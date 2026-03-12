@@ -40,7 +40,7 @@ export class Character {
         );
         const head = MeshBuilder.CreateBox("", {depth: .5, width: .25, height: .25}, this.scene)
         head.parent = this.characterCapsuleBody
-        head.position.z += 1
+        head.position.z += 0.4
         
         this.characterCapsuleBody.position = new Vector3(
             spawnPos.x, 
@@ -60,7 +60,8 @@ export class Character {
             
             // Lock rotation so capsule doesn't tip over
             this.characterAggregate.body.setMassProperties({
-                inertia: new Vector3(0, 0, 0)
+                inertia: Vector3.ZeroReadOnly,  // the exact constant the BJS team uses internally
+                inertiaOrientation: Quaternion.Identity()  // required alongside inertia in Havok
             });
             
             this.characterAggregate.body.disablePreStep = false;
@@ -76,23 +77,35 @@ export class Character {
         this.scene.registerBeforeRender(() => {
             if (!this.characterCapsuleBody || !this.characterAggregate) return;
             
-            // Ground check via raycast
             const rayOrigin = this.characterAggregate.body.getObjectCenterWorld();
             const rayDirection = new Vector3(0, -1, 0);
-            const rayLength = (this.capsuleHeight / 2) + 0.2;
+
+            // Increase length slightly and cast 3 rays: centre + two offset to match capsule radius
+            const rayLength = (this.capsuleHeight / 2) + 0.35;  // a bit more generous
             
-            const groundCast = this.scene.getPhysicsEngine()?.raycast(
-                rayOrigin,
-                rayOrigin.add(rayDirection.scale(rayLength))
-            );
-            
-            if (groundCast) {
-                this.isGrounded = groundCast.hasHit && 
-                    groundCast.body !== this.characterAggregate.body;
-                    
-                if (this.isGrounded && this.isJumped) {
-                    this.isJumped = false;
+            const offsets = [
+                new Vector3(0, 0, 0),                              // centre
+                new Vector3( this.capsuleRadius, 0, 0),            // right edge
+                new Vector3(-this.capsuleRadius, 0, 0),            // left edge
+            ];
+
+            let hit = false;
+            for (const offset of offsets) {
+                const origin = rayOrigin.add(offset);
+                const groundCast = this.scene.getPhysicsEngine()?.raycast(
+                    origin,
+                    origin.add(rayDirection.scale(rayLength))
+                );
+                if (groundCast?.hasHit && groundCast.body !== this.characterAggregate.body) {
+                    hit = true;
+                    break;
                 }
+            }
+
+            this.isGrounded = hit;
+            console.log(this.isGrounded)
+            if (this.isGrounded && this.isJumped) {
+                this.isJumped = false;
             }
         });
     }
@@ -105,19 +118,31 @@ export class Character {
         const forward = this.characterCapsuleBody.getDirection(Vector3.Forward());
         const moveDir = forward.scale(speed);
         
-        const velY = this.isGrounded ? currentVel.y : currentVel.y - this.fallVelocitySpeed;
+        // Don't touch Y velocity while jumping — let physics handle it
+        const velY = this.isJumped
+            ? currentVel.y                              // preserve jump impulse
+            : this.isGrounded
+                ? currentVel.y
+                : currentVel.y - this.fallVelocitySpeed;
+
         this.characterAggregate.body.setLinearVelocity(
             new Vector3(moveDir.x, velY, moveDir.z)
         );
     }
-    
-    // Called by controller to stop movement
+
+    // In Character.js — stopMovement()
     stopMovement() {
         if (!this.usePhysics || !this.characterAggregate) return;
         
         const currentVel = this.characterAggregate.body.getLinearVelocity();
+
+        // Don't touch Y velocity while jumping — let physics handle it
+        const velY = this.isJumped
+            ? currentVel.y                              // preserve jump impulse
+            : currentVel.y - this.fallVelocitySpeed;
+
         this.characterAggregate.body.setLinearVelocity(
-            new Vector3(0, currentVel.y - this.fallVelocitySpeed, 0)
+            new Vector3(0, velY, 0)
         );
     }
     
@@ -143,9 +168,11 @@ export class Character {
         this.isJumped = true;
         this.isGrounded = false;
         
-        this.characterAggregate.body.applyImpulse(
-            new Vector3(moveDir.x, this.jumpHeight, moveDir.z),
-            this.characterAggregate.body.getObjectCenterWorld()
+        // DON'T use applyImpulse with zero-inertia bodies in Havok
+        // SET the velocity directly instead
+        const currentVel = this.characterAggregate.body.getLinearVelocity();
+        this.characterAggregate.body.setLinearVelocity(
+            new Vector3(moveDir.x, this.jumpHeight, moveDir.z)
         );
     }
     

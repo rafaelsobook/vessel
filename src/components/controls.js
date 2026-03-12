@@ -5,9 +5,9 @@ export class CharacterControls {
     camera = null;
     scene = null;
     
-    walkSpeed = 4;
-    sprintSpeed = 8;
-    currentSpeed = 4;
+    walkSpeed = 10;
+    sprintSpeed = 25;
+    currentSpeed = 10;
     
     isMoving = false;
     isSprinting = false;
@@ -64,10 +64,7 @@ export class CharacterControls {
                 this.isSprinting = true;
                 this.currentSpeed = this.sprintSpeed;
                 break;
-            case " ":
-                e.preventDefault();
-                this.handleJump();
-                break;
+
         }
         
         // Calculate rotation based on input direction
@@ -94,6 +91,10 @@ export class CharacterControls {
                 this.isSprinting = false;
                 this.currentSpeed = this.walkSpeed;
                 break;
+            case " ":
+                e.preventDefault();
+                this.handleJump();
+            break;
         }
         
         if (this.input.forward === 0 && this.input.right === 0) {

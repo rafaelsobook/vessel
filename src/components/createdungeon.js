@@ -1,158 +1,465 @@
-import { 
-    Vector3, 
+/**
+ * generateDungeon.js – v4
+ *
+ * What changed from v3:
+ *  - No door generation (doors array is always empty / ignored)
+ *  - buildStaircaseAndGate() creates:
+ *      • A 10-step staircase of CreateBox steps leading UP to boss room level
+ *        Each step: width=5, height=0.5, depth=0.5  (as requested)
+ *        Steps stack so each one is 0.5 units higher and 0.5 units deeper than the last
+ *      • A wide ornate boss gate (single wide door box) at the top of the stairs
+ *        at the boss room entrance wall
+ *
+ * BabylonJS box coordinate rules (unchanged):
+ *   width  = X axis
+ *   height = Y axis  (up/down)
+ *   depth  = Z axis
+ *   Box position = centre of the box
+ *
+ *   Floor tile top face at Y=0:
+ *     pos.y = -FLOOR_THICKNESS / 2
+ *
+ *   Step i (0-based) sitting on the floor with stacking:
+ *     pos.y   = STEP_H/2 + i * STEP_H      ← each step sits on the one below
+ *     pos.z   = startZ + i * STEP_D        ← each step protrudes outward
+ */
+
+import {
+    Vector3,
     MeshBuilder,
     PhysicsAggregate,
     PhysicsShapeType,
-    Tools
+    PBRMaterial,
+    Color3,
+    PointLight,
+    Tools,
 } from '@babylonjs/core';
 
-/**
- * Auto-detects door orientation from the grid by checking which axis
- * has floor tiles on both sides of the door cell.
- *
- * Returns "horizontal" if the passage runs left↔right (door face is N/S),
- * or "vertical" if the passage runs up↔down (door face is E/W).
- */
-function inferDoorOrientation(grid, doorX, doorY) {
-    const rows = grid.length;
-    const cols = grid[0].length;
+// ─── Constants ────────────────────────────────────────────────────────────────
+const FLOOR_THICKNESS = 0.3;
+const FLOOR_Y         = -(FLOOR_THICKNESS / 2);
+const DEFAULT_CEIL_H  = 5;
 
-    const leftIsFloor  = doorX > 0       && grid[doorY][doorX - 1] !== 0;
-    const rightIsFloor = doorX < cols - 1 && grid[doorY][doorX + 1] !== 0;
-    const upIsFloor    = doorY > 0       && grid[doorY - 1][doorX] !== 0;
-    const downIsFloor  = doorY < rows - 1 && grid[doorY + 1][doorX] !== 0;
+// ── Staircase tuning: ALL stair visuals controlled here ──────────────────────
+//
+//  STEP_W      width across the staircase (perpendicular to travel direction).
+//              Must match the corridor mouth: corridorWidth(3) x cellSize(4) = 12.
+//              Set to 12 to fill the full opening with no side gaps.
+//
+//  STEP_H      rise per step. 0.1 = very flat and walkable.
+//
+//  STEP_D      tread depth per step (along travel direction). 0.40 = comfortable.
+//
+//  STEP_COUNT  number of steps. Boss room is elevated by STEP_COUNT * STEP_H.
+//              20 steps x 0.1 = 2.0 units total elevation.
+//
+const STEP_W     = 12;   // widened to fill corridor mouth (no more side gaps)
+const STEP_H     = 0.1;  // flat step rise (as requested)
+const STEP_D     = 0.40; // step tread depth
+const STEP_COUNT = 20;   // 20 steps as requested
 
-    const horizontalPassage = leftIsFloor || rightIsFloor;
-    const verticalPassage   = upIsFloor   || downIsFloor;
+// Boss room floor elevation = total stair height = 20 x 0.1 = 2.0 units
+const STAIR_TOTAL_HEIGHT = STEP_COUNT * STEP_H;
 
-    // Prefer axis where BOTH neighbours are open; fall back to either side
-    if (horizontalPassage && !verticalPassage) return "horizontal"; // door face is N/S, passage is E↔W
-    if (verticalPassage   && !horizontalPassage) return "vertical";  // door face is E/W, passage is N↔S
+// ─── PBR factory (cached) ─────────────────────────────────────────────────────
+const _pbrCache = new Map();
 
-    // Both axes open (cross-roads) – trust the data file hint if available
-    return null; // caller falls back to the original value
+export function makePBR(name, cfg, scene) {
+    if (_pbrCache.has(name)) return _pbrCache.get(name);
+    const mat = new PBRMaterial(name, scene);
+    if (cfg.albedoColor)       mat.albedoColor      = Color3.FromHexString(cfg.albedoColor);
+    if (cfg.emissiveColor)     mat.emissiveColor     = Color3.FromHexString(cfg.emissiveColor);
+    if (cfg.emissiveIntensity) mat.emissiveIntensity = cfg.emissiveIntensity;
+    mat.roughness               = cfg.roughness ?? 0.8;
+    mat.metallic                = cfg.metallic  ?? 0.0;
+    mat.usePhysicalLightFalloff = true;
+    mat.environmentIntensity    = 0.1;
+    _pbrCache.set(name, mat);
+    return mat;
+}
+export function clearPBRCache() { _pbrCache.clear(); }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const worldX = (gx, cs) => gx * cs + cs / 2;
+const worldZ = (gz, cs) => gz * cs + cs / 2;
+
+function spawnLight(id, x, y, z, cfg, scene) {
+    const l = new PointLight(id, new Vector3(x, y, z), scene);
+    l.diffuse = l.specular = Color3.FromHexString(cfg.color ?? "#ffffff");
+    l.intensity = cfg.intensity ?? 1.0;
+    l.range     = cfg.range     ?? 20;
+    return l;
 }
 
-export function generateDungeon(scene, dungeon, materials) {
-    const { grid } = dungeon.layout;
-    const cellSize = dungeon.layout.cellSize;
-    const wallHeight = dungeon.walls.height;
+function inferDoorOrientation(grid, gx, gz) {
+    const rows = grid.length, cols = grid[0].length;
+    const W = gx > 0      && grid[gz][gx-1] !== 0;
+    const E = gx < cols-1 && grid[gz][gx+1] !== 0;
+    const N = gz > 0      && grid[gz-1][gx] !== 0;
+    const S = gz < rows-1 && grid[gz+1][gx] !== 0;
+    if ((W || E) && !(N || S)) return "horizontal";
+    if ((N || S) && !(W || E)) return "vertical";
+    return null;
+}
 
-    // ── Floors & ceilings ────────────────────────────────────────────────────
-    dungeon.rooms.forEach(room => {
-        const { x, y, width, height } = room.bounds;
-        const worldX = (x + width / 2) * cellSize;
-        const worldZ = (y + height / 2) * cellSize;
+function getCeilHeight(dungeon, gx, gz) {
+    for (const r of dungeon.rooms) {
+        const { x, y, width, height } = r.bounds;
+        if (gx >= x && gx < x+width && gz >= y && gz < y+height)
+            return r.ceiling?.height ?? DEFAULT_CEIL_H;
+    }
+    return DEFAULT_CEIL_H;
+}
 
-        const floor = MeshBuilder.CreateBox(`floor_${room.id}`, {
-            width: width * cellSize,
-            height: 0.2,
-            depth: height * cellSize
+// ─── Staircase + Boss Gate ────────────────────────────────────────────────────
+/**
+ * Builds a 10-step staircase leading to the boss room, then a wide boss gate
+ * at the top of the stairs on the boss room's entrance wall.
+ *
+ * The staircase is always oriented so it approaches the nearest wall of the
+ * boss room. Steps are stacked: each step is STEP_W wide, STEP_H tall, STEP_D deep.
+ * Step i sits at:
+ *   worldY  = STEP_H/2 + i * STEP_H       (stacks upward)
+ *   worldZ  = approachZ + i * STEP_D * dir (marches toward the boss room)
+ *
+ * @param {Scene}  scene
+ * @param {object} dungeon
+ * @param {number} cs        cellSize
+ * @param {number} wallH     wall height
+ */
+function buildStaircaseAndGate(scene, dungeon, cs, wallH) {
+    const { bossRoom, stairApproach } = dungeon;
+    if (!bossRoom || !stairApproach) return;
+
+    const { stairBaseX, stairBaseZ, floorEdgeX, floorEdgeZ, approachDir } = stairApproach;
+    const { dx, dz } = approachDir;
+
+    // Total world-space run of the staircase
+    const totalRun = STEP_COUNT * STEP_D;
+
+    // Step i centre positions:
+    //   - Start at stairBase, march toward floorEdge
+    //   - Step 0 is at stairBase + STEP_D/2 (first step, furthest from room)
+    //   - Step STEP_COUNT-1 top face lands exactly at STAIR_TOTAL_HEIGHT
+    //     and its front face lands at floorEdgeX/Z
+    //
+    // We derive the actual step centre XZ from floorEdge going BACKWARDS:
+    //   stepCentreX = floorEdgeX - dx * (totalRun - i*STEP_D - STEP_D/2)
+    //   stepCentreZ = floorEdgeZ - dz * (totalRun - i*STEP_D - STEP_D/2)
+    //
+    // This guarantees step STEP_COUNT-1 front face == floorEdge exactly.
+
+    const stepMat = makePBR("mat_stair_step", {
+        albedoColor: "#3a3030", roughness: 0.75, metallic: 0.1,
+    }, scene);
+    const rimMat = makePBR("mat_stair_rim", {
+        albedoColor: "#6a4020", emissiveColor: "#3a1800",
+        emissiveIntensity: 0.4, roughness: 0.5, metallic: 0.3,
+    }, scene);
+    const gateMat = makePBR("mat_boss_gate", {
+        albedoColor: "#1a0505", emissiveColor: "#cc2200",
+        emissiveIntensity: 1.5, roughness: 0.2, metallic: 0.9,
+    }, scene);
+
+    for (let i = 0; i < STEP_COUNT; i++) {
+        // Distance from floorEdge to the CENTRE of this step
+        const distFromEdge = totalRun - i * STEP_D - STEP_D / 2;
+        const stepCentreX  = floorEdgeX - dx * distFromEdge;
+        const stepCentreZ  = floorEdgeZ - dz * distFromEdge;
+        // Y: step i top face = (i+1)*STEP_H, so centre = i*STEP_H + STEP_H/2
+        const stepCentreY  = i * STEP_H + STEP_H / 2;
+
+        const step = MeshBuilder.CreateBox(`stair_step_${i}`, {
+            width:  dx !== 0 ? STEP_D : STEP_W,
+            height: STEP_H,
+            depth:  dz !== 0 ? STEP_D : STEP_W,
         }, scene);
-        floor.position = new Vector3(worldX, -0.1, worldZ);
-        floor.material = materials.floor;
-        new PhysicsAggregate(floor, PhysicsShapeType.BOX, { mass: 0 }, scene);
+        step.position = new Vector3(stepCentreX, stepCentreY, stepCentreZ);
+        step.material = i % 2 === 0 ? stepMat : rimMat;
+        new PhysicsAggregate(step, PhysicsShapeType.BOX, { mass: 0 }, scene);
+    }
 
-        const ceiling = MeshBuilder.CreateBox(`ceiling_${room.id}`, {
-            width: width * cellSize,
-            height: 0.2,
-            depth: height * cellSize
+    // Glow at stair base
+    spawnLight("light_stair_base",
+        floorEdgeX - dx * totalRun, 1.5, floorEdgeZ - dz * totalRun,
+        { color: "#ff4400", intensity: 0.5, range: 14 }, scene);
+
+    // ── Landing platform ──────────────────────────────────────────────────
+    // The boss room wall thickness = cs (one full cell). The corridor cells
+    // outside the wall are at Y=0 and the boss floor is at STAIR_TOTAL_HEIGHT.
+    // We build a raised landing slab that covers the wall cell gap so the player
+    // walks off the last step directly onto solid elevated ground.
+    // The landing sits between floorEdge and floorEdge + cs (the wall thickness)
+    // in the approach direction, at STAIR_TOTAL_HEIGHT.
+    const landingDepth = cs; // one cell deep — covers the wall gap
+    const landingCentreX = floorEdgeX + dx * (landingDepth / 2);
+    const landingCentreZ = floorEdgeZ + dz * (landingDepth / 2);
+    const landingMat = makePBR("mat_landing", {
+        albedoColor: "#3a1a1a", roughness: 0.6, metallic: 0.1
+    }, scene);
+    const landing = MeshBuilder.CreateBox("boss_landing", {
+        width:  dx !== 0 ? landingDepth : STEP_W,
+        height: FLOOR_THICKNESS,
+        depth:  dz !== 0 ? landingDepth : STEP_W,
+    }, scene);
+    landing.position = new Vector3(landingCentreX, STAIR_TOTAL_HEIGHT + FLOOR_Y, landingCentreZ);
+    landing.material = landingMat;
+    new PhysicsAggregate(landing, PhysicsShapeType.BOX, { mass: 0 }, scene);
+
+    // ── Boss Gate ─────────────────────────────────────────────────────────
+    // Gate sits at floorEdge + cs (inner face of the boss room wall),
+    // base at Y = STAIR_TOTAL_HEIGHT.
+    const gateY = STAIR_TOTAL_HEIGHT;
+    const gateW = STEP_W;
+    const gateH = wallH - gateY;
+    // Place gate one cell INSIDE floorEdge so it's at the inner wall face
+    const gateX = floorEdgeX + dx * cs;
+    const gateZ = floorEdgeZ + dz * cs;
+
+    const gate = MeshBuilder.CreateBox("boss_gate", {
+        width:  dx !== 0 ? 0.3  : gateW,
+        height: gateH,
+        depth:  dz !== 0 ? 0.3  : gateW,
+    }, scene);
+    gate.position = new Vector3(gateX, gateY + gateH / 2, gateZ);
+    gate.material = gateMat;
+    new PhysicsAggregate(gate, PhysicsShapeType.BOX, { mass: 0 }, scene);
+
+    spawnLight("light_boss_gate", gateX, gateY + gateH * 0.6, gateZ,
+        { color: "#ff1100", intensity: 1.2, range: 20 }, scene);
+
+    // Flanking pillars
+    const flankOffset = gateW / 2 + 0.3;
+    [1, -1].forEach((side, fi) => {
+        const fx = gateX + (dz !== 0 ? side * flankOffset : 0);
+        const fz = gateZ + (dx !== 0 ? side * flankOffset : 0);
+
+        const pillar = MeshBuilder.CreateBox(`gate_pillar_${fi}`, {
+            width: 0.6, height: gateH * 1.1, depth: 0.6
         }, scene);
-        ceiling.position = new Vector3(worldX, room.ceiling.height, worldZ);
-        ceiling.material = materials.ceiling;
+        pillar.position = new Vector3(fx, gateY + gateH * 0.55, fz);
+        pillar.material = makePBR("mat_gate_pillar",
+            { albedoColor: "#2a1010", roughness: 0.6, metallic: 0.2 }, scene);
+        new PhysicsAggregate(pillar, PhysicsShapeType.BOX, { mass: 0 }, scene);
+
+        spawnLight(`light_gate_pillar_${fi}`, fx, gateY + gateH, fz,
+            { color: "#ff3300", intensity: 0.6, range: 10 }, scene);
     });
+}
 
-    // ── Walls ────────────────────────────────────────────────────────────────
-    for (let z = 0; z < grid.length; z++) {
-        for (let x = 0; x < grid[z].length; x++) {
-            if (grid[z][x] === 0) {
-                const wall = MeshBuilder.CreateBox(`wall_${x}_${z}`, {
-                    width: cellSize,
-                    height: wallHeight,
-                    depth: cellSize
-                }, scene);
-                wall.position = new Vector3(
-                    x * cellSize + cellSize / 2,
-                    wallHeight / 2,
-                    z * cellSize + cellSize / 2
-                );
-                wall.material = materials.wall;
-                new PhysicsAggregate(wall, PhysicsShapeType.BOX, { mass: 0 }, scene);
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+export function generateDungeon(scene, dungeon, matOverrides = {}) {
+    const { grid } = dungeon.layout;
+    const cs       = dungeon.layout.cellSize;
+    const wallH    = dungeon.walls.height;
+
+    // Shared surface materials
+    const wallMat  = matOverrides.wall
+        ?? makePBR("mat_wall",  dungeon.walls?.pbr  ?? { albedoColor: "#1e1e1e", roughness: 0.9,  metallic: 0.02 }, scene);
+    const floorMat = matOverrides.floor
+        ?? makePBR("mat_floor", dungeon.rooms?.[0]?.pbr?.floor ?? { albedoColor: "#2a2a2a", roughness: 0.85, metallic: 0.0 }, scene);
+    const ceilMat  = matOverrides.ceiling
+        ?? makePBR("mat_ceil",  dungeon.rooms?.[0]?.pbr?.ceiling ?? { albedoColor: "#111111", roughness: 0.92, metallic: 0.0 }, scene);
+
+    // Boss room gets its own floor/ceil material
+    const bossRoom  = dungeon.rooms.find(r => r.type === "boss_room");
+    const bFloorMat = bossRoom?.pbr?.floor
+        ? makePBR("mat_boss_floor", bossRoom.pbr.floor, scene)
+        : makePBR("mat_boss_floor", { albedoColor: "#3a1a1a", roughness: 0.6, metallic: 0.1 }, scene);
+    const bCeilMat  = bossRoom?.pbr?.ceiling
+        ? makePBR("mat_boss_ceil", bossRoom.pbr.ceiling, scene)
+        : makePBR("mat_boss_ceil", { albedoColor: "#2a0808", roughness: 0.7, metallic: 0.05 }, scene);
+
+    // Helper: is this cell inside the boss room?
+    function isInBossRoom(gx, gz) {
+        if (!bossRoom) return false;
+        const { x, y, width, height } = bossRoom.bounds;
+        return gx >= x && gx < x+width && gz >= y && gz < y+height;
+    }
+
+    // ── Grid loop: walls + floors + ceilings ──────────────────────────────────
+    //
+    // BOSS ROOM ELEVATION = STAIR_TOTAL_HEIGHT (20 steps x 0.1 = 2.0 units)
+    //
+    // THREE things must be elevated together so everything lines up:
+    //   1. Boss room FLOOR tiles  → top face at BOSS_ELEVATION (= 2.0)
+    //   2. Boss room CEILING tiles → bottom face at BOSS_ELEVATION + ceilH
+    //   3. Boss room WALL cells   → base at BOSS_ELEVATION, not at 0
+    //      A wall cell is "boss-adjacent" if ANY of its 4 neighbours is inside
+    //      the boss room bounds. This catches the perimeter walls correctly.
+    //
+    const BOSS_ELEVATION = STAIR_TOTAL_HEIGHT; // = 2.0 units
+
+    // Pre-build a Set of "boss wall" grid keys so the loop is O(1) per cell
+    const bossWallKeys = new Set();
+    if (bossRoom) {
+        const { x: bx, y: by, width: bw, height: bh } = bossRoom.bounds;
+        for (let gz = 0; gz < grid.length; gz++) {
+            for (let gx = 0; gx < grid[gz].length; gx++) {
+                if (grid[gz][gx] !== 0) continue; // only wall cells
+                // Check all 4 neighbours — if any is inside boss room, this wall is elevated
+                const neighbours = [[gx-1,gz],[gx+1,gz],[gx,gz-1],[gx,gz+1]];
+                for (const [nx, nz] of neighbours) {
+                    if (nx >= bx && nx < bx+bw && nz >= by && nz < by+bh) {
+                        bossWallKeys.add(`${gx}_${gz}`);
+                        break;
+                    }
+                }
             }
         }
     }
 
-    // ── Doors ────────────────────────────────────────────────────────────────
-    dungeon.doors.forEach(door => {
-        const centerX = door.x * cellSize + cellSize / 2;
-        const centerZ = door.y * cellSize + cellSize / 2;
-        const doorHeight   = wallHeight * 0.9;
-        const doorThickness = 0.3;          // thin panel
-        const doorWidth     = cellSize * 0.85; // slightly narrower than the passage
+    for (let gz = 0; gz < grid.length; gz++) {
+        for (let gx = 0; gx < grid[gz].length; gx++) {
+            const cell   = grid[gz][gx];
+            const cx     = worldX(gx, cs);
+            const cz     = worldZ(gz, cs);
+            const inBoss = isInBossRoom(gx, gz);
 
-        // ── AUTO-DETECT orientation from the grid ──
-        const detectedOrientation = inferDoorOrientation(grid, door.x, door.y);
-        const orientation = detectedOrientation ?? door.orientation;
+            if (cell === 0) {
+                // Wall cell — elevated if it borders the boss room
+                const isBossWall = bossWallKeys.has(`${gx}_${gz}`);
+                const elev = isBossWall ? BOSS_ELEVATION : 0;
 
-        /*
-         * Passage runs LEFT ↔ RIGHT  →  "horizontal"
-         *   The opening is along the X axis, so the door panel must block it:
-         *   panel is wide in Z (depth), thin in X.
-         *
-         * Passage runs UP ↔ DOWN     →  "vertical"
-         *   The opening is along the Z axis, so the door panel must block it:
-         *   panel is wide in X (width), thin in Z.
-         */
-        const doorBox = MeshBuilder.CreateBox(door.id, {
-            width:  orientation === "horizontal" ? doorThickness : doorWidth,
-            height: doorHeight,
-            depth:  orientation === "horizontal" ? doorWidth     : doorThickness
-        }, scene);
+                const wall = MeshBuilder.CreateBox(`wall_${gx}_${gz}`, {
+                    width: cs, height: wallH, depth: cs
+                }, scene);
+                // Base of wall at elev, centre at elev + wallH/2
+                wall.position = new Vector3(cx, elev + wallH / 2, cz);
+                wall.material = wallMat;
+                new PhysicsAggregate(wall, PhysicsShapeType.BOX, { mass: 0 }, scene);
+                continue;
+            }
 
-        doorBox.position = new Vector3(centerX, doorHeight / 2, centerZ);
-        doorBox.material = door.type === "iron" ? materials.ironDoor : materials.door;
-        new PhysicsAggregate(doorBox, PhysicsShapeType.BOX, { mass: 0 }, scene);
-    });
+            // Walkable cell — elevated if inside boss room
+            const elev = inBoss ? BOSS_ELEVATION : 0;
 
-    // ── Props ────────────────────────────────────────────────────────────────
-    dungeon.props.forEach(prop => {
-        const worldX = prop.x * cellSize + cellSize / 2;
-        const worldZ = prop.y * cellSize + cellSize / 2;
-
-        if (prop.type === "torch") {
-            const torchPole = MeshBuilder.CreateCylinder(prop.id + "_pole", {
-                height: 1.2,
-                diameter: 0.08
+            // FLOOR: top face at Y = elev  →  centre at elev + FLOOR_Y
+            const floor = MeshBuilder.CreateBox(`floor_${gx}_${gz}`, {
+                width: cs, height: FLOOR_THICKNESS, depth: cs
             }, scene);
-            torchPole.position = new Vector3(worldX, 0.6, worldZ);
-            torchPole.material = materials.torch;
+            floor.position = new Vector3(cx, elev + FLOOR_Y, cz);
+            floor.material = inBoss ? bFloorMat : floorMat;
+            new PhysicsAggregate(floor, PhysicsShapeType.BOX, { mass: 0 }, scene);
 
-            const torchTop = MeshBuilder.CreateSphere(prop.id + "_flame", {
-                diameter: 0.25
+            // CEILING: bottom face at elev + ceilH  →  centre at elev + ceilH + FLOOR_THICKNESS/2
+            const ch   = getCeilHeight(dungeon, gx, gz);
+            const ceil = MeshBuilder.CreateBox(`ceil_${gx}_${gz}`, {
+                width: cs, height: FLOOR_THICKNESS, depth: cs
             }, scene);
-            torchTop.position = new Vector3(worldX, 1.3, worldZ);
-            torchTop.material = materials.torch;
+            ceil.position = new Vector3(cx, elev + ch + FLOOR_THICKNESS / 2, cz);
+            ceil.material = inBoss ? bCeilMat : ceilMat;
+        }
+    }
 
-        } else if (prop.type === "barrel") {
-            const barrel = MeshBuilder.CreateCylinder(prop.id, {
-                height: 1.5,
-                diameter: 0.8
-            }, scene);
-            barrel.position = new Vector3(worldX, 0.75, worldZ);
-            barrel.rotation.y = Tools.ToRadians(prop.rotation);
-            barrel.material = materials.barrel;
-            new PhysicsAggregate(barrel, PhysicsShapeType.CYLINDER, { mass: 10 }, scene);
+    // ── Props ──────────────────────────────────────────────────────────────────
+    dungeon.props?.forEach(prop => {
+        const px   = worldX(prop.x, cs);
+        const pz   = worldZ(prop.y, cs);
+        const sc   = prop.scale ?? 1.0;
+        const pMat = prop.pbr ? makePBR(`pmat_${prop.id}`, prop.pbr, scene) : null;
 
-        } else if (prop.type === "chest") {
-            const chest = MeshBuilder.CreateBox(prop.id, {
-                width: 1,
-                height: 0.8,
-                depth: 0.6
-            }, scene);
-            chest.position = new Vector3(worldX, 0.4, worldZ);
-            chest.rotation.y = Tools.ToRadians(prop.rotation);
-            chest.material = materials.chest;
-            new PhysicsAggregate(chest, PhysicsShapeType.BOX, { mass: 20 }, scene);
+        switch (prop.type) {
+
+            case "torch": {
+                const poleMat  = makePBR("mat_tpole",  { albedoColor: "#4a2a10", roughness: 0.8,  metallic: 0.05 }, scene);
+                const flameMat = makePBR("mat_tflame", { albedoColor: "#ff6600", emissiveColor: "#ff4400", emissiveIntensity: 3.0, roughness: 0.4, metallic: 0.0 }, scene);
+                const pole  = MeshBuilder.CreateCylinder(`${prop.id}_pole`,  { height: 1.2, diameter: 0.1 }, scene);
+                const flame = MeshBuilder.CreateSphere  (`${prop.id}_flame`, { diameter: 0.3 }, scene);
+                pole.position  = new Vector3(px, 0.6,  pz);
+                flame.position = new Vector3(px, 1.35, pz);
+                pole.material  = poleMat;
+                flame.material = flameMat;
+                spawnLight(`light_${prop.id}`, px, 1.5, pz, { color: "#ff8844", intensity: 0.7, range: 12 }, scene);
+                break;
+            }
+
+            case "barrel": {
+                const mat = pMat ?? makePBR("mat_barrel", { albedoColor: "#5c3317", roughness: 0.75, metallic: 0.05 }, scene);
+                const h   = 1.5 * sc;
+                const b   = MeshBuilder.CreateCylinder(prop.id, { height: h, diameter: 0.8 * sc }, scene);
+                b.position   = new Vector3(px, h / 2, pz);
+                b.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
+                b.material   = mat;
+                new PhysicsAggregate(b, PhysicsShapeType.CYLINDER, { mass: 10 }, scene);
+                break;
+            }
+
+            case "chest":
+            case "ancient_chest": {
+                const mat = pMat ?? makePBR("mat_chest", { albedoColor: "#8b6914", roughness: 0.4, metallic: 0.6 }, scene);
+                const W = 1.0*sc, H = 0.8*sc, D = 0.6*sc;
+                const c = MeshBuilder.CreateBox(prop.id, { width: W, height: H, depth: D }, scene);
+                c.position   = new Vector3(px, H / 2, pz);
+                c.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
+                c.material   = mat;
+                new PhysicsAggregate(c, PhysicsShapeType.BOX, { mass: 20 }, scene);
+                break;
+            }
+
+            case "crystal_cluster": {
+                const mat = pMat ?? makePBR("mat_ccluster", { albedoColor: "#4488ff", emissiveColor: "#2244dd", emissiveIntensity: 2.0, roughness: 0.05, metallic: 0.7 }, scene);
+                [
+                    { h: 1.8*sc, d: 0.28*sc, ox: 0,        oz: 0,        rz: 0   },
+                    { h: 1.2*sc, d: 0.18*sc, ox:  0.25*sc, oz:  0.10*sc, rz: 10  },
+                    { h: 1.0*sc, d: 0.15*sc, ox: -0.20*sc, oz:  0.15*sc, rz: -10 },
+                ].forEach((s, i) => {
+                    const m = MeshBuilder.CreateCylinder(`${prop.id}_s${i}`, {
+                        height: s.h, diameterTop: 0, diameterBottom: s.d, tessellation: 6
+                    }, scene);
+                    m.position   = new Vector3(px + s.ox, s.h / 2, pz + s.oz);
+                    m.rotation.y = Tools.ToRadians((prop.rotation ?? 0) + i * 25);
+                    m.rotation.z = Tools.ToRadians(s.rz);
+                    m.material   = mat;
+                });
+                if (prop.pbr?.emissiveIntensity > 1.0)
+                    spawnLight(`light_${prop.id}`, px, 1.2*sc, pz,
+                        { color: prop.pbr.emissiveColor ?? "#4466ff", intensity: prop.pbr.emissiveIntensity * 0.25, range: 12*sc }, scene);
+                break;
+            }
+
+            case "crystal_pillar": {
+                const mat = pMat ?? makePBR("mat_cpillar", { albedoColor: "#44aaff", emissiveColor: "#1166dd", emissiveIntensity: 2.5, roughness: 0.04, metallic: 0.7 }, scene);
+                const ph  = 3.5 * sc;
+                const p   = MeshBuilder.CreateCylinder(`${prop.id}_body`, {
+                    height: ph, diameterTop: 0.12*sc, diameterBottom: 0.38*sc, tessellation: 7
+                }, scene);
+                p.position   = new Vector3(px, ph / 2, pz);
+                p.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
+                p.material   = mat;
+                new PhysicsAggregate(p, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+                const tip = MeshBuilder.CreateSphere(`${prop.id}_tip`, { diameter: 0.45*sc }, scene);
+                tip.position = new Vector3(px, ph + 0.2*sc, pz);
+                tip.material = mat;
+                spawnLight(`light_${prop.id}`, px, ph + 0.3*sc, pz,
+                    { color: prop.pbr?.emissiveColor ?? "#4488ff", intensity: (prop.pbr?.emissiveIntensity ?? 2.5) * 0.35, range: 18*sc }, scene);
+                break;
+            }
+
+            case "stalagmite": {
+                const mat = pMat ?? makePBR("mat_stalagmite", { albedoColor: "#222228", roughness: 0.88, metallic: 0.02 }, scene);
+                const h   = 1.6 * sc;
+                const s   = MeshBuilder.CreateCylinder(prop.id, { height: h, diameterTop: 0.04*sc, diameterBottom: 0.3*sc, tessellation: 6 }, scene);
+                s.position   = new Vector3(px, h / 2, pz);
+                s.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
+                s.material   = mat;
+                new PhysicsAggregate(s, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+                break;
+            }
+
+            default:
+                console.warn(`[generateDungeon] Unknown prop type: "${prop.type}"`);
         }
     });
+
+    // ── Scene lights ──────────────────────────────────────────────────────────
+    dungeon.lighting?.lights?.forEach((cfg, i) => {
+        if (cfg.type === "point")
+            spawnLight(`scene_light_${i}`, cfg.x * cs, cfg.y, cfg.z * cs,
+                { color: cfg.color, intensity: cfg.intensity, range: cfg.range }, scene);
+    });
+
+    // ── Staircase + Boss Gate (built last so it's on top of the floor) ────────
+    buildStaircaseAndGate(scene, dungeon, cs, wallH);
 }
