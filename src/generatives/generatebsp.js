@@ -152,95 +152,116 @@ function finaliseTiles(grid) {
             if (grid[y][x] === T_CORRIDOR) grid[y][x] = T_FLOOR;
 }
 
-// ─── Find which side of the boss room has a corridor connected to it ──────────
-// Returns:
-//   wallEdge   : world-space position of the boss room wall face (where floor starts)
-//   approachDir: unit vector pointing FROM corridor INTO the room (+x, -x, +z, -z)
-//   stairBase  : world-space XZ position to start building stairs from
-//                (stairBase is STAIR_CELLS cells back from the wall edge along the corridor)
+// ─── Compute exact stair approach geometry from the grid ─────────────────────
 //
-// The staircase is built FROM stairBase marching IN approachDir so the last
-// step lands exactly at the boss room floor edge.
+// This function scans every cell on all 4 sides of the boss room to find which
+// side has floor tiles (the corridor entrance). It then measures the ACTUAL
+// connected floor span on that side to get the real corridor width in world units.
 //
-const STAIR_CELLS = 6; // how many corridor cells back the stair base sits
+// Everything generateDungeon needs is computed here in grid/world space:
+//
+//   approachDir  { dx, dz }  unit vector pointing INTO the boss room
+//   floorEdgeX/Z             world XZ of the outer boss room wall face on the corridor side
+//   stairCentreX/Z           world XZ centre of the corridor (used to centre the staircase)
+//   corridorWorldWidth        actual corridor width in world units (for gate + seal sizing)
+//   stairBaseX/Z             world XZ where step 0 is centred (STAIR_CELLS back from wall)
+//
+const STAIR_CELLS = 6;
 
 function findStairApproach(grid, room, cellSize) {
     const { x, y, w, h } = room;
-    const cx = x + Math.floor(w / 2);  // grid centre X of boss room
-    const cy = y + Math.floor(h / 2);  // grid centre Z of boss room
+    const rows = grid.length;
+    const cols = grid[0].length;
 
-    // For each side, check one cell outside the boss room wall for a floor tile.
-    // floorEdge = the world-space coordinate of the boss room's outer wall face
-    //             on that side — i.e. exactly where the elevated floor begins.
-    //
-    // Diagram (bottom side, dz = -1 means corridor comes from below, enters going up):
-    //
-    //   grid row y+h  : corridor cells (T_FLOOR outside boss room)
-    //   grid row y+h-1: bottom wall of boss room
-    //   grid row y    : first interior floor row of boss room
-    //
-    //   floorEdge world Z = (y + h) * cellSize   ← outer face of bottom wall
-    //
-    // The stair base is placed STAIR_CELLS cells further back along the corridor.
+    // Scan a side and return the contiguous span of T_FLOOR cells
+    function scanSide(fixedVal, scanFrom, scanTo, isRow) {
+        // isRow=true  → we fix Y=fixedVal, scan X from scanFrom to scanTo
+        // isRow=false → we fix X=fixedVal, scan Y from scanFrom to scanTo
+        let minFloor = null, maxFloor = null;
+        for (let i = scanFrom; i <= scanTo; i++) {
+            const gx = isRow ? i        : fixedVal;
+            const gy = isRow ? fixedVal : i;
+            if (gy >= 0 && gy < rows && gx >= 0 && gx < cols && grid[gy][gx] === T_FLOOR) {
+                if (minFloor === null) minFloor = i;
+                maxFloor = i;
+            }
+        }
+        return { minFloor, maxFloor };
+    }
 
-    const sides = [
-        {
-            // Corridor below the boss room → stairs climb upward in -Z direction
-            checkX: cx, checkY: y + h,
-            dir: { dx: 0, dz: -1 },
-            floorEdgeX: (cx + 0.5) * cellSize,
-            floorEdgeZ: (y + h)    * cellSize,   // outer face of bottom wall
-            stairBaseX: (cx + 0.5) * cellSize,
-            stairBaseZ: (y + h + STAIR_CELLS) * cellSize,
+    // Check all 4 sides of the boss room, one cell outside each wall
+    const candidates = [
+        // South side: row y+h is outside the bottom wall
+        { side: 'south', isRow: true,  fixedVal: y + h,  scanFrom: x, scanTo: x + w - 1,
+          dir: { dx: 0, dz: -1 },
+          floorEdgeZ: (y + h) * cellSize,  // outer face of south wall
+          getFloorEdgeX: (mid) => mid * cellSize + cellSize / 2,
+          getFloorEdgeZ: ()    => (y + h) * cellSize,
+          getStairBaseZ: ()    => (y + h + STAIR_CELLS) * cellSize,
+          getStairBaseX: (mid) => mid * cellSize + cellSize / 2,
         },
-        {
-            // Corridor above the boss room → stairs climb in +Z direction
-            checkX: cx, checkY: y - 1,
-            dir: { dx: 0, dz: 1 },
-            floorEdgeX: (cx + 0.5) * cellSize,
-            floorEdgeZ:  y          * cellSize,   // outer face of top wall
-            stairBaseX: (cx + 0.5) * cellSize,
-            stairBaseZ: (y - STAIR_CELLS) * cellSize,
+        // North side: row y-1 is outside the top wall
+        { side: 'north', isRow: true,  fixedVal: y - 1,  scanFrom: x, scanTo: x + w - 1,
+          dir: { dx: 0, dz: 1 },
+          getFloorEdgeX: (mid) => mid * cellSize + cellSize / 2,
+          getFloorEdgeZ: ()    => y * cellSize,
+          getStairBaseZ: ()    => (y - STAIR_CELLS) * cellSize,
+          getStairBaseX: (mid) => mid * cellSize + cellSize / 2,
         },
-        {
-            // Corridor right of boss room → stairs climb in -X direction
-            checkX: x + w, checkY: cy,
-            dir: { dx: -1, dz: 0 },
-            floorEdgeX: (x + w)    * cellSize,   // outer face of right wall
-            floorEdgeZ: (cy + 0.5) * cellSize,
-            stairBaseX: (x + w + STAIR_CELLS) * cellSize,
-            stairBaseZ: (cy + 0.5) * cellSize,
+        // East side: col x+w is outside the right wall
+        { side: 'east', isRow: false, fixedVal: x + w,  scanFrom: y, scanTo: y + h - 1,
+          dir: { dx: -1, dz: 0 },
+          getFloorEdgeX: ()    => (x + w) * cellSize,
+          getFloorEdgeZ: (mid) => mid * cellSize + cellSize / 2,
+          getStairBaseX: ()    => (x + w + STAIR_CELLS) * cellSize,
+          getStairBaseZ: (mid) => mid * cellSize + cellSize / 2,
         },
-        {
-            // Corridor left of boss room → stairs climb in +X direction
-            checkX: x - 1, checkY: cy,
-            dir: { dx: 1, dz: 0 },
-            floorEdgeX:  x          * cellSize,  // outer face of left wall
-            floorEdgeZ: (cy + 0.5)  * cellSize,
-            stairBaseX: (x - STAIR_CELLS) * cellSize,
-            stairBaseZ: (cy + 0.5)  * cellSize,
+        // West side: col x-1 is outside the left wall
+        { side: 'west', isRow: false, fixedVal: x - 1,  scanFrom: y, scanTo: y + h - 1,
+          dir: { dx: 1, dz: 0 },
+          getFloorEdgeX: ()    => x * cellSize,
+          getFloorEdgeZ: (mid) => mid * cellSize + cellSize / 2,
+          getStairBaseX: ()    => (x - STAIR_CELLS) * cellSize,
+          getStairBaseZ: (mid) => mid * cellSize + cellSize / 2,
         },
     ];
 
-    for (const s of sides) {
-        if (get(grid, s.checkX, s.checkY) === T_FLOOR) {
-            return {
-                approachDir: s.dir,
-                floorEdgeX:  s.floorEdgeX,
-                floorEdgeZ:  s.floorEdgeZ,
-                stairBaseX:  s.stairBaseX,
-                stairBaseZ:  s.stairBaseZ,
-            };
-        }
+    for (const c of candidates) {
+        const { minFloor, maxFloor } = scanSide(c.fixedVal, c.scanFrom, c.scanTo, c.isRow);
+        if (minFloor === null) continue; // no floor on this side
+
+        // Compute corridor centre cell index and actual span in grid cells
+        const spanCells   = maxFloor - minFloor + 1;
+        const midCell     = minFloor + (spanCells - 1) / 2;  // can be fractional for even spans
+
+        // World-space centre of the corridor opening
+        const corridorWorldWidth = spanCells * cellSize;
+        const stairCentreX = c.getFloorEdgeX(midCell);
+        const stairCentreZ = c.getFloorEdgeZ(midCell);
+
+        return {
+            approachDir:         c.dir,
+            floorEdgeX:          c.getFloorEdgeX(midCell),
+            floorEdgeZ:          c.getFloorEdgeZ(midCell),
+            stairCentreX,
+            stairCentreZ,
+            corridorWorldWidth,
+            stairBaseX:          c.getStairBaseX(midCell),
+            stairBaseZ:          c.getStairBaseZ(midCell),
+        };
     }
 
-    // Fallback
+    // Fallback (should never happen in a connected dungeon)
+    const cx = x + Math.floor(w / 2);
     return {
-        approachDir: { dx: 0, dz: -1 },
-        floorEdgeX:  (cx + 0.5) * cellSize,
-        floorEdgeZ:  (y + h)    * cellSize,
-        stairBaseX:  (cx + 0.5) * cellSize,
-        stairBaseZ:  (y + h + STAIR_CELLS) * cellSize,
+        approachDir:        { dx: 0, dz: -1 },
+        floorEdgeX:         (cx + 0.5) * cellSize,
+        floorEdgeZ:         (y + h)    * cellSize,
+        stairCentreX:       (cx + 0.5) * cellSize,
+        stairCentreZ:       (y + h)    * cellSize,
+        corridorWorldWidth: 3 * cellSize,
+        stairBaseX:         (cx + 0.5) * cellSize,
+        stairBaseZ:         (y + h + STAIR_CELLS) * cellSize,
     };
 }
 
@@ -327,7 +348,7 @@ export function generateBSPDungeon({
     gridWidth     = 32,
     gridHeight    = 32,
     cellSize      = 4,
-    wallHeight    = 5,
+    wallHeight    = 15,
     corridorWidth = 3,
     name          = "Procedural Dungeon",
     difficulty    = 1,

@@ -8,7 +8,6 @@ const canvas = document.querySelector("canvas")
 let engine 
 let scene
 
-
 let sceneName
 // Game states
 let gameStatus = "loading" // loading,running

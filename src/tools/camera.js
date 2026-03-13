@@ -6,7 +6,7 @@ export function createArcCam(scene, placeDetail){
         "camera",
         Tools.ToRadians(-90),
         Tools.ToRadians(75),
-        65,
+        140,
         new Vector3(
             placeDetail.spawn.x * placeDetail.layout.cellSize,
             1.6,
@@ -16,7 +16,7 @@ export function createArcCam(scene, placeDetail){
     );
     camera.attachControl();
     camera.lowerRadiusLimit = 5;
-    camera.upperRadiusLimit = 50;
+    camera.upperRadiusLimit = 140;
     camera.lowerBetaLimit = Tools.ToRadians(20);
     camera.upperBetaLimit = Tools.ToRadians(85);
     camera.wheelPrecision = 50;

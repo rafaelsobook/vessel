@@ -38,7 +38,7 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FLOOR_THICKNESS = 0.3;
 const FLOOR_Y         = -(FLOOR_THICKNESS / 2);
-const DEFAULT_CEIL_H  = 5;
+const DEFAULT_CEIL_H  = 15;
 
 // ── Staircase tuning: ALL stair visuals controlled here ──────────────────────
 //
@@ -131,95 +131,81 @@ function buildStaircaseAndGate(scene, dungeon, cs, wallH) {
     const { bossRoom, stairApproach } = dungeon;
     if (!bossRoom || !stairApproach) return;
 
-    const { stairBaseX, stairBaseZ, floorEdgeX, floorEdgeZ, approachDir } = stairApproach;
+    const {
+        approachDir,
+        floorEdgeX, floorEdgeZ,   // outer wall face on corridor side
+        stairCentreX, stairCentreZ, // world XZ centre of corridor opening
+        corridorWorldWidth,          // ACTUAL corridor width in world units
+        stairBaseX, stairBaseZ,     // world XZ of step 0 centre
+    } = stairApproach;
     const { dx, dz } = approachDir;
 
-    // Total world-space run of the staircase
+    // stepW = actual corridor width — steps fill the opening exactly, no gaps
+    const stepW    = corridorWorldWidth;
     const totalRun = STEP_COUNT * STEP_D;
 
-    // Step i centre positions:
-    //   - Start at stairBase, march toward floorEdge
-    //   - Step 0 is at stairBase + STEP_D/2 (first step, furthest from room)
-    //   - Step STEP_COUNT-1 top face lands exactly at STAIR_TOTAL_HEIGHT
-    //     and its front face lands at floorEdgeX/Z
-    //
-    // We derive the actual step centre XZ from floorEdge going BACKWARDS:
-    //   stepCentreX = floorEdgeX - dx * (totalRun - i*STEP_D - STEP_D/2)
-    //   stepCentreZ = floorEdgeZ - dz * (totalRun - i*STEP_D - STEP_D/2)
-    //
-    // This guarantees step STEP_COUNT-1 front face == floorEdge exactly.
+    const stepMat = makePBR("mat_stair_step", { albedoColor: "#3a3030", roughness: 0.75, metallic: 0.1 }, scene);
+    const rimMat  = makePBR("mat_stair_rim",  { albedoColor: "#6a4020", emissiveColor: "#3a1800", emissiveIntensity: 0.4, roughness: 0.5, metallic: 0.3 }, scene);
+    const gateMat = makePBR("mat_boss_gate",  { albedoColor: "#1a0505", emissiveColor: "#cc2200", emissiveIntensity: 1.5, roughness: 0.2, metallic: 0.9 }, scene);
 
-    const stepMat = makePBR("mat_stair_step", {
-        albedoColor: "#3a3030", roughness: 0.75, metallic: 0.1,
-    }, scene);
-    const rimMat = makePBR("mat_stair_rim", {
-        albedoColor: "#6a4020", emissiveColor: "#3a1800",
-        emissiveIntensity: 0.4, roughness: 0.5, metallic: 0.3,
-    }, scene);
-    const gateMat = makePBR("mat_boss_gate", {
-        albedoColor: "#1a0505", emissiveColor: "#cc2200",
-        emissiveIntensity: 1.5, roughness: 0.2, metallic: 0.9,
-    }, scene);
-
+    // Build steps anchored from floorEdge backwards.
+    // stairCentreX/Z is the corridor centre — steps are centred there.
+    // Each step i:
+    //   - XZ centre along travel axis: floorEdge - dir*(totalRun - i*STEP_D - STEP_D/2)
+    //   - XZ centre perp axis: stairCentreX or stairCentreZ (constant)
+    //   - Y centre: i*STEP_H + STEP_H/2
     for (let i = 0; i < STEP_COUNT; i++) {
-        // Distance from floorEdge to the CENTRE of this step
         const distFromEdge = totalRun - i * STEP_D - STEP_D / 2;
-        const stepCentreX  = floorEdgeX - dx * distFromEdge;
-        const stepCentreZ  = floorEdgeZ - dz * distFromEdge;
-        // Y: step i top face = (i+1)*STEP_H, so centre = i*STEP_H + STEP_H/2
-        const stepCentreY  = i * STEP_H + STEP_H / 2;
+        // Move along travel axis from floorEdge; use corridor centre on perp axis
+        const stepX = dz !== 0 ? stairCentreX : floorEdgeX - dx * distFromEdge;
+        const stepZ = dx !== 0 ? stairCentreZ : floorEdgeZ - dz * distFromEdge;
+        const stepY = i * STEP_H + STEP_H / 2;
 
         const step = MeshBuilder.CreateBox(`stair_step_${i}`, {
-            width:  dx !== 0 ? STEP_D : STEP_W,
+            width:  dz !== 0 ? stepW  : STEP_D,   // wide along perp, thin along travel
             height: STEP_H,
-            depth:  dz !== 0 ? STEP_D : STEP_W,
+            depth:  dx !== 0 ? stepW  : STEP_D,
         }, scene);
-        step.position = new Vector3(stepCentreX, stepCentreY, stepCentreZ);
+        step.position = new Vector3(stepX, stepY, stepZ);
         step.material = i % 2 === 0 ? stepMat : rimMat;
         new PhysicsAggregate(step, PhysicsShapeType.BOX, { mass: 0 }, scene);
     }
 
-    // Glow at stair base
     spawnLight("light_stair_base",
-        floorEdgeX - dx * totalRun, 1.5, floorEdgeZ - dz * totalRun,
+        dz !== 0 ? stairCentreX : stairBaseX,
+        1.5,
+        dx !== 0 ? stairCentreZ : stairBaseZ,
         { color: "#ff4400", intensity: 0.5, range: 14 }, scene);
 
     // ── Landing platform ──────────────────────────────────────────────────
-    // The boss room wall thickness = cs (one full cell). The corridor cells
-    // outside the wall are at Y=0 and the boss floor is at STAIR_TOTAL_HEIGHT.
-    // We build a raised landing slab that covers the wall cell gap so the player
-    // walks off the last step directly onto solid elevated ground.
-    // The landing sits between floorEdge and floorEdge + cs (the wall thickness)
-    // in the approach direction, at STAIR_TOTAL_HEIGHT.
-    const landingDepth = cs; // one cell deep — covers the wall gap
-    const landingCentreX = floorEdgeX + dx * (landingDepth / 2);
-    const landingCentreZ = floorEdgeZ + dz * (landingDepth / 2);
-    const landingMat = makePBR("mat_landing", {
-        albedoColor: "#3a1a1a", roughness: 0.6, metallic: 0.1
-    }, scene);
+    // Raised slab at STAIR_TOTAL_HEIGHT covering the wall-thickness gap.
+    // Width = corridorWorldWidth (exact corridor opening), depth = cs (wall thickness).
+    const landingX = dz !== 0 ? stairCentreX : floorEdgeX + dx * (cs / 2);
+    const landingZ = dx !== 0 ? stairCentreZ : floorEdgeZ + dz * (cs / 2);
+    const landingMat = makePBR("mat_landing", { albedoColor: "#3a1a1a", roughness: 0.6, metallic: 0.1 }, scene);
     const landing = MeshBuilder.CreateBox("boss_landing", {
-        width:  dx !== 0 ? landingDepth : STEP_W,
+        width:  dz !== 0 ? stepW : cs,
         height: FLOOR_THICKNESS,
-        depth:  dz !== 0 ? landingDepth : STEP_W,
+        depth:  dx !== 0 ? stepW : cs,
     }, scene);
-    landing.position = new Vector3(landingCentreX, STAIR_TOTAL_HEIGHT + FLOOR_Y, landingCentreZ);
+    landing.position = new Vector3(landingX, STAIR_TOTAL_HEIGHT + FLOOR_Y, landingZ);
     landing.material = landingMat;
     new PhysicsAggregate(landing, PhysicsShapeType.BOX, { mass: 0 }, scene);
 
     // ── Boss Gate ─────────────────────────────────────────────────────────
-    // Gate sits at floorEdge + cs (inner face of the boss room wall),
-    // base at Y = STAIR_TOTAL_HEIGHT.
+    // Gate at inner wall face (floorEdge + cs along travel).
+    // Width = corridorWorldWidth — exactly covers the opening, no gaps, no overrun.
+    // Height = full wallH from boss floor to boss ceiling.
+    const gateX = dz !== 0 ? stairCentreX : floorEdgeX + dx * cs;
+    const gateZ = dx !== 0 ? stairCentreZ : floorEdgeZ + dz * cs;
     const gateY = STAIR_TOTAL_HEIGHT;
-    const gateW = STEP_W;
-    const gateH = wallH - gateY;
-    // Place gate one cell INSIDE floorEdge so it's at the inner wall face
-    const gateX = floorEdgeX + dx * cs;
-    const gateZ = floorEdgeZ + dz * cs;
+    const gateW = corridorWorldWidth;   // ← from actual grid scan, not a constant
+    const gateH = wallH;
 
     const gate = MeshBuilder.CreateBox("boss_gate", {
-        width:  dx !== 0 ? 0.3  : gateW,
+        width:  dz !== 0 ? gateW : 0.3,
         height: gateH,
-        depth:  dz !== 0 ? 0.3  : gateW,
+        depth:  dx !== 0 ? gateW : 0.3,
     }, scene);
     gate.position = new Vector3(gateX, gateY + gateH / 2, gateZ);
     gate.material = gateMat;
@@ -228,22 +214,31 @@ function buildStaircaseAndGate(scene, dungeon, cs, wallH) {
     spawnLight("light_boss_gate", gateX, gateY + gateH * 0.6, gateZ,
         { color: "#ff1100", intensity: 1.2, range: 20 }, scene);
 
-    // Flanking pillars
-    const flankOffset = gateW / 2 + 0.3;
+    // ── Side seal blocks ──────────────────────────────────────────────────
+    // Two blocks, one on each side of the gate.
+    // They fill from the gate edge to the dungeon wall (cs wide each side).
+    // Height spans from Y=0 to boss ceiling to leave zero gap anywhere.
+    const sealMat = makePBR("mat_gate_seal", { albedoColor: "#1a0808", roughness: 0.7, metallic: 0.15 }, scene);
+    const sealH   = wallH + STAIR_TOTAL_HEIGHT;  // Y=0 → boss ceiling
+    const sealHalfW = gateW / 2 + cs / 2;        // offset from gate centre to seal centre
+
     [1, -1].forEach((side, fi) => {
-        const fx = gateX + (dz !== 0 ? side * flankOffset : 0);
-        const fz = gateZ + (dx !== 0 ? side * flankOffset : 0);
+        // Offset along the PERPENDICULAR axis only
+        const sx = dz !== 0 ? gateX + side * sealHalfW : gateX;
+        const sz = dx !== 0 ? gateZ + side * sealHalfW : gateZ;
 
-        const pillar = MeshBuilder.CreateBox(`gate_pillar_${fi}`, {
-            width: 0.6, height: gateH * 1.1, depth: 0.6
+        const seal = MeshBuilder.CreateBox(`gate_seal_${fi}`, {
+            // cs wide along perpendicular, cs deep along travel
+            width:  dz !== 0 ? cs : cs,
+            height: sealH,
+            depth:  dx !== 0 ? cs : cs,
         }, scene);
-        pillar.position = new Vector3(fx, gateY + gateH * 0.55, fz);
-        pillar.material = makePBR("mat_gate_pillar",
-            { albedoColor: "#2a1010", roughness: 0.6, metallic: 0.2 }, scene);
-        new PhysicsAggregate(pillar, PhysicsShapeType.BOX, { mass: 0 }, scene);
+        seal.position = new Vector3(sx, sealH / 2, sz);
+        seal.material = sealMat;
+        new PhysicsAggregate(seal, PhysicsShapeType.BOX, { mass: 0 }, scene);
 
-        spawnLight(`light_gate_pillar_${fi}`, fx, gateY + gateH, fz,
-            { color: "#ff3300", intensity: 0.6, range: 10 }, scene);
+        spawnLight(`light_gate_seal_${fi}`, sx, gateY + 2, sz,
+            { color: "#ff3300", intensity: 0.5, range: 8 }, scene);
     });
 }
 

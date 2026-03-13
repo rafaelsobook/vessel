@@ -19,9 +19,7 @@ export async function dungeonScene(engine, placeDetail){
     const materials = dungeonMaterial(scene);
 
     // Setup lighting
-    setupLighting(scene, placeDetail);
-
-    // Generate the dungeon (add physics to walls if needed)
+    setupLighting(scene, placeDetail)
     generateDungeon(scene, placeDetail, materials);
 
     // Create player character with physics enabled
