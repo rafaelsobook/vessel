@@ -33,6 +33,7 @@ import {
     Color3,
     PointLight,
     Tools,
+    Texture,
 } from '@babylonjs/core';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -61,23 +62,21 @@ const STEP_COUNT = 20;   // 20 steps as requested
 // Boss room floor elevation = total stair height = 20 x 0.1 = 2.0 units
 const STAIR_TOTAL_HEIGHT = STEP_COUNT * STEP_H;
 
-// ─── PBR factory (cached) ─────────────────────────────────────────────────────
-const _pbrCache = new Map();
-
-export function makePBR(name, cfg, scene) {
-    if (_pbrCache.has(name)) return _pbrCache.get(name);
-    const mat = new PBRMaterial(name, scene);
-    if (cfg.albedoColor)       mat.albedoColor      = Color3.FromHexString(cfg.albedoColor);
-    if (cfg.emissiveColor)     mat.emissiveColor     = Color3.FromHexString(cfg.emissiveColor);
-    if (cfg.emissiveIntensity) mat.emissiveIntensity = cfg.emissiveIntensity;
-    mat.roughness               = cfg.roughness ?? 0.8;
-    mat.metallic                = cfg.metallic  ?? 0.0;
-    mat.usePhysicalLightFalloff = true;
-    mat.environmentIntensity    = 0.1;
-    _pbrCache.set(name, mat);
+// ─── PBR material factory ─────────────────────────────────────────────────────
+export function createPBRMat(albedoTexName, bumpTexName, scene) {
+    const mat = new PBRMaterial("mat_" + albedoTexName, scene);
+    mat.albedoTexture = new Texture(`./images/modeltex/${albedoTexName}.jpg`, scene);
+    mat.bumpTexture   = new Texture(`./images/modeltex/${bumpTexName}.jpg`,   scene);
+    mat.albedoColor   = Color3.White();  // white = texture shows as-is, no tint
+    mat.roughness     = 1;
+    mat.metallic      = 0;
+    mat.environmentIntensity = 0.3;
     return mat;
 }
-export function clearPBRCache() { _pbrCache.clear(); }
+// legacy alias kept so nothing else breaks
+export function makePBR(name, cfg, scene) { return createPBRMat("rock2", "rock2normal", scene); }
+export function clearPBRCache() {}
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const worldX = (gx, cs) => gx * cs + cs / 2;
@@ -249,22 +248,27 @@ export function generateDungeon(scene, dungeon, matOverrides = {}) {
     const cs       = dungeon.layout.cellSize;
     const wallH    = dungeon.walls.height;
 
-    // Shared surface materials
-    const wallMat  = matOverrides.wall
-        ?? makePBR("mat_wall",  dungeon.walls?.pbr  ?? { albedoColor: "#1e1e1e", roughness: 0.9,  metallic: 0.02 }, scene);
-    const floorMat = matOverrides.floor
-        ?? makePBR("mat_floor", dungeon.rooms?.[0]?.pbr?.floor ?? { albedoColor: "#2a2a2a", roughness: 0.85, metallic: 0.0 }, scene);
-    const ceilMat  = matOverrides.ceiling
-        ?? makePBR("mat_ceil",  dungeon.rooms?.[0]?.pbr?.ceiling ?? { albedoColor: "#111111", roughness: 0.92, metallic: 0.0 }, scene);
+    // Read texture names passed through generateBSPDungeon({ textures: ... })
+    const tex     = dungeon.walls?.textures;
+    const wallTex = tex?.wall    ?? tex?.floor ?? tex?.ceiling ?? null;
+    const flrTex  = tex?.floor   ?? tex?.wall  ?? tex?.ceiling ?? null;
+    const ceilTex = tex?.ceiling ?? tex?.wall  ?? tex?.floor   ?? null;
 
-    // Boss room gets its own floor/ceil material
+    // Materials — use createPBRMat when texture names are available, otherwise plain PBR
+    const wallMat = wallTex
+        ? createPBRMat(wallTex.diffuse, wallTex.normal, scene)
+        : (() => { const m = new PBRMaterial("mat_wall",  scene); m.albedoColor = Color3.FromHexString("#1e1e1e"); m.roughness = 0.9;  m.metallic = 0.02; m.environmentIntensity = 0.3; return m; })();
+    const floorMat = flrTex
+        ? createPBRMat(flrTex.diffuse, flrTex.normal, scene)
+        : (() => { const m = new PBRMaterial("mat_floor", scene); m.albedoColor = Color3.FromHexString("#2a2a2a"); m.roughness = 0.85; m.metallic = 0.0;  m.environmentIntensity = 0.3; return m; })();
+    const ceilMat = ceilTex
+        ? createPBRMat(ceilTex.diffuse, ceilTex.normal, scene)
+        : (() => { const m = new PBRMaterial("mat_ceil",  scene); m.albedoColor = Color3.FromHexString("#111111"); m.roughness = 0.92; m.metallic = 0.0;  m.environmentIntensity = 0.3; return m; })();
+
+    // Boss room reuses the same textures
     const bossRoom  = dungeon.rooms.find(r => r.type === "boss_room");
-    const bFloorMat = bossRoom?.pbr?.floor
-        ? makePBR("mat_boss_floor", bossRoom.pbr.floor, scene)
-        : makePBR("mat_boss_floor", { albedoColor: "#3a1a1a", roughness: 0.6, metallic: 0.1 }, scene);
-    const bCeilMat  = bossRoom?.pbr?.ceiling
-        ? makePBR("mat_boss_ceil", bossRoom.pbr.ceiling, scene)
-        : makePBR("mat_boss_ceil", { albedoColor: "#2a0808", roughness: 0.7, metallic: 0.05 }, scene);
+    const bFloorMat = floorMat;
+    const bCeilMat  = ceilMat;
 
     // Helper: is this cell inside the boss room?
     function isInBossRoom(gx, gz) {

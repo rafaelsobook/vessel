@@ -3,13 +3,15 @@ import {
     Quaternion, 
     MeshBuilder,
     PhysicsAggregate,
-    PhysicsShapeType
+    PhysicsShapeType,
+    PBRMaterial,
+    Texture
 } from '@babylonjs/core';
 
 export class Character {
     scene = null;
     capsuleHeight = 2;
-    capsuleRadius = 0.1;
+    capsuleRadius = 0.5;
     characterCapsuleBody = null;
     characterAggregate = null;
     
@@ -29,7 +31,10 @@ export class Character {
     }
     
     createCapsuleBody(spawnPos) {
-        // Create visible capsule
+        const pbrMat = new PBRMaterial("asd", this.scene)
+        const tex = new Texture("./images/modeltex/brick1.jpg", this.scene)
+        pbrMat.albedoTexture = tex
+        pbrMat.roughness = 1
         this.characterCapsuleBody = MeshBuilder.CreateCapsule(
             "playerCapsule", 
             { 
@@ -38,6 +43,8 @@ export class Character {
             }, 
             this.scene
         );
+        this.characterCapsuleBody.material = pbrMat
+
         const head = MeshBuilder.CreateBox("", {depth: .5, width: .25, height: .25}, this.scene)
         head.parent = this.characterCapsuleBody
         head.position.z += 0.4

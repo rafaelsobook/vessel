@@ -245,7 +245,7 @@ function findStairApproach(grid, room, cellSize) {
             floorEdgeZ:          c.getFloorEdgeZ(midCell),
             stairCentreX,
             stairCentreZ,
-            corridorWorldWidth,
+            corridorWorldWidth,           // ACTUAL corridor width in world units
             stairBaseX:          c.getStairBaseX(midCell),
             stairBaseZ:          c.getStairBaseZ(midCell),
         };
@@ -343,6 +343,22 @@ function placeLights(rooms, wallH) {
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
+//
+// textures parameter shape:
+//   textures: {
+//     wall:    { diffuse: "rock2",  normal: "rock2normal"  },
+//     floor:   { diffuse: "rock2",  normal: "rock2normal"  },
+//     ceiling: { diffuse: "rock2",  normal: "rock2normal"  },
+//   }
+//
+// You can also pass a single shorthand — if only `wall` is given (or just a
+// top-level diffuse/normal), it is used for wall, floor AND ceiling:
+//   textures: { diffuse: "rock2", normal: "rock2normal" }
+//
+// Texture paths are resolved in generateDungeon as:
+//   "./images/modeltex/<diffuse>.jpg"   (albedo)
+//   "./images/modeltex/<normal>.jpg"    (bump/normal map)
+//
 export function generateBSPDungeon({
     seed          = Date.now(),
     gridWidth     = 32,
@@ -352,7 +368,26 @@ export function generateBSPDungeon({
     corridorWidth = 3,
     name          = "Procedural Dungeon",
     difficulty    = 1,
+    textures
 } = {}) {
+    // Normalise textures: if caller passes { diffuse, normal } at the top level,
+    // treat it as applying to wall, floor and ceiling.
+    // If caller passes { wall: {...}, floor: {...}, ceiling: {...} }, use as-is.
+    // Missing sub-keys fall back to the wall texture.
+    let normTex = { wall: textures, floor: textures, ceiling: textures };
+    // if (textures) {
+    //     console.log(textures.diffuse)
+    //     if (textures.diffuse || textures.normal) {
+    //         // Shorthand: same texture for everything
+    //         normTex = { wall: textures, floor: textures, ceiling: textures };
+    //     } else {
+    //         normTex = {
+    //             wall:    textures.wall    ?? textures.floor ?? textures.ceiling ?? null,
+    //             floor:   textures.floor   ?? textures.wall  ?? textures.ceiling ?? null,
+    //             ceiling: textures.ceiling ?? textures.wall  ?? textures.floor   ?? null,
+    //         };
+    //     }
+    // }
     const rng = seededRNG(seed);
 
     const grid = Array.from({ length: gridHeight }, () => new Array(gridWidth).fill(T_WALL));
@@ -394,9 +429,10 @@ export function generateBSPDungeon({
         walls: {
             thickness: 0.3,
             height:    wallHeight,
-            texture:   "stone_brick",
-            pbr:       { albedoColor: "#1c1c1c", roughness: 0.92, metallic: 0.02 },
-            segments:  [],
+            // pbr:       { albedoColor: "#1c1c1c", roughness: 0.92, metallic: 0.02 },
+            // textures sub-object — null if no textures were passed
+            textures: normTex,
+            segments: [],
         },
         doors:  [],
         props,
