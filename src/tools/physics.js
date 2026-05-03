@@ -9,7 +9,14 @@ let havokInstance = null;
  * Initialize Havok physics engine
  * Call this once before creating any physics objects
  */
-export async function initializePhysics(scene) {
+export function setGravity(scene, gravity) {
+    const physicsEngine = scene.getPhysicsEngine();
+    if (physicsEngine) {
+        physicsEngine.setGravity(gravity);
+        console.log("✅ Gravity set to:", gravity);
+    }
+}
+export async function initializePhysics(scene, _isGravitySet) {
     if (havokInstance) {
         console.log("Physics already initialized");
         return havokInstance;
@@ -26,11 +33,14 @@ export async function initializePhysics(scene) {
         scene.enablePhysics(new Vector3(0, 0, 0), havokPlugin);
         
         console.log("✅ Physics engine initialized");
+        _isGravitySet && setGravity(scene, new Vector3(0, -9.81, 0));
         return havokInstance;
     } catch (error) {
         console.error("❌ Failed to initialize physics:", error);
         throw error;
     }
+
+
 }
 
 /**
@@ -38,13 +48,7 @@ export async function initializePhysics(scene) {
  * @param {Scene} scene - Babylon.js scene
  * @param {Vector3} gravity - Gravity vector (e.g., new Vector3(0, -9.81, 0))
  */
-export function setGravity(scene, gravity) {
-    const physicsEngine = scene.getPhysicsEngine();
-    if (physicsEngine) {
-        physicsEngine.setGravity(gravity);
-        console.log("✅ Gravity set to:", gravity);
-    }
-}
+
 
 /**
  * Check if physics is initialized

@@ -1,164 +1,121 @@
+// components/controls.js
 import { Vector3, Quaternion, MeshBuilder } from '@babylonjs/core';
 
-export class CharacterControls {
-    character = null;
-    camera = null;
-    scene = null;
-    
-    walkSpeed = 10;
-    sprintSpeed = 25;
-    currentSpeed = 10;
-    
-    isMoving = false;
-    isSprinting = false;
-    
-    input = { forward: 0, right: 0 };
-    rotationHelper = null;
-    
-    constructor(character, camera, scene) {
-        this.character = character;
-        this.camera = camera;
-        this.scene = scene;
-        
-        this.setupRotationHelper();
-        this.setupKeyboardInput();
-        this.setupMovementLoop();
-    }
-    
-    setupRotationHelper() {
-        // Invisible helper for smooth rotation calculations
-        this.rotationHelper = MeshBuilder.CreateBox("rotHelper", { size: 0.1 }, this.scene);
-        this.rotationHelper.rotationQuaternion = Quaternion.Identity();
-        this.rotationHelper.isVisible = false;
-    }
-    
-    setupKeyboardInput() {
-        window.addEventListener("keydown", (e) => this.handleKeyDown(e));
-        window.addEventListener("keyup", (e) => this.handleKeyUp(e));
-    }
-    
-    handleKeyDown(e) {
-        const key = e.key.toLowerCase();
-        const camDir = this.camera.getForwardRay().direction.clone();
-        camDir.y = 0;
-        camDir.normalize();
-        
-        switch(key) {
-            case "w":
-                this.input.forward = 1;
-                this.isMoving = true;
-                break;
-            case "s":
-                this.input.forward = -1;
-                this.isMoving = true;
-                break;
-            case "a":
-                this.input.right = -1;
-                this.isMoving = true;
-                break;
-            case "d":
-                this.input.right = 1;
-                this.isMoving = true;
-                break;
-            case "shift":
-                this.isSprinting = true;
-                this.currentSpeed = this.sprintSpeed;
-                break;
+export function createCharacterControls(character, camera, scene) {
+    let walkSpeed = 10;
+    let sprintSpeed = 25;
+    let currentSpeed = walkSpeed;
 
-        }
-        
-        // Calculate rotation based on input direction
-        this.updateRotation(camDir);
+    let isMoving = false;
+    let isSprinting = false;
+
+    const input = { forward: 0, right: 0 };
+
+    // Invisible helper for smooth rotation calculations
+    const rotationHelper = MeshBuilder.CreateBox("rotHelper", { size: 0.1 }, scene);
+    rotationHelper.rotationQuaternion = Quaternion.Identity();
+    rotationHelper.isVisible = false;
+    rotationHelper.isPickable = false;
+
+    function updateRotation(camDir) {
+        const { forward, right } = input;
+
+        if (right === 1)  rotationHelper.lookAt(camDir, Math.PI / 2, 0, 0);
+        if (right === -1) rotationHelper.lookAt(camDir, -Math.PI / 2, 0, 0);
+        if (forward === 1)  rotationHelper.lookAt(camDir, 0, 0, 0);
+        if (forward === 1  && right === 1)  rotationHelper.lookAt(camDir, Math.PI / 4, 0, 0);
+        if (forward === 1  && right === -1) rotationHelper.lookAt(camDir, -Math.PI / 4, 0, 0);
+        if (forward === -1) rotationHelper.lookAt(camDir, Math.PI, 0, 0);
+        if (forward === -1 && right === 1)  rotationHelper.lookAt(camDir, Math.PI - Math.PI / 4, 0, 0);
+        if (forward === -1 && right === -1) rotationHelper.lookAt(camDir, -Math.PI + Math.PI / 4, 0, 0);
     }
-    
-    handleKeyUp(e) {
+
+    function getCamDir() {
+        const dir = camera.getForwardRay().direction.clone();
+        dir.y = 0;
+        return dir.normalize();
+    }
+
+    function handleJump() {
+        if (!character.getIsGrounded() || character.getIsJumped()) return;
+        const forward = character.getCapsuleBody().getDirection(Vector3.Forward());
+        character.jump(forward.scale(currentSpeed));
+    }
+
+    function handleKeyDown(e) {
         const key = e.key.toLowerCase();
-        
-        switch(key) {
-            case "w":
-                this.input.forward = 0;
-                break;
-            case "s":
-                this.input.forward = 0;
-                break;
-            case "a":
-                this.input.right = 0;
-                break;
-            case "d":
-                this.input.right = 0;
-                break;
+        const camDir = getCamDir();
+
+        switch (key) {
+            case "w": input.forward =  1; isMoving = true; break;
+            case "s": input.forward = -1; isMoving = true; break;
+            case "a": input.right   = -1; isMoving = true; break;
+            case "d": input.right   =  1; isMoving = true; break;
             case "shift":
-                this.isSprinting = false;
-                this.currentSpeed = this.walkSpeed;
+                isSprinting = true;
+                currentSpeed = sprintSpeed;
+                break;
+        }
+
+        updateRotation(camDir);
+    }
+
+    function handleKeyUp(e) {
+        const key = e.key.toLowerCase();
+
+        switch (key) {
+            case "w": input.forward = 0; break;
+            case "s": input.forward = 0; break;
+            case "a": input.right   = 0; break;
+            case "d": input.right   = 0; break;
+            case "shift":
+                isSprinting = false;
+                currentSpeed = walkSpeed;
                 break;
             case " ":
                 e.preventDefault();
-                this.handleJump();
-            break;
+                handleJump();
+                break;
         }
-        
-        if (this.input.forward === 0 && this.input.right === 0) {
-            this.isMoving = false;
-        }
-    }
-    
-    updateRotation(camDir) {
-        const { forward, right } = this.input;
-        
-        if (right === 1) this.rotationHelper.lookAt(camDir, Math.PI/2, 0, 0);
-        if (right === -1) this.rotationHelper.lookAt(camDir, -Math.PI/2, 0, 0);
-        if (forward === 1) this.rotationHelper.lookAt(camDir, 0, 0, 0);
-        if (forward === 1 && right === 1) this.rotationHelper.lookAt(camDir, Math.PI/4, 0, 0);
-        if (forward === 1 && right === -1) this.rotationHelper.lookAt(camDir, -Math.PI/4, 0, 0);
-        if (forward === -1) this.rotationHelper.lookAt(camDir, Math.PI, 0, 0);
-        if (forward === -1 && right === 1) this.rotationHelper.lookAt(camDir, Math.PI - Math.PI/4, 0, 0);
-        if (forward === -1 && right === -1) this.rotationHelper.lookAt(camDir, -Math.PI + Math.PI/4, 0, 0);
-    }
-    
-    handleJump() {
-        if (!this.character.getIsGrounded() || this.character.getIsJumped()) return;
-        
-        const forward = this.character.getCapsuleBody().getDirection(Vector3.Forward());
-        const moveDir = forward.scale(this.currentSpeed);
-        
-        this.character.jump(moveDir);
-    }
-    
-    setupMovementLoop() {
-        this.scene.registerBeforeRender(() => {
-            this.updateMovement();
-        });
-    }
-    
-    updateMovement() {
-        if (!this.character.getCapsuleBody()) return;
-        
-        // Apply rotation
-        this.character.applyRotation(this.rotationHelper.rotationQuaternion);
-        
-        // Apply movement
-        if (this.isMoving) {
-            this.character.applyMovement(Vector3.Forward(), this.currentSpeed);
-        } else if (this.character.getIsGrounded()) {
-            this.character.stopMovement();
+
+        if (input.forward === 0 && input.right === 0) {
+            isMoving = false;
+            character.stopMovement();
         }
     }
-    
-    // Public methods for multiplayer or AI control
-    setInput(forward, right) {
-        this.input.forward = forward;
-        this.input.right = right;
-        this.isMoving = forward !== 0 || right !== 0;
+
+    function updateMovement() {
+        if (!character.getCapsuleBody()) return;
+
+        character.applyRotation(rotationHelper.rotationQuaternion);
+
+        character.applyMovement(isMoving);
+        // if (isMoving) {
+            
+        // } else if (character.getIsGrounded()) {
+        //     // character.stopMovement();
+        // }
     }
-    
-    setSprinting(sprinting) {
-        this.isSprinting = sprinting;
-        this.currentSpeed = sprinting ? this.sprintSpeed : this.walkSpeed;
-    }
-    
-    dispose() {
-        if (this.rotationHelper) {
-            this.rotationHelper.dispose();
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    scene.registerBeforeRender(updateMovement);
+
+    // Return a small public API (optional, drop anything you don't use)
+    return {
+        setInput(forward, right) {
+            input.forward = forward;
+            input.right = right;
+            isMoving = forward !== 0 || right !== 0;
+        },
+        setSprinting(sprinting) {
+            isSprinting = sprinting;
+            currentSpeed = sprinting ? sprintSpeed : walkSpeed;
+        },
+        dispose() {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+            rotationHelper.dispose();
         }
-    }
+    };
 }

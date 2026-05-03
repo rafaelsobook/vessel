@@ -1,6 +1,7 @@
-import { dungeon } from "../constants/temporary.js";
+import { sceneMetaData } from "../constants/temporary.js";
 import { Engine, WebGPUEngine, Scene } from "@babylonjs/core"
 import loadScene from "./loadScene.js"
+import "@babylonjs/loaders"
 
 const canvas = document.querySelector("canvas")
 
@@ -10,7 +11,7 @@ let scene
 
 let sceneName
 // Game states
-let gameStatus = "loading" // loading,running
+let gameStatus = "loading" // loading, running
 
 export function getGameStatus(){
     return gameStatus
@@ -21,15 +22,18 @@ export function setGameStatus(_gameStat){
 export function getSceneDet(){
     return {scene,sceneName}
 }
-export function changeScene(newScene, _sceneName){
+export function switchScene(newScene, _sceneName){
+    setGameStatus("loading")
     scene.meshes.forEach(mesh => mesh.dispose())
     scene.dispose()
     scene = newScene
     sceneName = _sceneName;
+
+    setGameStatus("running")
 }
 export async function startScene(){
     await initEngine()
-    scene = await loadScene(engine, "dungeon", dungeon)
+    scene = await loadScene(engine, "room", sceneMetaData)
 
     if(!scene) return console.warn("creating scene failed")
 
@@ -41,24 +45,36 @@ export async function startScene(){
 
 async function initEngine(){	
     console.log("Starting the engine")	
-    if (await WebGPUEngine.IsSupportedAsync) {
-        engine = new WebGPUEngine(canvas);
-        await engine.initAsync();
-        // alert("WebGPU  !!!!!!!!!!!!! is supported");
-    } else {
-        engine = new Engine(canvas, true, {
-            stencil: false,                  
-            antialias: false,     
-            audioEngine: false,
-            adaptToDeviceRatio: true,   
-            disableWebGL2Support: false,
-            useHighPrecisionFloats: !isSafari,  
-            powerPreference: "high-performance",
-            failIfMajorPerformanceCaveat: false,
-            preserveDrawingBuffer: false,
-        });
-        // alert("WebGPU is NOT supported");
-    }
+    // if (await WebGPUEngine.IsSupportedAsync) {
+    //     engine = new WebGPUEngine(canvas);
+    //     await engine.initAsync();
+    //     // alert("WebGPU  !!!!!!!!!!!!! is supported");
+    // } else {
+    //     engine = new Engine(canvas, true, {
+    //         stencil: false,                  
+    //         antialias: false,     
+    //         audioEngine: false,
+    //         adaptToDeviceRatio: true,   
+    //         disableWebGL2Support: false,
+    //         useHighPrecisionFloats: !isSafari,  
+    //         powerPreference: "high-performance",
+    //         failIfMajorPerformanceCaveat: false,
+    //         preserveDrawingBuffer: false,
+    //     });
+    //     // alert("WebGPU is NOT supported");
+    // }
+
+    engine = new Engine(canvas, true, {
+        stencil: false,                  
+        antialias: false,     
+        audioEngine: false,
+        adaptToDeviceRatio: true,   
+        disableWebGL2Support: false,
+        useHighPrecisionFloats: false,  
+        powerPreference: "high-performance",
+        failIfMajorPerformanceCaveat: false,
+        preserveDrawingBuffer: false,
+    });
     scene = new Scene(engine)
     scene.createDefaultCamera()
     return engine

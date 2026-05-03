@@ -1,2 +1,4 @@
-import { rooms } from "./roomdb"
-export const dungeon = rooms[2]
+import { metaDatas } from "./roomdb"
+export const sceneMetaData = metaDatas[4]
+
+console.log("sceneMetaData", sceneMetaData)

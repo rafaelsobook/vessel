@@ -1,0 +1,334 @@
+/**
+ * createVillage.js
+ *
+ * Builds an open-air village scene in Babylon.js from the descriptor
+ * produced by generateVillageMetaData(). Mirrors the createArea.js
+ * conventions (instanced floor tiles, PhysicsAggregate, PBR materials)
+ * but operates on an open world — no walls or ceiling.
+ *
+ * Usage:
+ *   import { createVillage } from './createVillage';
+ *
+ *   const village = generateVillageMetaData({ seed: 42, ... });
+ *   createVillage(scene, village, assetRegistry);
+ *
+ * assetRegistry shape:
+ *   {
+ *     smallHouse:  [mesh0, mesh1, mesh2],   // indexed by variant
+ *     mediumHouse: [mesh0, mesh1, mesh2],
+ *     bigHouse:    [mesh0, mesh1],
+ *     smallTree:   [mesh0, mesh1, mesh2, mesh3],
+ *     mediumTree:  [mesh0, mesh1, mesh2],
+ *     bigTree:     [mesh0, mesh1],
+ *     lightPole:   [mesh0],
+ *     grass:       [mesh0, ..., mesh4],
+ *     herb:        [mesh0, ..., mesh3],
+ *     mushroom:    [mesh0, mesh1, mesh2],
+ *   }
+ *
+ * Each registry entry must be a Babylon.js Mesh already loaded into the
+ * scene (e.g. via SceneLoader.ImportMesh). createVillage will call
+ * createInstance() on the correct variant, so templates should have
+ * isVisible = false before being passed in.
+ */
+
+import {
+    Vector3,
+    MeshBuilder,
+    PhysicsAggregate,
+    PhysicsShapeType,
+    StandardMaterial,
+    Color3,
+    HemisphericLight,
+    DirectionalLight,
+    PointLight,
+} from '@babylonjs/core';
+
+// ─── Material helper ──────────────────────────────────────────────────────────
+/**
+ * Creates a StandardMaterial from a PBR-like descriptor.
+ * @param {string} id
+ * @param {{ albedoColor?: string, roughness?: number, metallic?: number }} cfg
+ * @param {BABYLON.Scene} scene
+ */
+function makeColorMat(id, cfg, scene) {
+    const mat = new StandardMaterial(id, scene);
+    mat.diffuseColor  = Color3.FromHexString(cfg?.albedoColor ?? '#4a6741');
+    mat.specularColor = new Color3(
+        cfg?.metallic ?? 0,
+        cfg?.metallic ?? 0,
+        cfg?.metallic ?? 0,
+    );
+    mat.specularPower = Math.round((1 - (cfg?.roughness ?? 0.95)) * 128);
+    return mat;
+}
+
+// ─── Lighting ─────────────────────────────────────────────────────────────────
+/**
+ * Applies the village lighting descriptor to the scene.
+ * Supports 'directional', 'point', and 'hemisphere' light types.
+ * @param {BABYLON.Scene} scene
+ * @param {{ ambient: object, lights: object[] }} lightingData
+ * @param {string} namePrefix
+ */
+function applyLighting(scene, lightingData, namePrefix) {
+    const { ambient, lights } = lightingData;
+
+    // Ambient via a low-intensity hemispheric light pointing straight up.
+    if (ambient) {
+        const ambLight = new HemisphericLight(
+            `${namePrefix}_ambient`,
+            new Vector3(0, 1, 0),
+            scene,
+        );
+        ambLight.intensity   = ambient.intensity ?? 0.55;
+        ambLight.diffuse     = Color3.FromHexString(ambient.color ?? '#ffffff');
+        ambLight.specular    = new Color3(0, 0, 0);
+        ambLight.groundColor = new Color3(0, 0, 0);
+    }
+
+    (lights ?? []).forEach((l, i) => {
+        const id = `${namePrefix}_light_${i}`;
+
+        if (l.type === 'directional') {
+            // DirectionalLight direction = position vector normalised toward origin.
+            const dir  = new Vector3(-l.x, -l.y, -l.z).normalize();
+            const dLight = new DirectionalLight(id, dir, scene);
+            dLight.intensity = l.intensity ?? 1.0;
+            dLight.diffuse   = Color3.FromHexString(l.color ?? '#ffffff');
+
+        } else if (l.type === 'point') {
+            const pLight = new PointLight(id, new Vector3(l.x, l.y, l.z), scene);
+            pLight.intensity = l.intensity ?? 1.0;
+            pLight.range     = l.range     ?? 20;
+            pLight.diffuse   = Color3.FromHexString(l.color ?? '#ffffff');
+
+        } else if (l.type === 'hemisphere') {
+            const hLight = new HemisphericLight(id, new Vector3(0, 1, 0), scene);
+            hLight.intensity   = l.intensity ?? 0.2;
+            hLight.diffuse     = Color3.FromHexString(l.color ?? '#ffffff');
+            hLight.groundColor = new Color3(0, 0, 0);
+        }
+    });
+}
+
+// ─── Ground plane ─────────────────────────────────────────────────────────────
+function buildFloor(scene, layout, palisade, floorMat, namePrefix) {
+    // Extend to the palisade perimeter so there's no gap under the stakes.
+    const w = palisade?.outerWidth  ?? layout.width;
+    const h = palisade?.outerHeight ?? layout.height;
+
+    const ground = MeshBuilder.CreateGround(`${namePrefix}_ground`, {
+        width: w, height: h, subdivisions: 1,
+    }, scene);
+    ground.material = floorMat;
+    ground.position.y = 0;
+
+    const agg = new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0 }, scene);
+    agg.shape.material = { restitution: 0, friction: 1 };
+}
+
+// ─── Dirt paths ───────────────────────────────────────────────────────────────
+/**
+ * Renders each path segment as a flat quad (thin box) on top of the grass floor.
+ * @param {BABYLON.Scene} scene
+ * @param {object[]} paths  - [{ id, x1, z1, x2, z2, width, pbr }]
+ * @param {string} namePrefix
+ */
+function buildPaths(scene, paths, namePrefix) {
+    (paths ?? []).forEach(path => {
+        const dx     = path.x2 - path.x1;
+        const dz     = path.z2 - path.z1;
+        const length = Math.sqrt(dx * dx + dz * dz);
+        const cx     = (path.x1 + path.x2) / 2;
+        const cz     = (path.z1 + path.z2) / 2;
+        const angle  = Math.atan2(dx, dz); // rotation around Y
+
+        const mat = makeColorMat(`${namePrefix}_mat_${path.id}`, path.pbr, scene);
+
+        const quad = MeshBuilder.CreateBox(`${namePrefix}_${path.id}`, {
+            width:  path.width ?? 4,
+            height: 0.02,           // thin slab sitting on the grass
+            depth:  length,
+        }, scene);
+
+        quad.position      = new Vector3(cx, 0.01, cz);
+        quad.rotation.y    = angle;
+        quad.material      = mat;
+        quad.receiveShadows = true;
+
+        // Static physics so characters can walk over it.
+        const agg = new PhysicsAggregate(quad, PhysicsShapeType.BOX, { mass: 0 }, scene);
+        agg.shape.material = { restitution: 0, friction: 1 };
+    });
+}
+
+// ─── Prop placement ───────────────────────────────────────────────────────────
+/**
+ * Instantiates a single prop array (e.g. smallHouses, bigTrees …) into the scene.
+ *
+ * @param {BABYLON.Scene}   scene
+ * @param {object[]}        items          - prop descriptors from the metadata
+ * @param {BABYLON.Mesh[]}  templateMeshes - registry entry for this type, indexed by variant
+ * @param {boolean}         addPhysics     - whether to attach a static PhysicsAggregate
+ * @param {string}          namePrefix
+ */
+function spawnProps(scene, items, mainMesh, addPhysics, namePrefix) {
+    // if (!templateMeshes || templateMeshes.length === 0) return;
+
+    items.forEach(item => {
+        const template = mainMesh;
+        if (!template) return;
+
+        const inst = template.createInstance(`${namePrefix}_${item.id}`);
+
+        inst.position = new Vector3(item.x, item.y, item.z);
+        inst.rotation = new Vector3(0, (item.rotation * Math.PI) / 180, 0);
+        inst.scaling  = new Vector3(item.scale.x, item.scale.y, item.scale.z);
+
+        inst.isVisible = true;
+        if (addPhysics) {
+            const agg = new PhysicsAggregate(inst, PhysicsShapeType.MESH, { mass: 0 }, scene);
+            agg.shape.material = { restitution: 0, friction: 1 };
+        }
+    });
+}
+// ─── Palisade wall ────────────────────────────────────────────────────────────
+/**
+ * Builds the rectangular perimeter palisade from cylinder instances.
+ * Each stake is an independent MeshBuilder.CreateCylinder with a flat top
+ * and a slightly pointed tip (diameterTop smaller than diameterBottom).
+ *
+ * @param {BABYLON.Scene} scene
+ * @param {object}        palisade   - from village.palisade
+ * @param {string}        namePrefix
+ */
+function buildPalisade(scene, palisade, namePrefix) {
+    if (!palisade?.stakes?.length) return;
+
+    const { stakeHeight, stakeRadius, stakes } = palisade;
+
+    // Single template cylinder — instances share geometry
+    const template = MeshBuilder.CreateCylinder(`${namePrefix}_palisade_tpl`, {
+        height:      stakeHeight,
+        diameterTop:    stakeRadius * 0.3,   // tapered tip — pointy top
+        diameterBottom: stakeRadius * 2,     // full base
+        tessellation: 8,                     // low-poly log look
+    }, scene);
+
+    // Dark weathered wood material
+    const mat = new StandardMaterial(`${namePrefix}_palisade_mat`, scene);
+    mat.diffuseColor  = Color3.FromHexString('#3b2a1a');
+    mat.specularColor = new Color3(0.02, 0.02, 0.02);
+    mat.specularPower = 8;
+    template.material  = mat;
+    template.isVisible = false;
+
+    stakes.forEach(stake => {
+        const inst = template.createInstance(`${namePrefix}_${stake.id}`);
+        inst.position  = new Vector3(stake.x, stake.y, stake.z);
+        // Subtle tilt so the wall looks hand-planted, not machine-perfect
+        inst.rotation  = new Vector3(stake.tiltX ?? 0, 0, 0);
+        inst.isVisible = true;
+
+        // Static physics so player cannot walk through the wall
+        const agg = new PhysicsAggregate(inst, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+        agg.shape.material = { restitution: 0, friction: 1 };
+    });
+}
+// ─── Light-pole point lights ──────────────────────────────────────────────────
+/**
+ * For each light pole that has `lit: true`, adds a small PointLight hovering
+ * just above the top of the pole mesh so it illuminates the surroundings.
+ * @param {BABYLON.Scene} scene
+ * @param {object[]} poles
+ * @param {string} namePrefix
+ */
+function spawnPoleLights(scene, poles, namePrefix) {
+    const POLE_LIGHT_HEIGHT = 5;  // world units above pole origin
+
+    (poles ?? []).forEach((pole, i) => {
+        if (!pole.lit) return;
+        const pl = new PointLight(
+            `${namePrefix}_poleLight_${i}`,
+            new Vector3(pole.x, pole.y + POLE_LIGHT_HEIGHT, pole.z),
+            scene,
+        );
+        pl.intensity = 0.8;
+        pl.range     = 18;
+        pl.diffuse   = new Color3(1.0, 0.95, 0.78); // warm lantern colour
+    });
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+/**
+ * Builds a full village scene from a generateVillageMetaData() descriptor.
+ *
+ * @param {BABYLON.Scene}  scene
+ * @param {object}         village        - output of generateVillageMetaData()
+ * @param {object}         assetRegistry  - { [type]: BABYLON.Mesh[] }
+ *
+ * assetRegistry example:
+ *   {
+ *     smallHouse:  [houseSmall_v0, houseSmall_v1, houseSmall_v2],
+ *     mediumHouse: [houseMed_v0,   houseMed_v1,   houseMed_v2],
+ *     bigHouse:    [houseBig_v0,   houseBig_v1],
+ *     smallTree:   [treeS_v0, treeS_v1, treeS_v2, treeS_v3],
+ *     mediumTree:  [treeM_v0, treeM_v1, treeM_v2],
+ *     bigTree:     [treeB_v0, treeB_v1],
+ *     lightPole:   [pole_v0],
+ *     grass:       [grass_v0, grass_v1, grass_v2, grass_v3, grass_v4],
+ *     herb:        [herb_v0, herb_v1, herb_v2, herb_v3],
+ *     mushroom:    [shroom_v0, shroom_v1, shroom_v2],
+ *   }
+ *
+ * Each mesh in the registry must already be hidden (isVisible = false) so only
+ * the spawned instances are visible.
+ */
+export function createVillage(scene, village, assetRegistry = {}) {
+
+    console.log(assetRegistry)
+    const prefix = village.meta?.name ?? 'village';
+
+    // ── 1. Lighting ───────────────────────────────────────────────────────────
+    // applyLighting(scene, village.lighting, prefix);
+
+    // ── 2. Ground ─────────────────────────────────────────────────────────────
+    const floorMat = makeColorMat(`${prefix}_mat_floor`, village.floor?.pbr, scene);
+    buildFloor(scene, village.layout, village.palisade, floorMat, prefix);
+
+    // ── 3. Dirt paths ─────────────────────────────────────────────────────────
+    buildPaths(scene, village.paths, prefix);
+
+    buildPalisade(scene, village.palisade, prefix);
+
+    // ── 4. Props ──────────────────────────────────────────────────────────────
+    // Houses — with physics so the player can't walk through them.
+    spawnProps(scene, village.bigHouses,    assetRegistry.bigHouse,   true,  prefix);
+    spawnProps(scene, village.mediumHouses, assetRegistry.mediumHouse, true, prefix);
+    spawnProps(scene, village.smallHouses,  assetRegistry.smallHouse,  true, prefix);
+
+    // Trees — with physics (trunks block movement).
+    spawnProps(scene, village.bigTrees,    assetRegistry.bigTree,    true, prefix);
+    spawnProps(scene, village.mediumTrees, assetRegistry.mediumTree,  true, prefix);
+    spawnProps(scene, village.smallTrees,  assetRegistry.smallTree,   true, prefix);
+
+    // Light poles — with physics.
+    spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true, prefix);
+
+    // Foliage — no physics (purely decorative, high count, no collision needed).
+    spawnProps(scene, village.grass,     assetRegistry.grass,     false, prefix);
+    spawnProps(scene, village.herbs,     assetRegistry.herb,      false, prefix);
+    spawnProps(scene, village.mushrooms, assetRegistry.mushroom,  false, prefix);
+
+    // ── 5. Point lights on lit poles ──────────────────────────────────────────
+    // spawnPoleLights(scene, village.lightPoles, prefix);
+
+    // ── 6. Return spawn info so the caller can position the player ────────────
+    const spawnOut = village.spawn ?? { x: 0, y: 1, z: 0, rotation: 0 };
+    console.log('[createVillage] spawn descriptor:', spawnOut,
+                '| entry:', village.entry,
+                '| exit:', village.exit,
+                '| area:', village.layout?.width, 'x', village.layout?.height);
+    return { spawn: spawnOut };
+}

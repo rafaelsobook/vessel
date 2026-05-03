@@ -1,15 +1,30 @@
-import { Scene, Vector3 } from "@babylonjs/core"
+import { MeshBuilder, Scene, Vector3 } from "@babylonjs/core"
 import { dungeonMaterial } from "../tools/materials.js";
-import { generateDungeon } from "../components/createdungeon.js";
+import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
-import { Character } from "../components/createcharacter.js";
-import { CharacterControls } from "../components/controls.js";
+import { Character } from "../character/createcharacter.js";
+import {  createCharacterControls } from "../components/controls.js";
 import { initializePhysics, setGravity } from "../tools/physics.js";
+import { createRock } from "../assetcreation/createRock.js";
+import { loadAvatarContainer, loadModel } from "../tools/loadmodel.js";
+import { createSunRay } from "../tools/sunrays.js";
+import { sceneCleanupReady } from "../components/cleanup.js";
+// import { createMobileControls } from "../components/mobilecontrols.js";
 
 export async function dungeonScene(engine, placeDetail){
+    
+    const spawnPos = {
+        x: placeDetail.spawn.x * placeDetail.layout.cellSize,
+        y: placeDetail.spawn.y + 1,
+        z: placeDetail.spawn.z * placeDetail.layout.cellSize
+    };
     const scene = new Scene(engine)
+    setupLighting(scene, placeDetail)
+    
+    const container = await loadAvatarContainer("./models/avatar/avatar.glb", scene)
 
+    createSunRay(spawnPos, false, scene)
     // IMPORTANT: Initialize physics FIRST before creating any physics objects
     await initializePhysics(scene);
     
@@ -17,31 +32,25 @@ export async function dungeonScene(engine, placeDetail){
     setGravity(scene, new Vector3(0, -9.81, 0));
 
     const materials = dungeonMaterial(scene);
-
+    const rock = createRock(scene)
+    const tile = await loadModel("./models/tiles/tile1.glb", scene)
     // Setup lighting
-    setupLighting(scene, placeDetail)
-    generateDungeon(scene, placeDetail, materials);
 
-    // Create player character with physics enabled
-    const spawnPos = {
-        x: placeDetail.spawn.x * placeDetail.layout.cellSize,
-        y: placeDetail.spawn.y + 1,
-        z: placeDetail.spawn.z * placeDetail.layout.cellSize
-    };
-    
-    const player = new Character(scene, spawnPos, true); // true = physics enabled
+    createDungeon(scene, placeDetail, materials,rock,tile);
+    // const ground = MeshBuilder.CreateGround("ground", { width: 100, height: 100 }, scene);
+    // ground.position = new Vector3(spawnPos.x, spawnPos.y, spawnPos.z)
+    const player = new Character(scene, spawnPos, true, container); // true = physics enabled
 
-    // Create camera and attach to player
-    const camera = createArcCam(scene, placeDetail);
-    attachCam(player.characterCapsuleBody);
-    // Setup player controls (only for local player, not for multiplayer entities)
-    const controls = new CharacterControls(player, camera, scene);
+    const camera = createArcCam(scene, placeDetail, player.head);
     
     await scene.whenReadyAsync()
 
+    const isTouchDevice = navigator.maxTouchPoints > 0;
+
+    const controls = createCharacterControls(player, camera, scene);
+
+    scene.meshes.forEach(mesh => mesh.isPickable = false)
+    scene.onDisposeObservable.addOnce(() => controls.dispose());
+    sceneCleanupReady(scene, createCharacterControls(player, camera, scene));
     return scene
 }
-
-// For multiplayer, you can create characters without controls:
-// const otherPlayer = new Character(scene, spawnPos, true);
-// Then update their position from network data without controls
