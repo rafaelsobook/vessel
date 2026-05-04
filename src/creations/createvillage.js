@@ -42,7 +42,9 @@ import {
     HemisphericLight,
     DirectionalLight,
     PointLight,
+    PBRMaterial
 } from '@babylonjs/core';
+import { createGroundMat, createPathMat } from '../tools/groundmat';
 
 // ─── Material helper ──────────────────────────────────────────────────────────
 /**
@@ -51,17 +53,7 @@ import {
  * @param {{ albedoColor?: string, roughness?: number, metallic?: number }} cfg
  * @param {BABYLON.Scene} scene
  */
-function makeColorMat(id, cfg, scene) {
-    const mat = new StandardMaterial(id, scene);
-    mat.diffuseColor  = Color3.FromHexString(cfg?.albedoColor ?? '#4a6741');
-    mat.specularColor = new Color3(
-        cfg?.metallic ?? 0,
-        cfg?.metallic ?? 0,
-        cfg?.metallic ?? 0,
-    );
-    mat.specularPower = Math.round((1 - (cfg?.roughness ?? 0.95)) * 128);
-    return mat;
-}
+
 
 // ─── Lighting ─────────────────────────────────────────────────────────────────
 /**
@@ -113,15 +105,16 @@ function applyLighting(scene, lightingData, namePrefix) {
 }
 
 // ─── Ground plane ─────────────────────────────────────────────────────────────
-function buildFloor(scene, layout, palisade, floorMat, namePrefix) {
+function buildFloor(scene, layout, palisade, namePrefix) {
+    const groundOffset = 10
     // Extend to the palisade perimeter so there's no gap under the stakes.
     const w = palisade?.outerWidth  ?? layout.width;
     const h = palisade?.outerHeight ?? layout.height;
 
     const ground = MeshBuilder.CreateGround(`${namePrefix}_ground`, {
-        width: w, height: h, subdivisions: 1,
+        width: w+groundOffset, height: h+groundOffset, subdivisions: 1,
     }, scene);
-    ground.material = floorMat;
+    ground.material = createGroundMat(scene);
     ground.position.y = 0;
 
     const agg = new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0 }, scene);
@@ -136,30 +129,21 @@ function buildFloor(scene, layout, palisade, floorMat, namePrefix) {
  * @param {string} namePrefix
  */
 function buildPaths(scene, paths, namePrefix) {
-    (paths ?? []).forEach(path => {
-        const dx     = path.x2 - path.x1;
-        const dz     = path.z2 - path.z1;
-        const length = Math.sqrt(dx * dx + dz * dz);
-        const cx     = (path.x1 + path.x2) / 2;
-        const cz     = (path.z1 + path.z2) / 2;
-        const angle  = Math.atan2(dx, dz); // rotation around Y
+    if (!paths?.length) return;
 
-        const mat = makeColorMat(`${namePrefix}_mat_${path.id}`, path.pbr, scene);
+    const TILE = 4;
 
-        const quad = MeshBuilder.CreateBox(`${namePrefix}_${path.id}`, {
-            width:  path.width ?? 4,
-            height: 0.02,           // thin slab sitting on the grass
-            depth:  length,
-        }, scene);
+    const template = MeshBuilder.CreatePlane(`${namePrefix}_path_tmpl`, {
+        width: TILE, height: TILE,
+    }, scene);
+    template.rotation.x  = Math.PI / 2;
+    template.material    = createPathMat(scene);
+    template.setEnabled(false);
 
-        quad.position      = new Vector3(cx, 0.01, cz);
-        quad.rotation.y    = angle;
-        quad.material      = mat;
-        quad.receiveShadows = true;
-
-        // Static physics so characters can walk over it.
-        const agg = new PhysicsAggregate(quad, PhysicsShapeType.BOX, { mass: 0 }, scene);
-        agg.shape.material = { restitution: 0, friction: 1 };
+    paths.forEach(tile => {
+        const inst = template.createInstance(`${namePrefix}_path_${tile.id}`);
+        inst.position       = new Vector3(tile.x, 0.01, tile.z);
+        inst.receiveShadows = true;
     });
 }
 
@@ -173,14 +157,19 @@ function buildPaths(scene, paths, namePrefix) {
  * @param {boolean}         addPhysics     - whether to attach a static PhysicsAggregate
  * @param {string}          namePrefix
  */
-function spawnProps(scene, items, mainMesh, addPhysics, namePrefix) {
+function spawnProps(scene, items, mainMesh, addPhysics) {
     // if (!templateMeshes || templateMeshes.length === 0) return;
 
-    items.forEach(item => {
-        const template = mainMesh;
-        if (!template) return;
+    if(!mainMesh) return 
 
-        const inst = template.createInstance(`${namePrefix}_${item.id}`);
+    if(mainMesh.material){
+        mainMesh.material.unlit = true
+        console.log(mainMesh.material instanceof PBRMaterial)
+    }
+    items.forEach(item => {
+        if (!mainMesh) return;
+
+        const inst = mainMesh.createInstance(`${mainMesh.name}_${item.id}`);
 
         inst.position = new Vector3(item.x, item.y, item.z);
         inst.rotation = new Vector3(0, (item.rotation * Math.PI) / 180, 0);
@@ -211,7 +200,7 @@ function buildPalisade(scene, palisade, namePrefix) {
     // Single template cylinder — instances share geometry
     const template = MeshBuilder.CreateCylinder(`${namePrefix}_palisade_tpl`, {
         height:      stakeHeight,
-        diameterTop:    stakeRadius * 0.3,   // tapered tip — pointy top
+        diameterTop:    stakeRadius ,   // tapered tip — pointy top
         diameterBottom: stakeRadius * 2,     // full base
         tessellation: 8,                     // low-poly log look
     }, scene);
@@ -287,48 +276,46 @@ function spawnPoleLights(scene, poles, namePrefix) {
  */
 export function createVillage(scene, village, assetRegistry = {}) {
 
-    console.log(assetRegistry)
+    // console.log(assetRegistry)
     const prefix = village.meta?.name ?? 'village';
 
     // ── 1. Lighting ───────────────────────────────────────────────────────────
     // applyLighting(scene, village.lighting, prefix);
 
     // ── 2. Ground ─────────────────────────────────────────────────────────────
-    const floorMat = makeColorMat(`${prefix}_mat_floor`, village.floor?.pbr, scene);
-    buildFloor(scene, village.layout, village.palisade, floorMat, prefix);
+    buildFloor(scene, village.layout, village.palisade, prefix);
 
-    // ── 3. Dirt paths ─────────────────────────────────────────────────────────
-    buildPaths(scene, village.paths, prefix);
+    console.log(village.paths)
 
     buildPalisade(scene, village.palisade, prefix);
 
     // ── 4. Props ──────────────────────────────────────────────────────────────
     // Houses — with physics so the player can't walk through them.
-    spawnProps(scene, village.bigHouses,    assetRegistry.bigHouse,   true,  prefix);
-    spawnProps(scene, village.mediumHouses, assetRegistry.mediumHouse, true, prefix);
-    spawnProps(scene, village.smallHouses,  assetRegistry.smallHouse,  true, prefix);
+    spawnProps(scene, village.bigHouses,    assetRegistry.bigHouse,   true);
+    spawnProps(scene, village.mediumHouses, assetRegistry.mediumHouse, true);
+    spawnProps(scene, village.smallHouses,  assetRegistry.smallHouse,  true);
 
     // Trees — with physics (trunks block movement).
-    spawnProps(scene, village.bigTrees,    assetRegistry.bigTree,    true, prefix);
-    spawnProps(scene, village.mediumTrees, assetRegistry.mediumTree,  true, prefix);
-    spawnProps(scene, village.smallTrees,  assetRegistry.smallTree,   true, prefix);
+    spawnProps(scene, village.bigTrees,    assetRegistry.bigTree,    true);
+    spawnProps(scene, village.mediumTrees, assetRegistry.mediumTree,  true);
+    spawnProps(scene, village.smallTrees,  assetRegistry.smallTree,   true);
 
     // Light poles — with physics.
-    spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true, prefix);
+    spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true);
 
     // Foliage — no physics (purely decorative, high count, no collision needed).
-    spawnProps(scene, village.grass,     assetRegistry.grass,     false, prefix);
-    spawnProps(scene, village.herbs,     assetRegistry.herb,      false, prefix);
-    spawnProps(scene, village.mushrooms, assetRegistry.mushroom,  false, prefix);
+    spawnProps(scene, village.grass,     assetRegistry.grass,     false);
+    spawnProps(scene, village.herbs,     assetRegistry.herb,      false);
+    spawnProps(scene, village.mushrooms, assetRegistry.mushroom,  false);
 
     // ── 5. Point lights on lit poles ──────────────────────────────────────────
     // spawnPoleLights(scene, village.lightPoles, prefix);
 
     // ── 6. Return spawn info so the caller can position the player ────────────
     const spawnOut = village.spawn ?? { x: 0, y: 1, z: 0, rotation: 0 };
-    console.log('[createVillage] spawn descriptor:', spawnOut,
-                '| entry:', village.entry,
-                '| exit:', village.exit,
-                '| area:', village.layout?.width, 'x', village.layout?.height);
+    // console.log('[createVillage] spawn descriptor:', spawnOut,
+    //             '| entry:', village.entry,
+    //             '| exit:', village.exit,
+    //             '| area:', village.layout?.width, 'x', village.layout?.height);
     return { spawn: spawnOut };
 }

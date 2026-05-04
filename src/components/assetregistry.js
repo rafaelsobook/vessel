@@ -7,6 +7,8 @@ export async function getVillageAssetRegistry() {
     const mediumHouse = await mergeAndLoadModel("./models/houses/house2.glb");
     const smallHouse = await mergeAndLoadModel("./models/houses/house1.glb");
 
+    const bigTree = await mergeAndLoadModel("./models/trees/deadtree1.glb");
+    const mediumTree = await mergeAndLoadModel("./models/trees/deadtree1.glb");
     const smallTree = await mergeAndLoadModel("./models/trees/deadtree1.glb");
 
     const pole = await mergeAndLoadModel("./models/poleslamp/polelamp.glb");
@@ -24,8 +26,8 @@ export async function getVillageAssetRegistry() {
         mediumHouse: mediumHouse,
         smallHouse: smallHouse,
         // pole
-        bigTree: smallTree,
-        mediumTree: smallTree,
+        bigTree,
+        mediumTree,
         smallTree,
 
         lightPole: pole,

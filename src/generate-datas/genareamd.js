@@ -146,6 +146,7 @@ function buildPalisade(width, height, spacing, stakeHeight, stakeRadius, entryDi
     }
 
     // north = +Z, south = -Z
+    // Front row
     for (let x = -halfW; x <= halfW; x += spacing)
         if (!inGap(x, 'north')) addStake(x,  halfH);
 
@@ -157,6 +158,22 @@ function buildPalisade(width, height, spacing, stakeHeight, stakeRadius, entryDi
 
     for (let z = -halfH + spacing; z < halfH; z += spacing)
         if (!inGap(z, 'east')) addStake( halfW, z);
+
+    // Back row — offset inward by 1.5 units, staggered by half-spacing to fill gaps
+    const rowOffset = 1.5;
+    const halfS = spacing / 2;
+
+    for (let x = -halfW + halfS; x <= halfW; x += spacing)
+        if (!inGap(x, 'north')) addStake(x,  halfH - rowOffset);
+
+    for (let x = -halfW + halfS; x <= halfW; x += spacing)
+        if (!inGap(x, 'south')) addStake(x, -(halfH - rowOffset));
+
+    for (let z = -halfH + spacing + halfS; z < halfH; z += spacing)
+        if (!inGap(z, 'west')) addStake(-(halfW - rowOffset), z);
+
+    for (let z = -halfH + spacing + halfS; z < halfH; z += spacing)
+        if (!inGap(z, 'east')) addStake( halfW - rowOffset, z);
 
     return { stakeHeight, stakeRadius, spacing, doorWidth, stakes };
 }
@@ -238,13 +255,20 @@ function buildIndoorLighting(width, height, wallHeight) {
 }
 
 // ─── Dirt paths ───────────────────────────────────────────────────────────────
+// Returns one {id, x, z} entry per CELL_SIZE tile along the cross-shaped path.
 function buildPaths(width, height) {
-    const hw = width  / 2;
-    const hd = height / 2;
-    return [
-        { id: 'path_ew', x1: -hw, z1:  0,   x2: hw, z2:  0,  width: 4, pbr: DEFAULT_DIRT_PBR },
-        { id: 'path_ns', x1:  0,  z1: -hd,  x2:  0, z2:  hd, width: 4, pbr: DEFAULT_DIRT_PBR },
-    ];
+    const hw    = Math.floor(width  / 2 / CELL_SIZE) * CELL_SIZE;
+    const hd    = Math.floor(height / 2 / CELL_SIZE) * CELL_SIZE;
+    const tiles = [];
+    let   id    = 0;
+
+    for (let x = -hw; x <= hw; x += CELL_SIZE)
+        tiles.push({ id: id++, x, z: 0 });
+
+    for (let z = -hd; z <= hd; z += CELL_SIZE)
+        if (z !== 0) tiles.push({ id: id++, x: 0, z });
+
+    return tiles;
 }
 
 // ─── Portal descriptor ────────────────────────────────────────────────────────
@@ -320,6 +344,7 @@ function buildSpawn(entry, halfW, halfH, isEnclosed) {
  * }} options
  */
 export function generateArea({
+    sceneTemp,
     name             = 'village',
     width            = 200,
     height           = 200,
@@ -343,8 +368,8 @@ export function generateArea({
     totalMushrooms   = 10,
     // palisade (village only)
     palisadeSpacing      = 2.5,
-    palisadeStakeHeight  = 6,
-    palisadeStakeRadius  = 0.4,
+    palisadeStakeHeight  = 12,
+    palisadeStakeRadius  = 1.1,
     palisadeMargin       = 6,
     palisadeDoorWidth    = 8,
     // enclosed room
@@ -516,5 +541,6 @@ export function generateArea({
         stairApproach: null,
 
         spawn,
+        sceneTemp
     };
 }

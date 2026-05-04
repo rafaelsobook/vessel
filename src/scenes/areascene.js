@@ -22,7 +22,7 @@ export async function areaScene(engine, placeDetail){
     // console.log(placeDetail)
     const spawnPos = getSpawnPos(placeDetail);
     const scene = new Scene(engine)
-    const light = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
+    
     setupLighting(scene, placeDetail)
     
     // const container = await loadAvatarContainer("./models/avatar/avatar.glb", scene)

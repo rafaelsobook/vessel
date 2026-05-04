@@ -34,8 +34,6 @@ export const joinWorld = (roomId) => {
     socket.emit("join-world", playerSocket, (response) => {
         socketId = response.socketId;
         socketPlacesMD = response.placesMD;
-        console.log("Joined world with socket ID:", socketId);
-        console.log("Received places metadata:", socketPlacesMD);
     });
 };
 

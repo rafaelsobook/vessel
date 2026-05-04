@@ -1,6 +1,7 @@
-import { SpotLight, HemisphericLight, Color3, Vector3, Scene } from "@babylonjs/core";
+import { SpotLight, HemisphericLight, DirectionalLight,Color3, Vector3, Scene } from "@babylonjs/core";
 
 export function setupLighting(scene, placeDetail) {
+    console.log(placeDetail)
 
     // ── Environment texture ────────────────────────────────────────────────
     // PBRMaterial needs scene.environmentTexture to calculate reflections and
@@ -10,21 +11,34 @@ export function setupLighting(scene, placeDetail) {
         createSkybox:       false,
         // environmentTexture: "https://assets.babylonjs.com/environments/environmentSpecular.env",
     });
-    scene.environmentIntensity = 0.15; // low — dungeon is dark, just enough for surface detail
+    // scene.environmentIntensity = 0.15; // low — dungeon is dark, just enough for surface detail
 
     // ── Hemispheric ambient fill ───────────────────────────────────────────
     // Prevents pitch-black shadows. Very dim — just lifts the floor off zero.
-    const hemi = new HemisphericLight("hemi_ambient", new Vector3(0, 1, 0), scene);
-    hemi.intensity   = 0.15;
-    hemi.diffuse     = new Color3(1.0, 0.6, 0.3);  // cool blue-grey dungeon ambient
-    hemi.groundColor = new Color3(0.1, 0.1, 0.12); // dark bounce from floor
-    hemi.specular    = Color3.Black();               // no specular from ambient fill
+    const {fogColor, fogDensity} = placeDetail.sceneTemp
+    placeDetail.sceneTemp?.lights?.forEach((light) => {
+        
+
+        if (light.name === "directional") {
+            const dirLight = new DirectionalLight("dir_light", new Vector3(-1, -3, -1), scene);
+            
+            dirLight.intensity = light.intensity
+            // dirLight.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
+            
+        }
+        if(light.name === "hemispheric"){
+            const hemi = new HemisphericLight("hemi_ambient", new Vector3(0, 1, 0), scene);
+            hemi.position = new Vector3(-2, 4, 2);
+            hemi.intensity = light.intensity
+            hemi.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
+        }
+    })            // no specular from ambient fill
 
     scene.fogMode = Scene.FOGMODE_EXP;
-    scene.fogColor = new Color3(0.05, 0.15, 0.1);
-    scene.fogDensity = 0.1;
+    scene.fogColor = new Color3(fogColor.r,fogColor.g,fogColor.b);
+    scene.fogDensity = fogDensity;
     // Ambient
-    scene.ambientColor = new Color3(0.1, 0.25, 0.15);
+    // scene.ambientColor = new Color3(0.1, 0.25, 0.15);
 
     // Fog
     scene.fogColor = new Color3(0.05, 0.15, 0.1);

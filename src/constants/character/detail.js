@@ -68,9 +68,9 @@ export const charDet = {
     titles: [],
 
     currentPlace: {
-        placeId: "room101",
-        name: "room",
-        areaType: "room",
+        placeId: "village101",
+        name: "village",
+        areaType: "village",
     },
     places: [],
     status: [],

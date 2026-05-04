@@ -24,10 +24,21 @@ export const metaDatas = [
         width:      100,
         height:     100,
         seed: 123, 
-        totalBigHouse: 10, 
+        totalBigHouse: 1, 
+        totalSmallHouse : 30,
+        totalMediumHouse: 0,
         totalBigTrees: 1, 
         entry: "south",
         exit: "north",
+        sceneTemp: {
+            fogDensity: 0.008,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9}, 
+                // {name:"hemispheric", intensity: 0.1}, 
+            ],
+        }
     }),
     {
         placeId: "room101",
