@@ -10,11 +10,11 @@ export function getSpawnPos(placeDetail){
         z: placeDetail.spawn.z * scale,
     };
 
-    console.log('[getSpawnPos] areaType:', placeDetail.areaType,
-                '| raw spawn:', placeDetail.spawn,
-                '| scale:', scale,
-                '| world pos:', pos,
-                '| layout:', placeDetail.layout.width, 'x', placeDetail.layout.height);
+    // console.log('[getSpawnPos] areaType:', placeDetail.areaType,
+    //             '| raw spawn:', placeDetail.spawn,
+    //             '| scale:', scale,
+    //             '| world pos:', pos,
+    //             );
 
     return pos;
 }

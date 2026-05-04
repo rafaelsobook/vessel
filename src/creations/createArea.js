@@ -1,4 +1,4 @@
-/**
+ /**
  * createArea.js
  *
  * Builds a single enclosed room in a Babylon.js scene from the data

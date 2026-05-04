@@ -49,10 +49,10 @@ export class Character {
 
         this.createMeshBody(container)
 
-        this.characterCapsuleBody.isVisible = false; // hide the capsule mesh, we only use it for physics
+        this.characterCapsuleBody.isVisible = true; // hide the capsule mesh, we only use it for physics
         this.characterCapsuleBody.isPickable = false; // hide the capsule mesh, we only use it for physics
         this.head = MeshBuilder.CreateBox("", {depth: .5, width: .25, height: .25}, this.scene)
-        this.head.isVisible = false
+        this.head.isVisible = true
         this.head.isPickable = false
         this.head.parent = this.characterCapsuleBody
         this.head.position = new Vector3(0, 0.25, 0.1)
@@ -91,6 +91,7 @@ export class Character {
         }
     }
     createMeshBody(container){
+        if(!container) return;
         const player = container.instantiateModelsToScene();
         player.rootNodes[0].parent = this.characterCapsuleBody
         player.rootNodes[0].position.y = (-this.capsuleHeight/2)+0.1

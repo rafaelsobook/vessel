@@ -1,10 +1,10 @@
 import { dungeonScene } from "../scenes/dungeonscene.js";
 import { areaScene } from "../scenes/areascene.js";
 import { setGameStatus } from "./main.js";
-export default async function loadScene(engine, currentStage, placeDetail, accountDetail){
+export default async function loadScene(engine, placeDetail, accountDetail){
     setGameStatus("loading")
     let scene;
-    console.log(`We are in ${currentStage}`)
+
     switch(placeDetail.areaType){
         case "dungeon":
             scene = await dungeonScene(engine, placeDetail)

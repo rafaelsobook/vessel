@@ -413,6 +413,7 @@ function placeLights(rooms, wallH) {
 
 // ─── Public API ────────────────────────────────────────────────────────────
 export function generateBSPDungeon({
+    placeId,
     seed          = Date.now(),
     gridWidth     = 32,
     gridHeight    = 32,
@@ -465,6 +466,7 @@ export function generateBSPDungeon({
     };
 
     return {
+        placeId,
         areaType: "dungeon",
         meta: { name, difficulty, theme: "stone_dungeon", seed, created: Date.now(), rockCount: rocks.length },
         layout: { width: gridWidth, height: gridHeight, cellSize, grid },

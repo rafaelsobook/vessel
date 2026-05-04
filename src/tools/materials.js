@@ -1,20 +1,30 @@
-import { PBRMaterial, Color3 } from "@babylonjs/core";
+import { PBRMaterial, StandardMaterial, Color3, Texture } from "@babylonjs/core";
+
+
+export function createMat(name, color, texturePath, scene, scale = { uScale: 1, vScale: 1 }) {
+    const mat = new StandardMaterial(name, scene);
+    if(texturePath){
+        const diffTex = new Texture(texturePath, scene);
+        diffTex.uScale = scale.uScale;
+        diffTex.vScale = scale.vScale;
+        
+        mat.diffuseTexture = diffTex;
+        mat.specularColor = new Color3(0,0,0);
+
+    }
+   
+    // Base color (like diffuseColor but PBR)
+    if(color){
+        mat.diffuseColor = color;
+    }
+
+    return mat;
+}
 
 export function dungeonMaterial(scene) {
     const mats = {};
 
-    function createMat(name, color) {
-        const mat = new PBRMaterial(name, scene);
 
-        // Base color (like diffuseColor but PBR)
-        mat.albedoColor = color;
-
-        // === TOONY SETTINGS ===
-        mat.roughness = 1.0;   // flat look
-        mat.metallic = 0.0;    // no realism
-
-        return mat;
-    }
 
     // Floor
     mats.floor = createMat("floorMat", new Color3(0.4, 0.4, 0.45));

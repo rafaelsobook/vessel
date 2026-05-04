@@ -1,7 +1,11 @@
-import { sceneMetaData } from "../constants/temporary.js";
+
 import { Engine, WebGPUEngine, Scene } from "@babylonjs/core"
 import loadScene from "./loadScene.js"
 import "@babylonjs/loaders"
+import { getSocketPlacesMD, initSocket, joinWorld } from "../sockets/joinsocket.js";
+import { metaDatas } from "../constants/localroomdb.js";
+import { getCharDet } from "../states/characterstate.js";
+import { findMyCurrentPlace } from "../states/placestates.js";
 
 const canvas = document.querySelector("canvas")
 
@@ -33,7 +37,12 @@ export function switchScene(newScene, _sceneName){
 }
 export async function startScene(){
     await initEngine()
-    scene = await loadScene(engine, "room", sceneMetaData)
+    initSocket()
+    
+    const charDet = getCharDet()
+    joinWorld(charDet.currentPlace.placeId)
+
+    scene = await loadScene(engine, findMyCurrentPlace())
 
     if(!scene) return console.warn("creating scene failed")
 
@@ -43,8 +52,7 @@ export async function startScene(){
     })
 }
 
-async function initEngine(){	
-    console.log("Starting the engine")	
+async function initEngine(){
     // if (await WebGPUEngine.IsSupportedAsync) {
     //     engine = new WebGPUEngine(canvas);
     //     await engine.initAsync();

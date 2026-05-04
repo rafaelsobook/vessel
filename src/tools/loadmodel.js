@@ -11,13 +11,14 @@ import "@babylonjs/loaders";
 //   - material = null    (caller assigns material)
 //   - position = (0,0,0)
 //
+
 export async function loadModel(path, scene) {
     const container = await SceneLoader.LoadAssetContainerAsync("", path, scene);
     container.addAllToScene();
 
     // Find the mesh that actually has geometry — skip __root__ and empty nodes
     const mesh = container.meshes.find(m => m.getTotalVertices() > 0);
-    console.log(mesh)
+    container.meshes.forEach(m => {console.log(m.name)})
     if (!mesh) throw new Error(`[loadTemplate] No geometry found in ${path}`);
 
     console.log(`[loadTemplate] found mesh: "${mesh.name}" verts=${mesh.getTotalVertices()}`);
@@ -26,7 +27,7 @@ export async function loadModel(path, scene) {
     // Detach from __root__ so our scaling/position is in world space
     // and doesn't get double-transformed by the parent node
     mesh.setParent(null);
-    mesh.position.setAll(0);
+    // mesh.position.setAll(0);
     // GLB from Blender often arrives upside down in BabylonJS due to
     // the Z-up → Y-up axis conversion. Rotate 180° on X to flip it right-side up.
     // mesh.rotation.set(Math.PI/2, 0, 0);
@@ -47,10 +48,17 @@ export async function loadModel(path, scene) {
     return mesh;
 }
 
-export async function mergeAndLoadModel(path, scene){
+export async function loadModelByIndx(path, meshIndx, scene) {
+    const container = await SceneLoader.ImportMeshAsync("", "", path, scene);
+    container.meshes[meshIndx].parent = null
+    container.meshes[0].dispose()
+    return container.meshes[meshIndx];
+}
+
+export async function mergeAndLoadModel(path, scene, functionBeforeMerge){
     const container = await SceneLoader.LoadAssetContainerAsync("", path, scene);
     container.addAllToScene();
-    
+    if(functionBeforeMerge) functionBeforeMerge(container);
     const mesh = Mesh.MergeMeshes(
         container.meshes[0].getChildren(),
         true,

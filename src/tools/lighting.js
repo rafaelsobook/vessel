@@ -8,7 +8,7 @@ export function setupLighting(scene, placeDetail) {
     scene.createDefaultEnvironment({
         createGround:       false,
         createSkybox:       false,
-        environmentTexture: "https://assets.babylonjs.com/environments/environmentSpecular.env",
+        // environmentTexture: "https://assets.babylonjs.com/environments/environmentSpecular.env",
     });
     scene.environmentIntensity = 0.15; // low — dungeon is dark, just enough for surface detail
 
@@ -22,7 +22,7 @@ export function setupLighting(scene, placeDetail) {
 
     scene.fogMode = Scene.FOGMODE_EXP;
     scene.fogColor = new Color3(0.05, 0.15, 0.1);
-    scene.fogDensity = 0.008;
+    scene.fogDensity = 0.1;
     // Ambient
     scene.ambientColor = new Color3(0.1, 0.25, 0.15);
 
@@ -33,24 +33,24 @@ export function setupLighting(scene, placeDetail) {
 
     // scene.activeLiglight.diffuse = new BABYLON.Color3(1.0, 0.6, 0.3);
 
-    const cs = placeDetail.layout.cellSize;
+    // const cs = placeDetail.layout.cellSize;
 
-    placeDetail.lighting.lights.forEach((light, i) => {
-        // const wx = light.x * cs;
-        // const wy = light.y ?? 8;        // world Y — already set by BSP as wallH*0.7
-        // const wz = light.z * cs;
+    // placeDetail.lighting.lights.forEach((light, i) => {
+    //     // const wx = light.x * cs;
+    //     // const wy = light.y ?? 8;        // world Y — already set by BSP as wallH*0.7
+    //     // const wz = light.z * cs;
 
-        // const spot = new SpotLight(
-        //     `spot_${i}`,
-        //     new Vector3(wx, wy, wz),    // position: near ceiling
-        //     new Vector3(0, -1, 0),       // direction: straight down
-        //     Math.PI / 2.5,               // angle: ~72° cone — wide enough to cover room floor
-        //     2,                           // exponent: falloff sharpness (2=soft edge)
-        //     scene
-        // );
-        // spot.diffuse   = Color3.FromHexString(light.color ?? "#ffaa55");
-        // spot.specular  = Color3.FromHexString(light.color ?? "#ffaa55");
-        // spot.intensity = light.intensity * 80;  // SpotLight needs higher intensity than PointLight
-        // spot.range     = light.range * cs;       // convert grid units → world units
-    });
+    //     // const spot = new SpotLight(
+    //     //     `spot_${i}`,
+    //     //     new Vector3(wx, wy, wz),    // position: near ceiling
+    //     //     new Vector3(0, -1, 0),       // direction: straight down
+    //     //     Math.PI / 2.5,               // angle: ~72° cone — wide enough to cover room floor
+    //     //     2,                           // exponent: falloff sharpness (2=soft edge)
+    //     //     scene
+    //     // );
+    //     // spot.diffuse   = Color3.FromHexString(light.color ?? "#ffaa55");
+    //     // spot.specular  = Color3.FromHexString(light.color ?? "#ffaa55");
+    //     // spot.intensity = light.intensity * 80;  // SpotLight needs higher intensity than PointLight
+    //     // spot.range     = light.range * cs;       // convert grid units → world units
+    // });
 }

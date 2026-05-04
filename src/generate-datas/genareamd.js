@@ -286,6 +286,7 @@ function buildSpawn(entry, halfW, halfH, isEnclosed) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 /**
  * @param {{
+ *   placeId?:               string,
  *   name?:               string,
  *   width?:              number,
  *   height?:             number,
@@ -319,13 +320,14 @@ function buildSpawn(entry, halfW, halfH, isEnclosed) {
  * }} options
  */
 export function generateArea({
-    name             = 'Village',
+    name             = 'village',
     width            = 200,
     height           = 200,
     cellSize         = CELL_SIZE,
     seed             = Date.now(),
     theme            = 'japanese_village',
-    areaType:        areaTypeOverride = null,
+    placeId,
+    areaType,
     // houses
     totalSmallHouse  = 0,
     totalMediumHouse = 0,
@@ -359,8 +361,7 @@ export function generateArea({
 
     const isVillage  = (totalSmallHouse + totalMediumHouse + totalBigHouse) > 0;
     const isEnclosed = wallHeight > 0 && !isVillage;
-    const areaType   = areaTypeOverride ?? (isVillage ? 'village' : isEnclosed ? 'area' : 'forest');
-
+   
     const floorPBR = floorOverride ?? (isEnclosed ? DEFAULT_INDOOR_FLOOR_PBR : DEFAULT_OUTDOOR_FLOOR_PBR);
     const wallsPBR = wallsOverride ?? DEFAULT_WALL_PBR;
     const ceilPBR  = ceilOverride  ?? DEFAULT_CEIL_PBR;
@@ -440,6 +441,7 @@ export function generateArea({
     const portalOffset = isVillage ? palisadeMargin : 0;
 
     return {
+        placeId,
         areaType,
 
         meta: {

@@ -1,7 +1,7 @@
 // File: src/tools/physics.js
 
 import HavokPhysics from "@babylonjs/havok";
-import { HavokPlugin, Vector3 } from "@babylonjs/core";
+import { HavokPlugin, Vector3, PhysicsShapeType, PhysicsAggregate } from "@babylonjs/core";
 
 let havokInstance = null;
 
@@ -39,10 +39,21 @@ export async function initializePhysics(scene, _isGravitySet) {
         console.error("❌ Failed to initialize physics:", error);
         throw error;
     }
-
-
 }
-
+export function createAggregate(mesh, options = { mass: 0 }, shapeType, scene){
+    
+    let shape
+    switch(shapeType){
+        case "mesh":
+            shape = PhysicsShapeType.MESH
+        break;
+        default:
+            shape = PhysicsShapeType.BOX
+        break
+    }
+    let agg = new PhysicsAggregate(mesh, shape, options, scene);
+    agg.shape.material = { restitution: 0, friction: 1 };
+}
 /**
  * Set gravity for the scene
  * @param {Scene} scene - Babylon.js scene
