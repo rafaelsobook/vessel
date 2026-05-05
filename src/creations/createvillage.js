@@ -248,7 +248,7 @@ function buildGates(scene, palisade, entry, exit, namePrefix) {
         const z = dir === 'north' ? hh - INSET : dir === 'south' ? -hh + INSET : 0;
 
         const gate = MeshBuilder.CreateBox(`${namePrefix}_gate_${id}`, {
-            width: w, height: stakeHeight, depth: d,
+            width: w/2, height: stakeHeight/2, depth: d,
         }, scene);
         gate.position   = new Vector3(x, stakeHeight / 2, z);
         gate.material   = mat;
