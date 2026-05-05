@@ -36,11 +36,57 @@ export const metaDatas = [
         height:     100,
         seed: 123, 
         totalBigHouse: 1, 
-        totalSmallHouse : 30,
+        totalSmallHouse : 1,
         totalMediumHouse: 0,
         totalBigTrees: 1, 
         entry: "south",
-        exit: "north",
+        exit: "east",
+        entryExitPlaceIds: {
+            entry: {
+                placeId: "village101",
+                name: "village",
+                areaType: "village",
+            },
+            exit: {
+                placeId: "village102",
+                name: "village",
+                areaType: "village",
+            }
+        },
+        sceneTemp: {
+            fogDensity: 0.008,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9}, 
+                // {name:"hemispheric", intensity: 0.1}, 
+            ],
+        }
+    }),
+    generateArea({ 
+        placeId: "village102",
+        areaType: "village",
+        width:      100,
+        height:     100,
+        seed: 123, 
+        totalBigHouse: 1, 
+        totalSmallHouse : 1,
+        totalMediumHouse: 0,
+        totalBigTrees: 1, 
+        entry: "west",
+        exit: "east",
+        entryExitPlaceId: {
+            entry: {
+                placeId: "village101",
+                name: "village",
+                areaType: "village",
+            },
+            exit: {
+                placeId: "village101",
+                name: "village",
+                areaType: "village",
+            }
+        },
         sceneTemp: {
             fogDensity: 0.008,
             fogColor:{ r:0.05, g:0.15, b:0.1},

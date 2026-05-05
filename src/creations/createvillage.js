@@ -225,6 +225,43 @@ function buildPalisade(scene, palisade, namePrefix) {
         agg.shape.material = { restitution: 0, friction: 1 };
     });
 }
+// ─── Gate slabs ───────────────────────────────────────────────────────────────
+// If you want to move the gate inside change the INSET
+function buildGates(scene, palisade, entry, exit, namePrefix) {
+    if (!palisade) return;
+
+    const { stakeHeight, doorWidth } = palisade;
+    const hw   = palisade.outerWidth  / 2;
+    const hh   = palisade.outerHeight / 2;
+    const SLAB = 0.8; // gate thickness
+
+    const mat = new StandardMaterial(`${namePrefix}_gate_mat`, scene);
+    mat.diffuseColor  = Color3.FromHexString('#3b2a1a');
+    mat.specularColor = new Color3(0.02, 0.02, 0.02);
+
+    function place(dir, id) {
+        const isNS = dir === 'north' || dir === 'south';
+        const w = isNS ? doorWidth : SLAB;
+        const d = isNS ? SLAB      : doorWidth;
+        const INSET = 4;
+        const x = dir === 'east' ? hw - INSET : dir === 'west' ? -hw + INSET : 0;
+        const z = dir === 'north' ? hh - INSET : dir === 'south' ? -hh + INSET : 0;
+
+        const gate = MeshBuilder.CreateBox(`${namePrefix}_gate_${id}`, {
+            width: w, height: stakeHeight, depth: d,
+        }, scene);
+        gate.position   = new Vector3(x, stakeHeight / 2, z);
+        gate.material   = mat;
+        gate.receiveShadows = true;
+
+        const agg = new PhysicsAggregate(gate, PhysicsShapeType.BOX, { mass: 0 }, scene);
+        agg.shape.material = { restitution: 0, friction: 1 };
+    }
+
+    if (entry?.direction) place(entry.direction, 'entry');
+    if (exit?.direction)  place(exit.direction,  'exit');
+}
+
 // ─── Light-pole point lights ──────────────────────────────────────────────────
 /**
  * For each light pole that has `lit: true`, adds a small PointLight hovering
@@ -288,6 +325,7 @@ export function createVillage(scene, village, assetRegistry = {}) {
     console.log(village.paths)
 
     buildPalisade(scene, village.palisade, prefix);
+    buildGates(scene, village.palisade, village.entry, village.exit, prefix);
 
     // ── 4. Props ──────────────────────────────────────────────────────────────
     // Houses — with physics so the player can't walk through them.

@@ -3,7 +3,7 @@ import { dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
-import { Character } from "../character/createcharacter.js";
+import { Character } from "../charactersystem/createcharacter.js";
 import {  createCharacterControls } from "../components/controls.js";
 import { initializePhysics, setGravity } from "../tools/physics.js";
 import { createRock } from "../assetcreation/createRock.js";
