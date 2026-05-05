@@ -15,8 +15,19 @@ export const metaDatas = [
         wallHeight: 15,
         corridorWidth: 3,
         difficulty: 1,
-        textures: { wallTexName: "wall1", floorTexName: "floor1", ceilingTexName: "ceil1" }
+        textures: { wallTexName: "wall1", floorTexName: "floor1", ceilingTexName: "ceil1" },
         // ↑ shorthand — applies rock2.jpg to wall, floor AND ceiling
+    
+        //new
+        sceneTemp: {
+            fogDensity: 0.008,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9}, 
+                // {name:"hemispheric", intensity: 0.1}, 
+            ],
+        }
     }),
     generateArea({ 
         placeId: "village101",

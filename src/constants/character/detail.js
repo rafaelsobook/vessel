@@ -67,11 +67,7 @@ export const charDet = {
     ],
     titles: [],
 
-    currentPlace: {
-        placeId: "village101",
-        name: "village",
-        areaType: "village",
-    },
+
     places: [],
     status: [],
     regens: {sp: 0, hp: 0, mana: 0},
@@ -88,11 +84,25 @@ export const charDet = {
     defeatedMonsters: [],
     blessings: [],
     stories: [],
-    quests: [],
+    quests: [
+        {
+            npcID: "npc_emilia_001",
+            qName: "talk-to-emilia-1",
+            qTitle: "Meet Your Summoner",
+            desc: "Emilia", 
+            questRequirements: { reqType: false, completed: true}, //reqType'enemy/item/money
+        }
+    ],
     clearedQuests: [],
     race: "human",
     characterType: "player",
     lastSpoken: "none",
     deadCount: 1,
-    isDead: false
+    isDead: false,
+
+    currentPlace: {
+        placeId: "room101",
+        name: "room",
+        areaType: "room",
+    },
 }

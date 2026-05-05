@@ -1,6 +1,6 @@
 export const npcSpeech = [
     {
-        name: "emilia101",
+        npcID: "npc_emilia_001",
         normalSpeech: {
             type: "permanent", // once, permanent, conditional, random(means it is an array of possible speech)
             speech: "My name is Emilia Ashford, I greet you with my life, Now I bid you farewell and enjoy your slow fun journey here"
@@ -19,18 +19,18 @@ export const npcSpeech = [
                     {theNpc: true, message: "Shall grant you my remaining power to protect yourself from incoming chaos of this world"},
                     {theNpc: false, message: "Chaos ? I just got here, what is going on ?"},
                     {theNpc: true, message: "I know you're planning to enjoy a slow fun journey here"},
-                    {theNpc: true, message: "You people are our only hope to stop the chaos from new born demon lords"},
-                    {theNpc: false, message: "Demon lords !!!"},
+                    {theNpc: true, message: "You people are our only hope to stop the chaos from this era created by demons"},
+                    {theNpc: false, message: "Demons !!!"},
                     {theNpc: true, message: "Speaking of demon, My contract collector is here"},
-                    {theNpc: true, message: "Meet Peter outside this room, He can answer your questions"},
-                    {theNpc: true, message: "Do not waste my life. Go"},
-                    {theNpc: false, message: "Wait !!! Why waste your life for someone ..... !!!"},
+                    {theNpc: true, message: "Meet Peter outside, He can answer your questions"},
+                    {theNpc: true, message: "Do not waste my life. Go !!"},
+                    {theNpc: false, message: "Wait !!!"},
                     {theNpc: false, message: "drama:emilia "},
                 ],
                 questsToReceive: [
                     { 
                         qName: "talkToPeter1", 
-                        qTtle: "Meet Peter", 
+                        qTitle: "Meet Peter", 
                         desc: "Peter, Emilia's friend", 
                         questRequirements: { reqType: false, completed: true}, //reqType'enemy/item/money
                     }
