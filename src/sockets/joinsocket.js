@@ -1,5 +1,6 @@
 import { io } from "socket.io-client";
-import { getCharSocket } from "../states/characterstate";
+import { getCharSocket } from "../charactersystem/characterstate.js";
+import { activateOnSocketListeners, setSocketOn } from "./worldsocket.js";
 
 let socket = null;
 let socketId = null
@@ -21,9 +22,11 @@ export function getSocketPlacesMD() {
 
 
 export function initSocket() {
-    socket = io("http://localhost:3000", {
+    socket = io("ws://localhost:3000", {
         transports: ["websocket"],
     });
+
+    activateOnSocketListeners(socket)
 }
 export const joinWorld = (roomId) => {
     const playerSocket = getCharSocket();
@@ -31,6 +34,7 @@ export const joinWorld = (roomId) => {
         console.error("Socket not initialized. Call initSocket() first.");
         return;
     }
+    setSocketOn(true)
     socket.emit("join-world", playerSocket, (response) => {
         socketId = response.socketId;
         socketPlacesMD = response.placesMD;

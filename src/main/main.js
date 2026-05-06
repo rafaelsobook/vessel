@@ -4,8 +4,10 @@ import loadScene from "./loadScene.js"
 import "@babylonjs/loaders"
 import { getSocketPlacesMD, initSocket, joinWorld } from "../sockets/joinsocket.js";
 import { metaDatas } from "../constants/localroomdb.js";
-import { getCharDet } from "../states/characterstate.js";
+import { getCharDetFromDB, getCharDetFromDBAndUpdateCharState, setCharState } from "../charactersystem/characterstate.js"
 import { findMyCurrentPlace } from "../states/placestates.js";
+import { disposePhysics } from "../tools/physics.js";
+import { beginWorldRenderInWorldSocket } from "../sockets/worldsocket.js";
 
 const canvas = document.querySelector("canvas")
 
@@ -26,7 +28,11 @@ export function setGameStatus(_gameStat){
 export function getSceneDet(){
     return {scene,sceneName}
 }
-export function switchScene(newScene, _sceneName){
+export function getEngine(){
+    if(!engine) return console.log("NO ENGINE")
+    return engine
+}
+export function changeScene(newScene, _sceneName){
     setGameStatus("loading")
     scene.meshes.forEach(mesh => mesh.dispose())
     scene.dispose()
@@ -39,17 +45,15 @@ export async function startScene(){
     await initEngine()
     initSocket()
     
-    const charDet = getCharDet()
-    joinWorld(charDet.currentPlace.placeId)
+    const charDet = getCharDetFromDBAndUpdateCharState()
 
-    scene = await loadScene(engine, findMyCurrentPlace())
+    scene = await loadScene(findMyCurrentPlace())
 
     if(!scene) return console.warn("creating scene failed")
-
+    // changeScene(scene, "new scene")
+    // beginWorldRenderInWorldSocket(scene)
+    engine.runRenderLoop(() => scene.render())
     window.addEventListener("resize", ()  => engine.resize())
-    engine.runRenderLoop(() => {
-        scene.render()
-    })
 }
 
 async function initEngine(){
@@ -83,7 +87,6 @@ async function initEngine(){
         failIfMajorPerformanceCaveat: false,
         preserveDrawingBuffer: false,
     });
-    scene = new Scene(engine)
-    scene.createDefaultCamera()
+
     return engine
 }

@@ -1,22 +1,22 @@
 import { dungeonScene } from "../scenes/dungeonscene.js";
 import { areaScene } from "../scenes/areascene.js";
 import { setGameStatus } from "./main.js";
-export default async function loadScene(engine, placeDetail, accountDetail){
+export default async function loadScene(placeDetail, accountDetail){
     setGameStatus("loading")
     let scene;
 
     switch(placeDetail.areaType){
         case "dungeon":
-            scene = await dungeonScene(engine, placeDetail)
+            scene = await dungeonScene(placeDetail)
         break
         case "room":
-            scene = await areaScene(engine, placeDetail)
+            scene = await areaScene(placeDetail)
         break
         case "village":
-            scene = await areaScene(engine, placeDetail)
+            scene = await areaScene(placeDetail)
         break
         default:
-            scene = await dungeonScene(engine, placeDetail)
+            scene = await dungeonScene(placeDetail)
         break
     }
     if(scene) {

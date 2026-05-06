@@ -1,5 +1,7 @@
+import { randNum } from "../../tools/random";
+
 export const charDet = {
-    owner: "asdqwdasd",
+    owner: randNum(10000, 900000),
     name: "sdawdasd",
     stats: { 
         weapon: 1, 
@@ -19,8 +21,32 @@ export const charDet = {
     maxMp: 100,
     sp: 100,
     maxSp: 100,
-    exp: 0,
-    maxExp: 100,
+    defeatedFoes:[
+        {
+            foeType: "monster",
+            total: 0
+        },
+        {
+            foeType: "human",
+            total: 0
+        },
+        {
+            foeType: "demon",
+            total: 0
+        },
+        {
+            foeType: "higher demon",
+            total: 0
+        },
+        {
+            foeType: "dragon",
+            total: 0
+        },
+        {
+            foeType: "god",
+            total: 0
+        },
+    ],
     x: 0,
     z: 0,
     cloth: "rudeus",
@@ -97,11 +123,9 @@ export const charDet = {
     race: "human",
     characterType: "player",
     lastSpoken: "none",
-    deadCount: 1,
-    isDead: false,
 
     currentPlace: {
-        placeId: "village101",
+        placeId: 1,
         name: "village",
         areaType: "village",
     },

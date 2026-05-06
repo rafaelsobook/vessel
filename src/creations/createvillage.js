@@ -45,6 +45,13 @@ import {
     PBRMaterial
 } from '@babylonjs/core';
 import { createGroundMat, createPathMat } from '../tools/groundmat';
+import { onIntersecEnterTrig } from '../components/actionManager';
+import { getCharState, setCharState } from '../charactersystem/characterstate';
+import { exitScene } from '../sockets/exitsocket';
+import { findMyCurrentPlace } from '../states/placestates';
+import loadScene from '../main/loadScene';
+import { getEngine, changeScene } from '../main/main';
+import { disposePhysics } from '../tools/physics';
 
 // ─── Material helper ──────────────────────────────────────────────────────────
 /**
@@ -227,19 +234,19 @@ function buildPalisade(scene, palisade, namePrefix) {
 }
 // ─── Gate slabs ───────────────────────────────────────────────────────────────
 // If you want to move the gate inside change the INSET
-function buildGates(scene, palisade, entry, exit, namePrefix) {
+function buildGates(scene, palisade, entry, exit, entryExitPlaceIds) {
     if (!palisade) return;
+    if(!entryExitPlaceIds) return
 
+    const { entryPlaceDetail, exitPlaceDetail } = entryExitPlaceIds
+    console.log(entry.direction)
+    console.log(exit.direction)
     const { stakeHeight, doorWidth } = palisade;
     const hw   = palisade.outerWidth  / 2;
     const hh   = palisade.outerHeight / 2;
     const SLAB = 0.8; // gate thickness
 
-    const mat = new StandardMaterial(`${namePrefix}_gate_mat`, scene);
-    mat.diffuseColor  = Color3.FromHexString('#3b2a1a');
-    mat.specularColor = new Color3(0.02, 0.02, 0.02);
-
-    function place(dir, id) {
+    function place(dir, pathname) {
         const isNS = dir === 'north' || dir === 'south';
         const w = isNS ? doorWidth : SLAB;
         const d = isNS ? SLAB      : doorWidth;
@@ -247,15 +254,37 @@ function buildGates(scene, palisade, entry, exit, namePrefix) {
         const x = dir === 'east' ? hw - INSET : dir === 'west' ? -hw + INSET : 0;
         const z = dir === 'north' ? hh - INSET : dir === 'south' ? -hh + INSET : 0;
 
-        const gate = MeshBuilder.CreateBox(`${namePrefix}_gate_${id}`, {
+        const gate = MeshBuilder.CreateBox(`gate_${pathname}`, {
             width: w/2, height: stakeHeight/2, depth: d,
         }, scene);
-        gate.position   = new Vector3(x, stakeHeight / 2, z);
-        gate.material   = mat;
-        gate.receiveShadows = true;
+        gate.position   = new Vector3(x, stakeHeight / 4, z);
+        let interval = setInterval(() => {
+            
+            const body = scene.getMeshByName(`player.${getCharState().owner}`)
+            if(!body) return console.log(`looking for player capsule for gate intersection player.${getCharState().owner}`)
 
-        const agg = new PhysicsAggregate(gate, PhysicsShapeType.BOX, { mass: 0 }, scene);
-        agg.shape.material = { restitution: 0, friction: 1 };
+            onIntersecEnterTrig(gate, body, scene, () => {
+                if(pathname === "entry"){
+                    // save to your character data base first if have database
+                    // replace setCharState to getCharFromDBAndSetCharState() if you have db
+                    const charState = getCharState()
+
+                    charState.currentPlace.placeId = entryPlaceDetail.placeId
+                    charState.currentPlace.name = entryPlaceDetail.name
+                    charState.currentPlace.areaType = entryPlaceDetail.areaType
+
+                    console.log(getCharState())
+
+                    exitScene();
+
+                    const placeDetail = findMyCurrentPlace()
+                    disposePhysics(scene)
+                    const newScene = loadScene(placeDetail)
+                    // changeScene(newScene, "whatever")
+                }
+            })
+            clearInterval(interval)
+        }, 1000)
     }
 
     if (entry?.direction) place(entry.direction, 'entry');
@@ -313,7 +342,7 @@ function spawnPoleLights(scene, poles, namePrefix) {
  */
 export function createVillage(scene, village, assetRegistry = {}) {
 
-    // console.log(assetRegistry)
+    const {entryExitPlaceIds} = village
     const prefix = village.meta?.name ?? 'village';
 
     // ── 1. Lighting ───────────────────────────────────────────────────────────
@@ -325,7 +354,7 @@ export function createVillage(scene, village, assetRegistry = {}) {
     console.log(village.paths)
 
     buildPalisade(scene, village.palisade, prefix);
-    buildGates(scene, village.palisade, village.entry, village.exit, prefix);
+    buildGates(scene, village.palisade, village.entry, village.exit, entryExitPlaceIds);
 
     // ── 4. Props ──────────────────────────────────────────────────────────────
     // Houses — with physics so the player can't walk through them.

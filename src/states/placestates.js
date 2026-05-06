@@ -1,6 +1,6 @@
 import { metaDatas } from "../constants/localroomdb";
 import { getSocketPlacesMD } from "../sockets/joinsocket";
-import { getCharDet } from "./characterstate";
+import { getCharDetFromDB, getCharState } from "../charactersystem/characterstate.js";
 
 let prevPlace = null;
 let currentPlace = null;
@@ -11,14 +11,28 @@ export function setPlaceDetails(details) {
 }
 
 export function findMyCurrentPlace(){
-    const charDet = getCharDet()
-    let placeMetaData = metaDatas.find( localplace => localplace.placeId === charDet.currentPlace.placeId )
+    const charState = getCharState()
+    let placeMetaData = metaDatas.find( localplace => localplace.placeId === charState.currentPlace.placeId )
     if(!placeMetaData) {
-        placeMetaData = getSocketPlacesMD().find( place => place.placeId === charDet.currentPlace.placeId )
+        placeMetaData = getSocketPlacesMD().find( place => place.placeId === charState.currentPlace.placeId )
     }
 
     if(!placeMetaData) {
-        console.warn("place metadata not found for current place ID:", charDet.currentPlace.placeId);
+        console.warn("place metadata not found for current place ID:", charState.currentPlace.placeId);
+        placeMetaData = null
+    }
+    return placeMetaData
+}
+
+export function findPlaceMetaData(placeId){
+
+    let placeMetaData = metaDatas.find( localplace => localplace.placeId === placeId )
+    if(!placeMetaData) {
+        placeMetaData = getSocketPlacesMD().find( place => place.placeId === placeId )
+    }
+
+    if(!placeMetaData) {
+        console.warn("place metadata not found for current place ID:", placeId);
         placeMetaData = null
     }
     return placeMetaData

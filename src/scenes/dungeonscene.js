@@ -3,17 +3,18 @@ import { dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
-import { Character } from "../charactersystem/createcharacter.js";
+// import { Character } from "../charactersystem/createcharacter.js";
 import {  createCharacterControls } from "../components/controls.js";
 import { initializePhysics, setGravity } from "../tools/physics.js";
 import { createRock } from "../assetcreation/createRock.js";
 import { loadAvatarContainer, loadModel } from "../tools/loadmodel.js";
 import { createSunRay } from "../tools/sunrays.js";
 import { sceneCleanupReady } from "../components/cleanup.js";
+import { getEngine, setGameStatus } from "../main/main.js";
 // import { createMobileControls } from "../components/mobilecontrols.js";
 
-export async function dungeonScene(engine, placeDetail){
-    
+export async function dungeonScene(placeDetail){
+    const engine = getEngine()
     const spawnPos = {
         x: placeDetail.spawn.x * placeDetail.layout.cellSize,
         y: placeDetail.spawn.y + 1,
@@ -37,20 +38,18 @@ export async function dungeonScene(engine, placeDetail){
     // Setup lighting
 
     createDungeon(scene, placeDetail, materials,rock,tile);
-    // const ground = MeshBuilder.CreateGround("ground", { width: 100, height: 100 }, scene);
-    // ground.position = new Vector3(spawnPos.x, spawnPos.y, spawnPos.z)
-    const player = new Character(scene, spawnPos, true, container); // true = physics enabled
 
-    const camera = createArcCam(scene, placeDetail, player.head);
+    // const camera = createArcCam(scene, placeDetail, player.head);
     
     await scene.whenReadyAsync()
 
     const isTouchDevice = navigator.maxTouchPoints > 0;
 
-    const controls = createCharacterControls(player, camera, scene);
+    // const controls = createCharacterControls(player, camera, scene);
 
     scene.meshes.forEach(mesh => mesh.isPickable = false)
     scene.onDisposeObservable.addOnce(() => controls.dispose());
     sceneCleanupReady(scene, createCharacterControls(player, camera, scene));
+
     return scene
 }

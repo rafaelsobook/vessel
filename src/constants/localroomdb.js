@@ -5,7 +5,7 @@ import { generateBSPDungeon } from '../generate-datas/generatebsp.js';
 export const metaDatas = [
    
     generateBSPDungeon({ 
-        placeId: "dungeon101",
+        placeId: 12,
         areaType: "dungeon",
         seed: 12345,
         rockDensity: 0,
@@ -30,7 +30,7 @@ export const metaDatas = [
         }
     }),
     generateArea({ 
-        placeId: "village101",
+        placeId: 1,
         areaType: "village",
         width:      100,
         height:     100,
@@ -42,13 +42,13 @@ export const metaDatas = [
         entry: "south",
         exit: "east",
         entryExitPlaceIds: {
-            entry: {
-                placeId: "village101",
+            entryPlaceDetail: {
+                placeId: 1,
                 name: "village",
                 areaType: "village",
             },
-            exit: {
-                placeId: "village102",
+            exitPlaceDetail: {
+                placeId: 2,
                 name: "village",
                 areaType: "village",
             }
@@ -64,7 +64,7 @@ export const metaDatas = [
         }
     }),
     generateArea({ 
-        placeId: "village102",
+        placeId: 2,
         areaType: "village",
         width:      100,
         height:     100,
@@ -77,12 +77,12 @@ export const metaDatas = [
         exit: "east",
         entryExitPlaceId: {
             entry: {
-                placeId: "village101",
+                placeId: 1,
                 name: "village",
                 areaType: "village",
             },
             exit: {
-                placeId: "village101",
+                placeId: 2,
                 name: "village",
                 areaType: "village",
             }
@@ -98,7 +98,7 @@ export const metaDatas = [
         }
     }),
     {
-        placeId: "room101",
+        placeId: 10,
         name: 'Simple Room',
         width: 7, // ground width
         height: 10, // ground height

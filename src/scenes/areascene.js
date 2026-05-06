@@ -1,9 +1,9 @@
-import { HemisphericLight, MeshBuilder, Scene, Vector3 } from "@babylonjs/core"
+import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3 } from "@babylonjs/core"
 import { dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
-import { Character } from "../charactersystem/createcharacter.js";
+// import { Character } from "../charactersystem/createcharacter.js";
 import {  createCharacterControls } from "../components/controls.js";
 import { initializePhysics, setGravity } from "../tools/physics.js";
 import { createRock } from "../assetcreation/createRock.js";
@@ -15,25 +15,23 @@ import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
-import { getSocket } from "../sockets/joinsocket.js";
+import { getSocket, joinWorld } from "../sockets/joinsocket.js";
+import { getEngine, setGameStatus } from "../main/main.js";
+import { getCharState } from "../charactersystem/characterstate.js";
 // import { createMobileControls } from "../components/mobilecontrols.js";
 
-export async function areaScene(engine, placeDetail){
-    // console.log(placeDetail)
+export async function areaScene(placeDetail){
+    const engine = getEngine()
     const spawnPos = getSpawnPos(placeDetail);
     const scene = new Scene(engine)
-    
+    const cam = new ArcRotateCamera("ads", 0,0,50, Vector3.Zero(), scene)
+
+    cam.attachControl()
     setupLighting(scene, placeDetail)
-    
-    // const container = await loadAvatarContainer("./models/avatar/avatar.glb", scene)
 
     await initializePhysics(scene);
 
-    
-    
-    const player = new Character(scene, spawnPos, true); // true = physics enabled
-
-    const camera = createArcCam(scene, placeDetail, player.head);
+    // const camera = createArcCam(scene, placeDetail, player.head);
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()
@@ -52,10 +50,14 @@ export async function areaScene(engine, placeDetail){
     }
     
     await scene.whenReadyAsync()
-
+    console.log("area scene made")
     // const isTouchDevice = navigator.maxTouchPoints > 0;
 
-    scene.meshes.forEach(mesh => mesh.isPickable = false)
-    sceneCleanupReady(scene, createCharacterControls(player, camera, scene));
+    // scene.meshes.forEach(mesh => mesh.isPickable = false)
+    // sceneCleanupReady(scene, createCharacterControls(player, camera, scene));
+
+    cam.position = new Vector3(0,1,0)
+    joinWorld(getCharState().currentPlace.placeId)
+
     return scene
 }

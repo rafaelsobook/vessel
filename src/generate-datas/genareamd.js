@@ -344,6 +344,7 @@ function buildSpawn(entry, halfW, halfH, isEnclosed) {
  * }} options
  */
 export function generateArea({
+    entryExitPlaceIds,
     sceneTemp,
     name             = 'village',
     width            = 200,
@@ -466,6 +467,7 @@ export function generateArea({
     const portalOffset = isVillage ? palisadeMargin : 0;
 
     return {
+        entryExitPlaceIds,
         placeId,
         areaType,
 

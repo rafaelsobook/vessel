@@ -4,7 +4,7 @@ import HavokPhysics from "@babylonjs/havok";
 import { HavokPlugin, Vector3, PhysicsShapeType, PhysicsAggregate } from "@babylonjs/core";
 
 let havokInstance = null;
-
+let havokPlugin = null
 /**
  * Initialize Havok physics engine
  * Call this once before creating any physics objects
@@ -16,7 +16,27 @@ export function setGravity(scene, gravity) {
         console.log("✅ Gravity set to:", gravity);
     }
 }
+export function disposePhysics(scene) {
+    if(!scene) return
+    try {
+        if(!scene.getPhysicsEngine()) return
+        const physicsEngine = scene.getPhysicsEngine();
+
+        if (physicsEngine) {
+            havokPlugin?.dispose();
+            physicsEngine.dispose();
+        }
+
+        havokPlugin = null;
+        havokInstance = null;
+
+        console.log("✅ Physics disposed");
+    } catch (error) {
+        console.error("❌ Failed to dispose physics:", error);
+    }
+}
 export async function initializePhysics(scene, _isGravitySet) {
+    disposePhysics(scene)
     if (havokInstance) {
         console.log("Physics already initialized");
         return havokInstance;
@@ -27,7 +47,7 @@ export async function initializePhysics(scene, _isGravitySet) {
         havokInstance = await HavokPhysics();
         
         // Create Havok plugin
-        const havokPlugin = new HavokPlugin(true, havokInstance);
+        havokPlugin = new HavokPlugin(true, havokInstance);
         
         // Enable physics in the scene (no gravity for now)
         scene.enablePhysics(new Vector3(0, 0, 0), havokPlugin);
@@ -46,6 +66,9 @@ export function createAggregate(mesh, options = { mass: 0 }, shapeType, scene){
     switch(shapeType){
         case "mesh":
             shape = PhysicsShapeType.MESH
+        break;
+        case "capsule":
+            shape = PhysicsShapeType.CAPSULE
         break;
         default:
             shape = PhysicsShapeType.BOX
