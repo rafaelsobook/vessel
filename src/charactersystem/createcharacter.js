@@ -27,10 +27,13 @@ function createMainCapsuleToClone(scene){
         }, 
         scene
     );
+    mainCapsule.isVisible = false
+    mainCapsule.isPickable  =false
+    mainCapsule.isEnabled(false)
 }
 
 export function createCharacter(scene, spawnPos, container, det, usePhysics){
-    const body = createCapsuleBody(scene, spawnPos, det.owner)
+    const {body, camParent, aggregate} = createCapsuleBody(scene, spawnPos, det.owner, usePhysics)
 
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight+1,z:0}, 35);
@@ -38,11 +41,13 @@ export function createCharacter(scene, spawnPos, container, det, usePhysics){
 
     return {
         det,
-        _id: det.owner,
+        owner: det.owner,
         name: det.name,
         // spd: det.stats.spd,
         currentPlace: det.currentPlace.placeId,
         body,
+        camParent,
+        aggregate,
         nameMesh,
         // midDetection,
         // headBone,
@@ -97,24 +102,24 @@ function createCapsuleBody(scene, spawnPos, ownerId, usePhysics) {
     );
     body.rotationQuaternion = Quaternion.FromEulerVector(body.rotation)
     // Only create physics if enabled
+    let aggregate
     if (usePhysics) {
-        characterAggregate = createAggregate(body, {mass: 10}, "capsule", scene)
+        aggregate = createAggregate(body, {mass: 10}, "capsule", scene)
         
         // Lock rotation so capsule doesn't tip over
-        characterAggregate.body.setMassProperties({
+        aggregate.body.setMassProperties({
             inertia: Vector3.ZeroReadOnly,  // the exact constant the BJS team uses internally
             inertiaOrientation: Quaternion.Identity(),  // required alongside inertia in Havok
         });
-
-        characterAggregate.shape.material = {
-            restitution: 0,    // no bounciness
-            friction: 1,     // moderate friction for better ground control
-        }
         
-        characterAggregate.body.disablePreStep = false;
+        aggregate.body.disablePreStep = false;
         
         // Setup ground check
-        setupGroundCheck();
+        // setupGroundCheck();
     }
-    return body
+    return {
+        body,
+        camParent: head, 
+        aggregate
+    }
 }

@@ -18,6 +18,9 @@ export async function getVillageAssetRegistry() {
     smallHouse.isVisible = false
     
     smallTree.isVisible = false
+    bigTree.isVisible = false
+    mediumTree.isVisible = false
+    
     pole.isVisible = false
 
     return {

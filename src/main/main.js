@@ -34,6 +34,7 @@ export function getEngine(){
 }
 export function changeScene(newScene, _sceneName){
     setGameStatus("loading")
+    disposePhysics(scene)
     scene.meshes.forEach(mesh => mesh.dispose())
     scene.dispose()
     scene = newScene

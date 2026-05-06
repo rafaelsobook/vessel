@@ -51,7 +51,7 @@ import { exitScene } from '../sockets/exitsocket';
 import { findMyCurrentPlace } from '../states/placestates';
 import loadScene from '../main/loadScene';
 import { getEngine, changeScene } from '../main/main';
-import { disposePhysics } from '../tools/physics';
+
 
 // ─── Material helper ──────────────────────────────────────────────────────────
 /**
@@ -171,7 +171,7 @@ function spawnProps(scene, items, mainMesh, addPhysics) {
 
     if(mainMesh.material){
         mainMesh.material.unlit = true
-        console.log(mainMesh.material instanceof PBRMaterial)
+        // console.log(mainMesh.material instanceof PBRMaterial)
     }
     items.forEach(item => {
         if (!mainMesh) return;
@@ -239,8 +239,8 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds) {
     if(!entryExitPlaceIds) return
 
     const { entryPlaceDetail, exitPlaceDetail } = entryExitPlaceIds
-    console.log(entry.direction)
-    console.log(exit.direction)
+    // console.log(entry.direction)// south, east, west, nort
+    // console.log(exit.direction) 
     const { stakeHeight, doorWidth } = palisade;
     const hw   = palisade.outerWidth  / 2;
     const hh   = palisade.outerHeight / 2;
@@ -263,7 +263,7 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds) {
             const body = scene.getMeshByName(`player.${getCharState().owner}`)
             if(!body) return console.log(`looking for player capsule for gate intersection player.${getCharState().owner}`)
 
-            onIntersecEnterTrig(gate, body, scene, () => {
+            onIntersecEnterTrig(gate, body, scene, async () => {
                 if(pathname === "entry"){
                     // save to your character data base first if have database
                     // replace setCharState to getCharFromDBAndSetCharState() if you have db
@@ -278,9 +278,8 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds) {
                     exitScene();
 
                     const placeDetail = findMyCurrentPlace()
-                    disposePhysics(scene)
-                    const newScene = loadScene(placeDetail)
-                    // changeScene(newScene, "whatever")
+                    const newScene = await loadScene(placeDetail)
+                    changeScene(newScene, "whatever")
                 }
             })
             clearInterval(interval)
@@ -351,7 +350,7 @@ export function createVillage(scene, village, assetRegistry = {}) {
     // ── 2. Ground ─────────────────────────────────────────────────────────────
     buildFloor(scene, village.layout, village.palisade, prefix);
 
-    console.log(village.paths)
+    // console.log(village.paths)
 
     buildPalisade(scene, village.palisade, prefix);
     buildGates(scene, village.palisade, village.entry, village.exit, entryExitPlaceIds);

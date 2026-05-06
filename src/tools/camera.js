@@ -1,6 +1,8 @@
 import { ArcRotateCamera, Vector3, Tools } from "@babylonjs/core";
 
 let camera
+
+
 export function createArcCam(scene, placeDetail, head){
     camera = new ArcRotateCamera(
         "camera",
@@ -22,28 +24,28 @@ export function createArcCam(scene, placeDetail, head){
     camera.wheelPrecision = 50;
     camera.minZ = 0.01
 
-    scene.registerBeforeRender(() => {
-        const origin = camera.target.position ?? camera.target;
-        const direction = camera.position.subtract(origin).normalize();
-        const distance = Vector3.Distance(origin, camera.position);
+    // scene.registerBeforeRender(() => {
+    //     const origin = camera.target.position ?? camera.target;
+    //     const direction = camera.position.subtract(origin).normalize();
+    //     const distance = Vector3.Distance(origin, camera.position);
 
-        const ray = scene.createPickingRay(
-            scene.getEngine().getRenderWidth() / 2,
-            scene.getEngine().getRenderHeight() / 2,
-            null,
-            camera
-        );
+    //     const ray = scene.createPickingRay(
+    //         scene.getEngine().getRenderWidth() / 2,
+    //         scene.getEngine().getRenderHeight() / 2,
+    //         null,
+    //         camera
+    //     );
 
-        const hit = scene.pickWithRay(
-            { origin, direction, length: distance },
-            (mesh) => mesh.isPickable && mesh.isVisible
-        );
+    //     const hit = scene.pickWithRay(
+    //         { origin, direction, length: distance },
+    //         (mesh) => mesh.isPickable && mesh.isVisible
+    //     );
 
-        if (hit?.pickedMesh) {
-            console.log("Camera blocked by:", hit.pickedMesh.name);
-            hit.pickedMesh.isVisible = false;
-        }
-    });
+    //     if (hit?.pickedMesh) {
+    //         console.log("Camera blocked by:", hit.pickedMesh.name);
+    //         hit.pickedMesh.isVisible = false;
+    //     }
+    // });
 
     if(head) attachCam(head);    
     return camera

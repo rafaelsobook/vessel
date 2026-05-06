@@ -4,8 +4,7 @@ import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
 // import { Character } from "../charactersystem/createcharacter.js";
-import {  createCharacterControls } from "../components/controls.js";
-import { initializePhysics, setGravity } from "../tools/physics.js";
+import { initializePhysics } from "../tools/physics.js";
 import { createRock } from "../assetcreation/createRock.js";
 import { loadAvatarContainer, loadModel } from "../tools/loadmodel.js";
 import { createSunRay } from "../tools/sunrays.js";
@@ -24,9 +23,7 @@ export async function areaScene(placeDetail){
     const engine = getEngine()
     const spawnPos = getSpawnPos(placeDetail);
     const scene = new Scene(engine)
-    const cam = new ArcRotateCamera("ads", 0,0,50, Vector3.Zero(), scene)
-
-    cam.attachControl()
+    const cam = createArcCam(scene, placeDetail)
     setupLighting(scene, placeDetail)
 
     await initializePhysics(scene);
@@ -56,8 +53,12 @@ export async function areaScene(placeDetail){
     // scene.meshes.forEach(mesh => mesh.isPickable = false)
     // sceneCleanupReady(scene, createCharacterControls(player, camera, scene));
 
-    cam.position = new Vector3(0,1,0)
+
+    // make your architecture to everytime you recreateMeshes from the scene
+    // that has interaction with character best practise to spawn your character first
+    // before thoses meshes so those meshes will just find your character and apply interaction
     joinWorld(getCharState().currentPlace.placeId)
+
 
     return scene
 }

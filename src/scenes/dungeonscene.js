@@ -4,13 +4,12 @@ import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
 // import { Character } from "../charactersystem/createcharacter.js";
-import {  createCharacterControls } from "../components/controls.js";
-import { initializePhysics, setGravity } from "../tools/physics.js";
+import { initializePhysics } from "../tools/physics.js";
 import { createRock } from "../assetcreation/createRock.js";
 import { loadAvatarContainer, loadModel } from "../tools/loadmodel.js";
 import { createSunRay } from "../tools/sunrays.js";
 import { sceneCleanupReady } from "../components/cleanup.js";
-import { getEngine, setGameStatus } from "../main/main.js";
+import { getEngine } from "../main/main.js";
 // import { createMobileControls } from "../components/mobilecontrols.js";
 
 export async function dungeonScene(placeDetail){
@@ -28,9 +27,6 @@ export async function dungeonScene(placeDetail){
     createSunRay(spawnPos, false, scene)
     // IMPORTANT: Initialize physics FIRST before creating any physics objects
     await initializePhysics(scene);
-    
-    // Set gravity (optional - defaults to no gravity if not called)
-    setGravity(scene, new Vector3(0, -9.81, 0));
 
     const materials = dungeonMaterial(scene);
     const rock = createRock(scene)
@@ -49,7 +45,6 @@ export async function dungeonScene(placeDetail){
 
     scene.meshes.forEach(mesh => mesh.isPickable = false)
     scene.onDisposeObservable.addOnce(() => controls.dispose());
-    sceneCleanupReady(scene, createCharacterControls(player, camera, scene));
-
+    
     return scene
 }

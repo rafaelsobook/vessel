@@ -5,21 +5,17 @@ import { HavokPlugin, Vector3, PhysicsShapeType, PhysicsAggregate } from "@babyl
 
 let havokInstance = null;
 let havokPlugin = null
-/**
- * Initialize Havok physics engine
- * Call this once before creating any physics objects
- */
-export function setGravity(scene, gravity) {
-    const physicsEngine = scene.getPhysicsEngine();
-    if (physicsEngine) {
-        physicsEngine.setGravity(gravity);
-        console.log("✅ Gravity set to:", gravity);
-    }
-}
+
 export function disposePhysics(scene) {
-    if(!scene) return
+    if(!scene) return console.log("scene is not available")
     try {
-        if(!scene.getPhysicsEngine()) return
+        // console.log(scene.getPhysicsEngine() === null) // true 
+        if(scene.getPhysicsEngine() === null) {
+            if(havokPlugin) {
+                havokPlugin?.dispose()
+                havokPlugin = null
+            }
+        }
         const physicsEngine = scene.getPhysicsEngine();
 
         if (physicsEngine) {
@@ -35,7 +31,7 @@ export function disposePhysics(scene) {
         console.error("❌ Failed to dispose physics:", error);
     }
 }
-export async function initializePhysics(scene, _isGravitySet) {
+export async function initializePhysics(scene) {
     disposePhysics(scene)
     if (havokInstance) {
         console.log("Physics already initialized");
@@ -50,10 +46,10 @@ export async function initializePhysics(scene, _isGravitySet) {
         havokPlugin = new HavokPlugin(true, havokInstance);
         
         // Enable physics in the scene (no gravity for now)
-        scene.enablePhysics(new Vector3(0, 0, 0), havokPlugin);
+        scene.enablePhysics(new Vector3(0, -9.81, 0), havokPlugin);
         
         console.log("✅ Physics engine initialized");
-        _isGravitySet && setGravity(scene, new Vector3(0, -9.81, 0));
+    
         return havokInstance;
     } catch (error) {
         console.error("❌ Failed to initialize physics:", error);
@@ -76,6 +72,7 @@ export function createAggregate(mesh, options = { mass: 0 }, shapeType, scene){
     }
     let agg = new PhysicsAggregate(mesh, shape, options, scene);
     agg.shape.material = { restitution: 0, friction: 1 };
+    return agg
 }
 /**
  * Set gravity for the scene

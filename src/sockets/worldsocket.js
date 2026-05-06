@@ -1,7 +1,10 @@
 import { getCharState } from "../charactersystem/characterstate"
 import { createCharacter } from "../charactersystem/createcharacter"
+import { createMyCharacter } from "../charactersystem/createMyCharacter"
+import { attachControllerToThisCharacter } from "../controllers/inputMovement"
 import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
+import { attachCam } from "../tools/camera"
 import { getSpawnPos } from "../tools/position"
 
 let allPlayersFromTCP = []
@@ -77,12 +80,13 @@ export function reCreateMeshesInScene() {
         const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === tcpCharDet.owner)
         if (isAlreadyHere) return log("player already here ", isAlreadyHere.name)
 
-        const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
-        console.log(`character is in place: ${tcpCharPlaceMD.placeId}`)
 
-        const spawnPos = getSpawnPos(tcpCharPlaceMD) 
-        const player = createCharacter(sceneDet.scene, spawnPos, null, tcpCharDet, false)
-
+        let player
+        if(tcpCharDet.owner === characterState.owner){
+            player = createMyCharacter(tcpCharDet)
+        }else{
+            player = createCharacter(sceneDet.scene, spawnPos, null, tcpCharDet, false)
+        }
         pushPlayer(player, tcpCharDet.owner)
     })
 }
