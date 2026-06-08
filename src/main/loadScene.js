@@ -1,8 +1,17 @@
 import { dungeonScene } from "../scenes/dungeonscene.js";
 import { areaScene } from "../scenes/areascene.js";
 import { setGameStatus } from "./main.js";
-export default async function loadScene(placeDetail, accountDetail){
+import {getIsSocketOn } from "../sockets/worldsocket.js";
+import { findMyCurrentPlace } from "../states/placestates.js";
+import { initiateCharacter } from "../charactersystem/characterstate.js";
+import { checkIfTokenSaved } from "../tools/tools.js";
+
+export default async function loadScene(){
+
     setGameStatus("loading")
+
+    await initiateCharacter(checkIfTokenSaved())
+    const placeDetail = findMyCurrentPlace()
     let scene;
 
     switch(placeDetail.areaType){
@@ -15,12 +24,6 @@ export default async function loadScene(placeDetail, accountDetail){
         case "village":
             scene = await areaScene(placeDetail)
         break
-        default:
-            scene = await dungeonScene(placeDetail)
-        break
     }
-    if(scene) {
-        setGameStatus("running")
-        return scene
-    }
+    if(scene) return scene
 }

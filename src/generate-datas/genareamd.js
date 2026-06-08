@@ -32,7 +32,10 @@ function seededRNG(seed) {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const CELL_SIZE = 4;
+const CELL_SIZE    = 4;
+const BORDER_INNER = 0.65;  // foliage/trees start beyond this fraction of halfMin
+const HOUSE_OUTER  = 0.5;   // houses/poles stay within this fraction of halfMin
+const CENTER_RATIO = 0.04;  // fraction of foliage allowed to scatter into center
 
 const CLEARANCE = {
     smallHouse:  1,
@@ -45,6 +48,8 @@ const CLEARANCE = {
     grass:       0,
     herb:        1,
     mushroom:    1,
+    rock:        1,
+    flower:      0,
 };
 
 const VARIANTS = {
@@ -58,6 +63,8 @@ const VARIANTS = {
     grass:       5,
     herb:        4,
     mushroom:    3,
+    rock:        3,
+    flower:      4,
 };
 
 // ─── PBR defaults ─────────────────────────────────────────────────────────────
@@ -179,22 +186,35 @@ function buildPalisade(width, height, spacing, stakeHeight, stakeRadius, entryDi
 }
 
 // ─── Item placement ───────────────────────────────────────────────────────────
-function placeItems({ type, count, clearance, halfW, halfH, grid, rng, scaleRange = [1.0, 1.0], yOffset = 0 }) {
+function placeItems({ type, count, clearance, halfW, halfH, grid, rng, scaleRange = [1.0, 1.0], yOffset = 0, yOffsetRange = null, rotationRange = null, innerRadius = 0, outerRadius = 1, idOffset = 0 }) {
     const MAX_ATTEMPTS = 250;
     const items = [];
+    const halfMin = Math.min(halfW, halfH);
+    const minDist = innerRadius * halfMin;
+    const maxDist = outerRadius * halfMin;
     for (let i = 0; i < count; i++) {
         for (let a = 0; a < MAX_ATTEMPTS; a++) {
             const x = (rng() * 2 - 1) * halfW;
             const z = (rng() * 2 - 1) * halfH;
+            if (innerRadius > 0 || outerRadius < 1) {
+                const dist = Math.sqrt(x * x + z * z);
+                if (dist < minDist || dist > maxDist) continue;
+            }
             if (clearance > 0 && !grid.isAreaFree(x, z, clearance)) continue;
             const s = scaleRange[0] + rng() * (scaleRange[1] - scaleRange[0]);
+            const rot = rotationRange !== null
+                ? rotationRange[0] + rng() * (rotationRange[1] - rotationRange[0])
+                : Math.floor(rng() * 4) * 90;
+            const y = yOffsetRange !== null
+                ? yOffsetRange[0] + rng() * (yOffsetRange[1] - yOffsetRange[0])
+                : yOffset;
             items.push({
-                id:       `${type}_${i}`,
+                id:       `${type}_${i + idOffset}`,
                 type,
                 x,
-                y:        yOffset,
+                y,
                 z,
-                rotation: Math.floor(rng() * 4) * 90,
+                rotation: rot,
                 scale:    { x: s, y: s, z: s },
                 variant:  Math.floor(rng() * VARIANTS[type]),
             });
@@ -208,8 +228,18 @@ function placeItems({ type, count, clearance, halfW, halfH, grid, rng, scaleRang
 function placeLightPoles(count, halfW, halfH, grid, rng) {
     return placeItems({
         type: 'lightPole', count, clearance: CLEARANCE.lightPole,
-        halfW, halfH, grid, rng, scaleRange: [1.0, 1.0],
+        halfW, halfH, grid, rng, scaleRange: [1.0, 1.0], outerRadius: HOUSE_OUTER,
     }).map(pole => ({ ...pole, lit: true }));
+}
+
+// 96% of foliage/trees near borders, 4% allowed anywhere for a natural scatter
+function placeZoned(args) {
+    const b = Math.round(args.count * (1 - CENTER_RATIO));
+    const c = args.count - b;
+    return [
+        ...placeItems({ ...args, count: b, innerRadius: BORDER_INNER }),
+        ...placeItems({ ...args, count: c, idOffset: b }),
+    ];
 }
 
 // ─── Indoor torches (enclosed rooms) ─────────────────────────────────────────
@@ -344,6 +374,7 @@ function buildSpawn(entry, halfW, halfH, isEnclosed) {
  * }} options
  */
 export function generateArea({
+    isMultiplayer = true,
     entryExitPlaceIds,
     sceneTemp,
     name             = 'village',
@@ -367,6 +398,8 @@ export function generateArea({
     totalGrass       = 1000,
     totalHerbs       = 10,
     totalMushrooms   = 10,
+    totalRocks       = 15,
+    totalFlowers     = 30,
     // palisade (village only)
     palisadeSpacing      = 2.5,
     palisadeStakeHeight  = 12,
@@ -414,51 +447,69 @@ export function generateArea({
     const bigHouses = placeItems({
         type: 'bigHouse', count: totalBigHouse,
         clearance: CLEARANCE.bigHouse, halfW, halfH, grid, rng: houseRng,
-        scaleRange: [1.0, 1.2],
+        scaleRange: [1.0, 1.2], outerRadius: HOUSE_OUTER,
     });
     const mediumHouses = placeItems({
         type: 'mediumHouse', count: totalMediumHouse,
         clearance: CLEARANCE.mediumHouse, halfW, halfH, grid, rng: houseRng,
-        scaleRange: [0.9, 1.1],
+        scaleRange: [0.9, 1.1], outerRadius: HOUSE_OUTER,
     });
     const smallHouses = placeItems({
         type: 'smallHouse', count: totalSmallHouse,
         clearance: CLEARANCE.smallHouse, halfW, halfH, grid, rng: houseRng,
-        scaleRange: [0.85, 1.05],
+        scaleRange: [0.85, 1.05], outerRadius: HOUSE_OUTER,
     });
 
     // ── Trees ─────────────────────────────────────────────────────────────────
-    const bigTrees = placeItems({
+    const bigTrees = placeZoned({
         type: 'bigTree', count: totalBigTrees,
         clearance: CLEARANCE.bigTree, halfW, halfH, grid, rng: treeRng,
         scaleRange: [1.0, 1.4],
     });
-    const mediumTrees = placeItems({
+    const mediumTrees = placeZoned({
         type: 'mediumTree', count: totalMediumTrees,
         clearance: CLEARANCE.mediumTree, halfW, halfH, grid, rng: treeRng,
         scaleRange: [0.9, 1.2],
     });
-    const smallTrees = placeItems({
+    const smallTrees = placeZoned({
         type: 'smallTree', count: totalSmallTrees,
         clearance: CLEARANCE.smallTree, halfW, halfH, grid, rng: treeRng,
         scaleRange: [0.8, 1.1],
+        rotationRange: [0, 180],
+        yOffsetRange: [-0.2, 0],
     });
 
     // ── Foliage / poles ───────────────────────────────────────────────────────
     const lightPoles = placeLightPoles(totalLightPoles, halfW, halfH, grid, poleRng);
-    const grass      = placeItems({
+    const grass      = placeZoned({
+        yOffsetRange: [0, 0.4],
         type: 'grass', count: totalGrass, clearance: 0,
-        halfW, halfH, grid, rng: foliageRng, scaleRange: [0.6, 1.3],
+        halfW, halfH, grid, rng: foliageRng, scaleRange: [0.4, 1.3],
     });
-    const herbs = placeItems({
+    const herbs = placeZoned({
+        yOffsetRange: [0, 0.7],
         type: 'herb', count: totalHerbs,
         clearance: CLEARANCE.herb, halfW, halfH, grid, rng: foliageRng,
         scaleRange: [0.7, 1.1],
     });
-    const mushrooms = placeItems({
+    const mushrooms = placeZoned({
         type: 'mushroom', count: totalMushrooms,
         clearance: CLEARANCE.mushroom, halfW, halfH, grid, rng: foliageRng,
         scaleRange: [0.5, 1.0],
+    });
+    const rocks = placeZoned({
+        type: 'rock', count: totalRocks,
+        clearance: CLEARANCE.rock, halfW, halfH, grid, rng: foliageRng,
+        scaleRange: [0.4, 1.4],
+        rotationRange: [0, 360],
+        yOffsetRange: [-0.1, 0.1],
+    });
+    const flowers = placeZoned({
+        yOffsetRange: [0, 0.3],
+        type: 'flower', count: totalFlowers,
+        clearance: CLEARANCE.flower, halfW, halfH, grid, rng: foliageRng,
+        scaleRange: [0.5, 0.7],
+        rotationRange: [0, 360],
     });
 
     const tileHeights = buildTileHeightMap(cols, rows, jitterRng);
@@ -467,6 +518,7 @@ export function generateArea({
     const portalOffset = isVillage ? palisadeMargin : 0;
 
     return {
+        isMultiplayer,
         entryExitPlaceIds,
         placeId,
         areaType,
@@ -485,6 +537,8 @@ export function generateArea({
                 grass:        grass.length,
                 herbs:        herbs.length,
                 mushrooms:    mushrooms.length,
+                rocks:        rocks.length,
+                flowers:      flowers.length,
             },
         },
 
@@ -516,7 +570,7 @@ export function generateArea({
         // ── Props ─────────────────────────────────────────────────────────────
         smallHouses, mediumHouses, bigHouses,
         smallTrees, mediumTrees, bigTrees,
-        lightPoles, grass, herbs, mushrooms,
+        lightPoles, grass, herbs, mushrooms, rocks, flowers,
 
         // ── Enclosed-room surfaces (null for open-air) ────────────────────────
         rooms: isEnclosed ? [{
@@ -538,7 +592,7 @@ export function generateArea({
             : buildOutdoorLighting(width, height),
 
         doors:         [],
-        rocks:         [],
+        rocks:         rocks,
         bossRoom:      null,
         stairApproach: null,
 

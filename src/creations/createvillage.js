@@ -37,21 +37,28 @@ import {
     MeshBuilder,
     PhysicsAggregate,
     PhysicsShapeType,
+    PhysicsShapeConvexHull,
+    PhysicsShapeMesh,
+    PhysicsBody,
+    PhysicsMotionType,
     StandardMaterial,
     Color3,
     HemisphericLight,
     DirectionalLight,
     PointLight,
-    PBRMaterial
+    PBRMaterial,
+    PhysicsShapeBox,
+    Quaternion
 } from '@babylonjs/core';
 import { createGroundMat, createPathMat } from '../tools/groundmat';
-import { onIntersecEnterTrig } from '../components/actionManager';
+import { onIntersecEnterTrig,onIntersecExitTrig } from '../components/actionManager';
 import { getCharState, setCharState } from '../charactersystem/characterstate';
 import { exitScene } from '../sockets/exitsocket';
 import { findMyCurrentPlace } from '../states/placestates';
 import loadScene from '../main/loadScene';
-import { getEngine, changeScene } from '../main/main';
-
+import { getEngine, changeScene, getSceneDet, getGameStatus } from '../main/main';
+import { openCloseInteractBtn } from '../tools/popupUI';
+import { randNum } from '../tools/random';
 
 // ─── Material helper ──────────────────────────────────────────────────────────
 /**
@@ -164,29 +171,48 @@ function buildPaths(scene, paths, namePrefix) {
  * @param {boolean}         addPhysics     - whether to attach a static PhysicsAggregate
  * @param {string}          namePrefix
  */
-function spawnProps(scene, items, mainMesh, addPhysics) {
-    // if (!templateMeshes || templateMeshes.length === 0) return;
+function spawnProps(scene, items, mainMesh, addPhysics, shapeType) {
+    if (!mainMesh) return;
 
-    if(!mainMesh) return 
+    if (mainMesh.material) mainMesh.material.unlit = true;
 
-    if(mainMesh.material){
-        mainMesh.material.unlit = true
-        // console.log(mainMesh.material instanceof PBRMaterial)
-    }
-    items.forEach(item => {
-        if (!mainMesh) return;
-
-        const inst = mainMesh.createInstance(`${mainMesh.name}_${item.id}`);
-
-        inst.position = new Vector3(item.x, item.y, item.z);
-        inst.rotation = new Vector3(0, (item.rotation * Math.PI) / 180, 0);
-        inst.scaling  = new Vector3(item.scale.x, item.scale.y, item.scale.z);
-
-        inst.isVisible = true;
-        if (addPhysics) {
-            const agg = new PhysicsAggregate(inst, PhysicsShapeType.MESH, { mass: 0 }, scene);
-            agg.shape.material = { restitution: 0, friction: 1 };
+    // Compute the collision shape once, reuse it for every instance.
+    let sharedShape = null;
+    if (addPhysics) {
+        switch(shapeType){
+            case "mesh":
+                sharedShape = new PhysicsShapeMesh(mainMesh, scene);
+            break
+            case "convex":
+                sharedShape = new PhysicsShapeConvexHull(mainMesh, scene);
+            break
+            default: {
+                // const bb = mainMesh.getBoundingInfo().boundingBox;
+                // sharedShape = new PhysicsShapeBox(bb.center, Quaternion.Identity(), bb.extendSize, scene);
+                sharedShape = new PhysicsShapeMesh(mainMesh, scene);
+                break;
+            }
         }
+
+        if (sharedShape) sharedShape.material = { restitution: 0, friction: 1 };
+    }
+
+    items.forEach(item => {
+        const inst = mainMesh.createInstance(`${mainMesh.name}_${item.id}`);
+        inst.position   = new Vector3(item.x, item.y, item.z);
+        inst.rotation   = new Vector3(0, (item.rotation * Math.PI) / 180, 0);
+        inst.scaling    = new Vector3(item.scale.x, item.scale.y, item.scale.z);
+        inst.isPickable = false;
+        if (addPhysics) {
+            if (sharedShape) {
+                const body = new PhysicsBody(inst, PhysicsMotionType.STATIC, false, scene);
+                body.shape = sharedShape;
+            } else {
+                const agg = new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
+                agg.shape.material = { restitution: 0, friction: 1 };
+            }
+        }
+        inst.freezeWorldMatrix();
     });
 }
 // ─── Palisade wall ────────────────────────────────────────────────────────────
@@ -199,32 +225,17 @@ function spawnProps(scene, items, mainMesh, addPhysics) {
  * @param {object}        palisade   - from village.palisade
  * @param {string}        namePrefix
  */
-function buildPalisade(scene, palisade, namePrefix) {
+function buildPalisade(scene, palisade, woodenstake, namePrefix) {
     if (!palisade?.stakes?.length) return;
 
     const { stakeHeight, stakeRadius, stakes } = palisade;
-
-    // Single template cylinder — instances share geometry
-    const template = MeshBuilder.CreateCylinder(`${namePrefix}_palisade_tpl`, {
-        height:      stakeHeight,
-        diameterTop:    stakeRadius ,   // tapered tip — pointy top
-        diameterBottom: stakeRadius * 2,     // full base
-        tessellation: 8,                     // low-poly log look
-    }, scene);
-
-    // Dark weathered wood material
-    const mat = new StandardMaterial(`${namePrefix}_palisade_mat`, scene);
-    mat.diffuseColor  = Color3.FromHexString('#3b2a1a');
-    mat.specularColor = new Color3(0.02, 0.02, 0.02);
-    mat.specularPower = 8;
-    template.material  = mat;
-    template.isVisible = false;
+    woodenstake.isVisible = false
 
     stakes.forEach(stake => {
-        const inst = template.createInstance(`${namePrefix}_${stake.id}`);
-        inst.position  = new Vector3(stake.x, stake.y, stake.z);
+        const inst = woodenstake.createInstance(`${namePrefix}_${stake.id}`);
+        inst.position  = new Vector3(stake.x, 0, stake.z);
         // Subtle tilt so the wall looks hand-planted, not machine-perfect
-        inst.rotation  = new Vector3(stake.tiltX ?? 0, 0, 0);
+        inst.rotation  = new Vector3(stake.tiltX+randNum(-0.2,0.2) ?? 0, 0, 0);
         inst.isVisible = true;
 
         // Static physics so player cannot walk through the wall
@@ -234,17 +245,15 @@ function buildPalisade(scene, palisade, namePrefix) {
 }
 // ─── Gate slabs ───────────────────────────────────────────────────────────────
 // If you want to move the gate inside change the INSET
-function buildGates(scene, palisade, entry, exit, entryExitPlaceIds) {
+function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBody, gateTemplate) {
     if (!palisade) return;
     if(!entryExitPlaceIds) return
 
     const { entryPlaceDetail, exitPlaceDetail } = entryExitPlaceIds
-    // console.log(entry.direction)// south, east, west, nort
-    // console.log(exit.direction) 
     const { stakeHeight, doorWidth } = palisade;
     const hw   = palisade.outerWidth  / 2;
     const hh   = palisade.outerHeight / 2;
-    const SLAB = 0.8; // gate thickness
+    const SLAB = 0.8;
 
     function place(dir, pathname) {
         const isNS = dir === 'north' || dir === 'south';
@@ -254,36 +263,56 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds) {
         const x = dir === 'east' ? hw - INSET : dir === 'west' ? -hw + INSET : 0;
         const z = dir === 'north' ? hh - INSET : dir === 'south' ? -hh + INSET : 0;
 
-        const gate = MeshBuilder.CreateBox(`gate_${pathname}`, {
+        // Offset the trigger toward the player's approach side so they hit it before the gate model's physics
+        const approachOffset =
+            dir === 'south' ? new Vector3(0, 0,  3) :
+            dir === 'north' ? new Vector3(0, 0, -3) :
+            dir === 'east'  ? new Vector3(-3, 0, 0) :
+                              new Vector3( 3, 0, 0);
+
+        const triggerBox = MeshBuilder.CreateBox(`gate_${pathname}`, {
             width: w/2, height: stakeHeight/2, depth: d,
         }, scene);
-        gate.position   = new Vector3(x, stakeHeight / 4, z);
-        let interval = setInterval(() => {
-            
-            const body = scene.getMeshByName(`player.${getCharState().owner}`)
-            if(!body) return console.log(`looking for player capsule for gate intersection player.${getCharState().owner}`)
+        triggerBox.position  = new Vector3(x + approachOffset.x, stakeHeight / 4, z + approachOffset.z);
+        triggerBox.isVisible = false;
+        triggerBox.isPickable = false;
 
-            onIntersecEnterTrig(gate, body, scene, async () => {
-                if(pathname === "entry"){
-                    // save to your character data base first if have database
-                    // replace setCharState to getCharFromDBAndSetCharState() if you have db
-                    const charState = getCharState()
+        if (gateTemplate) {
+            const gateModel = gateTemplate.createInstance(`gate_model_${pathname}`)
+            gateModel.position  = new Vector3(x, 0, z)
+            gateModel.rotation.y = isNS ? 0 : Math.PI / 2
+            gateModel.isVisible = true
+            new PhysicsAggregate(gateModel, PhysicsShapeType.BOX, { mass: 0 }, scene)
+        }
 
-                    charState.currentPlace.placeId = entryPlaceDetail.placeId
-                    charState.currentPlace.name = entryPlaceDetail.name
-                    charState.currentPlace.areaType = entryPlaceDetail.areaType
+        onIntersecEnterTrig(triggerBox, characterBody, scene, async () => {
+            openCloseInteractBtn(null, true, async () => {
+                let placeDetailShort
 
-                    console.log(getCharState())
-
-                    exitScene();
-
-                    const placeDetail = findMyCurrentPlace()
-                    const newScene = await loadScene(placeDetail)
-                    changeScene(newScene, "whatever")
+                switch(pathname){
+                    case "entry":
+                        placeDetailShort = entryPlaceDetail
+                    break
+                    case "exit":
+                        placeDetailShort = exitPlaceDetail
+                    break
                 }
+                const charState = getCharState()
+
+                charState.currentPlace.placeId = placeDetailShort.placeId
+                charState.currentPlace.name = placeDetailShort.name
+                charState.currentPlace.areaType = placeDetailShort.areaType
+
+                exitScene();
+
+                const placeDetail = findMyCurrentPlace()
+                await changeScene(placeDetail, "whatever")
             })
-            clearInterval(interval)
-        }, 1000)
+            
+        })
+        onIntersecExitTrig(triggerBox, characterBody, scene, () => {
+            openCloseInteractBtn(false, false)
+        })
     }
 
     if (entry?.direction) place(entry.direction, 'entry');
@@ -339,7 +368,7 @@ function spawnPoleLights(scene, poles, namePrefix) {
  * Each mesh in the registry must already be hidden (isVisible = false) so only
  * the spawned instances are visible.
  */
-export function createVillage(scene, village, assetRegistry = {}) {
+export function createVillage(scene, village, assetRegistry = {}, characterBody) {
 
     const {entryExitPlaceIds} = village
     const prefix = village.meta?.name ?? 'village';
@@ -352,8 +381,8 @@ export function createVillage(scene, village, assetRegistry = {}) {
 
     // console.log(village.paths)
 
-    buildPalisade(scene, village.palisade, prefix);
-    buildGates(scene, village.palisade, village.entry, village.exit, entryExitPlaceIds);
+    buildPalisade(scene, village.palisade, assetRegistry.woodenstake, prefix);
+    buildGates(scene, village.palisade, village.entry, village.exit, entryExitPlaceIds, characterBody, assetRegistry.gate);
 
     // ── 4. Props ──────────────────────────────────────────────────────────────
     // Houses — with physics so the player can't walk through them.
@@ -362,9 +391,9 @@ export function createVillage(scene, village, assetRegistry = {}) {
     spawnProps(scene, village.smallHouses,  assetRegistry.smallHouse,  true);
 
     // Trees — with physics (trunks block movement).
-    spawnProps(scene, village.bigTrees,    assetRegistry.bigTree,    true);
-    spawnProps(scene, village.mediumTrees, assetRegistry.mediumTree,  true);
-    spawnProps(scene, village.smallTrees,  assetRegistry.smallTree,   true);
+    spawnProps(scene, village.bigTrees,    assetRegistry.bigTree,    true, "mesh");
+    spawnProps(scene, village.mediumTrees, assetRegistry.mediumTree,  true, "mesh");
+    spawnProps(scene, village.smallTrees,  assetRegistry.smallTree,   true, "mesh");
 
     // Light poles — with physics.
     spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true);
@@ -373,6 +402,8 @@ export function createVillage(scene, village, assetRegistry = {}) {
     spawnProps(scene, village.grass,     assetRegistry.grass,     false);
     spawnProps(scene, village.herbs,     assetRegistry.herb,      false);
     spawnProps(scene, village.mushrooms, assetRegistry.mushroom,  false);
+    spawnProps(scene, village.rocks,     assetRegistry.rocks,     false);
+    spawnProps(scene, village.flowers,   assetRegistry.flower,    false);
 
     // ── 5. Point lights on lit poles ──────────────────────────────────────────
     // spawnPoleLights(scene, village.lightPoles, prefix);

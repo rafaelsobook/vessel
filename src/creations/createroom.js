@@ -5,34 +5,56 @@ import {
     Color3,
     HemisphericLight,
     PointLight,
+    DirectionalLight,
+    ShadowGenerator,
 } from '@babylonjs/core';
 import { createAggregate } from '../tools/physics';
 import { loadModelByIndx, mergeAndLoadModel } from '../tools/loadmodel';
-import { createMat } from '../tools/materials';
+import { createMat, createMatV2 } from '../tools/materials';
+import { createFireParticles } from '../tools/particlesystem';
+import { spawnMagicCircle } from './magiccircles';
+import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
+import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
+import { exitScene } from '../sockets/exitsocket';
+import { findMyCurrentPlace } from '../states/placestates';
+import { changeScene } from '../main/main';
+import { openCloseInteractBtn } from '../tools/popupUI';
+
+import { startQuestionare } from '../components/conversations';
+import { checkIfTokenSaved } from "../tools/tools"
 
 const WALL_HEIGHT    = 0.5;
 const WALL_THICKNESS = 0.3;
 
+let hasPhysics = true
 
-function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene) {
+function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene, shadowGenerator) {
     for (let i = 0; i < count; i++) {
         const px = startPos.x + stepVec.x * i;
         const pz = startPos.z + stepVec.z * i;
 
         const brick = brickMaster.createInstance(`${name}_${i}`);
         brick.position = new Vector3(px, wh / 2, pz);
-        createAggregate(brick, { mass: 0 }, "box", scene);
+        if(hasPhysics)createAggregate(brick, { mass: 0 }, "box", scene);
 
         const cap = capMaster.createInstance(`${name}_cap_${i}`);
         cap.position = new Vector3(px, wh/2, pz);
-        createAggregate(cap, { mass: 0 }, "box", scene);
+        if(hasPhysics)createAggregate(cap, { mass: 0 }, "box", scene);
 
-        brick.isVisible =true
-        cap.isVisible =true
+        brick.isVisible = true
+        cap.isVisible = true
+
+        if (shadowGenerator) {
+            shadowGenerator.addShadowCaster(brick)
+            shadowGenerator.addShadowCaster(cap)
+            brick.receiveShadows = true
+            cap.receiveShadows = true
+        }
     }
 }
 
-export async function createRoom(scene, room) {
+export async function createRoom(scene, room, characterBody, _hasPhysics = true) {
+    hasPhysics = _hasPhysics
     const {
         name       = 'Room',
         width      = 7,
@@ -40,7 +62,10 @@ export async function createRoom(scene, room) {
         wallHeight = WALL_HEIGHT,
         bedConfig,
         indorItems = [],
+        spawn,
+        exitPlaceDetail
     } = room;
+    console.log(room)
     const halfW = width  / 2;
     const halfH = height / 2;
     const wh    = wallHeight;
@@ -54,16 +79,16 @@ export async function createRoom(scene, room) {
     const ground = MeshBuilder.CreateGround(`${name}_ground`, { width, height, subdivisions: 1 }, scene);
     ground.material   = floorMat;
     ground.position.y = 0;
-    createAggregate(ground, { mass: 0 }, "box", scene);
+    if(hasPhysics) createAggregate(ground, { mass: 0 }, "box", scene);
 
     // ── Wall masters (hidden, used only for instancing) ───────────────────────
     const brickNS = MeshBuilder.CreateBox(`${name}_mbrick_ns`, { width: 1,   height: wh,  depth: wt }, scene);
     brickNS.material  = wallMat;
-    brickNS.isVisible = true;
+    brickNS.isVisible = false;
 
     const brickEW = MeshBuilder.CreateBox(`${name}_mbrick_ew`, { width: wt,  height: wh,  depth: 1  }, scene);
     brickEW.material  = wallMat;
-    brickEW.isVisible = true;
+    brickEW.isVisible = false;
 
     const brickTop = MeshBuilder.CreateBox(`${name}_mcap_ns`, { height: 0.4, size: 0.6 }, scene);
     brickTop.material  = wallMat;
@@ -73,36 +98,85 @@ export async function createRoom(scene, room) {
     const nsCount = Math.ceil(width);
     const ewCount = Math.ceil(height);
 
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    const ambient = new HemisphericLight(`${name}_ambient`, new Vector3(0, 1, 0), scene);
+    ambient.intensity   = 0.4;
+    ambient.diffuse     = new Color3(1.0, 0.92, 0.82);
+    ambient.groundColor = new Color3(0.1, 0.08, 0.06);
+
+    // const dirLight = new DirectionalLight(`${name}_dirlight`, new Vector3(-1, -2, -1), scene);
+    // dirLight.position  = new Vector3(halfW, wh * 4, halfH);
+    // dirLight.intensity = 0.8;
+    // dirLight.diffuse   = new Color3(1.0, 0.92, 0.82);
+
+    // const shadowGenerator = new ShadowGenerator(1024, dirLight);
+    // shadowGenerator.useBlurExponentialShadowMap = true;
+
+    ground.receiveShadows = true;
+
+    // ── Walls ─────────────────────────────────────────────────────────────────
     buildWall(`${name}_wall_n`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene);
     buildWall(`${name}_wall_s`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene);
     buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene);
     buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene);
 
-    // ── Lighting ──────────────────────────────────────────────────────────────
-    const ambient = new HemisphericLight(`${name}_ambient`, new Vector3(0, 1, 0), scene);
-    ambient.intensity   = 0.5;
-    ambient.diffuse     = new Color3(1.0, 0.92, 0.82);
-    ambient.groundColor = new Color3(0.1, 0.08, 0.06);
-
-    const pt = new PointLight(`${name}_point`, new Vector3(0, wh * 0.85, 0), scene);
-    pt.intensity = 0.7;
-    pt.range     = Math.max(width, height) * 2;
-    pt.diffuse   = new Color3(1.0, 0.90, 0.75);
-
-    if (bedConfig?.hasBed) {
-        const model = await mergeAndLoadModel(`./models/beds/${bedConfig.bedGlbName}`, scene);
-
-        model.position = new Vector3(bedConfig.bedPosition.x, bedConfig.bedPosition.y, bedConfig.bedPosition.z);
-        model.rotation.y = bedConfig.bedRotation;
-        createAggregate(model, { mass: 0 }, "box", scene);
-    }
     if(indorItems.length > 0){
         indorItems.forEach(async item => {
-            const model = await loadModelByIndx(item.glbPath, 1, scene);
-
+            if (item.name.includes("particle_fire")) {
+                createFireParticles(item.position, scene)
+                return
+            }
+            // const model = await loadModelByIndx(item.glbPath, 1, scene);
+            const model = await mergeAndLoadModel(item.glbPath, scene, item.functionBeforeMerge);
             model.position = new Vector3(item.position.x, item.position.y, item.position.z);
             model.addRotation(0, item.rotation, 0);
-            createAggregate(model, item.physics.opt, item.physics.type, scene);
+            model.name = item.name
+
+            if(item.diffuseTexPath){
+                const mat = createMatV2(scene, item.diffuseTexPath)
+                model.material = mat
+                model.material.backFaceCulling  = false
+            }
+            // shadowGenerator.addShadowCaster(model)
+            // model.receiveShadows = true
+            if(item.cbAfterMade) item.cbAfterMade(scene)
+            if(hasPhysics) createAggregate(model, item.physics.opt, item.physics.type, scene);
+        })
+    }
+
+    // setTimeout(() => {
+    //     spawnMagicCircle(new Vector3(spawn.x, spawn.y, spawn.z), scene, "divine1", 0.8)
+    //     spawnProjectileFromBelow({x:0,y:-1,z:0}, characterBody.position, scene)
+
+    //     setTimeout(() => {
+    //         startQuestionare(1)
+    //     })
+    // }, 2000)
+
+    if (exitPlaceDetail && characterBody) {
+        const exitTrigger = MeshBuilder.CreateBox(`${name}_exit_trig`, { width: width/4, height: 2, depth: 1/2 }, scene)
+        exitTrigger.position = new Vector3(0, 1, -halfH + 0.5)
+        exitTrigger.isVisible = true
+        exitTrigger.isPickable = false
+
+        onIntersecEnterTrig(exitTrigger, characterBody, scene, () => {
+            openCloseInteractBtn(true, "none", async () => {
+                openCloseInteractBtn(false)
+
+                const charState = getCharState()
+
+                charState.currentPlace.placeId = exitPlaceDetail.placeId
+                charState.currentPlace.name = exitPlaceDetail.name
+                charState.currentPlace.areaType = exitPlaceDetail.areaType
+
+                const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                console.log(newCharData)
+                exitScene(false)
+                await changeScene("whatever")
+            })
+        })
+        onIntersecExitTrig(exitTrigger, characterBody, scene, () => {
+            openCloseInteractBtn(false, false)
         })
     }
 }

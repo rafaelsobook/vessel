@@ -9,10 +9,12 @@ import { createRock } from "../assetcreation/createRock.js";
 import { loadAvatarContainer, loadModel } from "../tools/loadmodel.js";
 import { createSunRay } from "../tools/sunrays.js";
 import { sceneCleanupReady } from "../components/cleanup.js";
-import { getEngine } from "../main/main.js";
+import { getEngine, setGameStatus } from "../main/main.js";
+import { showHideIcons } from "../charactersystem/uimanagement.js";
 // import { createMobileControls } from "../components/mobilecontrols.js";
 
 export async function dungeonScene(placeDetail){
+    showHideIcons()
     const engine = getEngine()
     const spawnPos = {
         x: placeDetail.spawn.x * placeDetail.layout.cellSize,
@@ -41,10 +43,7 @@ export async function dungeonScene(placeDetail){
 
     const isTouchDevice = navigator.maxTouchPoints > 0;
 
-    // const controls = createCharacterControls(player, camera, scene);
-
-    scene.meshes.forEach(mesh => mesh.isPickable = false)
-    scene.onDisposeObservable.addOnce(() => controls.dispose());
+    setGameStatus("running")
     
     return scene
 }

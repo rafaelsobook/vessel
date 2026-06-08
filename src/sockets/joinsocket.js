@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 import { getCharSocket } from "../charactersystem/characterstate.js";
-import { activateOnSocketListeners, setSocketOn } from "./worldsocket.js";
+import { activateOnSocketListeners, getIsSocketOn, setSocketOn } from "./worldsocket.js";
 
 let socket = null;
 let socketId = null
@@ -40,4 +40,3 @@ export const joinWorld = (roomId) => {
         socketPlacesMD = response.placesMD;
     });
 };
-

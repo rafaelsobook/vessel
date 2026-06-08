@@ -30,19 +30,76 @@ import { findPlaceMetaData } from "../states/placestates.js"
 import { attachCam } from "../tools/camera.js"
 import { getSpawnPos } from "../tools/position.js"
 import { createCharacter } from "./createcharacter.js"
+import { ActionManager, MeshBuilder, Vector3 } from "@babylonjs/core"
+import { getCharState } from "./characterstate"
+import { getPlayersOnScene } from "../sockets/worldsocket.js"
 
-export function createMyCharacter(tcpCharDet){
-    const sceneDet = getSceneDet()
+
+export function createMyCharacter(tcpCharDet, scene){
 
     const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
-    console.log(`character is in place: ${tcpCharPlaceMD.placeId}`)
 
     const spawnPos = getSpawnPos(tcpCharPlaceMD)
 
-    const player = createCharacter(sceneDet.scene, spawnPos, null, tcpCharDet, true)
+    const player = createCharacter(scene, spawnPos, {...tcpCharDet,
+        // mode would be by default always Idle if newly joined
+    // addiditonal infos because our tcpCharDet does not come from tcp(in tcp we put this additional info) 
+    _moving: false,
+    _minning: false, 
+    }, true)
+    if(!player) return
     attachCam(player.camParent)
-    const controls = attachControllerToThisCharacter(player.aggregate)
 
-    sceneCleanupReady(sceneDet.scene, controls)
+    const controls = attachControllerToThisCharacter(player.aggregate, scene)
+
+    const atkCollider = createAttackColliderForEnemy(scene, player.body)
+
+    sceneCleanupReady(scene, controls)
     return player
+}
+
+function createAttackColliderForEnemy(scene, body){
+    const atkCollider = MeshBuilder.CreateBox("atkCollider", {width: 2, height: 0.25, depth: 1}, scene)
+    atkCollider.isPickable = false
+    // atkCollider.parent = body
+    atkCollider.position = new Vector3(0, 0, 2.5)
+    atkCollider.isVisible = false
+    atkCollider.actionManager = new ActionManager(scene)
+    scene.registerBeforeRender(() => {
+        if(!body) return
+        atkCollider.position.y += 10 * (scene.getEngine().getDeltaTime() / 1000)
+    })
+    return atkCollider
+}
+export function positionAtkCollider(pos, dirTarg){
+    const charState = getCharState()
+    if(!charState) return 
+    const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+    if(!player) return
+    const atkCollider = getSceneDet().scene.getMeshByName(`atkCollider`)
+    if(!atkCollider) return
+
+    // Get forward direction from player's world matrix
+    const forward = new Vector3(0, 0, 1)
+    const worldForward = Vector3.TransformNormal(
+        forward,
+        player.body.getWorldMatrix()
+    )
+    worldForward.normalize()
+
+    // Offset multiplier — how far in front of the body
+    const reach = pos?.reach ?? 1.0       // forward distance (punch ~0.8, kick ~1.0, weapon ~1.5)
+    // const heightOffset = pos?.height ?? 0  // 0 = same level, negative = low kick, positive = high punch
+
+    // Final position: player pos + forward * reach + Y offset
+    const spawnPos = player.body.absolutePosition
+        .add(worldForward.scale(reach))
+
+    atkCollider.position.copyFrom(spawnPos)
+    
+    // Optionally match player's Y rotation so collider faces same way
+    if(player.body.rotationQuaternion){
+        atkCollider.rotationQuaternion = player.body.rotationQuaternion.clone()
+    }
+    atkCollider.position.y = -2
 }

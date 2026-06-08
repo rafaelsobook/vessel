@@ -4,18 +4,33 @@ export function onIntersecEnterTrig(mesh, otherMesh, scene, callb){
     if(!mesh.actionManager){
         mesh.actionManager = new ActionManager(scene)
     }
-    
-
-    // OnIntersectionEnterTrigger
-    mesh.actionManager.registerAction(
+    return mesh.actionManager.registerAction(
         new ExecuteCodeAction(
             {
                 trigger: ActionManager.OnIntersectionEnterTrigger,
-                parameter: otherMesh  // the mesh to check against
+                parameter: otherMesh
             },
-            () => {
-                if(callb) callb()
-            }
+            () => { if(callb) callb() }
         )
     );
+}
+export function onIntersecExitTrig(mesh, otherMesh, scene, callb){
+    if(!mesh.actionManager){
+        mesh.actionManager = new ActionManager(scene)
+    }
+    mesh.actionManager.registerAction(
+        new ExecuteCodeAction(
+            {
+                trigger: ActionManager.OnIntersectionExitTrigger,
+                parameter: otherMesh
+            },
+            () => { if(callb) callb() }
+        )
+    );
+    
+}
+export function removeIntersecTrig(mesh, action){
+    if(mesh.actionManager && action){
+        mesh.actionManager.unregisterAction(action)
+    }
 }

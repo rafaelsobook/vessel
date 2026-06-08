@@ -7,7 +7,7 @@ let havokInstance = null;
 let havokPlugin = null
 
 export function disposePhysics(scene) {
-    if(!scene) return console.log("scene is not available")
+    if(!scene) return
     try {
         // console.log(scene.getPhysicsEngine() === null) // true 
         if(scene.getPhysicsEngine() === null) {
@@ -25,8 +25,6 @@ export function disposePhysics(scene) {
 
         havokPlugin = null;
         havokInstance = null;
-
-        console.log("✅ Physics disposed");
     } catch (error) {
         console.error("❌ Failed to dispose physics:", error);
     }
@@ -34,7 +32,6 @@ export function disposePhysics(scene) {
 export async function initializePhysics(scene) {
     disposePhysics(scene)
     if (havokInstance) {
-        console.log("Physics already initialized");
         return havokInstance;
     }
 
@@ -47,9 +44,7 @@ export async function initializePhysics(scene) {
         
         // Enable physics in the scene (no gravity for now)
         scene.enablePhysics(new Vector3(0, -9.81, 0), havokPlugin);
-        
-        console.log("✅ Physics engine initialized");
-    
+
         return havokInstance;
     } catch (error) {
         console.error("❌ Failed to initialize physics:", error);

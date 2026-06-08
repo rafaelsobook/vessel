@@ -4,11 +4,17 @@ import loadScene from "./loadScene.js"
 import "@babylonjs/loaders"
 import { getSocketPlacesMD, initSocket, joinWorld } from "../sockets/joinsocket.js";
 import { metaDatas } from "../constants/localroomdb.js";
-import { getCharDetFromDB, getCharDetFromDBAndUpdateCharState, setCharState } from "../charactersystem/characterstate.js"
+import { setCharState } from "../charactersystem/characterstate.js"
+import { activateBtnOnce } from "../charactersystem/uimanagement.js";
 import { findMyCurrentPlace } from "../states/placestates.js";
 import { disposePhysics } from "../tools/physics.js";
-import { beginWorldRenderInWorldSocket } from "../sockets/worldsocket.js";
-
+import { makeSureArraysAreClean } from "../components/cleanup.js";
+import { checkIfTokenSaved } from "../tools/tools.js";
+import { setupCharacterScene } from "../scenes/setupcharacterscene.js";
+import { closeCharacterPage } from "../pages/createcharacterpage.js";
+import { activateInteractBtn } from "../tools/popupUI.js";
+import { initOnceStatsSystem } from "../charactersystem/statsSystem.js";
+import { initOnceStorySystem } from "../charactersystem/storyQuestSystem.js";
 const canvas = document.querySelector("canvas")
 
 
@@ -29,31 +35,48 @@ export function getSceneDet(){
     return {scene,sceneName}
 }
 export function getEngine(){
-    if(!engine) return console.log("NO ENGINE")
+    if(!engine) return null
     return engine
 }
-export function changeScene(newScene, _sceneName){
+// 
+export function changeScene(_sceneName){
     setGameStatus("loading")
-    disposePhysics(scene)
+
     scene.meshes.forEach(mesh => mesh.dispose())
     scene.dispose()
-    scene = newScene
-    sceneName = _sceneName;
+    // In the village or any path I will intersect the exit() will emit making sure every info of us is deleted
+    makeSureArraysAreClean(async () => {
+        const newScene = await loadScene()
+        scene = newScene
+        sceneName = _sceneName;
+    })
 
-    setGameStatus("running")
 }
-export async function startScene(){
+export async function startScene(willCreateCharacter){
+
     await initEngine()
-    initSocket()
-    
-    const charDet = getCharDetFromDBAndUpdateCharState()
+    if(!willCreateCharacter){
+        closeCharacterPage()
+        initSocket()
 
-    scene = await loadScene(findMyCurrentPlace())
+        scene = await loadScene()
 
-    if(!scene) return console.warn("creating scene failed")
-    // changeScene(scene, "new scene")
-    // beginWorldRenderInWorldSocket(scene)
-    engine.runRenderLoop(() => scene.render())
+        if(!scene) return console.warn("creating scene failed")
+        // changeScene(scene, "new scene")
+        // beginWorldRenderInWorldSocket(scene)
+        activateBtnOnce()
+        activateInteractBtn()
+        // initOnceWorlChatSystem()
+        initOnceStatsSystem()
+        initOnceStorySystem()
+        // initOnceEnhanceSystem()
+        // initOnceEmojiActions()
+        // playSocketScene(_scene)
+    }else{
+        scene = await setupCharacterScene(engine)
+    }
+
+    engine.runRenderLoop(() => gameStatus === "running" && scene.render())
     window.addEventListener("resize", ()  => engine.resize())
 }
 
@@ -81,7 +104,7 @@ async function initEngine(){
         stencil: false,                  
         antialias: false,     
         audioEngine: false,
-        adaptToDeviceRatio: true,   
+        adaptToDeviceRatio: false,   
         disableWebGL2Support: false,
         useHighPrecisionFloats: false,  
         powerPreference: "high-performance",

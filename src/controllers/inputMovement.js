@@ -1,10 +1,15 @@
 import { Quaternion, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getSceneDet } from "../main/main";
+import { setCanPress, getCanPress, getCharState } from '../charactersystem/characterstate';
+import { getPlayersOnScene } from '../sockets/worldsocket';
+import { stopAnim } from '../tools/tools';
+import { playAnim, stopAllAnim } from '../tools/animation';
+import { emitMove, emitStop } from '../sockets/emits';
 
-let aggregate = null;
+let aggregate = null
 
-export function attachControllerToThisCharacter(_aggregate) {
-    const { scene } = getSceneDet();
+export function attachControllerToThisCharacter(_aggregate, scene) {
+    // const { scene } = getSceneDet();
     aggregate = _aggregate;
     return setupControls(scene);
 }
@@ -12,8 +17,8 @@ export function attachControllerToThisCharacter(_aggregate) {
 function setupControls(scene) {
     const camera = scene.activeCamera;
 
-    let walkSpeed = 10;
-    let sprintSpeed = 25;
+    let walkSpeed = 1;
+    let sprintSpeed = 20;
     let currentSpeed = walkSpeed;
     let isMoving = false;
 
@@ -42,7 +47,33 @@ function setupControls(scene) {
         if (forward === -1 && right === -1) rotationHelper.lookAt(camDir, -Math.PI + Math.PI / 4, 0, 0);
     }
 
+    function setPlayerMoving(value) {
+        const charState = getCharState()
+        if (!charState) return
+        const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+        player._moving = value
+        if (player) {
+            switch(player.mode){
+                case "idle":
+                    currentSpeed = walkSpeed
+                break
+                case "fighting":
+                    currentSpeed = sprintSpeed
+                break
+            }
+           
+            if(!value) {
+                // stopAnim(player.anims, "running")
+                // stopAnim(player.anims, "walk")
+                stopAllAnim(player.anims)
+                // playAnim(player.anims, "runstopped1")
+            }
+        }
+
+    }
+
     function handleKeyDown(e) {
+        if(!getCanPress()) return
         const key = e.key.toLowerCase();
 
         switch (key) {
@@ -53,10 +84,15 @@ function setupControls(scene) {
             case "shift": currentSpeed = sprintSpeed; break;
         }
 
+        if (isMoving) {
+            setPlayerMoving(true)
+            
+        }
         updateRotation(getCamDir());
     }
 
     function handleKeyUp(e) {
+        if(!getCanPress()) return
         const key = e.key.toLowerCase();
 
         switch (key) {
@@ -65,19 +101,28 @@ function setupControls(scene) {
             case "a": input.right   = 0; break;
             case "d": input.right   = 0; break;
             case "shift": currentSpeed = walkSpeed; break;
+            case " ":
+                const state = getCharState()
+                console.log(state)
+                const body = getSceneDet().scene.getMeshByName(`player.${state.owner}`)
+                console.log(body.position)
+            break;
         }
 
         if (input.forward === 0 && input.right === 0) {
             isMoving = false;
+            setPlayerMoving(false)
             const vel = aggregate.body.getLinearVelocity();
             aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
+            emitStop()
         }
-        console.log("keyup")
     }
 
+    let lastEmit = 0;
     function updateMovement() {
         if (!aggregate) return;
-
+        if(!getCanPress()) return
+        const dt = 
         aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
 
         if (isMoving) {
@@ -86,21 +131,26 @@ function setupControls(scene) {
             fwd.normalize();
             const vel = aggregate.body.getLinearVelocity();
             aggregate.body.setLinearVelocity(new Vector3(
-                fwd.x * currentSpeed,
+                (fwd.x * currentSpeed),
                 vel.y,
-                fwd.z * currentSpeed
+                (fwd.z * currentSpeed)
             ));
+            const now = performance.now();
+            if (now - lastEmit > 50) {
+                emitMove();
+                lastEmit = now;
+            }
         }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-    scene.registerBeforeRender(updateMovement);
+    const physicsObserver = scene.onBeforePhysicsObservable.add(updateMovement);
     return {
         dispose: () => {
-            console.log("disposing event listeners")
             window.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("keyup", handleKeyUp);
+            scene.onBeforePhysicsObservable.remove(physicsObserver);
         }
     }
 }

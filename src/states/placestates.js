@@ -1,6 +1,6 @@
 import { metaDatas } from "../constants/localroomdb";
 import { getSocketPlacesMD } from "../sockets/joinsocket";
-import { getCharDetFromDB, getCharState } from "../charactersystem/characterstate.js";
+import {  getCharState } from "../charactersystem/characterstate.js";
 
 let prevPlace = null;
 let currentPlace = null;

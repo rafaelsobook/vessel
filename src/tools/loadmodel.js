@@ -18,11 +18,7 @@ export async function loadModel(path, scene) {
 
     // Find the mesh that actually has geometry — skip __root__ and empty nodes
     const mesh = container.meshes.find(m => m.getTotalVertices() > 0);
-    container.meshes.forEach(m => {console.log(m.name)})
     if (!mesh) throw new Error(`[loadTemplate] No geometry found in ${path}`);
-
-    console.log(`[loadTemplate] found mesh: "${mesh.name}" verts=${mesh.getTotalVertices()}`);
-    console.log(`[loadTemplate] mesh parent: ${mesh.parent?.name ?? "none"}`);
 
     // Detach from __root__ so our scaling/position is in world space
     // and doesn't get double-transformed by the parent node
@@ -36,13 +32,6 @@ export async function loadModel(path, scene) {
     // generateDungeon will assign the correct PBR material
     mesh.material = null;
     mesh.isVisible = false;
-
-    // Log the local bounding box so we can verify size
-    const bbox = mesh.getBoundingInfo().boundingBox;
-    const w = bbox.maximum.x - bbox.minimum.x;
-    const h = bbox.maximum.y - bbox.minimum.y;
-    const d = bbox.maximum.z - bbox.minimum.z;
-    console.log(`[loadTemplate] local bbox: ${w.toFixed(3)} × ${h.toFixed(3)} × ${d.toFixed(3)}`);
 
     // mesh.rotationQuaternion = null
     return mesh;
@@ -58,9 +47,10 @@ export async function loadModelByIndx(path, meshIndx, scene) {
 export async function mergeAndLoadModel(path, scene, functionBeforeMerge){
     const container = await SceneLoader.LoadAssetContainerAsync("", path, scene);
     container.addAllToScene();
-    if(functionBeforeMerge) functionBeforeMerge(container);
+    if(functionBeforeMerge) return functionBeforeMerge(container)
+    
     const mesh = Mesh.MergeMeshes(
-        container.meshes[0].getChildren(),
+        container.meshes[0].getChildMeshes(),
         true,
         true,
         undefined,
@@ -77,6 +67,28 @@ export async function mergeAndLoadModel(path, scene, functionBeforeMerge){
     return mesh
 }
 export async function loadAvatarContainer(path, scene){
-    const container = await LoadAssetContainerAsync(path, scene);
-    return container
+    return await LoadAssetContainerAsync(path, scene);
+}
+
+export async function loadMeshOnlyParts(path, scene) {
+    const container = await LoadAssetContainerAsync(path, scene)
+    container.addAllToScene()
+
+    const rootNode = container.meshes[0]
+    const parts = container.meshes.slice(1)
+
+    parts.forEach(m => {
+        // Detach from __root__ while preserving world transform.
+        // __root__ carries Blender's Z-up→Y-up axis fix — without this,
+        // createInstance() would produce sideways/rotated parts since
+        // instances don't inherit the parent chain.
+        m.setParent(null)
+        m.bakeCurrentTransformIntoVertices()
+        m.isVisible = false
+        m.material = null
+    })
+
+    rootNode.dispose()
+
+    return Object.fromEntries(parts.map(m => [m.name, m]))
 }

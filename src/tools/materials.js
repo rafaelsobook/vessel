@@ -1,26 +1,69 @@
 import { PBRMaterial, StandardMaterial, Color3, Texture } from "@babylonjs/core";
 
+let MatUsed = StandardMaterial
 
-export function createMat(name, color, texturePath, scene, scale = { uScale: 1, vScale: 1 }) {
+export function createGlowingMat(scene, colorType = "yellow"){
+    const colors = {
+        yellow: { diffuse: new Color3(0.8, 0.7, 0.0), emissive: new Color3(1.0, 0.9, 0.0) },
+        green:  { diffuse: new Color3(0.0, 0.6, 0.0), emissive: new Color3(0.0, 1.0, 0.2) },
+        white:  { diffuse: new Color3(0.8, 0.8, 0.8), emissive: new Color3(1.0, 1.0, 1.0) },
+        blue:   { diffuse: new Color3(0.0, 0.2, 0.8), emissive: new Color3(0.0, 0.4, 1.0) },
+        red:    { diffuse: new Color3(0.8, 0.0, 0.0), emissive: new Color3(1.0, 0.1, 0.1) },
+        violet: { diffuse: new Color3(0.5, 0.0, 0.8), emissive: new Color3(0.7, 0.0, 1.0) },
+    };
+    const palette = colors[colorType] ?? colors.yellow;
+    const mat = new StandardMaterial("glowingMat_" + colorType, scene);
+    mat.diffuseColor = palette.diffuse;
+    mat.emissiveColor = palette.emissive;
+    mat.specularColor = new Color3(0, 0, 0);
+    return mat;
+}
+
+export function createMat(name, color, diffuseTexPath, scene, scale = { uScale: 1, vScale: 1 }) {
     const mat = new StandardMaterial(name, scene);
-    if(texturePath){
-        const diffTex = new Texture(texturePath, scene);
+    if(diffuseTexPath){
+        const diffTex = new Texture(diffuseTexPath, scene);
         diffTex.uScale = scale.uScale;
         diffTex.vScale = scale.vScale;
         
         mat.diffuseTexture = diffTex;
         mat.specularColor = new Color3(0,0,0);
-
-    }
-   
+    }   
     // Base color (like diffuseColor but PBR)
     if(color){
         mat.diffuseColor = color;
     }
-
     return mat;
 }
+export function createMatV2(scene, diffuseTexPath, normalTexPath, uVscaleTex = 1){
+    const mat = new MatUsed("mat", scene)
+    mat.specularColor = new Color3(0, 0, 0)
+    if(normalTexPath){
+        const normalTex = new Texture(normalTexPath, scene)
+        normalTex.uScale = uVscaleTex
+        normalTex.vScale = uVscaleTex
+        mat.bumpTexture = normalTex
+    }
+    if(diffuseTexPath){
+        const diffuseTex = new Texture(diffuseTexPath, scene)
+        diffuseTex.uScale = uVscaleTex
+        diffuseTex.vScale = uVscaleTex
+        mat.diffuseTexture = diffuseTex
+    }
+    return mat
+}
+export function createColorMat(name, color, scene, normalTexPath){
+    const mat = new StandardMaterial(name, scene)
 
+    mat.diffuseColor = new Color3(color.r,color.g,color.b)
+
+    if(normalTexPath){
+        const bumpTex = new Texture(normalTexPath, scene)
+        mat.bumpTexture = bumpTex
+    }
+
+    return mat
+}
 export function dungeonMaterial(scene) {
     const mats = {};
 

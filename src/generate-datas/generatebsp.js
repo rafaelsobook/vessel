@@ -425,7 +425,7 @@ export function generateBSPDungeon({
     difficulty    = 1,
     textures      = null,
     rockDensity   = 1,
-
+    isMultiplayer   = true,
 } = {}) {
     const rng = seededRNG(seed);
 
@@ -468,6 +468,7 @@ export function generateBSPDungeon({
     };
 
     return {
+        isMultiplayer,
         sceneTemp,
         placeId,
         areaType: "dungeon",

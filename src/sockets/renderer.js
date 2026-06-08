@@ -1,0 +1,174 @@
+import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene } from "./worldsocket";
+import { getCharState } from "../charactersystem/characterState.js";
+import { playAnim } from "../tools/animation.js";
+import { getGameStatus, getSceneDet } from "../main/main.js";
+import { Vector3 } from "@babylonjs/core";
+
+let scene;
+
+const log = console.log
+
+export function removeRenderObservable(_scene){
+    if(_scene) _scene.onBeforeRenderObservable.remove(renderCallback)
+}
+export function addRenderObservable(_scene){
+    scene = _scene;
+    scene.onBeforeRenderObservable.add(renderCallback)
+}
+
+
+let renderCallback = function () {
+    if(getGameStatus() === "loading") return;
+    const charState = getCharState()
+    if(!charState) return
+
+    const dt = scene.getEngine().getDeltaTime()/1000
+    
+    getProjectilesOnScene().forEach(proj => {
+        if(charState.currentPlace.placeId !== proj.placeId) return 
+        if(!proj.body) return
+        if(proj.stuck) return
+
+        proj.body.locallyTranslate(new Vector3(0, 0, proj.spd * dt))
+    })
+
+    getPlayersOnScene().forEach(player => {
+
+        if(charState.currentPlace.placeId !== player.currentPlaceId) return
+        if(!player.body) return 
+        const isActionPlaying = player.anims.some(anim =>
+            (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
+        )
+
+        player.anims.forEach(anim => {
+            // if(anim.isPlaying) console.log(anim.name)
+        })
+        if (!isActionPlaying) {
+            if(player._attacking) return
+            
+            if(player._moving){
+                // return console.log("moving")
+                switch(player.mode){
+                    case "idle":
+                        playAnim(player.anims, "walk")
+                    break
+                    case "fighting":
+                        playAnim(player.anims, "running")
+                    break
+                }
+                return
+            }
+            switch(player.mode){
+                case "idle":
+                    playAnim(player.anims, "idle")
+                break
+                case "fighting":
+                    playAnim(player.anims, "combatIdle")
+                break
+            }
+            // const loopAnim = player.anims.find(anim => anim.name.toLowerCase() === player.mode.toLowerCase())
+            // if (loopAnim && !loopAnim.isPlaying) {
+            //     console.log(player.mode)
+            //     playAnim(player.anims, player.mode)
+            //     switch(player.mode){
+            //         case "idle":
+            //             playAnim(player.anims, "idle")
+            //         break
+            //         case "fighting":
+            //             playAnim(player.anims, "combatIdle")
+            //         break
+            //     }
+            // }
+        }
+    })
+    getEnemiesOnScene().forEach(en => {
+        if (en._isMoving && en._targetId) {
+            const targetPlayer = getSceneDet().scene.getMeshByName(`player.${en._targetId}`)
+            if(targetPlayer){
+                en.body.lookAt(new Vector3(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z))
+                en.body.locallyTranslate(new Vector3(0, 0, en.spd * dt))
+            }
+            
+            // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle 
+            en.anims.forEach(anim => {
+                if (anim.name === "running" && !anim.isPlaying) {
+                    anim.speedRatio = .9 + en.spd * .05
+                    anim.play()
+                }
+            })
+        } else {
+            // en.anims.forEach(anim => {
+            //     if(anim.name.includes('hit') && anim.isPlaying) return log("goblin hit anim playing")
+            // })
+        }
+    })
+    getNpcOnScene().forEach(player => {
+        if(charState.currentPlace.placeId !== player.currentPlaceId) return
+        if(!player.body) return 
+        const isActionPlaying = player.anims.some(anim =>
+            (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
+        )
+        if (!isActionPlaying) {
+            if(player._attacking) return
+            
+            if(player._moving){
+                // return console.log("moving")
+                switch(player.mode){
+                    case "idle":
+                        playAnim(player.anims, "walk")
+                    break
+                    case "fighting":
+                        playAnim(player.anims, "running")
+                    break
+                }
+                return
+            }
+            switch(player.mode){
+                case "idle":
+                    playAnim(player.anims, "idle")
+                break
+                case "fighting":
+                    playAnim(player.anims, "combatIdle")
+                break
+            }
+            // const loopAnim = player.anims.find(anim => anim.name.toLowerCase() === player.mode.toLowerCase())
+            // if (loopAnim && !loopAnim.isPlaying) {
+            //     console.log(player.mode)
+            //     playAnim(player.anims, player.mode)
+            //     switch(player.mode){
+            //         case "idle":
+            //             playAnim(player.anims, "idle")
+            //         break
+            //         case "fighting":
+            //             playAnim(player.anims, "combatIdle")
+            //         break
+            //     }
+            // }
+        }
+    })
+    if(!getIsSocketOn()) return;
+    // enemiez.forEach(en => {
+    //     if (en._isMoving && en._targetId) {
+    //         en.body.locallyTranslate(new Vector3(0, 0, en.spd * dt))
+    //         // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle 
+    //         en.anims.forEach(anim => {
+    //             if (anim.name === "running" && !anim.isPlaying) {
+    //                 anim.speedRatio = .9 + en.spd * .05
+    //                 anim.play()
+    //             }
+    //         })
+    //     } else {
+    //         // en.anims.forEach(anim => {
+    //         //     if(anim.name.includes('hit') && anim.isPlaying) return log("goblin hit anim playing")
+    //         // })
+    //     }
+    // })
+    // if (npcz.length) {
+    //     npcz.forEach(pl => {
+    //         if (pl._isMoving) {
+    //             pl.body.locallyTranslate(new Vector3(0, 0, pl.spd * dt))
+    //             playAnim(pl.anims, "running")
+    //         }
+    //     })
+    // }
+}

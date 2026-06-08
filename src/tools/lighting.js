@@ -1,8 +1,6 @@
 import { SpotLight, HemisphericLight, DirectionalLight,Color3, Vector3, Scene } from "@babylonjs/core";
 
 export function setupLighting(scene, placeDetail) {
-    console.log(placeDetail)
-
     // ── Environment texture ────────────────────────────────────────────────
     // PBRMaterial needs scene.environmentTexture to calculate reflections and
     // indirect lighting. Without it everything looks flat regardless of lights.
