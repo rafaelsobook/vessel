@@ -12,7 +12,6 @@ import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
 import { getPlayersOnScene } from "../sockets/worldsocket.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord } from "./createcharacter.js";
-const log = console.log
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -94,7 +93,6 @@ export function getTotalDefense(){
         if(itm.itemCateg === 'equipable' && itm.equiped){
             if(itm.equipAbilities.def){
                 totalD+=itm.equipAbilities.def
-                log(`def after ${itm.name} def ${totalD}`)
             }
         }
     })
@@ -103,12 +101,10 @@ export function getTotalDefense(){
 
     if(abilityDef && abilityDef.toAdd){
         totalD += abilityDef.toAdd
-        log(`def after abilityDef ${totalD}`)
     }
     if(abilityDef && abilityDef.percent){
         const additionalDefByPercent = totalD*abilityDef.percent
         totalD += additionalDefByPercent 
-        log(`damage after additionalDefByPercent ${totalD}`)          
     }
     // log(`total def ${totalD}`)
     return totalD
@@ -169,7 +165,6 @@ export function activateLifeSystem(){
         // FOR STATUS EFFECTS
         characterState.status.forEach(effect => {
             if(!effect.permanent) return 
-            console.log(`${effect.effectType} is active..`)
             switch(effect.effectType){
                 case "poisoned":
                     // characterState.hp -= effect.dmgPm
@@ -208,7 +203,6 @@ export function summarizeStats(){
         totalRegens,
         resistance
     } = getMyAbilitiesInfo()
-    console.log(totalHpPercent)
     if(totalHpPercent){
         addStats.additionalHp = maxHp*totalHpPercent   
     }
@@ -228,8 +222,6 @@ export function summarizeStats(){
     }
 
     if(totalMeeleeDmg.toAdd){
-        log(totalMeeleeDmg)
-        log(addStats)
         addStats.additionalMeeleeDmg.toAdd = totalMeeleeDmg.toAdd
     }
     if(totalMeeleeDmg.percent){
@@ -343,7 +335,7 @@ export async function deductHp(dmg, effects, enemyStats){
 export function addEffectsOnStat(effect){
     if(!effect.permanent) return //log(`${effect.effectType} is not permanent will not add on my sickness status`)
     const effectAlreadyInMyStatus = characterState.status.some(status => status.effectType === effect.effectType)
-    if(effectAlreadyInMyStatus) return log("effect already in my sickness status")
+    if(effectAlreadyInMyStatus) return
     
     switch(effect.effectType){
         case "poisoned":
@@ -360,7 +352,6 @@ export async function gameOver(){
     closeAllPopupAndUI()
 
     clearIntervals()
-    log("GAME OVER")
     
     characterState.hp = 0
     characterState.mp = 0
@@ -380,7 +371,6 @@ export async function gameOver(){
     updateHPMPSP_UI_ALLZERO()
 
     const res =await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
-    console.log(res)
     // characterState.deadCount++
     // characterState.isDead=true;
     // await updateMyDetailsOL({...characterState,
@@ -490,7 +480,6 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
         if(willUpdateCharState) characterState = data
         return data
     } catch (error) {
-        log(error)   
         return error.message
     }    
 }

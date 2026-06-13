@@ -55,7 +55,6 @@ export async function createNpc(scene, det) {
     root.getChildMeshes().forEach(mesh => {
         if (!mesh.material) return
         const mat = mesh.material
-        console.log(`[NPC mat] ${mesh.name} → ${mat.getClassName()}`, mat)
         if (mat.getClassName() === 'PBRMaterial') {
             mat.environmentIntensity = 0.3
             mat.directIntensity     = 1

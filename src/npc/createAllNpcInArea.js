@@ -13,7 +13,6 @@ import { checkIfTokenSaved } from "../tools/tools.js"
 
 export function createAllNpcInArea(hero, scene){
     const myHeroDatabase = getCharState()
-    console.log(myHeroDatabase)
     npcDetails.forEach( async npcdet => {
         if(npcdet.currentPlaceId !== myHeroDatabase.currentPlace.placeId) return
         let anNpc
@@ -32,22 +31,18 @@ export function createAllNpcInArea(hero, scene){
                 let storyInfo = false
                 let myQuestShortDetail = false
                 myState.quests.forEach(myqst => {
-                    console.log(myqst)
                     storyInfo = anNpc.det.forQuests.find(qst => qst.qName ===myqst.qName)
                     if(storyInfo) myQuestShortDetail = myqst
                 })
                 
-                if(!storyInfo) return startConv(anNpc.det.randomSpeech, () => console.log("Done Talking"))
-                console.log(storyInfo)
-                if(!myQuestShortDetail) return console.log("you don't have an existing quest")
-                console.log(myQuestShortDetail)
+                if(!storyInfo) return startConv(anNpc.det.randomSpeech, () => {})
+                if(!myQuestShortDetail) return
                 if(!myQuestShortDetail.questRequirements.completed && storyInfo.notCompletedSpeech) return startConv(storyInfo.notCompletedSpeech)
                 
 
                 if(myQuestShortDetail && myQuestShortDetail.questRequirements.completed) return startConv(storyInfo.speech, async () => {
                     myState = getCharState()
                     myState.quests = myState.quests.filter(stry=> stry.qName !== storyInfo.qName)
-                    console.log("this quest is no longer on your quests") // remove the prev first
                     // then add the new questsToReceive
 
                     storyInfo.questsToReceive.forEach(qstToRec => myState.quests.push(qstToRec))
@@ -56,7 +51,6 @@ export function createAllNpcInArea(hero, scene){
                         switch(storyInfo.reward.receiveRewardType){
                             case "item":
                                 storyInfo.reward.rewardItems.forEach(rwrdItm => {
-                                    log(rwrdItm.qnty)
                                     obtain(rwrdItm)
                                 })
                             break
@@ -65,13 +59,12 @@ export function createAllNpcInArea(hero, scene){
                                 // showItemAcquiredPopUp("krit", storyInfo.reward.rewardCoin)
                             break
                         }
-                        console.log(storyInfo)                    
                     }
                     myState.clearedQuests.push(storyInfo.qName)
                     const updatedState = await updateMyDetailsOL(myState, checkIfTokenSaved(), true)
                 })
                 
-                startConv(anNpc.det.speech, () => console.log("Done Talking"))
+                startConv(anNpc.det.speech, () => {})
                 // returnCam(scene, freecam)
                 // openCloseChatContainer(true)
                 // theNpc = getNpcArray().find(npz => npz._id === anNpc._id)

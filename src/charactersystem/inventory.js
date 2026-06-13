@@ -3,7 +3,6 @@ import { getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { equipItem, showItemInfo } from "./itemInfoSystem.js"
 
-const log = console.log
 
 const inventoryCont  = document.querySelector(".inventory-container")
 const itemSlotList   = document.querySelector(".slots-list")
@@ -42,7 +41,7 @@ export async function openUpdateInventory(willOpen){
 export function insertItemOnInventory(itm){
     if(itm.equiped) {
         equipItem(itm)
-        return log(`${itm.dn} is equiped do not put inside inventory`)
+        return
     }
     const button = createElement('button',  `slot-btn ${itm.itemId}`)
     const itemImg = createElement("img", `slot-img ${itm.rarity}`)

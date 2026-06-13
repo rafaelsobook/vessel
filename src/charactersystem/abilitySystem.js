@@ -12,7 +12,6 @@ const descriptionLists = document.querySelector('.description-list')
 const notifCont = document.querySelector('.abilities-notif-container')
 const notifLists = document.querySelector('.abilities-notif-list')
 const notifAcceptBtn = document.querySelector('.ablty-notif-btn')
-const log = console.log;
 
 notifAcceptBtn.addEventListener('click', async () => {
     setPointerClickable(notifAcceptBtn, "none", 2000)
@@ -25,7 +24,6 @@ notifAcceptBtn.addEventListener('click', async () => {
     // getAllSounds().notif1S.play()
     activateLifeSystem()
     const updatedAbilites = getAdditionalsFromAbilities()
-    log(updatedAbilites)
 })
 
 
@@ -39,11 +37,10 @@ export async function receiveAbilities(_numberNotGreaterThanTen, limit){
         if(Math.random()*10 <= _numberNotGreaterThanTen){
             const alreadyHave = state.blessings.find(ablty=>ablty.name === ability.name)
   
-            if(limit && abilitiesReceived.length >= limit) return console.log('Abilities reached limit')
+            if(limit && abilitiesReceived.length >= limit) return
             if(alreadyHave) {
                 state.blessings.forEach(ablty => {
                     if(ablty.name === alreadyHave.name){
-                        log("already have")
                         ablty.lvl+=1,
 
                         ablty.percents.hp+=ablty.percents.hp,
@@ -64,10 +61,8 @@ export async function receiveAbilities(_numberNotGreaterThanTen, limit){
                         abilitiesReceived.push(ablty)
                     }
                 })        
-                log(state.blessings)        
-                return log("already have this ability just upgrade")
+                return
             }
-            console.log('some ability gained')
             state.blessings.push(ability)
             abilitiesReceived.push(ability)
         }
@@ -145,7 +140,6 @@ export function getMyAbilitiesInfo(){
                 })                
             }
 
-            console.log(totalHpPercent)
         })
     }
 
@@ -195,10 +189,9 @@ export function showAbilityDesc(e){
     const element = e.target;
     const name = e.target.className.split(" ")[1]
     const abilityDetail = getCharState().blessings.find(ablty=> ablty.name === name)
-    if(!abilityDetail) return console.log('cant find ability')
+    if(!abilityDetail) return
 
     const rect = element.getBoundingClientRect();
-    console.log('Element position:', rect);
     uniqueDescBx.style.display = "block"
     uniqueDescBx.style.top = rect.top-rect.height
     uniqueDescBx.style.left = rect.left

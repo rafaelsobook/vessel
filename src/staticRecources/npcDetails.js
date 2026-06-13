@@ -125,7 +125,6 @@ export default [
                     }
                 ],
                 cb: () => {
-                    console.log("After the quest") // Enter Name Register will open
                     // actually none because the questToReceive will activate when you go near the crystal
                 }
             },
@@ -191,7 +190,6 @@ export default [
                     }
                 ],
                 cb: () => {
-                    console.log("After the quest") // Enter Name Register will open
                     // actually none because the questToReceive will activate when you go near the crystal
                 }
             },
@@ -298,7 +296,6 @@ export default [
                 
                 callBack: function (arg) {
                     receiveAbilities(4, 6)
-                    console.log("callback Working")
                 },
                 questsToReceive: [
                     { 

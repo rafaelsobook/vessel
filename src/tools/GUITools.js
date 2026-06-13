@@ -7,7 +7,6 @@ const hitScreen = document.querySelector(".hit-screen")
 hitScreen.addEventListener("transitionend", () => {
     hitScreen.classList.remove("screenFadeOff")
     hitScreen.style.display = "none"
-    console.log("hitscreen transition ended")
 })
 
 export function poppingTextMesh(textToDisplay,color,fontSize, maxPosY,pos, theParent, willAnimate){
@@ -85,7 +84,6 @@ export function createIcon(iconName, GUI, parentPanelOrDynamicTex, cb){
     button.thickness = 0;
 
     const image = new Image('icon', `./images/UI/${iconName}.png`);
-    console.log(image)
     // Add the image to the button's content
     button.addControl(image);
 

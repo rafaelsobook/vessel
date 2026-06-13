@@ -67,8 +67,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             removeIntersecTrig(enterAction)
             setTimeout(() => {  
                 theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
-                if(!theProjectile) return console.log("projectile after timeout not found")
-                console.log("Projectile found")
+                if(!theProjectile) return
                 theProjectile.spd = 5
                 theProjectile.stuck = true
                 theProjectile.body.setParent(pl.bodytarget)

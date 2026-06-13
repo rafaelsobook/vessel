@@ -65,7 +65,6 @@ export async function createRoom(scene, room, characterBody, _hasPhysics = true)
         spawn,
         exitPlaceDetail
     } = room;
-    console.log(room)
     const halfW = width  / 2;
     const halfH = height / 2;
     const wh    = wallHeight;
@@ -170,7 +169,6 @@ export async function createRoom(scene, room, characterBody, _hasPhysics = true)
                 charState.currentPlace.areaType = exitPlaceDetail.areaType
 
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                console.log(newCharData)
                 exitScene(false)
                 await changeScene("whatever")
             })

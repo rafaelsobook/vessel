@@ -20,7 +20,6 @@ import { pFloat } from '../tools/tools';
 let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
 
-const log = console.log
 export function showHideSword(swordTNode, isVisible){
     swordTNode.getChildMeshes().forEach(mesh => mesh.isVisible = isVisible)
 }
@@ -61,7 +60,6 @@ function createAnimeBodyMaterials(scene, det){
 export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false){
     const isMeshCreated = scene.getMeshByName(`player.${det.ownerId}`)
     if(isMeshCreated){
-        console.log(`${det.name} will not be created. already in scene`)
         return false
     }
     let swordMeshes = []
@@ -87,32 +85,28 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         const toPush = {name: swordName, mesh: sword}
         swordMeshes.push(toPush)
         showHideSword(sword, true)
-        log(`added sword successfully `, swordName)
         return toPush
     }
 
     // equips
     function equipBoots(itemName){
-        if(!itemName) return log("No itemName ")
-        console.log(`${det.name} is equiping ${itemName}`)
+        if(!itemName) return
         boots.forEach(boot =>{
             if(boot.name === itemName){
                 // const textureSet = wearableTex.find(tex => tex.texName === itemName)
-                // if(!textureSet) return log("did not found the texture set for this item")
+                // if(!textureSet) return
 
                 // boot.mesh.material.bump = 1
                 // boot.mesh.material.metallic = .5
                 // boot.mesh.material.diffuseTexture = textureSet.tex.diff
                 // boot.mesh.material.roughnessTexture = textureSet.tex.rough
                 // // belt.mesh.material.bumpTexture = textureSet.tex.norm
-                log(`${det.name} equiped ${itemName} successfully !`)
                 boot.mesh.isVisible = true
                 // boot.mesh.material.specularColor = new Color3(0,0,0)
             }else boot.mesh.isVisible = false
         })
     }
-    function equipSword(swordToEquipName, onHand, parts){
-        console.log('equiping a sword ', swordToEquipName)
+    function equipSword(swordToEquipName, onHand, parts, _rHand){
         if(!swordMeshes.length) createSword(swordToEquipName, parts)
         
         let toEquip = false
@@ -126,12 +120,13 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         })
         if(!toEquip) {
             toEquip = createSword(swordToEquipName, parts)
-            // return console.log("not yet made in my swordmeshes so will create ...")
+            // return
         }
-        if(!toEquip) return log("something went wrong creating sword mesh")
+        if(!toEquip) return
+        console.log(swordMeshes.length)
         showHideSword(toEquip.mesh, true)
         if(onHand){
-            toEquip.mesh.parent = rHand
+            toEquip.mesh.parent = _rHand
         }else {
             // toEquip.mesh.parent = weaponSocket
             // toEquip.mesh.rotation = new Vector3(0,0,0)
@@ -146,7 +141,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             if(itm.itemCateg ==="equipable"){   
                         
                 if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
-                if(itm.itemType === "weapon" && itm.equiped) equipSword(itm.name, true, itm.parts)
+                if(itm.itemType === "weapon" && itm.equiped) equipSword(itm.name, true, itm.parts, rHand)
                 // if(itm.itemType === "helmet" && itm.equiped) equipHelmet(_helmsRoot, itm.name)
                 // if(itm.itemType === "armor" && itm.equiped) equipArmor(_armorRoot, itm.name)
                 // if(itm.itemType === "belt" && itm.equiped) equipBelt(itm.itemModelStyle, itm.name)
@@ -272,7 +267,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         }
         if(mes.name.includes("belt.")){
             const beltName = mes.name.split(".")[1]
-            if(!beltName) return log("has no belt name")
+            if(!beltName) return
             
             // const designatedMat = createEquipMat()
             // mes.material = beltMat
@@ -281,7 +276,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         }
         if(mes.name.includes("cloak.")){
             const cloakName = mes.name.split(".")[1]
-            if(!cloakName) return log("has no cloak name")
+            if(!cloakName) return
             
             // const designatedMat = createEquipMat()
             // mes.material = cloakMat

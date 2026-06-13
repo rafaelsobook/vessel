@@ -7,12 +7,11 @@ import { getAttackInfo } from "../charactersystem/attackingSystem";
 
 
 let emitMyLocInterval = null
-const log = console.log
 export function emitMove(){
     const charState = getCharState()
-    if(!charState) return console.log("charstate fail")
+    if(!charState) return
     const socket = getSocket()
-    if(!socket) return console.log("socket fail")
+    if(!socket) return
     const { pos, dirTarg, mode} = getPlayerCoord(charState.owner)
 
     socket.emit("emitmove", {
@@ -52,9 +51,9 @@ export function emitMyLoc(newMode){
     })
 }
 export function emitDied() {
-    if (!getIsSocketOn()) return log("socket not available")
+    if (!getIsSocketOn()) return
     const socket = getSocket()
-    if(!socket) return console.log("no socket")
+    if(!socket) return
     const characterState = getCharState()
     socket.emit("will-die", { ownerId: characterState.owner, currentPlaceId: characterState.currentPlace.placeId })
     // playerz = []// restart ka ulet kase pag bumalik ka sa pinangalingan mo di na gagawin yung character kase makikita ulet sa playerz array
@@ -63,9 +62,9 @@ export function emitDied() {
 }
 // Attack Actions
 export function emitAttack() {
-    if (!getIsSocketOn()) return log("socket not available")
+    if (!getIsSocketOn()) return
     const socket = getSocket()
-    if(!socket) return console.log("no socket")
+    if(!socket) return
     // const enemyAccuracy = enemy.det.stats.accuracy
     // if (dmgDetails.accuracy < Math.random() * enemyAccuracy * 10) isMissed = true
 
@@ -74,9 +73,8 @@ export function emitAttack() {
 
 // ITEM EQUIP
 export function emitEquipItem(itemDet, isHiding) {
-    log("emit equip")
+
     const charState = getCharState()
-    console.log(charState)
     const socket = getSocket()
     socket.emit("emitEquipItem", {
         ownerId: charState.owner,

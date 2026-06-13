@@ -25,12 +25,12 @@ export const myownspeeches = [
         ],
         cb: function() {
             const charState = getCharState()
-            if(!charState) return console.log("not found charstate")
+            if(!charState) return
             setCanPress(false)
             setCharStateMode("idle")
             setTimeout( async () => {
                 const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-                if(!myChar) return console.log("not found getPlayersOnScene")
+                if(!myChar) return
                 await setCurrentSpeechId(null)
                 startQuestionare(1, myChar.body)
             }, 2000)

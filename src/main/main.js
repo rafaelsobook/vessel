@@ -15,6 +15,7 @@ import { closeCharacterPage } from "../pages/createcharacterpage.js";
 import { activateInteractBtn } from "../tools/popupUI.js";
 import { initOnceStatsSystem } from "../charactersystem/statsSystem.js";
 import { initOnceStorySystem } from "../charactersystem/storyQuestSystem.js";
+import { setSocketOn } from "../sockets/worldsocket.js";
 const canvas = document.querySelector("canvas")
 
 
@@ -39,18 +40,22 @@ export function getEngine(){
     return engine
 }
 // 
-export function changeScene(_sceneName){
+export async function changeScene(_sceneName){
     setGameStatus("loading")
+    setSocketOn(false)
 
-    scene.meshes.forEach(mesh => mesh.dispose())
-    scene.dispose()
-    // In the village or any path I will intersect the exit() will emit making sure every info of us is deleted
-    makeSureArraysAreClean(async () => {
-        const newScene = await loadScene()
-        scene = newScene
-        sceneName = _sceneName;
-    })
-
+    scene?.meshes?.forEach(mesh => mesh.dispose())
+    scene?.dispose()
+    
+    const sceneDetail = await loadScene()
+    scene = sceneDetail.scene
+    sceneName = _sceneName;
+    // // In the village or any path I will intersect the exit() will emit making sure every info of us is deleted
+    // makeSureArraysAreClean(async () => {
+    
+    // })
+    setSocketOn(sceneDetail.isSocketOn)
+    setGameStatus("running")
 }
 export async function startScene(willCreateCharacter){
 
@@ -59,7 +64,7 @@ export async function startScene(willCreateCharacter){
         closeCharacterPage()
         initSocket()
 
-        scene = await loadScene()
+        await changeScene()
 
         if(!scene) return console.warn("creating scene failed")
         // changeScene(scene, "new scene")
@@ -75,7 +80,6 @@ export async function startScene(willCreateCharacter){
     }else{
         scene = await setupCharacterScene(engine)
     }
-
     engine.runRenderLoop(() => gameStatus === "running" && scene.render())
     window.addEventListener("resize", ()  => engine.resize())
 }

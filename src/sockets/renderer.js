@@ -6,7 +6,6 @@ import { Vector3 } from "@babylonjs/core";
 
 let scene;
 
-const log = console.log
 
 export function removeRenderObservable(_scene){
     if(_scene) _scene.onBeforeRenderObservable.remove(renderCallback)
@@ -47,7 +46,7 @@ let renderCallback = function () {
             if(player._attacking) return
             
             if(player._moving){
-                // return console.log("moving")
+                // return
                 switch(player.mode){
                     case "idle":
                         playAnim(player.anims, "walk")
@@ -98,7 +97,7 @@ let renderCallback = function () {
             })
         } else {
             // en.anims.forEach(anim => {
-            //     if(anim.name.includes('hit') && anim.isPlaying) return log("goblin hit anim playing")
+            //     if(anim.name.includes('hit') && anim.isPlaying) return
             // })
         }
     })
@@ -112,7 +111,7 @@ let renderCallback = function () {
             if(player._attacking) return
             
             if(player._moving){
-                // return console.log("moving")
+                // return
                 switch(player.mode){
                     case "idle":
                         playAnim(player.anims, "walk")
@@ -159,7 +158,7 @@ let renderCallback = function () {
     //         })
     //     } else {
     //         // en.anims.forEach(anim => {
-    //         //     if(anim.name.includes('hit') && anim.isPlaying) return log("goblin hit anim playing")
+    //         //     if(anim.name.includes('hit') && anim.isPlaying) return
     //         // })
     //     }
     // })

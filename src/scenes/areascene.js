@@ -29,7 +29,6 @@ import { obtain } from "../charactersystem/inventory.js";
 import createAllNpcInArea from "../npc/createAllNpcInArea.js";
 
 export async function areaScene(placeDetail){
-    console.log(placeDetail)
     // showHideIcons()
     const { placeId, sceneTemp, isMultiplayer } = placeDetail
     const spawnPos = getSpawnPos(placeDetail);
@@ -89,7 +88,7 @@ export async function areaScene(placeDetail){
     // make your architecture to everytime you recreateMeshes from the scene
     // that has interaction with character best practise to spawn your character first
     // before thoses meshes so those meshes will just find your character and apply interaction
-    setGameStatus("running")
+
     if(isMultiplayer) {
         joinWorld(getCharState().currentPlace.placeId)
         // openCloseChatContainer() // coming soon
@@ -108,5 +107,5 @@ export async function areaScene(placeDetail){
         startMyOwnSpeech()
         hideShowAllScreenUI(false)
     }
-    return scene
+    return {scene, isSocketOn: isMultiplayer }
 }

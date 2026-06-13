@@ -11,11 +11,11 @@ const statusList = document.querySelector(".status-effects-list")
 const interactBtn = document.getElementById("interactBtn")
 let interactBtnActivated = false
 
-let callbackAfterClicked = () => log("interact Btn clicked, but no callback assigned yet")
+let callbackAfterClicked = () => {}
 
 // Activation
 export function activateInteractBtn(){
-    if(interactBtnActivated) return log("interact Btn already activated: reject")
+    if(interactBtnActivated) return
     interactBtn.addEventListener("click", () => callbackAfterClicked())
     interactBtnActivated = true
 }
@@ -55,7 +55,6 @@ export function showAnswerButtons(choices, cb){
         btn.innerHTML = choice.text
         btn.addEventListener("click", () => {
             cb(indx)
-            console.log("answer indx: ", indx)
             closeAnswerButtons()
         })
         answersList.appendChild(btn)

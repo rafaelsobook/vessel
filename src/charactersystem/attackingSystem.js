@@ -2,7 +2,6 @@ import { emitAttack } from "../sockets/emits"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
 import { getAdditionalsFromAbilities, getCharState, getTotalAtkSpd } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
-const log = console.log
 
 export function attack(_attackInfo){  
     const {
@@ -20,11 +19,10 @@ export function attack(_attackInfo){
     
     const { physicalDmg, weaponDmg, magicDmg, accuracy } = dmgDetails
     const playerAttacked = getPlayersOnScene().find(pl => pl.owner === owner)
-    if (!playerAttacked) return log("player will attack not found")
+    if (!playerAttacked) return
     playerAttacked._attacking = true
     playerAttacked.anims.forEach(anim => {
         if (anim.name === animName) {
-            console.log(animName)
             anim.stop()
             anim.speedRatio = .8 + atkSpd
             anim.play()

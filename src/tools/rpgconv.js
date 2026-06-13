@@ -6,7 +6,7 @@ export default class Conversation {
         this.intervalGenerating = undefined
         this.closingTimeout = undefined
 
-        this.proceedToNext = () => console.log("not yet defined")
+        this.proceedToNext = () => {}
 
         const mainContainer = document.querySelector(".main-container")
         const convText = document.querySelector(".conv-text")

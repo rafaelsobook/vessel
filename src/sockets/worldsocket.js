@@ -14,7 +14,6 @@ import { attack } from "../charactersystem/attackingSystem"
 import createEnemy, { enemyIsHit } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitDied } from "./emits"
-const log = console.log
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -125,19 +124,17 @@ export function activateOnSocketListeners(socket){
     })
     // equiping
     socket.on("equiped-item", data => {
-        if (!isSocketOn) return log("socket not available")
+        if (!isSocketOn) return
         const charState = getCharState()
         const {ownerId, itemName, itemModelStyle,  itemType, currentPlaceId} = data
-        console.log(`equiping ${itemName} `, data)
         if (!charState) return
-        if (charState.currentPlace.placeId !== currentPlaceId) return log(`equip sword in ${currentPlaceId}`)
+        if (charState.currentPlace.placeId !== currentPlaceId) return
+        if(ownerId === charState.owner) return console.log("this is me return")
         const theEquipingPlayer = playersOnScene.find(pl => pl.owner === ownerId)
-        if (!theEquipingPlayer) return log("equiping player not found")
-        console.log(`${itemName} will be equiped in ${currentPlaceId}`)
+        if (!theEquipingPlayer) return
 
-        console.log("has parts ", data.parts)
         if (itemType === "boots") theEquipingPlayer.equipBoots(itemName)
-        if(itemType === "weapon") theEquipingPlayer.equipSword(itemName, true, data.parts)
+        if(itemType === "weapon") theEquipingPlayer.equipSword(itemName, true, data.parts, theEquipingPlayer.rHand)
 
         // if (itemType === "weapon") theEquipingPlayer.equipSword(swordRoot, itemName, theEquipingPlayer._attacking, data.isHide)
         // if (itemType === "helmet") theEquipingPlayer.equipHelmet(helmRoot, itemName)
@@ -150,8 +147,7 @@ export function activateOnSocketListeners(socket){
     // ACTIONS
     // PLAYER ATTACK RELATED
     socket.on("player-attacked", data => {
-        if (!isSocketOn) return log("socket not available")
-        log(`player attacking `, data)
+        if (!isSocketOn) return
         // const {
         //     owner,
         //     pos,
@@ -194,17 +190,15 @@ export function activateOnSocketListeners(socket){
     // ENEMY RELATED
     socket.on("enemy-attacked", data => {
         const { currentPlaceId, _id, pos, targetId, dmg, attackAnimName, effects, atkSpd } = data
-        console.log(data)
-        if (!isSocketOn) return log("socket not available")
+        if (!isSocketOn) return
         const charState = getCharState()
         if (getGameStatus() === "loading") return
-        if (currentPlaceId !== charState.currentPlace.placeId) return log("enemy attacked not here")
+        if (currentPlaceId !== charState.currentPlace.placeId) return
         let theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
-        if (!theEnemyToAttack) return log("the enemy is not from here")
+        if (!theEnemyToAttack) return
         const victimPlayer = playersOnScene.find(victim => victim.owner === targetId)
-        if (!victimPlayer) return log("not found player has been attacked")
+        if (!victimPlayer) return
 
-        console.log("Monster Attacked !! ", data)
         theEnemyToAttack._isMoving = false
         theEnemyToAttack._attacking = true
         theEnemyToAttack._targetId = data.targetId
@@ -301,23 +295,23 @@ export function activateOnSocketListeners(socket){
     })
     socket.on("enemy-is-hit", data => {
         const { targetId, dmg, currentPlaceId, hp, maxHp } = data
-        if (!isSocketOn) return log("socket not available")
+        if (!isSocketOn) return
         const charState = getCharState()
         if (getGameStatus() === "loading") return
-        if (currentPlaceId !== charState.currentPlace.placeId) return log("enemy hit not here")
+        if (currentPlaceId !== charState.currentPlace.placeId) return
         let theEnemyToHit = enemiez.find(enem => enem._id === targetId)
-        if (!theEnemyToHit) return log("the enemy is not from here")
+        if (!theEnemyToHit) return
 
         enemyIsHit(data)
     })
     socket.on("enemy-chasing", data => {
         const { currentPlaceId, _id, targetId, actionType } = data
-        if (!isSocketOn) return log("socket not available")
+        if (!isSocketOn) return
         const charState = getCharState()
         if (getGameStatus() === "loading") return
-        if (currentPlaceId !== charState.currentPlace.placeId) return log("enemy attacked not here")
+        if (currentPlaceId !== charState.currentPlace.placeId) return
         let enemyToChase = enemiez.find(enem => enem._id === data._id)
-        if (!enemyToChase) return log("the enemy is not from here")
+        if (!enemyToChase) return
         enemyToChase._targetId = data.targetId
         if (data.actionType === "idle") {
             enemyToChase._isMoving = false
@@ -328,7 +322,7 @@ export function activateOnSocketListeners(socket){
         }
     })
     socket.on("enemy-removed", enemyId => {
-        if (!isSocketOn) return log("socket not available")
+        if (!isSocketOn) return
         const enemyDiedHere = enemiez.find(enmy => enmy._id === enemyId)
         if (enemyDiedHere) {
             enemyDiedHere.targetId = false
@@ -348,7 +342,7 @@ export function activateOnSocketListeners(socket){
         if(!charState) return
         if(ownerId === charState.owner) return
         const player = playersOnScene.find(pl => pl.owner === ownerId)
-        if(!player) return console.log("not found")
+        if(!player) return
         
         player._moving = true
         player.mode = mode
@@ -367,7 +361,7 @@ export function activateOnSocketListeners(socket){
         if(!charState) return
         if(ownerId === charState.owner) return
         const player = playersOnScene.find(pl => pl.owner === ownerId)
-        if(!player) return console.log("not found")
+        if(!player) return
         
         player._moving = false
         player.mode = mode
@@ -387,13 +381,11 @@ export function activateOnSocketListeners(socket){
         const charState = getCharState()
         if(!charState) return
         const player = playersOnScene.find(pl => pl.owner === ownerId)
-        if(!player) return console.log("not found")
+        if(!player) return
         if(mode === "fighting") {
-            console.log("previo is idles")
             playAnim(player.anims, "act_idletoready1")
         }
         if(mode === "idle") {
-            console.log("Idle")
             playAnim(player.anims, "act_idletoready1", false, true)
         }
         player.mode = mode
@@ -416,7 +408,7 @@ export function activateOnSocketListeners(socket){
     // DISCONNECT
     socket.on("player-death", data => {
         const {ownerId, currentPlaceId} = data
-        if (!isSocketOn) return log("socket not available")
+        if (!isSocketOn) return
       
 
         playerDied(ownerId, currentPlaceId)
@@ -444,19 +436,18 @@ export function reCreateMeshesInScene() {
 
         const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === tcpCharDet.owner)
         
-        if(tcpCharDet.owner === characterState.owner) return console.log("my character")
+        if(tcpCharDet.owner === characterState.owner) return console.log("my character return ", tcpCharDet.owner);
+        
 
         const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
         const spawnPos = {x: tcpCharDet.x, y: tcpCharDet.y, z: tcpCharDet.z }
 
         let player = createCharacter(sceneDet.scene, spawnPos, tcpCharDet, false)
         if(!player) return
-        console.log(`${tcpCharDet.name} spawn in `, spawnPos)
         pushPlayer(player, tcpCharDet.owner)
     })
     allEnemiez.length && allEnemiez.forEach(enemTcpInfo => {
-        log(enemTcpInfo)   
-        if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return log(`${enemTcpInfo.name} is in place: ${enemTcpInfo.currentPlaceId}. you are in: ${characterState.currentPlace.placeId}`)
+        if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return
         const isAlreadyHere = enemiez.find(enem => enem._id === enemTcpInfo._id)
         if (isAlreadyHere) return 
         const enemy = createEnemy(scene, enemTcpInfo)
@@ -470,11 +461,10 @@ export function reCreateMeshesInScene() {
 //  player related
 export function playerDied(ownerId, currentPlaceId) {
     const player = playersOnScene.find(pl => pl.owner === ownerId)
-    if (!player) return log("player died not found")
+    if (!player) return
     const charState = getCharState()
     if (!charState) return
-    if (charState.currentPlace.placeId !== currentPlaceId) return log("player died not here")
-    log(`${player.name} is dead !`)
+    if (charState.currentPlace.placeId !== currentPlaceId) return
     player._moving = false
     player._attacking = false
     player._minning = false
@@ -517,7 +507,7 @@ export function removePlayer({ ownerId, playerName, placeId }){
 // npc
 export function pushNpc(npcMeshDetail) {
     const theNpc = npcz.find(npc => npc._id === npcMeshDetail._id)
-    if (theNpc) return log("npc already here")
+    if (theNpc) return
     npcz.push(npcMeshDetail)
 }
 export function resetNpcArray() {

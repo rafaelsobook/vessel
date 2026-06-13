@@ -13,7 +13,6 @@ import { updateHeartStatus, updateStatUI } from "./statsSystem.js"
 import { emitEquipItem } from "../sockets/emits.js"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 
-const log = console.log
 
 const itemInfoCont = document.querySelector(".item-info-cont")
 const itemImg = document.querySelector(".itemInfoImg")
@@ -35,10 +34,9 @@ const weaponAccessoryList = document.querySelectorAll(".eqpd-slot")
 
 let itemDetail= undefined
 let sellItemFunc = async () => {
-    if(!itemDetail) return console.log("Item not yet stated")
-    console.log("selling Item ", itemDetail)
+    if(!itemDetail) return
     const charState = getCharState()
-    if(!itemDetail.price) return log("Item has no price")
+    if(!itemDetail.price) return
     if(itemDetail.itemCateg === "equipable"){
         charState.assets.krit += itemDetail.price
     }else{
@@ -48,7 +46,6 @@ let sellItemFunc = async () => {
         }
     }
     charState.items = charState.items.filter(itm => itm.itemId !== itemDetail.itemId)
-    console.log(charState.items)
 
     // getAllSounds().coinReceivedS.play()
     await updateMyDetailsOL(charState, checkIfTokenSaved())
@@ -59,7 +56,7 @@ let activateFunc = () => {
 }
 // functionalities for activateFunc and listNftFunc
 let listingThisItem = async () => {
-    if(!itemDetail) return console.log("Item not yet stated")
+    if(!itemDetail) return
     closeItemInfo()
     enableDisableInfoBtns(true)
     const charState = getCharState()    
@@ -72,11 +69,12 @@ let listingThisItem = async () => {
     enableDisableInfoBtns(false)
 }
 let equipItemFunc = () => {
-    if(!itemDetail) return console.log("Item not yet stated")
-    if(itemDetail.itemCateg !== "equipable") return log("not equipable")
+    if(!itemDetail) return
+    if(itemDetail.itemCateg !== "equipable") return
     openCloseMiniLS(`Equiping ${itemDetail.dn} ...`, true)
     // for UI and setting charState item to equiped
     equipItem(itemDetail, true)
+    const { itemType, name, parts, itemId } = itemDetail
     //  for 3d multiplayer sword mesh logic
     const isMultiplayerZone = getIsSocketOn()
     const charState = getCharState()
@@ -84,11 +82,13 @@ let equipItemFunc = () => {
         emitEquipItem(itemDetail, true)
     }else{
         const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-        if(!myChar) return console.log("char not dfound")
-        myChar.equipBoots(itemDetail.name)
+        if(!myChar) return
+        
+        if (itemType === "boots") myChar.equipBoots(name)
+        if(itemType === "weapon") myChar.equipSword(name, true, parts, myChar.rHand)
+
     }
     
-    console.log('equiping ', itemDetail)
     // const equipS = getSceneDet().scene.getSoundByName("itemEquipS")
     // equipS.play()
     // saving
@@ -98,13 +98,13 @@ let equipItemFunc = () => {
     })
 }
 // let emitAddGateFunc = async () => {
-//     if(!itemDetail) return console.log("Item not yet stated")
+//     if(!itemDetail) return
 //     const charState = getCharState()
 //     const isValidPlace = validGatePlaces.some(placeName => placeName === charState.currentPlace)
 //     if(!isValidPlace) return openClosePopup('Unable To Summon Gate Here', true, 1500)
 //     const scene = getSceneDet().scene
 //     const myBody = scene.getMeshByName(`body.${charState._id}`)
-//     if(!myBody) return log('not found body')
+//     if(!myBody) return
 //     const myPos = myBody.position
 
 //     const newId = `${randomNum()}${randomNum()}`
@@ -138,8 +138,8 @@ let equipItemFunc = () => {
 //     // await deleteGate(newId)
 // }
 let consumeItemFunc = async () => {
-    if(!itemDetail) return console.log("Item not yet stated")
-    if(itemDetail.itemCateg !== "consumable") return log("not consumable")
+    if(!itemDetail) return
+    if(itemDetail.itemCateg !== "consumable") return
     
     openCloseMiniLS(`Consuming ${itemDetail.dn} ...`, true)
     const { cure, plusHp, plusMp, plusSp, plusDmg, plusSpd,fillHunger,  fillTireness } = itemDetail.consumeAbilities
@@ -165,7 +165,6 @@ let consumeItemFunc = async () => {
     if(cure && cure.length && charState.status.length){
         cure.forEach(effectTypeName => {
             const hasCure = charState.status.find(effect => effect.effectType === effectTypeName)
-            log(hasCure)
             charState.status = charState.status.filter(effect => effect.effectType !== effectTypeName)
         })
     }
@@ -314,13 +313,12 @@ export function openClaimableItems(_claimableItems){
 export function removeItem(_invItem, updateDetailOnline){
     const charState = getCharState()
     const itemToRemove = charState.items.find(itm => itm.itemId === _invItem.itemId)
-    if(!itemToRemove) return log(_invItem.name, " to remove not found")
+    if(!itemToRemove) return
     
     charState.items = charState.items.filter(itm => itm.itemId !== _invItem.itemId)
 
     if(updateDetailOnline){
         updateMyDetailsOL(charState, checkIfTokenSaved()).then( result => {
-            log(_invItem.name, "item removed from the database")
         })
     }
 }

@@ -188,7 +188,7 @@ export async function setupCharacterScene(engine){
         if (selectedCategory === "skin")  toSave = { ...toSave, skinColor:  { r, g, b } }
     })
 
-    return scene
+    return {scene, isSocketOn: false}
 }
 
 export function hideOrDisposeAllByGroupNames(meshes, groupNames = [], willDisposeAll, keepThisArmors = []){

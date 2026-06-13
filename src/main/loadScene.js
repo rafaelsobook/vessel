@@ -12,18 +12,18 @@ export default async function loadScene(){
 
     await initiateCharacter(checkIfTokenSaved())
     const placeDetail = findMyCurrentPlace()
-    let scene;
+    let sceneDetail;
 
     switch(placeDetail.areaType){
         case "dungeon":
-            scene = await dungeonScene(placeDetail)
+            sceneDetail = await dungeonScene(placeDetail)
         break
         case "room":
-            scene = await areaScene(placeDetail)
+            sceneDetail = await areaScene(placeDetail)
         break
         case "village":
-            scene = await areaScene(placeDetail)
+            sceneDetail = await areaScene(placeDetail)
         break
     }
-    if(scene) return scene
+    if(sceneDetail) return sceneDetail
 }

@@ -55,7 +55,6 @@ import { onIntersecEnterTrig,onIntersecExitTrig } from '../components/actionMana
 import { getCharState, setCharState } from '../charactersystem/characterstate';
 import { exitScene } from '../sockets/exitsocket';
 import { findMyCurrentPlace } from '../states/placestates';
-import loadScene from '../main/loadScene';
 import { getEngine, changeScene, getSceneDet, getGameStatus } from '../main/main';
 import { openCloseInteractBtn } from '../tools/popupUI';
 import { randNum } from '../tools/random';

@@ -1,7 +1,6 @@
 import { Vector3} from "@babylonjs/core"
 import { sessionStorageName} from "../constants/constants"
 const allUI = document.querySelectorAll(".cont")
-const log = console.log
 
 
 export const apiOpt = (meth, toPost, token) => {
@@ -43,7 +42,7 @@ export async function useFetch(address, meth, tok, theBody){
         const data = await response.json()
         return data
     }catch(err){
-        return  log(err)
+        return
     }
 }
 export function pFloat(number){
@@ -64,7 +63,6 @@ export function rotateAnim(dirTarg, body, rotationAnimation, scene, spdRatio){
     const angle = Math.atan2(diffX,diffY)
   
     let angleDifference = angle - body.rotation.y;
-    log(angle)
     // Ensure the angle is within the range [-π, π]
     if (angleDifference > Math.PI) {
     angleDifference -= 2 * Math.PI;
@@ -196,11 +194,8 @@ export function getMeshPos(_mesh){
 export function *animationBlend(from, to){
     let nw = 0
     let cw = 0
-    log("run courutine")
     to.play(true)
 
-    log(from.weight)
-    log(to.weight)
     while(nw < 1){
         nw+=0.1
         cw-=0.1

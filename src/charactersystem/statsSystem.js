@@ -60,12 +60,10 @@ export function initOnceStatsSystem(){
             updateStatUI()
 
             const hero = getPlayersOnScene().find(pl=>pl._id === state._id)
-            if(!hero) return log('not found hero')
+            if(!hero) return
             // hero.spd = state.stats.spd
             // beginOrRestartAttack(BABYLON, hero, getSceneDet().scene)
-            log(state.stats.spd)
             const realSpd = {...state.stats, spd: state.stats.spd+additionalAbility.additionalSpd }
-            log(realSpd)
             getSocket().emit("update-stat", {_id: state._id, 
                 stats: {...state.stats, spd: state.stats.spd+additionalAbility.additionalSpd }
             })
@@ -78,7 +76,6 @@ export function initOnceStatsSystem(){
 }
 
 export function openOrCloseStats(){
-    log(!statsContainer.style.display)
     if(!statsContainer.style.display||statsContainer.style.display==="none"){
         statsContainer.style.display = "flex"
         updateStatUI()

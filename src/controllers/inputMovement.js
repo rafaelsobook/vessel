@@ -133,9 +133,7 @@ function setupControls(scene) {
             case "shift": currentSpeed = walkSpeed; break;
             case " ":
                 const state = getCharState()
-                console.log(state)
                 const body = getSceneDet().scene.getMeshByName(`player.${state.owner}`)
-                console.log(body.position)
             break;
         }
 

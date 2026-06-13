@@ -191,7 +191,7 @@ export function createMesh(scene, meshName, size, pos, visibility, isVisible, ha
     return mesh
 }
 export function createClone(toClone, pos, rotatY, cloneName, willNofFreeze, scaleFloat){
-    if(!toClone) return console.log("to clone invalid")    
+    if(!toClone) return    
     const cloned = toClone.clone(cloneName ? cloneName : toClone.name)
     cloned.parent = null
     cloned.position = new Vector3(pos.x,pos.y ? pos.y : 0, pos.z)
@@ -204,7 +204,7 @@ export function createClone(toClone, pos, rotatY, cloneName, willNofFreeze, scal
 }
 // when using createIns take caution that the position you set will be depending on the original mesh position
 export function createIns(toClone, pos, rotatY, cloneName, willNofFreeze, scaleFloat){
-    if(!toClone) return console.log("to clone invalid")
+    if(!toClone) return
     const cloned = toClone.createInstance(cloneName ? cloneName : toClone.name)
     cloned.position = new Vector3(pos.x,pos.y ? pos.y : cloned.position.y, pos.z)
     // using rotateY will rotate it from somewhere in origin

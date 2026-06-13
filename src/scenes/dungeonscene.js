@@ -14,6 +14,7 @@ import { showHideIcons } from "../charactersystem/uimanagement.js";
 // import { createMobileControls } from "../components/mobilecontrols.js";
 
 export async function dungeonScene(placeDetail){
+    const { placeId, sceneTemp, isMultiplayer } = placeDetail
     showHideIcons()
     const engine = getEngine()
     const spawnPos = {
@@ -45,5 +46,5 @@ export async function dungeonScene(placeDetail){
 
     setGameStatus("running")
     
-    return scene
+    return {scene, isSocketOn: isMultiplayer }
 }

@@ -16,13 +16,11 @@ import { randBetween } from "../tools/random.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
-const log = console.log
 
 
 
 
 export default function createEnemy(scene, det) {
-    console.log(det)
 
     const {goblinRoot, monolithRoot} = getSocketContainers()
     let yPos = det.y+(det.bodyHeight/2) + 0.05
@@ -75,13 +73,12 @@ export default function createEnemy(scene, det) {
     
     const { hpbar, hpmesh } = createHpBar(yPos + .1, det._id, body, det.hp, det.maxHp)
     // const theCharacterRoot = monsRoots.find(rootInfo => rootInfo.name === det.modelStyle)
-    // if (!theCharacterRoot) return log("This monster has no model")
+    // if (!theCharacterRoot) return
 
     mainBodyMeshes.getChildren().forEach(enemyasset => {
         enemyasset.name = enemyasset.name.split(" ")[2].toLowerCase()
         enemyasset.isPickable = false
         if (enemyasset.name === 'body') {
-            console.log(`${det.name} has body`)
             // console.warn("set material for body")
             const mat = createMonsterMaterial(scene, det.modelStyle, det.name)
             enemyasset.material = mat
@@ -108,13 +105,12 @@ export default function createEnemy(scene, det) {
         intervalWillAttack = setInterval(() => {
             // console.log(det.stats.atkSpd)
             const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-            if (getGameStatus() === "loading") return log("game is loading")
+            if (getGameStatus() === "loading") return
             if (!thisEnemy) return clearInterval(intervalWillAttack)
-            console.log("Enemy Attacking palyers", getPlayersOnScene())
             if (thisEnemy._targetId) {
                 const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
-                if (!targetHero) return log("goblin target not on playerz")
-                if (targetHero.isDead) return log("monster target dead")
+                if (!targetHero) return
+                if (targetHero.isDead) return
                 const targBody = scene.getMeshByName(`player.${thisEnemy._targetId}`)
                 if (!targBody) return console.warn("targbody cannot found")
                 const { x, z } = targBody.position
@@ -131,11 +127,9 @@ export default function createEnemy(scene, det) {
     if(!charState) return
     const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!myChar) return
-    console.log("enemy found my char body")
     onIntersecEnterTrig(body, myChar.body, getSceneDet().scene, () => {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-        if (!thisEnemy) return log("not found enemy")
-        console.log("collided making it moving false")
+        if (!thisEnemy) return
         thisEnemy._isMoving = false
         const myCharId = myChar.body.name.split(".")[1]
         const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
@@ -149,8 +143,7 @@ export default function createEnemy(scene, det) {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         const myCharId = myChar.body.name.split(".")[1]
 
-        if (!thisEnemy) return log("not found enemy")
-        console.log("collided making it moving false")
+        if (!thisEnemy) return
         thisEnemy._isMoving = false
         const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
 
@@ -161,7 +154,7 @@ export default function createEnemy(scene, det) {
     })
     onIntersecExitTrig(atkDetection, myChar.body, getSceneDet().scene, () => {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-        if (!thisEnemy) return log("not found enemy")
+        if (!thisEnemy) return
 
         const myCharId = myChar.body.name.split(".")[1]
         if (thisEnemy._targetId !== myCharId) return 
@@ -173,7 +166,7 @@ export default function createEnemy(scene, det) {
     //     const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
     //     const myCharId = myChar.body.name.split(".")[1]
 
-    //     if (!thisEnemy) return log("not found enemy")
+    //     if (!thisEnemy) return
 
     //     const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
 
@@ -188,7 +181,7 @@ export default function createEnemy(scene, det) {
         // const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         // const myCharId = myChar.body.name.split(".")[1]
 
-        // if (!thisEnemy) return log("not found enemy")
+        // if (!thisEnemy) return
 
         // const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${thisEnemy._targetId}`)
         // const plPos = enemyTargetBody.position
@@ -212,7 +205,7 @@ export default function createEnemy(scene, det) {
     //         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
     //         const myCharId = heroBody.name.split(".")[1]
     //         const heroPos = heroBody.position
-    //         if (!thisEnemy) return log("not found enemy")
+    //         if (!thisEnemy) return
     //         if(thisEnemy.isDead) return 
     //         console.warn(det.name, " emit range attack")
     //         emitRangeAttack(det, thisEnemy._id, false, det.cPlace, getMeshPos(thisEnemy.body), getMeshPos(heroBody), det.rangeAtkDetails)
@@ -221,7 +214,7 @@ export default function createEnemy(scene, det) {
     //         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
     //         const myCharId = heroBody.name.split(".")[1]
     //         const heroPos = heroBody.position
-    //         if (!thisEnemy) return log("not found enemy")
+    //         if (!thisEnemy) return
     //         if(thisEnemy.isDead) return 
     //         emitRangeAttack(det, thisEnemy._id, false, det.cPlace, getMeshPos(thisEnemy.body), getMeshPos(heroBody), det.rangeAtkDetails)
     //     })
@@ -232,7 +225,7 @@ export default function createEnemy(scene, det) {
     if(atkCollider){
         onIntersecExitTrig(atkCollider, body, scene, () => {
             const enemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-            if (!enemy) return log("enemy not found")
+            if (!enemy) return
             // Handle attack collision logic
             const charState = getCharState()
             // playAnim(entries.animationGroups, `hit1`)
@@ -306,7 +299,7 @@ function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, range
     })
 }
 function emitChase(enemId, heroId, cPlaceId, actionType) {
-    // if(thisEnemy.actionType === "idle" ) return log("this enemy is only idle")
+    // if(thisEnemy.actionType === "idle" ) return
     getSocket().emit("enemyWillChase", {
         currentPlaceId: cPlaceId,
         _id: enemId,
@@ -315,7 +308,6 @@ function emitChase(enemId, heroId, cPlaceId, actionType) {
     })
 }
 function emitRegisterAsEnemy(enemId, heroId, dirTarg) {
-    console.log("emitRegisterAsEnemy ", enemId,  " ", heroId)
     getSocket().emit("registerPlayerAsEnemy", {
         _id: enemId,
         targetId: heroId,
@@ -326,12 +318,11 @@ function emitRegisterAsEnemy(enemId, heroId, dirTarg) {
 export function enemyIsHit(data){
     const { playerId, targetId, dmgToApply, currentPlaceId, hp, maxHp } = data
     const enemy = getEnemiesOnScene().find(ene => ene._id === targetId)
-    if (!enemy) return log("enemy not found")
+    if (!enemy) return
     // for weapon when hit something sound
     // playSound(soundToPlay, .9, .3)
     const enemPos = enemy.body.position
 
-    console.log(data)
  
     poppingTextMesh(`-${data.dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
@@ -340,7 +331,6 @@ export function enemyIsHit(data){
     if (data.hp <= 0) {
         removeEnemyOnScene(targetId)
         clearInterval(enemy.intervalWillAttack)
-        console.log("ENEMY LENGTH ", getEnemiesOnScene().length)
         playAnim(enemy.anims, "death")
         enemyDispose(enemy)
         // if (enemy.deathSound) {
@@ -354,7 +344,6 @@ export function enemyIsHit(data){
         return getSocket().emit("removeEnemy", {enemyId: targetId})
         
     }
-    console.log(getEnemiesOnScene().length)
 }
 export function defeatedAmonster(data){
     const {name,dn, monsSoul,skills,effects,effectsWhenHit, loots} = data

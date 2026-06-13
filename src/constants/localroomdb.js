@@ -273,14 +273,13 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null,
                 cbAfterMade: (scene) => {
-                    console.log("callback of testcrtu")
                     let charState = getCharState()
-                    if(!charState) return console.log("no charstate")
+                    if(!charState) return
                     const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-                    if(!player) return console.log("player is still not made on the scene")
+                    if(!player) return
                     // const scene = getSceneDet().scene
                     const testCrystal = scene.getMeshByName("testcrystal")
-                    if(!testCrystal) return console.log("not found test crystal")
+                    if(!testCrystal) return
                     const collider = MeshBuilder.CreateBox("testcrystalcollider", {size: 2, height: 0.2}, scene)
                     collider.parent = testCrystal
                     collider.isVisible = false
@@ -288,9 +287,8 @@ export const metaDatas = [
                     onIntersecEnterTrig(collider, player.body, scene, () => {
                         charState = getCharState()
                         const touchCrystalQuest = charState.quests.find(qst => qst.qName === "touchTheCrystal")
-                        if(!touchCrystalQuest) return console.log("Has not yet finished with Emilia")
+                        if(!touchCrystalQuest) return
                         openCloseInteractBtn("true", true, () => {
-                            console.log("test crystal clicked")
                             openCloseInteractBtn("none", false)
                             setCharStateMode("casting")
                             setCanPress(false)
@@ -314,7 +312,6 @@ export const metaDatas = [
                             })
 
                             setTimeout( async () => {
-                                console.log("Finished quest")
                                 touchCrystalQuest.questRequirements.completed = true
                                 // save to database
 

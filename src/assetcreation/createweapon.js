@@ -2,14 +2,16 @@ import { MeshBuilder, TransformNode, Vector3 } from "@babylonjs/core"
 import { getSocketContainers } from "../sockets/worldsocket"
 import { createGlowingMat } from "../tools/materials"
 import { addGlow } from "../tools/glow"
+import { getSceneDet } from "../main/main"
 
-export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, parent, options = {
+export function createWeapon(_scene, weaponType = "sword", pos = {x:0,y:0,z:0}, parent, options = {
     bladeRarity: "rare2",
     guardRarity: "rare1",
     handleRarity: "common1",
     pommelRarity: "common1"
 }, glowingColor) {
-
+    const scene = getSceneDet().scene
+    
     const { allweapons } = getSocketContainers()
     if (!allweapons) return console.warn("allweapons not yet imported")
 
@@ -46,7 +48,6 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
         inst.parent = root
         inst.position = Vector3.Zero()
         if(glowingColor && mat !== null){
-            console.log("applying glowing mat to", inst.name)
             inst.material = mat
             addGlow(scene, inst, 0.4)
         }

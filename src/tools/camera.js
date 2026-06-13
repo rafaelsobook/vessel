@@ -70,7 +70,6 @@ export function attachCam(body){
     })
 }
 export function camShake(scene, cam, intensity, isSlight){
-    console.log("will shake")
     const shakeDuration = 0.1
     const shakeIntensity = intensity
     // cam.setTarget(null)

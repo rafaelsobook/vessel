@@ -33,9 +33,8 @@ export function initOnceStorySystem(){
         npcDetails.forEach(npc=> {
             const myNextStoryQuest = npc.forQuests.find(stryqst => stryqst.qName === storyQst.qName)
             if(!myNextStoryQuest) return
-            console.log(npc)
             const theNpc = getNpcOnScene().find(npcInScene => npcInScene.name === npc.name)
-            if(!theNpc) return console.log("Did not found the npc in scene")
+            if(!theNpc) return
             npcDetail = npc
             npcMeshDetail = theNpc
         })
@@ -44,7 +43,7 @@ export function initOnceStorySystem(){
         // if(!npcMeshDetail.canSpeak) return openClosePopup(`Can't speak right now`, true, 2000)
         const charState = getCharState()
         const myMeshDetail = getPlayersOnScene().find(pl => pl._id === charState._id)
-        if(!myMeshDetail) return console.log("not found myself in storySystem")
+        if(!myMeshDetail) return
         if(npcDetail.currentPlace !== charState.currentPlace) {
             return openClosePopup(`${npcDetail.name} not here`, true, 2000)
         }
@@ -105,14 +104,10 @@ export async function changeStory(_newStory){
 export function checkStoryQuestIfCompleted(_reqType, itemOrEnemyName){
     //_reqType === 'enemy' || 'item'
     // so if my quest type is correct and the name of requirements is that then ill increment 
-    console.log(_reqType, " ", itemOrEnemyName)
     getCharState().quests.forEach(qst => {
-        console.log(qst.questRequirements.reqType)
-        console.log(qst.questRequirements.name)
         if(qst.questRequirements.reqType === _reqType && qst.questRequirements.name === itemOrEnemyName){
             qst.questRequirements.current++
             if(qst.questRequirements.current >= qst.questRequirements.requiredNum) {
-                console.log("I completed the quest")
                 updateStoryQuestUI(qst)
                 return qst.questRequirements.completed=true
             }   

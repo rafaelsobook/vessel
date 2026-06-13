@@ -17,7 +17,6 @@ const inventoryCont  = document.querySelector(".inventory-container")
 
 let buttonsActivated = false
 
-const log = console.log
 
 export function showHideIcons(display = "none", arrayOfIconNames = ['icons-container', 'walk-run-icons-container']){
     // arrayOfIconNames ['.icons-container', '.walk-run-icons-container']
@@ -30,7 +29,6 @@ export function closeAllPopupAndUI(){
     closeInventory()
 }
 export function hideShowAllScreenUI(_isVisible = false){
-    console.log(_isVisible)
     showHideIcons(_isVisible ?  "block" : "none")
     disableEnableAttackButtonsContainer(false, !_isVisible)
     openCloseLifeDisplay(_isVisible)
@@ -39,7 +37,7 @@ export function openCloseLifeDisplay(_isVisible){
     lifeManaStamCont.style.display = _isVisible ? "block":"none"
 }
 export function activateBtnOnce(){
-    if(buttonsActivated) return console.log("Buttons are already activated")
+    if(buttonsActivated) return
     menuBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
             const btnName = e.target.className.split(" ")[3]
@@ -83,7 +81,6 @@ export function activateBtnOnce(){
                     }, 100)
                 break
                 case "attack":
-                    console.log("ATTACK !!!")
                     const charState = getCharState()
                     if(!charState) return
                     let weaponType = ""
@@ -95,10 +92,8 @@ export function activateBtnOnce(){
                     if(weaponType) attackAnimName = `${weaponType}attack1`
 
                     if(isSocketOn){
-                        console.log("attack socket on")
                         emitAttack(attackAnimName)
                     }else{
-                        console.log("attack socket off")
                         attack(getAttackInfo())
                     } 
                     positionAtkCollider({ reach: 1})
@@ -115,9 +110,9 @@ export function activateBtnOnce(){
                     // this.playAnim(this.myChar.anims, "throw")
 
                     // const myCurSword = this.myChar.swordz.find(swrd => swrd.name.split(".")[1] === this.det.weapon.name)
-                    // if(!myCurSword) return log("current sword not found")
+                    // if(!myCurSword) return
                     // const weaponDetail = this.det.items.find(itm => itm.meshId === this.det.weapon.meshId)
-                    // if(!weaponDetail) return log("weapon not found")
+                    // if(!weaponDetail) return
                     // myCurSword.addRotation(Math.PI,0,0)
                     // log("cur sowrd " + myCurSword )
                     // if(this.socketAvailable) this.socket.emit("action-willthrow", {_id:this.det._id, weaponName: this.det.weapon.name})
@@ -165,21 +160,18 @@ export function activateBtnOnce(){
 
     document.addEventListener("keyup", e => {
         if(e.key === " "){
-            console.log(getCharState())
         }
     })
     itemSlotList.addEventListener("click", e => {
-        log(e.target.className)
         const btnName = e.target.className
-        if(!btnName || !btnName.includes("slot-btn")) return log('not an item clicked')
+        if(!btnName || !btnName.includes("slot-btn")) return
 
         const itemClickedId = btnName.split(" ")[1]
         let myItem = getCharState().items.find(itm => itm.itemId === itemClickedId)
         // if(!myItem) { // if not in my database maybe in my nftz collection
         //     myItem = myNftz.find(itm => itm.itemId === itemClickedId)
         // }
-        if(!myItem) return log("item not found in database or in Nftz")
-        console.log(myItem)
+        if(!myItem) return
         showItemInfo(myItem)
         // getAllSounds().pickItemS.play()
     })
