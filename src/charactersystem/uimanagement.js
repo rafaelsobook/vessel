@@ -29,7 +29,12 @@ export function showHideIcons(display = "none", arrayOfIconNames = ['icons-conta
 export function closeAllPopupAndUI(){
     closeInventory()
 }
-
+export function hideShowAllScreenUI(_isVisible = false){
+    console.log(_isVisible)
+    showHideIcons(_isVisible ?  "block" : "none")
+    disableEnableAttackButtonsContainer(false, !_isVisible)
+    openCloseLifeDisplay(_isVisible)
+}
 export function openCloseLifeDisplay(_isVisible){
     lifeManaStamCont.style.display = _isVisible ? "block":"none"
 }

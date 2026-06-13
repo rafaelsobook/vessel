@@ -122,7 +122,7 @@ export function getTotalAtkSpd(){
 // ACTIVATIONS
 export function activateLifeSystem(){
     const {name, lvl} = characterState
-    lvlAndName.innerHTML = `lvl ${lvl} ${name}`
+    lvlAndName.innerHTML = `Lvl ${lvl} ${name}`
 
     clearIntervals()
     // receiveAbilities(10)

@@ -3,10 +3,10 @@ import { myownspeeches } from "../constants/myownspeech";
 import { showAnswerButtons } from "../tools/popupUI"
 import  Conversation from "../tools/rpgconv"
 import { getPlayersOnScene } from "../sockets/worldsocket";
-import { getCharState, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate";
+import { getCharState, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate";
 import { playAnim } from "../tools/animation";
 import { checkIfTokenSaved, playAnimWithCallback } from "../tools/tools";
-import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement";
+import { disableEnableAttackButtonsContainer, hideShowAllScreenUI } from "../charactersystem/uimanagement";
 const log = console.log
 
 const conv = new Conversation(document, 30)
@@ -33,12 +33,15 @@ export function startQuestionare(questionId, characterBody){
 }
 export function startMyOwnSpeech(){
     const charState = getCharState()
-    console.log(charState)
+
     const ownSpeech = myownspeeches.find(speech => speech.ownSpeechId === charState.currentspeechId)
     if(!ownSpeech) return log("no quest found with id: ", questId)
 
     let mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!mycharacter) return log("character not found")
+
+    setCanPress(false)
+    hideShowAllScreenUI()
 
     playAnimWithCallback(mycharacter.anims, ownSpeech.animationName, false, () => {
         mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
@@ -47,6 +50,7 @@ export function startMyOwnSpeech(){
     })
     // playAnim(mycharacter.anims, ownSpeech.animationName)
     conv.startConversation(ownSpeech.speeches, 0, () => {
+        hideShowAllScreenUI()
         ownSpeech.cb()
     })
 }

@@ -7,7 +7,37 @@ import { playAnim, stopAllAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 
 let aggregate = null
+let rotationHelper = null;
 
+export function getControllerObjects(){
+    return { aggregate, rotationHelper }
+}
+
+export function faceForward(targP){
+    const scene = getSceneDet().scene
+    if(!scene) return
+    const charState = getCharState()
+    if(!charState) return
+    const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+    if(!player) return
+    const myPos = player.body.position.clone()
+
+    const toFacePos = {x: targP.x-myPos.x, z: targP.z-myPos.z}
+    rotationHelper.lookAt(new Vector3(toFacePos.x, rotationHelper.position.y, toFacePos.z),0,0,0);
+    let faceTargetQuat = rotationHelper.rotationQuaternion.clone();
+
+    let observable = scene.onAfterRenderObservable.add(() => {
+        const cur = aggregate.transformNode.rotationQuaternion;
+        if (faceTargetQuat) {
+            Quaternion.SlerpToRef(cur, faceTargetQuat, 0.15, cur);
+            if (Math.abs(Quaternion.Dot(cur, faceTargetQuat)) > 0.9998) {
+                cur.copyFrom(faceTargetQuat);
+                faceTargetQuat = null;
+                scene.onAfterRenderObservable.remove(observable);
+            }
+        }
+    })
+}
 export function attachControllerToThisCharacter(_aggregate, scene) {
     // const { scene } = getSceneDet();
     aggregate = _aggregate;
@@ -24,7 +54,7 @@ function setupControls(scene) {
 
     const input = { forward: 0, right: 0 };
 
-    const rotationHelper = MeshBuilder.CreateBox("rotHelper", { size: 0.1 }, scene);
+    rotationHelper = MeshBuilder.CreateBox("rotHelper", { size: 0.1 }, scene);
     rotationHelper.rotationQuaternion = Quaternion.Identity();
     rotationHelper.isVisible = false;
     rotationHelper.isPickable = false;
@@ -122,7 +152,7 @@ function setupControls(scene) {
     function updateMovement() {
         if (!aggregate) return;
         if(!getCanPress()) return
-        const dt = 
+ 
         aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
 
         if (isMoving) {

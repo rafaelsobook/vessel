@@ -1,5 +1,5 @@
 // roomdb.js
-import { ActionManager, MeshBuilder } from '@babylonjs/core';
+import { ActionManager, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getCharState, setCanPress, setCharStateMode } from '../charactersystem/characterstate.js';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager.js';
 import { generateArea } from '../generate-datas/genareamd.js';
@@ -10,6 +10,8 @@ import { randNum } from '../tools/random.js';
 import { openCloseInteractBtn } from '../tools/popupUI.js';
 import { playAnim } from '../tools/animation.js';
 import { disableEnableAttackButtonsContainer } from '../charactersystem/uimanagement.js';
+import { faceForward, getControllerObjects } from '../controllers/inputMovement.js';
+import { createMagicCircle } from '../creations/magiccircles.js';
 
 export const metaDatas = [
 
@@ -294,6 +296,23 @@ export const metaDatas = [
                             setCanPress(false)
                             disableEnableAttackButtonsContainer(false, true)
                             playAnim(player.anims, "cast", false)
+
+                            faceForward({x: 1, y: 0.9, z: 3.1})
+
+                            // const elementNames = charState.aptitude.map(a => `apt_${a.element}`)
+                            const elementNames = ["apt_fire", "apt_water", "apt_earth", "apt_light", "apt_darkness"]
+
+                            let timeoutnums = 1000
+                            let discPosY = 2
+                            elementNames.forEach(name => {
+                                const capturedY = discPosY
+                                setTimeout(() => {
+                                    createMagicCircle({x: 1, y: capturedY, z: 3.1}, getSceneDet().scene, name, 2, 4000)
+                                }, timeoutnums)
+                                timeoutnums += 2000
+                                discPosY += 0.25
+                            })
+
                             setTimeout( async () => {
                                 console.log("Finished quest")
                                 touchCrystalQuest.questRequirements.completed = true
@@ -302,7 +321,7 @@ export const metaDatas = [
                                 setCharStateMode("idle")
                                 setCanPress(true)
                                 disableEnableAttackButtonsContainer(true)
-                            }, 1000)
+                            }, 10000)
                         });
                     })
                     onIntersecExitTrig(collider, player.body, scene, () => openCloseInteractBtn("none", false))

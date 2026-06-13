@@ -5,7 +5,7 @@ import { getPlayersOnScene } from '../sockets/worldsocket';
 import { getSceneDet } from '../main/main';
 import { setCanPress } from '../charactersystem/characterState';
 import { receiveAbilities } from '../charactersystem/abilitySystem';
-import { spawnMagicCircle, despawnMagicCircle } from '../creations/magiccircles';
+import { spawnMagicCircle } from '../creations/magiccircles';
 import { playAnim, stopAllAnim } from '../tools/animation';
 import { playAnimWithCallback, randomNum, stopAnim } from '../tools/tools';
 import { Vector3 } from '@babylonjs/core';
@@ -49,7 +49,7 @@ export const questions = [
                 }
             },
             {
-                text: "What Happened",
+                text: "How'd I get here",
                 cb: () => {
                     startQuestionare(3)
                 }
@@ -74,15 +74,39 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "I must take my leave ..."
+                message: "Simply I can't waste the souls I used to summon you here"
             },
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "Accept this gift, a token of gratitude for hearing me out"
+                message: "Therefore, Choose one blessing that will help you"
+            },
+            {
+                name: "kamisama",
+                isLeft: false,
+                message: "Choose wisely. This will shape who you become in this world."
             },
         ],
-        answers: [],
+        answers: [
+            {
+                text: "Osiris' Hearth",
+                cb: () => {
+                    startQuestionare(3)
+                }
+            },
+            {
+                text: "Aether's Core",
+                cb: () => {
+                    startQuestionare(3)
+                }
+            },
+            {
+                text: "Gaia's Fortitude",
+                cb: () => {
+                    startQuestionare(3)
+                }
+            },
+        ],
         cb: () => { 
             setTimeout(() => {
                 obtain(bootsItem)
@@ -212,8 +236,6 @@ export const questions = [
                         receiveAbilities(5, 10)
                         setTimeout(() => { 
                             character = getPlayersOnScene().find(player => player.owner === charState.owner)
-                            
-                            despawnMagicCircle(disc,scene)
                             setCanPress(true)
                             stopAllAnim(character.anims)
                             setCharStateMode("idle")

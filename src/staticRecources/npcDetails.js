@@ -1,4 +1,5 @@
 import { receiveAbilities } from "../charactersystem/abilitySystem.js"
+import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
 // import { openCloseShop, updateShopItem } from "../charactersystem/shopSystem.js"
 // import { activateCinemaOne } from "../tools/cameraTools.js"
 import { randomNum, getNumUntil} from "../tools/tools.js"
@@ -112,6 +113,7 @@ export default [
                     {name:"", message: "The results get written into your guild file. That way when you take on commissions, we can match you with jobs that suit what you're capable of. Healers go to medical requests. Fire users go to ice cave jobs. You understand."},
                     {name:"", message: "I realise I never actually asked... and I wrote 'Unknown' in the registry which the guildmaster is going to scold me for later."},
                     {name:"", message: "What is your name?"},
+                    {name:"", message: "Great! Now Feel free to register your magic on the crystal"},
                 ],
                 notCompletedSpeech: false,
                 questsToReceive: [
@@ -135,21 +137,16 @@ export default [
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
                 speech: [
-                    {name:"", message: "Let me just—"},
-                    {name:"", message: "Your mana capacity is... considerably above what we typically see at registration. Most F rank adventurers who come through here sit somewhere between low and mid range. Normal. Nothing wrong with it."},
-                    {name:"", message: "Yours is not that."},
-                    {name:"", message: "And your aptitudes — the crystal doesn't usually light up that intensely. Especially not for someone who just woke up from near death two days ago. Imagine what it reads when you're at full strength."},
-                    {name:"", message: "I registered your name on your badge and for starters I think you are more than F Rank"},
-                    {name:"", message: "But I will say — off the record, just between you and me —"},
-                    {name:"", message: "I have a feeling you will surpass even our Guild Master someday, You have huge potential"},
-                    {name:"", message: "Perfect timing to put that power of yours to the test. And to let the guild see what they're working with."},
-                    {name:"", message: "These Insectss have been crossing the eastern border for about a week now. Small, fast, and absolutely relentless when it comes to farmland. The villagers are losing crops every single day and frankly they are getting tired of sending requests that aren't being picked up fast enough."},
-                    {name:"", message: "Now — I won't insult you. I think you could probably clear that field before lunch and not even break a sweat. But the thing is, we are stretched thin right now. Most of our available members are out on higher priority commissions and we simply do not have the hands to send someone over there."},
-                    {name:"", message: "So yes — technically it is an F rank request. But urgent is urgent, and the villagers need someone there sooner rather than later."},
-                    {name:"", message: "Which is why I'm willing to bump the reward up personally. Better coin than what's listed, plus the standard guild points. Consider it compensation for the... lack of challenge"},
-                    {name:"", message: "I apologize for giving you a job on your first day, but I know it'll be worth it"},
-                    {name:"", message: "Goodluck and Happy Hunting !!"},
-                   
+                    {name:"", message: "Let me just finish your registration..."},
+                    {name:"", message: "Alright. The crystal has your reading on file now. Mana capacity, aptitudes — all logged. Every adventurer starts somewhere, and this gives us a baseline to track your growth over time."},
+                    {name:"", message: "Your rank has been set to F. That is standard for new registrants. It is not a judgment — it simply means you have not yet taken on guild commissions. That changes the moment you start."},
+                    {name:"", message: "Now, I do have something for you if you are willing."},
+                    {name:"", message: "Insects have been crossing the eastern border for about a week now. Small, fast, and relentless when it comes to farmland. The villagers are losing crops every day and their requests have been sitting in the queue longer than they should."},
+                    {name:"", message: "Most of our available members are out on higher priority commissions right now. We are stretched thin and we simply do not have the hands to spare."},
+                    {name:"", message: "So yes — it is an F rank request. But urgent is urgent, and the villagers need someone there soon."},
+                    {name:"", message: "Standard reward plus guild points. Nothing flashy, but it is honest work and a good way to get your first commission on the record."},
+                    {name:"", message: "I apologize for throwing this at you on your first day. "},
+                    {name:"", message: "Good luck out there."},                   
                 ],
                 notCompletedSpeech: [
                     {name:"", message: "Go near the crstal and simply place your hand there"},
@@ -163,8 +160,12 @@ export default [
                     }
                 ],
                 cb: () => {
-                    console.log("After the quest") // Enter Name Register will open
-                    // actually none because the questToReceive will activate when you go near the crystal
+                    updateStoryQuestUI({ 
+                        qName: "slayYourFirstInsect", 
+                        qTtle: "Hunt Down Insects", 
+                        desc: "Slay insects near the borders", 
+                        questRequirements: { reqType: "enemy", name: "orangelith", current: 0, requiredNum: 3, completed: false }, //reqType'enemy/item/money
+                    })
                 }
             },
             { // storyInfo

@@ -24,7 +24,7 @@ import { startMyOwnSpeech } from "../components/conversations.js";
 import { loadMeshOnlyParts } from "../tools/loadmodel.js";
 import { spawnProjectile } from "../creations/skills.js";
 import {runEmitMyLocInterval } from "../sockets/emits.js";
-import { showHideIcons } from "../charactersystem/uimanagement.js";
+import { hideShowAllScreenUI, openCloseLifeDisplay, showHideIcons } from "../charactersystem/uimanagement.js";
 import { obtain } from "../charactersystem/inventory.js";
 import createAllNpcInArea from "../npc/createAllNpcInArea.js";
 
@@ -101,13 +101,12 @@ export async function areaScene(placeDetail){
     playSocketScene(scene)
     setCanPress(true)
 
-    if(charState.currentspeechId){
-        startMyOwnSpeech()
-        setTimeout(() => {
-            // spawnProjectile({x:0,y:1,z:5}, myCharacter.bodytarget.getAbsolutePosition(), "yellow", scene, "default")
-        }, 4000)
-    }
+
 
     showHideIcons("block")
+    if(charState.currentspeechId){
+        startMyOwnSpeech()
+        hideShowAllScreenUI(false)
+    }
     return scene
 }
