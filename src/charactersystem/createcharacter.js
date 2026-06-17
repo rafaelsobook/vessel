@@ -137,6 +137,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         _minning,
         equipSword: (name, onHand, parts, _rHand) => equipSword(name, onHand, parts, _rHand ?? rHand, scene, swordMeshes),
         equipBoots: (name) => equipBoots(name, boots),
+
+        swordMeshes
     }
 }
 
