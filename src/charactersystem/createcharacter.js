@@ -57,6 +57,40 @@ function createAnimeBodyMaterials(scene, det){
     }
 }
 
+export function createSword(scene, swordName, parts, rHand, swordMeshes) {
+    const sword = createWeapon(scene, "sword", {x: 0.2, y: 0.2, z: 0}, rHand, parts)
+    const toPush = {name: swordName, mesh: sword}
+    swordMeshes.push(toPush)
+    showHideSword(sword, true)
+    return toPush
+}
+
+export function equipBoots(itemName, boots) {
+    if(!itemName) return
+    boots.forEach(boot => {
+        if(boot.name === itemName){
+            boot.mesh.isVisible = true
+        } else boot.mesh.isVisible = false
+    })
+}
+
+export function equipSword(swordToEquipName, onHand, parts, rHand, scene, swordMeshes) {
+    let toEquip = false
+    if(!swordMeshes.length) {
+        toEquip = createSword(scene, swordToEquipName, parts, rHand, swordMeshes)
+    }
+    swordMeshes.forEach(swrd => {
+        showHideSword(swrd.mesh, false)
+        if(swrd.name === swordToEquipName) toEquip = swrd
+    })
+    if(!toEquip) {
+        toEquip = createSword(scene, swordToEquipName, parts, rHand, swordMeshes)
+    }
+    if(!toEquip) return
+    showHideSword(toEquip.mesh, true)
+    if(onHand) toEquip.mesh.parent = rHand
+}
+
 export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false){
     const isMeshCreated = scene.getMeshByName(`player.${det.ownerId}`)
     if(isMeshCreated){
@@ -68,84 +102,19 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
 
-
-
     const containers = getSocketContainers()
     const {root, animationGroups, rHand, belts, cloaks, boots} = createAnimeBody(containers, body, bodytarget, det, scene)
-    
-    // const weaponTNode = createWeapon(scene, "sword", {x: 0.2, y:0.2, z:0 }, rHand)// the position is the right position for the hand
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
 
-    // creations
-    function createSword(swordName, parts){
-        
-        const sword = createWeapon(getSceneDet().scene, "sword", {x: 0.2, y:0.2, z:0 }, rHand,parts)
-        // sword.getChildren()[0].material = theSwordRoot.mat
-        const toPush = {name: swordName, mesh: sword}
-        swordMeshes.push(toPush)
-        showHideSword(sword, true)
-        return toPush
-    }
-
-    // equips
-    function equipBoots(itemName){
-        if(!itemName) return
-        boots.forEach(boot =>{
-            if(boot.name === itemName){
-                // const textureSet = wearableTex.find(tex => tex.texName === itemName)
-                // if(!textureSet) return
-
-                // boot.mesh.material.bump = 1
-                // boot.mesh.material.metallic = .5
-                // boot.mesh.material.diffuseTexture = textureSet.tex.diff
-                // boot.mesh.material.roughnessTexture = textureSet.tex.rough
-                // // belt.mesh.material.bumpTexture = textureSet.tex.norm
-                boot.mesh.isVisible = true
-                // boot.mesh.material.specularColor = new Color3(0,0,0)
-            }else boot.mesh.isVisible = false
-        })
-    }
-    function equipSword(swordToEquipName, onHand, parts, _rHand){
-        if(!swordMeshes.length) createSword(swordToEquipName, parts)
-        
-        let toEquip = false
-        
-        swordMeshes.forEach(swrd => {
-            // showHideMesh(swrd.mesh, false)
-            showHideSword(swrd.mesh, false)     
-            if(swrd.name === swordToEquipName){
-                toEquip = swrd
-            }
-        })
-        if(!toEquip) {
-            toEquip = createSword(swordToEquipName, parts)
-            // return
-        }
-        if(!toEquip) return
-        console.log(swordMeshes.length)
-        showHideSword(toEquip.mesh, true)
-        if(onHand){
-            toEquip.mesh.parent = _rHand
-        }else {
-            // toEquip.mesh.parent = weaponSocket
-            // toEquip.mesh.rotation = new Vector3(0,0,0)
-            // toEquip.mesh.position.y = 0
-            // toEquip.mesh.position.x = 0
-        }
-        // alert("successfully equiped " + toEquip.name)
-    }
-
-    if(det.items.length){        
+    if(det.items.length){
         det.items.forEach(itm => {
-            if(itm.itemCateg ==="equipable"){   
-                        
-                if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
-                if(itm.itemType === "weapon" && itm.equiped) equipSword(itm.name, true, itm.parts, rHand)
-                // if(itm.itemType === "helmet" && itm.equiped) equipHelmet(_helmsRoot, itm.name)
-                // if(itm.itemType === "armor" && itm.equiped) equipArmor(_armorRoot, itm.name)
-                // if(itm.itemType === "belt" && itm.equiped) equipBelt(itm.itemModelStyle, itm.name)
-                // if(itm.itemType === "cloak" && itm.equiped) equipCloak(itm.itemModelStyle, itm.name)
+            if(itm.itemCateg === "equipable"){
+                if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name, boots)
+                if(itm.itemType === "weapon" && itm.equiped) {
+                    const toEquip = createSword(scene, itm.name, itm.parts, rHand, swordMeshes)
+                    showHideSword(toEquip.mesh, true)
+                }
             }
         })
     }
@@ -154,7 +123,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         det,
         owner: det.owner,
         name: det.name,
-        // spd: det.stats.spd,
         currentPlaceId: det.currentPlace.placeId,
         body,
         bodytarget,
@@ -167,26 +135,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         mode,
         _moving,
         _minning,
-        // midDetection,
-        // headBone,
-        // hairs,
-        // anims: entries.animationGroups,
-        equipSword,
-        // equipHelmet,
-        // equipArmor,
-        // equipBelt,
-        // equipCloak,
-        equipBoots,
-        
-        // rotationAnimation,
-
-        // swordWhenHitS,
-        // staffWhenHitS,
-        // whooshS,
-        // punchedS,
-        // _attacking: det._attacking ? det._attacking : false,
-        // _isMoving: det._isMoving ? det._isMoving : false,
-        // _dirTarg: det._dirTarg ? det._dirTarg : {x:0,y:yPos,z:0}
+        equipSword: (name, onHand, parts, _rHand) => equipSword(name, onHand, parts, _rHand ?? rHand, scene, swordMeshes),
+        equipBoots: (name) => equipBoots(name, boots),
     }
 }
 

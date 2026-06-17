@@ -16,13 +16,14 @@ import { randBetween } from "../tools/random.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
+import { createSlimeMat } from "./skins.js"
 
 
 
 
 export default function createEnemy(scene, det) {
 
-    const {goblinRoot, monolithRoot} = getSocketContainers()
+    const {goblinRoot, monolithRoot, slimeRoot} = getSocketContainers()
     let yPos = det.y+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
         { x: det.x, y:yPos , z: det.z }, 1, false, true)
@@ -58,6 +59,9 @@ export default function createEnemy(scene, det) {
         case "monolith":
             entries = monolithRoot.instantiateModelsToScene()
         break
+        case "slime":
+            entries = slimeRoot.instantiateModelsToScene()
+        break
     }
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
     const mainBodyMeshes = entries.rootNodes[0]
@@ -75,9 +79,15 @@ export default function createEnemy(scene, det) {
     // const theCharacterRoot = monsRoots.find(rootInfo => rootInfo.name === det.modelStyle)
     // if (!theCharacterRoot) return
 
-    mainBodyMeshes.getChildren().forEach(enemyasset => {
+    mainBodyMeshes.getChildMeshes().forEach(enemyasset => {
         enemyasset.name = enemyasset.name.split(" ")[2].toLowerCase()
         enemyasset.isPickable = false
+        if (enemyasset.name === 'slime') {
+            // console.warn("set material for body")
+            const mat = createSlimeMat(scene, enemyasset)
+            enemyasset.material = mat
+            return
+        }
         if (enemyasset.name === 'body') {
             // console.warn("set material for body")
             const mat = createMonsterMaterial(scene, det.modelStyle, det.name)
@@ -100,29 +110,31 @@ export default function createEnemy(scene, det) {
     function initAttack() {
         let attackSpdInterval = Math.floor(det.stats.atkSpd * 900)
         if (attackSpdInterval >= 3900) attackSpdInterval = 3950
-
+        attack()
         clearInterval(intervalWillAttack)
         intervalWillAttack = setInterval(() => {
             // console.log(det.stats.atkSpd)
-            const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-            if (getGameStatus() === "loading") return
-            if (!thisEnemy) return clearInterval(intervalWillAttack)
-            if (thisEnemy._targetId) {
-                const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
-                if (!targetHero) return
-                if (targetHero.isDead) return
-                const targBody = scene.getMeshByName(`player.${thisEnemy._targetId}`)
-                if (!targBody) return console.warn("targbody cannot found")
-                const { x, z } = targBody.position
-                const targPos = new Vector3(x, thisEnemy.body.position.y, z)
-                const targDist = Vector3.Distance(targPos, thisEnemy.body.position)
-                // console.log("targDistance  " + targDist)
-                // console.log("maxDistance  " + thisEnemy.det.maxDistance)
-                if (targDist <= thisEnemy.det.maxDistance) emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: thisEnemy.body.position.x, z: thisEnemy.body.position.z })
-            }
+            attack()
         }, 4400 - attackSpdInterval)
     }
-
+    function attack(){
+        const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
+        if (getGameStatus() === "loading") return
+        if (!thisEnemy) return clearInterval(intervalWillAttack)
+        if (thisEnemy._targetId) {
+            const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
+            if (!targetHero) return
+            if (targetHero.isDead) return
+            const targBody = scene.getMeshByName(`player.${thisEnemy._targetId}`)
+            if (!targBody) return console.warn("targbody cannot found")
+            const { x, z } = targBody.position
+            const targPos = new Vector3(x, thisEnemy.body.position.y, z)
+            const targDist = Vector3.Distance(targPos, thisEnemy.body.position)
+            // console.log("targDistance  " + targDist)
+            // console.log("maxDistance  " + thisEnemy.det.maxDistance)
+            if (targDist <= thisEnemy.det.maxDistance) emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: thisEnemy.body.position.x, z: thisEnemy.body.position.z })
+        }
+    }
     const charState = getCharState()
     if(!charState) return
     const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
@@ -237,7 +249,7 @@ export default function createEnemy(scene, det) {
             })
         })
     }
-    playAnim(entries.animationGroups, "0Idle", true)
+    playAnim(entries.animationGroups, "idle1", true)
     return {
         det,
         _id: det._id,
@@ -280,7 +292,7 @@ function emitAttack(detail, enemId, targetId, placeId, pos) {
         targetId: targetId,
         dmg: detail.stats.dmg,
         atkSpd: detail.stats.atkSpd,
-        attackAnimName: `attack${randomNumMinMax(0, 1.5)}`,
+        attackAnimName: `attack${randBetween(1,2)}`,
         effects: detail.effects
     })
 }
@@ -327,7 +339,7 @@ export function enemyIsHit(data){
     poppingTextMesh(`-${data.dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`
-    playAnim(enemy.anims, `hit${randBetween(0,1)}`)
+    playAnim(enemy.anims, `hit${randBetween(1,2)}`)
     if (data.hp <= 0) {
         removeEnemyOnScene(targetId)
         clearInterval(enemy.intervalWillAttack)

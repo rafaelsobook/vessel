@@ -50,6 +50,7 @@ const CLEARANCE = {
     mushroom:    1,
     rock:        1,
     flower:      0,
+    bush:        0,
 };
 
 const VARIANTS = {
@@ -65,6 +66,7 @@ const VARIANTS = {
     mushroom:    3,
     rock:        3,
     flower:      4,
+    bush:        1,
 };
 
 // ─── PBR defaults ─────────────────────────────────────────────────────────────
@@ -242,6 +244,55 @@ function placeZoned(args) {
     ];
 }
 
+// Bushes cluster: place N centers (border-biased), then scatter 5-10 bushes around each.
+function placeBushClusters({ count, halfW, halfH, rng }) {
+    const CLUSTER_RADIUS  = 3;
+    const MIN_PER_CLUSTER = 5;
+    const MAX_PER_CLUSTER = 10;
+    const MAX_ATTEMPTS    = 250;
+    const halfMin  = Math.min(halfW, halfH);
+    const borderMin = BORDER_INNER * halfMin;
+
+    const avgPerCluster  = (MIN_PER_CLUSTER + MAX_PER_CLUSTER) / 2;
+    const clusterCount   = Math.max(1, Math.round(count / avgPerCluster));
+    const borderClusters = Math.round(clusterCount * (1 - CENTER_RATIO));
+
+    const items = [];
+    let id = 0;
+
+    for (let c = 0; c < clusterCount && items.length < count; c++) {
+        const needsBorder = c < borderClusters;
+        let cx = 0, cz = 0;
+
+        for (let a = 0; a < MAX_ATTEMPTS; a++) {
+            cx = (rng() * 2 - 1) * halfW;
+            cz = (rng() * 2 - 1) * halfH;
+            const dist = Math.sqrt(cx * cx + cz * cz);
+            if (!needsBorder || dist >= borderMin) break;
+        }
+
+        const perCluster = MIN_PER_CLUSTER + Math.floor(rng() * (MAX_PER_CLUSTER - MIN_PER_CLUSTER + 1));
+
+        for (let b = 0; b < perCluster && items.length < count; b++) {
+            const angle  = rng() * Math.PI * 2;
+            const radius = rng() * CLUSTER_RADIUS;
+            const s      = 0.5 + rng() * 0.6;
+            items.push({
+                id:       `bush_${id++}`,
+                type:     'bush',
+                x:        cx + Math.cos(angle) * radius,
+                y:        0,
+                z:        cz + Math.sin(angle) * radius,
+                rotation: rng() * 360,
+                scale:    { x: s, y: s, z: s },
+                variant:  0,
+            });
+        }
+    }
+
+    return items;
+}
+
 // ─── Indoor torches (enclosed rooms) ─────────────────────────────────────────
 function placeTorches(width, height) {
     const hw = width  / 2 - 1;
@@ -400,6 +451,7 @@ export function generateArea({
     totalMushrooms   = 10,
     totalRocks       = 15,
     totalFlowers     = 30,
+    totalBushes      = 0,
     // palisade (village only)
     palisadeSpacing      = 2.5,
     palisadeStakeHeight  = 12,
@@ -511,6 +563,9 @@ export function generateArea({
         scaleRange: [0.5, 0.7],
         rotationRange: [0, 360],
     });
+    const bushes = placeBushClusters({
+        count: totalBushes, halfW, halfH, rng: foliageRng,
+    });
 
     const tileHeights = buildTileHeightMap(cols, rows, jitterRng);
 
@@ -539,6 +594,7 @@ export function generateArea({
                 mushrooms:    mushrooms.length,
                 rocks:        rocks.length,
                 flowers:      flowers.length,
+                bushes:       bushes.length,
             },
         },
 
@@ -570,7 +626,7 @@ export function generateArea({
         // ── Props ─────────────────────────────────────────────────────────────
         smallHouses, mediumHouses, bigHouses,
         smallTrees, mediumTrees, bigTrees,
-        lightPoles, grass, herbs, mushrooms, rocks, flowers,
+        lightPoles, grass, herbs, mushrooms, rocks, flowers, bushes,
 
         // ── Enclosed-room surfaces (null for open-air) ────────────────────────
         rooms: isEnclosed ? [{

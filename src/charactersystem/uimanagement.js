@@ -56,6 +56,7 @@ export function activateBtnOnce(){
         }) 
     })
     let clickedTimeOut
+    let swordAnimNum = 1
     walkRunBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
             const btnName = e.target.className.split(" ")[1]
@@ -89,17 +90,19 @@ export function activateBtnOnce(){
                         if(itm.itemType === "weapon" && itm.equiped) weaponType = itm.weaponType
                     })
 
-                    if(weaponType) attackAnimName = `${weaponType}attack1`
+                    if(weaponType) attackAnimName = `${weaponType}attack${swordAnimNum}`
 
                     if(isSocketOn){
                         emitAttack(attackAnimName)
                     }else{
-                        attack(getAttackInfo())
+                        attack(getAttackInfo(attackAnimName))
                     } 
                     positionAtkCollider({ reach: 1})
+                    swordAnimNum = swordAnimNum === 1 ? 2 : 1
+                    console.log(attackAnimName)
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
-                    }, 900)
+                    }, 500)
                 break
                 case "throw":
                     // if(this.myChar.mode !== "weapon") return this._statPopUp("You must hold a weapon")

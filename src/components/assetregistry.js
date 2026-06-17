@@ -24,6 +24,10 @@ export async function getVillageAssetRegistry() {
 
     
     const grass = createSinglePlane("grass_black")
+    const grass2 = createSinglePlane("grass2_black")
+
+    const bush = createSinglePlane("bush1")
+
     const flower = createSinglePlane("flower1", 0.4, 1)
 
     mediumHouse.isVisible = false
@@ -53,6 +57,8 @@ export async function getVillageAssetRegistry() {
 
         rocks,
         grass,
+        grass2,
+        bush,
         flower,
         // herb,
         // mushroom

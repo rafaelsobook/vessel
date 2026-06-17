@@ -10,7 +10,7 @@ const NPC_WIDTH   = 0.5
 let npcBodyContainer = null
 
 async function getNpcContainer(scene, glbPath) {
-    if (!npcBodyContainer) {
+    if (!npcBodyContainer || npcBodyContainer.scene !== scene) {
         npcBodyContainer = await loadAvatarContainer(glbPath, scene)
     }
     return npcBodyContainer

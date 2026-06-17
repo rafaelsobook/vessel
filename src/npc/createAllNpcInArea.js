@@ -15,12 +15,12 @@ export function createAllNpcInArea(hero, scene){
     const myHeroDatabase = getCharState()
     npcDetails.forEach( async npcdet => {
         if(npcdet.currentPlaceId !== myHeroDatabase.currentPlace.placeId) return
-        let anNpc
-        if(npcdet.glbPath){
-            anNpc = await createNpc(scene, npcdet)
-        }else{
-            anNpc = createCharacter(scene,{x: npcdet.x, y: npcdet.y, z: npcdet.z}, npcdet, false, true)
-        }
+        let anNpc = await createNpc(scene, npcdet)
+        // if(npcdet.glbPath){
+        //     anNpc = await createNpc(scene, npcdet)
+        // }else{
+        //     anNpc = createCharacter(scene,{x: npcdet.x, y: npcdet.y, z: npcdet.z}, npcdet, false, true)
+        // }
         pushNpc({...anNpc, canSpeak: true})
         onIntersecEnterTrig(anNpc.body, hero.body, scene, () => {
             openCloseInteractBtn("normal", true, () => {

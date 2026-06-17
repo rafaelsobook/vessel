@@ -1,5 +1,5 @@
 import { deductHp, getCharState } from "../charactersystem/characterstate"
-import { createCharacter } from "../charactersystem/createcharacter"
+import { createCharacter, equipBoots, equipSword } from "../charactersystem/createcharacter"
 import { createMyCharacter } from "../charactersystem/createMyCharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
@@ -35,7 +35,9 @@ let containers = {
     belts: null,
     cloaks: null,
 
-    sceneBossRoot: null
+    goblinRoot: null,
+    monolithRoot: null,
+    slimeRoot: null
 }
 
 
@@ -65,6 +67,7 @@ export function resetArray(){
 
         goblinRoot: null,
         monolithRoot: null,
+        slimeRoot: null
     }
 }
 export function setSocketContainers(newContainers){
@@ -133,8 +136,8 @@ export function activateOnSocketListeners(socket){
         const theEquipingPlayer = playersOnScene.find(pl => pl.owner === ownerId)
         if (!theEquipingPlayer) return
 
-        if (itemType === "boots") theEquipingPlayer.equipBoots(itemName)
-        if(itemType === "weapon") theEquipingPlayer.equipSword(itemName, true, data.parts, theEquipingPlayer.rHand)
+        if (itemType === "boots") equipBoots(itemName)
+        if(itemType === "weapon") equipSword(itemName, true, data.parts, theEquipingPlayer.rHand, theEquipingPlayer.swordMeshes)
 
         // if (itemType === "weapon") theEquipingPlayer.equipSword(swordRoot, itemName, theEquipingPlayer._attacking, data.isHide)
         // if (itemType === "helmet") theEquipingPlayer.equipHelmet(helmRoot, itemName)

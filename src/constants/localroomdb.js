@@ -41,7 +41,34 @@ export const metaDatas = [
         },
         isMultiplayer: true
     }),
-    {
+    {   
+        optionalObjects: [
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "Guild House",
+                position: {x: -8, y: 0, z: -12},
+                scale: null,
+                rotation:-Math.PI/2,
+                glbPath: "./models/houses/guild1.glb",
+                diffuseTexPath:null,
+                bumpTexPath: "./images/textures/houses/guild1.jpg",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+        ],
+        roomPaths: [
+            {
+                placeId: 9,
+                name: "Guild Room",
+                areaType: "room",
+                pos: {x: -2.75, y: 0.5, z: -12.02},
+                startingPos: {x: 0.12, y: 1, z: -4.4}
+            }
+        ],
+        
         ...generateArea({
         placeId: 1,
         areaType: "village",
@@ -52,10 +79,11 @@ export const metaDatas = [
         totalSmallHouse : 3,
         totalMediumHouse: 0,
         totalBigTrees: 5,
-        totalMediumTrees: 300,
-        totalSmallTrees: 300,
-        totalRocks: 1000,
-        totalGrass: 100000,
+        totalMediumTrees: 10,
+        totalSmallTrees: 100,
+        totalRocks: 500,
+        totalGrass: 10000,
+        totalBushes: 5000,
         // entry: "south",
         exit: "east",
         entryExitPlaceIds: {
@@ -80,10 +108,10 @@ export const metaDatas = [
             ],
         },
         isMultiplayer: true
-    })
+        }),
+        spawn: {x: 0.6, y: 1, z: -10},
     },
-    {
-    ...generateArea({
+    {...generateArea({
         placeId: 2,
         areaType: "village",
         width:      100,
@@ -129,7 +157,7 @@ export const metaDatas = [
         layout: { cellSize: 1 },
         spawn: {x: 0, y: 1, z: -2, rotation: 0},
 
-        indorItems: [
+        optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
                 name: "bed",
@@ -228,9 +256,17 @@ export const metaDatas = [
         height: 13, // ground height
         areaType: "room",
         layout: { cellSize: 1 },
-        spawn: {x: 3, y: 0.4, z: 2.5, rotation: 0},
-
-        indorItems: [
+        spawn: {x: 4.4, y: 0.4, z: 2.5, rotation: 0},
+        roomPaths: [ // pabalik sa room naten dapat sa taas ng hagdan to e
+            {
+                placeId: 10,
+                name: "room",
+                areaType: "room",
+                pos: {x: 6, y: 0.5, z: 5},
+                startingPos: {x: 0, y: 1, z: -2}
+            }
+        ],
+        optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
                 name: "guildtable",
@@ -247,18 +283,32 @@ export const metaDatas = [
             },
             {
                 itemId: randNum(0,9999).toString(),
-                name: "guildstair",
-                position: {x: -6, y: 0, z: 5},
+                name: "guildtable",
+                position: {x: -5, y: 0, z: 4.9},
                 scale: null,
-                rotation: Math.PI,
-                glbPath: "./models/indors/guildstairs.glb",
+                rotation: -Math.PI/2 - 0.3,
+                glbPath: "./models/indors/guildboard.glb",
                 // diffuseTexPath: "./images/modeltex/wood2.jpg",
                 physics: {
                     opt: {mass: 0},
-                    type: "mesh"
+                    type: "box"
                 },
                 functionBeforeMerge: null
             },
+            // { // I commented this out because the physics is complaining of how many the geometry is
+            //     itemId: randNum(0,9999).toString(),
+            //     name: "guildstair",
+            //     position: {x: -6, y: 0, z: 5},
+            //     scale: null,
+            //     rotation: Math.PI,
+            //     glbPath: "./models/indors/guildstairs.glb",
+            //     // diffuseTexPath: "./images/modeltex/wood2.jpg",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "mesh"
+            //     },
+            //     functionBeforeMerge: null
+            // },
             {
                 itemId: randNum(0,9999).toString(),
                 name: "testcrystal",

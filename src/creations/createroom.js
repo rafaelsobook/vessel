@@ -16,7 +16,7 @@ import { spawnMagicCircle } from './magiccircles';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
 import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
 import { exitScene } from '../sockets/exitsocket';
-import { findMyCurrentPlace } from '../states/placestates';
+import { findMyCurrentPlace, findPlaceMetaData } from '../states/placestates';
 import { changeScene } from '../main/main';
 import { openCloseInteractBtn } from '../tools/popupUI';
 
@@ -26,9 +26,8 @@ import { checkIfTokenSaved } from "../tools/tools"
 const WALL_HEIGHT    = 0.5;
 const WALL_THICKNESS = 0.3;
 
-let hasPhysics = true
 
-function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene, shadowGenerator) {
+function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene, hasPhysics,shadowGenerator) {
     for (let i = 0; i < count; i++) {
         const px = startPos.x + stepVec.x * i;
         const pz = startPos.z + stepVec.z * i;
@@ -53,15 +52,15 @@ function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, s
     }
 }
 
-export async function createRoom(scene, room, characterBody, _hasPhysics = true) {
-    hasPhysics = _hasPhysics
+export async function createRoom(scene, room, characterBody, hasPhysics = true) {
+    
     const {
         name       = 'Room',
         width      = 7,
         height     = 10,
         wallHeight = WALL_HEIGHT,
         bedConfig,
-        indorItems = [],
+        optionalObjects = [],
         spawn,
         exitPlaceDetail
     } = room;
@@ -114,34 +113,12 @@ export async function createRoom(scene, room, characterBody, _hasPhysics = true)
     ground.receiveShadows = true;
 
     // ── Walls ─────────────────────────────────────────────────────────────────
-    buildWall(`${name}_wall_n`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene);
-    buildWall(`${name}_wall_s`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene);
-    buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene);
-    buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene);
+    buildWall(`${name}_wall_n`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
+    buildWall(`${name}_wall_s`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
+    buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
+    buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
 
-    if(indorItems.length > 0){
-        indorItems.forEach(async item => {
-            if (item.name.includes("particle_fire")) {
-                createFireParticles(item.position, scene)
-                return
-            }
-            // const model = await loadModelByIndx(item.glbPath, 1, scene);
-            const model = await mergeAndLoadModel(item.glbPath, scene, item.functionBeforeMerge);
-            model.position = new Vector3(item.position.x, item.position.y, item.position.z);
-            model.addRotation(0, item.rotation, 0);
-            model.name = item.name
 
-            if(item.diffuseTexPath){
-                const mat = createMatV2(scene, item.diffuseTexPath)
-                model.material = mat
-                model.material.backFaceCulling  = false
-            }
-            // shadowGenerator.addShadowCaster(model)
-            // model.receiveShadows = true
-            if(item.cbAfterMade) item.cbAfterMade(scene)
-            if(hasPhysics) createAggregate(model, item.physics.opt, item.physics.type, scene);
-        })
-    }
 
     // setTimeout(() => {
     //     spawnMagicCircle(new Vector3(spawn.x, spawn.y, spawn.z), scene, "divine1", 0.8)
@@ -163,12 +140,18 @@ export async function createRoom(scene, room, characterBody, _hasPhysics = true)
                 openCloseInteractBtn(false)
 
                 const charState = getCharState()
+                
+                const tcpCharPlaceMD = findPlaceMetaData(exitPlaceDetail.placeId)
 
                 charState.currentPlace.placeId = exitPlaceDetail.placeId
                 charState.currentPlace.name = exitPlaceDetail.name
                 charState.currentPlace.areaType = exitPlaceDetail.areaType
-
+                charState.x = tcpCharPlaceMD.spawn.x
+                charState.y = tcpCharPlaceMD.spawn.y
+                charState.z = tcpCharPlaceMD.spawn.z
+                console.log(tcpCharPlaceMD)
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                console.log(newCharData)
                 exitScene(false)
                 await changeScene("whatever")
             })

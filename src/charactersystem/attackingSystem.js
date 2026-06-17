@@ -51,7 +51,7 @@ export function attack(_attackInfo){
 }
 
 // tools
-export function getAttackInfo(){
+export function getAttackInfo(attackAnimName){
     const charState = getCharState()
     if(!charState) return
     const { pos, dirTarg, mode} = getPlayerCoord(charState.owner)
@@ -64,7 +64,7 @@ export function getAttackInfo(){
         if (itm.itemType === "weapon" && itm.equiped) {
             hasWeapon = true
             weaponType = itm.weaponType
-            animName = `${weaponType}attack1`
+            animName = attackAnimName ? attackAnimName : `${weaponType}attack1`
         }
     })
     const dmgDetails = calcDmg(charState)

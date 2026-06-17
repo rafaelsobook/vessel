@@ -78,7 +78,8 @@ export async function startScene(willCreateCharacter){
         // initOnceEmojiActions()
         // playSocketScene(_scene)
     }else{
-        scene = await setupCharacterScene(engine)
+        const sceneDetail = await setupCharacterScene(engine)
+        scene = sceneDetail.scene
     }
     engine.runRenderLoop(() => gameStatus === "running" && scene.render())
     window.addEventListener("resize", ()  => engine.resize())

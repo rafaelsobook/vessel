@@ -1,8 +1,8 @@
 import { Quaternion, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getSceneDet } from "../main/main";
-import { setCanPress, getCanPress, getCharState } from '../charactersystem/characterstate';
+import { setCanPress, getCanPress, getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
 import { getPlayersOnScene } from '../sockets/worldsocket';
-import { stopAnim } from '../tools/tools';
+import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { playAnim, stopAllAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 
@@ -101,9 +101,10 @@ function setupControls(scene) {
         }
 
     }
-
+    let saveLocTimeout
     function handleKeyDown(e) {
         if(!getCanPress()) return
+        clearTimeout(saveLocTimeout)
         const key = e.key.toLowerCase();
 
         switch (key) {
@@ -124,7 +125,8 @@ function setupControls(scene) {
     function handleKeyUp(e) {
         if(!getCanPress()) return
         const key = e.key.toLowerCase();
-
+        let state = getCharState()
+        let pos
         switch (key) {
             case "w": input.forward = 0; break;
             case "s": input.forward = 0; break;
@@ -132,8 +134,10 @@ function setupControls(scene) {
             case "d": input.right   = 0; break;
             case "shift": currentSpeed = walkSpeed; break;
             case " ":
-                const state = getCharState()
-                const body = getSceneDet().scene.getMeshByName(`player.${state.owner}`)
+                
+                const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
+                pos = pl.body.getAbsolutePosition()
+                console.log(`x: ${pos.x}, z: ${pos.z}`)
             break;
         }
 
@@ -143,6 +147,13 @@ function setupControls(scene) {
             const vel = aggregate.body.getLinearVelocity();
             aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
             emitStop()
+
+            saveLocTimeout = setTimeout( async () => {
+                const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
+                pos = pl.body.getAbsolutePosition()
+                console.log(`saving ...`, pos)
+                await updateMyDetailsOL({...state, x: pos.x, y: pos.y, z: pos.z}, checkIfTokenSaved(), true, true)
+            }, 2000)
         }
     }
 

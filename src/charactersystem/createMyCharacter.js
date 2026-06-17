@@ -35,13 +35,15 @@ import { getCharState } from "./characterstate"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 
 
-export function createMyCharacter(tcpCharDet, scene){
+export function createMyCharacter(charState, scene){
 
-    const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
+    // const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
 
-    const spawnPos = getSpawnPos(tcpCharPlaceMD)
+    // let spawnPos = getSpawnPos(tcpCharPlaceMD)
+    let spawnPos = { x: charState.x, y: charState.y, z: charState.z}
 
-    const player = createCharacter(scene, spawnPos, {...tcpCharDet,
+
+    const player = createCharacter(scene, spawnPos, {...charState,
         // mode would be by default always Idle if newly joined
     // addiditonal infos because our tcpCharDet does not come from tcp(in tcp we put this additional info) 
     _moving: false,

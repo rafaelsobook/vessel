@@ -52,12 +52,13 @@ import {
 } from '@babylonjs/core';
 import { createGroundMat, createPathMat } from '../tools/groundmat';
 import { onIntersecEnterTrig,onIntersecExitTrig } from '../components/actionManager';
-import { getCharState, setCharState } from '../charactersystem/characterstate';
+import { getCharState, setCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
 import { exitScene } from '../sockets/exitsocket';
-import { findMyCurrentPlace } from '../states/placestates';
+import { findMyCurrentPlace, findPlaceMetaData } from '../states/placestates';
 import { getEngine, changeScene, getSceneDet, getGameStatus } from '../main/main';
 import { openCloseInteractBtn } from '../tools/popupUI';
 import { randNum } from '../tools/random';
+import { checkIfTokenSaved } from '../tools/tools';
 
 // ─── Material helper ──────────────────────────────────────────────────────────
 /**
@@ -214,6 +215,18 @@ function spawnProps(scene, items, mainMesh, addPhysics, shapeType) {
         inst.freezeWorldMatrix();
     });
 }
+function spawnNonPhysics(scene, items, mainMesh, yRotOffset = 0) {
+    if (!mainMesh) return;
+    if (mainMesh.material) mainMesh.material.unlit = true;
+    items.forEach(item => {
+        const inst = mainMesh.createInstance(`${mainMesh.name}_${item.id}`);
+        inst.position   = new Vector3(item.x, item.y, item.z);
+        inst.rotation   = new Vector3(0, (item.rotation * Math.PI) / 180 + yRotOffset, 0);
+        inst.scaling    = new Vector3(item.scale.x, item.scale.y, item.scale.z);
+        inst.isPickable = false;
+        inst.freezeWorldMatrix();
+    });
+}
 // ─── Palisade wall ────────────────────────────────────────────────────────────
 /**
  * Builds the rectangular perimeter palisade from cylinder instances.
@@ -297,11 +310,17 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBo
                     break
                 }
                 const charState = getCharState()
+                const tcpCharPlaceMD = findPlaceMetaData(placeDetailShort.placeId)
 
                 charState.currentPlace.placeId = placeDetailShort.placeId
                 charState.currentPlace.name = placeDetailShort.name
                 charState.currentPlace.areaType = placeDetailShort.areaType
 
+                charState.x = tcpCharPlaceMD.spawn.x
+                charState.y = tcpCharPlaceMD.spawn.y
+                charState.z = tcpCharPlaceMD.spawn.z
+                
+                const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
                 exitScene();
 
                 const placeDetail = findMyCurrentPlace()
@@ -398,11 +417,13 @@ export function createVillage(scene, village, assetRegistry = {}, characterBody)
     spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true);
 
     // Foliage — no physics (purely decorative, high count, no collision needed).
-    spawnProps(scene, village.grass,     assetRegistry.grass,     false);
-    spawnProps(scene, village.herbs,     assetRegistry.herb,      false);
-    spawnProps(scene, village.mushrooms, assetRegistry.mushroom,  false);
-    spawnProps(scene, village.rocks,     assetRegistry.rocks,     false);
-    spawnProps(scene, village.flowers,   assetRegistry.flower,    false);
+    spawnNonPhysics(scene, village.grass, assetRegistry.grass);
+    spawnNonPhysics(scene, village.grass, assetRegistry.grass2, Math.PI / 2);
+    spawnNonPhysics(scene, village.herbs,     assetRegistry.herb);
+    spawnNonPhysics(scene, village.mushrooms, assetRegistry.mushroom);
+    spawnNonPhysics(scene, village.rocks,     assetRegistry.rocks);
+    spawnNonPhysics(scene, village.flowers,   assetRegistry.flower);
+    spawnNonPhysics(scene, village.bushes,    assetRegistry.bush);
 
     // ── 5. Point lights on lit poles ──────────────────────────────────────────
     // spawnPoleLights(scene, village.lightPoles, prefix);

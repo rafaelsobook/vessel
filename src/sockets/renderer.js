@@ -36,7 +36,7 @@ let renderCallback = function () {
         if(charState.currentPlace.placeId !== player.currentPlaceId) return
         if(!player.body) return 
         const isActionPlaying = player.anims.some(anim =>
-            (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
+            (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("attack") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
         )
 
         player.anims.forEach(anim => {
@@ -90,7 +90,7 @@ let renderCallback = function () {
             
             // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle 
             en.anims.forEach(anim => {
-                if (anim.name === "running" && !anim.isPlaying) {
+                if (anim.name === "running1" && !anim.isPlaying) {
                     anim.speedRatio = .9 + en.spd * .05
                     anim.play()
                 }
