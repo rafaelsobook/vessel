@@ -77,46 +77,46 @@ import { checkIfTokenSaved } from '../tools/tools';
  * @param {{ ambient: object, lights: object[] }} lightingData
  * @param {string} namePrefix
  */
-function applyLighting(scene, lightingData, namePrefix) {
-    const { ambient, lights } = lightingData;
+// function applyLighting(scene, lightingData, namePrefix) {
+//     const { ambient, lights } = lightingData;
 
-    // Ambient via a low-intensity hemispheric light pointing straight up.
-    if (ambient) {
-        const ambLight = new HemisphericLight(
-            `${namePrefix}_ambient`,
-            new Vector3(0, 1, 0),
-            scene,
-        );
-        ambLight.intensity   = ambient.intensity ?? 0.55;
-        ambLight.diffuse     = Color3.FromHexString(ambient.color ?? '#ffffff');
-        ambLight.specular    = new Color3(0, 0, 0);
-        ambLight.groundColor = new Color3(0, 0, 0);
-    }
+//     // Ambient via a low-intensity hemispheric light pointing straight up.
+//     if (ambient) {
+//         const ambLight = new HemisphericLight(
+//             `${namePrefix}_ambient`,
+//             new Vector3(0, 1, 0),
+//             scene,
+//         );
+//         ambLight.intensity   = ambient.intensity ?? 0.55;
+//         ambLight.diffuse     = Color3.FromHexString(ambient.color ?? '#ffffff');
+//         ambLight.specular    = new Color3(0, 0, 0);
+//         ambLight.groundColor = new Color3(0, 0, 0);
+//     }
 
-    (lights ?? []).forEach((l, i) => {
-        const id = `${namePrefix}_light_${i}`;
+//     (lights ?? []).forEach((l, i) => {
+//         const id = `${namePrefix}_light_${i}`;
 
-        if (l.type === 'directional') {
-            // DirectionalLight direction = position vector normalised toward origin.
-            const dir  = new Vector3(-l.x, -l.y, -l.z).normalize();
-            const dLight = new DirectionalLight(id, dir, scene);
-            dLight.intensity = l.intensity ?? 1.0;
-            dLight.diffuse   = Color3.FromHexString(l.color ?? '#ffffff');
+//         if (l.type === 'directional') {
+//             // DirectionalLight direction = position vector normalised toward origin.
+//             const dir  = new Vector3(-l.x, -l.y, -l.z).normalize();
+//             const dLight = new DirectionalLight(id, dir, scene);
+//             dLight.intensity = l.intensity ?? 1.0;
+//             dLight.diffuse   = Color3.FromHexString(l.color ?? '#ffffff');
 
-        } else if (l.type === 'point') {
-            const pLight = new PointLight(id, new Vector3(l.x, l.y, l.z), scene);
-            pLight.intensity = l.intensity ?? 1.0;
-            pLight.range     = l.range     ?? 20;
-            pLight.diffuse   = Color3.FromHexString(l.color ?? '#ffffff');
+//         } else if (l.type === 'point') {
+//             const pLight = new PointLight(id, new Vector3(l.x, l.y, l.z), scene);
+//             pLight.intensity = l.intensity ?? 1.0;
+//             pLight.range     = l.range     ?? 20;
+//             pLight.diffuse   = Color3.FromHexString(l.color ?? '#ffffff');
 
-        } else if (l.type === 'hemisphere') {
-            const hLight = new HemisphericLight(id, new Vector3(0, 1, 0), scene);
-            hLight.intensity   = l.intensity ?? 0.2;
-            hLight.diffuse     = Color3.FromHexString(l.color ?? '#ffffff');
-            hLight.groundColor = new Color3(0, 0, 0);
-        }
-    });
-}
+//         } else if (l.type === 'hemisphere') {
+//             const hLight = new HemisphericLight(id, new Vector3(0, 1, 0), scene);
+//             hLight.intensity   = l.intensity ?? 0.2;
+//             hLight.diffuse     = Color3.FromHexString(l.color ?? '#ffffff');
+//             hLight.groundColor = new Color3(0, 0, 0);
+//         }
+//     });
+// }
 
 // ─── Ground plane ─────────────────────────────────────────────────────────────
 function buildFloor(scene, layout, palisade, namePrefix) {

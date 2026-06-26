@@ -1,6 +1,5 @@
 import { deductHp, getCharState } from "../charactersystem/characterstate"
-import { createCharacter, equipBoots, equipSword } from "../charactersystem/createcharacter"
-import { createMyCharacter } from "../charactersystem/createMyCharacter"
+import { createCharacter } from "../charactersystem/createcharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
 import { attachCam } from "../tools/camera"
@@ -132,12 +131,12 @@ export function activateOnSocketListeners(socket){
         const {ownerId, itemName, itemModelStyle,  itemType, currentPlaceId} = data
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
-        if(ownerId === charState.owner) return console.log("this is me return")
+        // if(ownerId === charState.owner) return console.log("this is me return")
         const theEquipingPlayer = playersOnScene.find(pl => pl.owner === ownerId)
         if (!theEquipingPlayer) return
 
-        if (itemType === "boots") equipBoots(itemName)
-        if(itemType === "weapon") equipSword(itemName, true, data.parts, theEquipingPlayer.rHand, theEquipingPlayer.swordMeshes)
+        if (itemType === "boots") theEquipingPlayer.equipBoots(itemName)
+        if(itemType === "weapon") theEquipingPlayer.equipSword(itemName, true, data.parts)
 
         // if (itemType === "weapon") theEquipingPlayer.equipSword(swordRoot, itemName, theEquipingPlayer._attacking, data.isHide)
         // if (itemType === "helmet") theEquipingPlayer.equipHelmet(helmRoot, itemName)
@@ -146,6 +145,18 @@ export function activateOnSocketListeners(socket){
         // if (itemType === "armor") theEquipingPlayer.equipArmor(armorRoot, itemName)
         // if (itemType === "belt") theEquipingPlayer.equipBelt(itemModelStyle, itemName)
         // if (itemType === "cloak") theEquipingPlayer.equipCloak(itemModelStyle, itemName)
+    })
+    socket.on("unequiped-item", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        const {ownerId, itemType, currentPlaceId} = data
+        if (!charState) return
+        if (charState.currentPlace.placeId !== currentPlaceId) return
+        // if(ownerId === charState.owner) return console.log("this is me return")
+        const theEquipingPlayer = playersOnScene.find(pl => pl.owner === ownerId)
+        if (!theEquipingPlayer) return
+
+        theEquipingPlayer.unEquip(itemType)
     })
     // ACTIONS
     // PLAYER ATTACK RELATED
@@ -215,6 +226,7 @@ export function activateOnSocketListeners(socket){
         playAnim(theEnemyToAttack.anims, data.attackAnimName)
         // player hit animation
         playAnim(victimPlayer.anims, "hit1")
+        theEnemyToAttack.attackSound.play()
         // playAnim(theEnemyToAttack.anims, data.attackAnimName, false, ()=>{
         //     theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
         //     if(!theEnemyToAttack) return
@@ -385,15 +397,13 @@ export function activateOnSocketListeners(socket){
         if(!charState) return
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
-        if(mode === "fighting") {
-            playAnim(player.anims, "act_idletoready1")
-        }
-        if(mode === "idle") {
-            playAnim(player.anims, "act_idletoready1", false, true)
-        }
-        player.mode = mode
-        if(ownerId === charState.owner) return
+        const prevMode = player.mode
+        console.log("prev mode: ", prevMode)
+        console.log("nexr mode: ", mode)
 
+        if(ownerId === charState.owner) return
+        
+        setPlayerMode(mode, player.owner)
         
         player.body.position.x = pos.x
         player.body.position.y = pos.y
@@ -461,7 +471,7 @@ export function reCreateMeshesInScene() {
 }
 
 
-//  player related
+//  PLAYER related
 export function playerDied(ownerId, currentPlaceId) {
     const player = playersOnScene.find(pl => pl.owner === ownerId)
     if (!player) return
@@ -504,7 +514,21 @@ export function removePlayer({ ownerId, playerName, placeId }){
     const bodyOfPlayer = scene.getMeshByName(`player.${ownerId}`)
     if (bodyOfPlayer) bodyOfPlayer.dispose()
 }
-
+export function setPlayerMode(ownerId, _newMode){
+    const player = playersOnScene.find(pl => pl.owner === ownerId)
+    if(!player) return;
+    const prevMode = player.mode
+    if(prevMode === "idle" && _newMode === "fighting"){
+        // first also think how you can get the character if equiping a weapon
+        // the animation of idle to fight will depend if it is wearing weapon
+        playAnim(player.anims, "act_idletoready1")
+    }
+    if(prevMode === "fighting" && _newMode === "idle"){
+        playAnim(player.anims, "act_idletoready1", false, true)
+           
+    }
+    player.mode = _newMode
+}
 
 
 // npc

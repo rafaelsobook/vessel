@@ -1,6 +1,6 @@
-import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, Quaternion } from "@babylonjs/core"
+import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, Quaternion, Sound } from "@babylonjs/core"
 import { createMesh, createMonsterMaterial } from "../creations/creationTools.js"
-import { randomNumMinMax } from "../tools/tools"
+import { lookAt, randomNumMinMax } from "../tools/tools"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
@@ -17,6 +17,7 @@ import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { createSlimeMat } from "./skins.js"
+import { runSound } from "../components/soundSystem.js"
 
 
 
@@ -107,17 +108,20 @@ export default function createEnemy(scene, det) {
     })
 
     let intervalWillAttack
+    let timeOutWillChase
     function initAttack() {
         let attackSpdInterval = Math.floor(det.stats.atkSpd * 900)
         if (attackSpdInterval >= 3900) attackSpdInterval = 3950
-        attack()
+        if(Math.random() > 0.7) attack()
         clearInterval(intervalWillAttack)
+        clearTimeout(timeOutWillChase)
         intervalWillAttack = setInterval(() => {
             // console.log(det.stats.atkSpd)
             attack()
         }, 4400 - attackSpdInterval)
     }
     function attack(){
+        console.log("attacking")
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         if (getGameStatus() === "loading") return
         if (!thisEnemy) return clearInterval(intervalWillAttack)
@@ -132,24 +136,28 @@ export default function createEnemy(scene, det) {
             const targDist = Vector3.Distance(targPos, thisEnemy.body.position)
             // console.log("targDistance  " + targDist)
             // console.log("maxDistance  " + thisEnemy.det.maxDistance)
-            if (targDist <= thisEnemy.det.maxDistance) emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: thisEnemy.body.position.x, z: thisEnemy.body.position.z })
+
+            if (targDist <= thisEnemy.det.maxDistance) {
+                emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: thisEnemy.body.position.x, z: thisEnemy.body.position.z })
+
+            }
         }
     }
     const charState = getCharState()
     if(!charState) return
     const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!myChar) return
+
+
     onIntersecEnterTrig(body, myChar.body, getSceneDet().scene, () => {
-        const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-        if (!thisEnemy) return
-        thisEnemy._isMoving = false
-        const myCharId = myChar.body.name.split(".")[1]
-        const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
+        // const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
+        // if (!thisEnemy) return
+        // thisEnemy._isMoving = false
+        // const myCharId = myChar.body.name.split(".")[1]
+        // const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
 
-        const plPos = enemyTargetBody.position
-        emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})
-
-        thisEnemy._isMoving = false
+        // const plPos = enemyTargetBody.position
+        // emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})
     })
     onIntersecEnterTrig(atkDetection, myChar.body, getSceneDet().scene, () => {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
@@ -162,7 +170,9 @@ export default function createEnemy(scene, det) {
         const plPos = enemyTargetBody.position
         emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})
         // emitChase(thisEnemy._id, myCharId, det.currentPlace, det.actionType)
-        initAttack()       
+        clearInterval(intervalWillAttack)
+        clearTimeout(timeOutWillChase)
+        initAttack()
     })
     onIntersecExitTrig(atkDetection, myChar.body, getSceneDet().scene, () => {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
@@ -171,7 +181,10 @@ export default function createEnemy(scene, det) {
         const myCharId = myChar.body.name.split(".")[1]
         if (thisEnemy._targetId !== myCharId) return 
         clearInterval(intervalWillAttack)
-        emitChase(thisEnemy._id, myCharId, det.currentPlaceId, det.actionType)
+        clearTimeout(timeOutWillChase)
+        timeOutWillChase = setTimeout(() => {
+            emitChase(thisEnemy._id, myCharId, det.currentPlaceId, det.actionType)
+        }, 1000)
     })
 
     // onIntersecEnterTrig(chaseDetector, myChar.body, getSceneDet().scene, () => {
@@ -250,6 +263,10 @@ export default function createEnemy(scene, det) {
         })
     }
     playAnim(entries.animationGroups, "idle1", true)
+
+    //  sounds
+    const  { runSound, deathSound, hitSound, attackSound } = monsterSounds(scene, det, body)
+
     return {
         det,
         _id: det._id,
@@ -258,6 +275,7 @@ export default function createEnemy(scene, det) {
         currentPlace: det.currentPlace,
         chaseDetector,
         body,
+
         // fshadow,
         nameMesh,
         hpbar,
@@ -272,11 +290,41 @@ export default function createEnemy(scene, det) {
         _dirTarg: det._dirTarg ? det._dirTarg : { x: 0, y: yPos, z: 0 },
         _targetId: det._targetId,
 
+        runSound,
+        deathSound,
+        hitSound,
+        attackSound,
 
         intervalWillAttack
     }
 }
+function monsterSounds(scene, det,body){
+    // let runSound = scene.getSoundByName(`${det.modelStyle}run`)
 
+    let runSound = new Sound(`${det.modelStyle}run`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}run.mp3`, scene, null, {
+        maxDistance: 30, spatialSound: true, loop: false, autoplay: false
+    })
+    runSound.setPlaybackRate(0.5)
+
+    let deathSound = new Sound(`${det.modelStyle}death`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}death.mp3`, scene, null, {
+        maxDistance: 50, spatialSound: true, loop: false, autoplay: false
+    })
+
+    let hitSound = new Sound(`${det.modelStyle}hitbynosharp`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}hitbynosharp.mp3`, scene, null, {
+        maxDistance: 50, spatialSound: true, loop: false, autoplay: false
+    })
+    let attackSound = new Sound(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}attack.mp3`, scene, null, {
+        maxDistance: 50, spatialSound: true, loop: false, autoplay: false
+    })
+    console.log(deathSound)
+
+    runSound.attachToMesh(body)
+    deathSound.attachToMesh(body)
+    hitSound.attachToMesh(body)
+    attackSound.attachToMesh(body)
+
+    return { runSound, deathSound, hitSound, attackSound }
+}
 function createChaseDetector(scene){
     const detector = createMesh(scene, "chasedetector", { size: 19, height: 0.1 }, { x: 0, y: 0, z: 0 }, 1, false, false)
     detector.isPickable = false
@@ -336,11 +384,18 @@ export function enemyIsHit(data){
     const enemPos = enemy.body.position
 
  
-    poppingTextMesh(`-${data.dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
+    poppingTextMesh(`-${dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`
     playAnim(enemy.anims, `hit${randBetween(1,2)}`)
+    enemy.hitSound.play()
+
+    const player = getPlayersOnScene().find(pl => pl.owner === playerId)
+    if(!player) return
+    lookAt(enemy.body, player.body.position)
+
     if (data.hp <= 0) {
+        enemy.deathSound.play()
         removeEnemyOnScene(targetId)
         clearInterval(enemy.intervalWillAttack)
         playAnim(enemy.anims, "death")

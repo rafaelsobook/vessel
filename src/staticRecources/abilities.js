@@ -1,7 +1,7 @@
 export default [
     {
         name: 'lifeblood',
-        dn: "Life Blood",
+        dn: "Osiris Hearth",
         desc: "This power granted its wielder to increase their current life by some percent, making them significantly stronger and more resilient than ordinary beings.",
         lvl: 1,
         isActive: true, //if false then the trigger will turn it on
@@ -26,6 +26,72 @@ export default [
             hp: .1, //10%
             mp: 0,
             sp: 0,
+        },
+        resistance:[{name: 'critical', percent: .1}], 
+        requireForLeveling: {
+            requireType: "kill", //none(will level up the same as you do) // kill(if higher than (number) from you) // percent (number)a percent of that if reached below. example your mana or life reached .1 below then this will level up
+        }
+    },
+    {
+        name: 'bluecore',
+        dn: "Aether's Core",
+        desc: "This power granted its wielder to increase their current mana, making them terrifying in the eyes of the sages",
+        lvl: 1,
+        isActive: true, //if false then the trigger will turn it on
+        trigger: false, // playerState(attacking, walking, idle)
+        percents: {
+            hp: .1, //10%
+            mp: 0,
+            sp: 0,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 0, percent: 0},
+            magicDmg:{ toAdd: 20, percent: 0},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false // so when this is true it will only activate if the trigger condition met
+        },
+        regens: {
+            hp: 0, //10%
+            mp: 0.1,
+            sp: 0,
+        },
+        resistance:[{name: 'critical', percent: .1}], 
+        requireForLeveling: {
+            requireType: "kill", //none(will level up the same as you do) // kill(if higher than (number) from you) // percent (number)a percent of that if reached below. example your mana or life reached .1 below then this will level up
+        }
+    },
+    {
+        name: 'goldenfort',
+        dn: "Golden Fortitude",
+        desc: "This power granted its wielder to increase their current stamina Making them war lords, hungry for endless war",
+        lvl: 1,
+        isActive: true, //if false then the trigger will turn it on
+        trigger: false, // playerState(attacking, walking, idle)
+        percents: {
+            hp: .1, //10%
+            mp: 0,
+            sp: 0,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 20, percent: 0},
+            magicDmg:{ toAdd: 0, percent: 0},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false // so when this is true it will only activate if the trigger condition met
+        },
+        regens: {
+            hp: 0, //10%
+            mp: 0,
+            sp: 0.1,
         },
         resistance:[{name: 'critical', percent: .1}], 
         requireForLeveling: {

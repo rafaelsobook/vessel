@@ -13,33 +13,36 @@ export function setupLighting(scene, placeDetail) {
 
     // ── Hemispheric ambient fill ───────────────────────────────────────────
     // Prevents pitch-black shadows. Very dim — just lifts the floor off zero.
+    const hemi = new HemisphericLight("hemi_ambient", new Vector3(0, 1, 0), scene);
+    hemi.intensity = 0.7
     const {fogColor, fogDensity} = placeDetail.sceneTemp
+    let lightUsed
     placeDetail.sceneTemp?.lights?.forEach((light) => {
-        
-
-        if (light.name === "directional") {
-            const dirLight = new DirectionalLight("dir_light", new Vector3(-1, -3, -1), scene);
+        // if (light.name === "directional") {
+        //     const dirLight = new DirectionalLight("dir_light", new Vector3(-1, -3, -1), scene);
+        //     lightUsed = dirLight
+        //     dirLight.intensity = light.intensity
+        //     // dirLight.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
             
-            dirLight.intensity = light.intensity
-            // dirLight.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
-            
-        }
+        // }
         if(light.name === "hemispheric"){
             const hemi = new HemisphericLight("hemi_ambient", new Vector3(0, 1, 0), scene);
             hemi.position = new Vector3(-2, 4, 2);
             hemi.intensity = light.intensity
             hemi.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
+            lightUsed = hemi
         }
     })            // no specular from ambient fill
 
-    scene.fogMode = Scene.FOGMODE_EXP;
-    scene.fogColor = new Color3(fogColor.r,fogColor.g,fogColor.b);
-    scene.fogDensity = fogDensity;
+    // scene.fogMode = Scene.FOGMODE_EXP;
+    // scene.fogColor = new Color3(fogColor.r,fogColor.g,fogColor.b);
+    // scene.fogDensity = fogDensity;
     // Ambient
     // scene.ambientColor = new Color3(0.1, 0.25, 0.15);
 
     // Fog
-    scene.fogColor = new Color3(0.05, 0.15, 0.1);
+    // scene.fogColor = new Color3(0.05, 0.15, 0.1);
+    return lightUsed
 
     // Accent light
 

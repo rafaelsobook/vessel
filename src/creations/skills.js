@@ -5,6 +5,7 @@ import { getCharState } from "../charactersystem/characterstate"
 import { randNum } from "../tools/random.js"
 import { getProjectilesOnScene } from "../sockets/worldsocket.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
+import { getAllSounds } from "../components/soundSystem.js"
 
 export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHit, willDisposeCountDown){
     let weaponPartDetails = _weaponPartDetails;
@@ -61,7 +62,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     const players = getPlayersOnScene()
     players.forEach(pl => {
         const enterAction = onIntersecEnterTrig(instance, pl.bodytarget, scene, () => {
-
+            getAllSounds().struckS.play()
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             theProjectile.spd = 2
             removeIntersecTrig(enterAction)

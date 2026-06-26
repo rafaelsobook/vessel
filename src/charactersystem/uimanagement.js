@@ -1,11 +1,13 @@
 import { showItemInfo } from "./itemInfoSystem.js"
 import { closeInventory, openUpdateInventory } from "./inventory.js"
 import { openOrCloseStats } from "./statsSystem.js"
-import { getCharState, setCanPress, setCharStateMode } from "./characterstate.js"
+import { getCharState, getTotal, setCanPress, setCharStateMode, updateSP_UI } from "./characterstate.js"
 import { getIsSocketOn } from "../sockets/worldsocket.js"
 import { emitAttack, emitMyLoc } from "../sockets/emits.js"
-import { attack, getAttackInfo } from "./attackingSystem.js"
+import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
 import { positionAtkCollider } from "./createMyCharacter.js"
+import { getAllSounds, playSound } from "../components/soundSystem.js"
+import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -63,10 +65,11 @@ export function activateBtnOnce(){
             const isSocketOn = getIsSocketOn()
             
             disableEnableAttackButtonsContainer(false)
-
+            clearTimeout(clickedTimeOut)
             switch(btnName){
                 case "walk":
                     setCharStateMode("idle")
+                    
                     if(isSocketOn) emitMyLoc("idle")
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
@@ -75,6 +78,7 @@ export function activateBtnOnce(){
                 break
                 case "running":       
                     setCharStateMode("fighting")
+                    
                     if(isSocketOn) emitMyLoc("fighting")
                 //    openOrCloseStats()
                     clickedTimeOut = setTimeout(() => {
@@ -84,25 +88,46 @@ export function activateBtnOnce(){
                 case "attack":
                     const charState = getCharState()
                     if(!charState) return
+                    
+                    const dmgDetails = calcDmg(charState)
+
+                    const spToDeduct = dmgDetails.physicalDmg + dmgDetails.weaponDmg
+                    clickedTimeOut = setTimeout(() => {
+                        disableEnableAttackButtonsContainer(true)
+                    }, 500)
+                    if(getTotal().sp < spToDeduct) {
+                        // openClosePopup("no stamina", true, 1000)
+                        popStatusEffect("no stamina", "yellow")
+                        return console.log("not enough sp")
+                    }
+                    
+                    charState.sp -= spToDeduct
+                    updateSP_UI()
+                    
+                    getAllSounds().voiceAttackS.setPlaybackRate(0.9 + (Math.random()*0.2))
+                    getAllSounds().voiceAttackS.play()
+                    
                     let weaponType = ""
                     let attackAnimName = ""
+                    const attackInfo = getAttackInfo(attackAnimName)
                     charState.items.find(itm=>{
                         if(itm.itemType === "weapon" && itm.equiped) weaponType = itm.weaponType
                     })
 
-                    if(weaponType) attackAnimName = `${weaponType}attack${swordAnimNum}`
-
+                    if(weaponType) {
+                        attackAnimName = `${weaponType}attack${swordAnimNum}`
+                        playSound(getAllSounds().swordWhooshS)
+                    }
                     if(isSocketOn){
                         emitAttack(attackAnimName)
                     }else{
-                        attack(getAttackInfo(attackAnimName))
+                        attack(attackInfo)
                     } 
                     positionAtkCollider({ reach: 1})
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1
                     console.log(attackAnimName)
-                    clickedTimeOut = setTimeout(() => {
-                        disableEnableAttackButtonsContainer(true)
-                    }, 500)
+
+
                 break
                 case "throw":
                     // if(this.myChar.mode !== "weapon") return this._statPopUp("You must hold a weapon")

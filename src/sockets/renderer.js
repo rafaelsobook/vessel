@@ -3,6 +3,7 @@ import { getCharState } from "../charactersystem/characterState.js";
 import { playAnim } from "../tools/animation.js";
 import { getGameStatus, getSceneDet } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
+import { checkDistance } from "../creations/creationTools.js";
 
 let scene;
 
@@ -38,7 +39,6 @@ let renderCallback = function () {
         const isActionPlaying = player.anims.some(anim =>
             (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("attack") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
         )
-
         player.anims.forEach(anim => {
             // if(anim.isPlaying) console.log(anim.name)
         })
@@ -84,8 +84,16 @@ let renderCallback = function () {
         if (en._isMoving && en._targetId) {
             const targetPlayer = getSceneDet().scene.getMeshByName(`player.${en._targetId}`)
             if(targetPlayer){
+
+
+                const enPos = en.body.position.clone()
+                const targPos = targetPlayer.position
+
+                const dist = checkDistance(new Vector3(enPos.x, targPos.y, enPos.z), targPos)
+                if(dist <= 0.25) return console.log(dist)
                 en.body.lookAt(new Vector3(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z))
                 en.body.locallyTranslate(new Vector3(0, 0, en.spd * dt))
+                // console.log(dist)
             }
             
             // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle 
@@ -95,6 +103,9 @@ let renderCallback = function () {
                     anim.play()
                 }
             })
+            if(en.runSound){
+                if(!en.runSound.isPlaying) en.runSound.play()
+            }
         } else {
             // en.anims.forEach(anim => {
             //     if(anim.name.includes('hit') && anim.isPlaying) return

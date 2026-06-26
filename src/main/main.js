@@ -106,9 +106,9 @@ async function initEngine(){
     // }
 
     engine = new Engine(canvas, true, {
-        stencil: false,                  
-        antialias: false,     
-        audioEngine: false,
+        stencil: false,
+        antialias: false,
+        audioEngine: true,
         adaptToDeviceRatio: false,   
         disableWebGL2Support: false,
         useHighPrecisionFloats: false,  

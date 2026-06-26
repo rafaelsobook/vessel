@@ -2,6 +2,7 @@ import { Animation, MeshBuilder, StandardMaterial, Texture, Color3, Vector3,
     BackEase, EasingFunction, GlowLayer } from "@babylonjs/core"
 import { createParticlesForMesh } from "../tools/particlesystem.js";
 import { addGlow } from "../tools/glow.js";
+import { getAllSounds } from "../components/soundSystem.js";
 
 export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000) {
     const disc = MeshBuilder.CreatePlane("magic_circle", { width: 2.5, height: 2.5 }, scene)
@@ -58,6 +59,8 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
     setTimeout(() => {
         despawnMagicCircle(disc, scene)
     }, timeOut)
+
+    getAllSounds().magicCircle.play()
     return disc
 }
 export function createMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000){
@@ -115,6 +118,7 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
 
     createParticlesForMesh(disc, scene, "thin1")
 
+    getAllSounds().magicCircle.play()
     setTimeout(() => {
         despawnMagicCircle(disc, scene)
     }, timeOut)

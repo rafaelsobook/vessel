@@ -12,6 +12,7 @@ import { APIURL } from "../constants/constants.js" //validGatePlaces
 import { updateHeartStatus, updateStatUI } from "./statsSystem.js"
 import { emitEquipItem } from "../sockets/emits.js"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
+import { getSocket } from "../sockets/joinsocket.js"
 
 
 const itemInfoCont = document.querySelector(".item-info-cont")
@@ -30,6 +31,8 @@ const listNftBtn = document.getElementById("listNftBtn")
 const inpNft = document.getElementById("inpNft")
 // const weaponAccessoryList = document.querySelector(".weapon-accessory")
 const weaponAccessoryList = document.querySelectorAll(".eqpd-slot")
+
+const armorybx = document.querySelector(".armory-bx")
 
 
 let itemDetail= undefined
@@ -85,7 +88,7 @@ let equipItemFunc = () => {
         if(!myChar) return
         
         if (itemType === "boots") myChar.equipBoots(name)
-        if(itemType === "weapon") myChar.equipSword(name, true, parts, myChar.rHand)
+        if(itemType === "weapon") myChar.equipSword(name, true, parts)
 
     }
     
@@ -215,6 +218,24 @@ export function equipItem(itemDet, updateItemsListUI){
     if(updateItemsListUI) openUpdateInventory(false)
     closeItemInfo()
 }
+export function unEquip(itemType){
+    weaponAccessoryList.forEach(chld => {
+        const slotName = chld.className
+        if(slotName === undefined) return
+        if(slotName.split(" ")[1] === itemType){
+            chld.innerHTML = ''
+            
+            const charState = getCharState()
+            charState.items.forEach(itm => {                
+                if(itm.itemType === itemType){
+                    itm.equiped = false
+                }
+            })
+        }
+    })
+    openUpdateInventory(false)
+    closeItemInfo()
+}
 export function closeItemInfo(){
     itemInfoCont.style.display = "none"
 }
@@ -325,3 +346,37 @@ export function removeItem(_invItem, updateDetailOnline){
 sellItemBtn.addEventListener("click", () => sellItemFunc())
 equipOrOpenBtn.addEventListener("click", () => activateFunc())
 listNftBtn.addEventListener("click", () => listingThisItem())
+armorybx.addEventListener("click", e => {
+    const className = e.target.className;
+    const state = getCharState()
+    const myChar = getPlayersOnScene().find(pl => pl.owner === state.owner)
+    if(!myChar) return
+    if(className && className.split(" ")[0] === "eqpd-slot"){
+        const itemType = className.split(" ")[1] //weapon //boots// belt // armor
+        if(!itemType) return console.log("category undefined");
+
+        unEquip(itemType)
+        const isMultiplayerZone = getIsSocketOn()
+        if(isMultiplayerZone){
+            const socket = getSocket()
+            socket.emit("emitUnEquip", 
+                { 
+                    ownerId: state.owner, 
+                    itemType,
+                    currentPlaceId: state.currentPlace.placeId
+                })
+        }else{
+            myChar.unEquip(itemType)
+        }
+        // switch(categname){
+        //     case "weapon":
+        //         const state = getCharState()
+        //         state.items.forEach(item => {
+        //             console.log(item)
+        //             if(item.equiped) console.log(item)
+        //             // console.log(item.isEquiped)
+        //         })
+        //     break
+        // }
+    }
+})

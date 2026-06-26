@@ -151,10 +151,11 @@ export function stopAnim(anims, animName, isStopAll){
     anims.forEach(anim => isStopAll ? anim.stop() : anim.name === animName && anim.stop())
 }
 
-export function lookAt(mesh, Vec3, targetPos){
+export function lookAt(body, targetPos){
 
-    const {x,y,z} = targetPos
-    mesh.lookAt(new Vector3(x, mesh.position.y,z),0,0,0)
+    const dx = targetPos.x - body.position.x
+    const dz = targetPos.z - body.position.z
+    body.rotation.y = Math.atan2(dx, dz)
 }
 export function disposeMesh(mesh){
     if(!mesh) return 

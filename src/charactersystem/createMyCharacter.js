@@ -31,11 +31,11 @@ import { attachCam } from "../tools/camera.js"
 import { getSpawnPos } from "../tools/position.js"
 import { createCharacter } from "./createcharacter.js"
 import { ActionManager, MeshBuilder, Vector3 } from "@babylonjs/core"
-import { getCharState } from "./characterstate"
+import { getCharState, setCharStateMode } from "./characterstate"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 
 
-export function createMyCharacter(charState, scene){
+export function createMyCharacter(charState, scene, allsounds){
 
     // const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
 
@@ -52,11 +52,14 @@ export function createMyCharacter(charState, scene){
     if(!player) return
     attachCam(player.camParent)
 
-    const controls = attachControllerToThisCharacter(player.aggregate, scene)
+    const controls = attachControllerToThisCharacter(player.aggregate, scene, allsounds)
 
     const atkCollider = createAttackColliderForEnemy(scene, player.body)
 
     sceneCleanupReady(scene, controls)
+
+    setCharStateMode(charState.mode)
+    console.log(charState.mode)
     return player
 }
 

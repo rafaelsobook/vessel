@@ -5,6 +5,8 @@ import { getPlayersOnScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { playAnim, stopAllAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
+import { findMyCurrentPlace } from '../states/placestates';
+import { runSound } from '../components/soundSystem';
 
 let aggregate = null
 let rotationHelper = null;
@@ -38,14 +40,23 @@ export function faceForward(targP){
         }
     })
 }
-export function attachControllerToThisCharacter(_aggregate, scene) {
+export function attachControllerToThisCharacter(_aggregate, scene, allsounds) {
     // const { scene } = getSceneDet();
     aggregate = _aggregate;
-    return setupControls(scene);
+    return setupControls(scene, allsounds);
 }
 
-function setupControls(scene) {
+function setupControls(scene, allsounds) {
     const camera = scene.activeCamera;
+    const charState = getCharState()
+    const placeDetail = findMyCurrentPlace()
+    const areaType = placeDetail.areaType;
+    
+    let runsound
+    if(areaType === "room"){
+        runsound = allsounds.woodrunS
+    }else runsound = allsounds.runningS
+    
 
     let walkSpeed = 1;
     let sprintSpeed = 20;
@@ -81,6 +92,7 @@ function setupControls(scene) {
         const charState = getCharState()
         if (!charState) return
         const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+        if(!player) return
         player._moving = value
         if (player) {
             switch(player.mode){
@@ -91,15 +103,15 @@ function setupControls(scene) {
                     currentSpeed = sprintSpeed
                 break
             }
-           
+            if(!runsound.isPlaying) runsound.play()
             if(!value) {
                 // stopAnim(player.anims, "running")
                 // stopAnim(player.anims, "walk")
                 stopAllAnim(player.anims)
+                if(runsound.isPlaying) runsound.stop()
                 // playAnim(player.anims, "runstopped1")
             }
         }
-
     }
     let saveLocTimeout
     function handleKeyDown(e) {
@@ -117,7 +129,6 @@ function setupControls(scene) {
 
         if (isMoving) {
             setPlayerMoving(true)
-            
         }
         updateRotation(getCamDir());
     }
@@ -150,10 +161,11 @@ function setupControls(scene) {
 
             saveLocTimeout = setTimeout( async () => {
                 const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
+                if(!pl) return
                 pos = pl.body.getAbsolutePosition()
                 console.log(`saving ...`, pos)
-                await updateMyDetailsOL({...state, x: pos.x, y: pos.y, z: pos.z}, checkIfTokenSaved(), true, true)
-            }, 2000)
+                await updateMyDetailsOL({...state, x: pos.x, y: pos.y, z: pos.z}, checkIfTokenSaved(), false, true)
+            }, 5000)
         }
     }
 

@@ -30,50 +30,64 @@ notifAcceptBtn.addEventListener('click', async () => {
 export function getAbilities(){
     return getCharState().blessings;
 }
-export async function receiveAbilities(_numberNotGreaterThanTen, limit){
+export async function receiveAbilities(_numberNotGreaterThanTen, limit, specificAbility = null){
     const state = getCharState()
     const abilitiesReceived = []
-    abilities.forEach(ability => {
-        if(Math.random()*10 <= _numberNotGreaterThanTen){
-            const alreadyHave = state.blessings.find(ablty=>ablty.name === ability.name)
-  
-            if(limit && abilitiesReceived.length >= limit) return
-            if(alreadyHave) {
-                state.blessings.forEach(ablty => {
-                    if(ablty.name === alreadyHave.name){
-                        ablty.lvl+=1,
 
-                        ablty.percents.hp+=ablty.percents.hp,
-                        ablty.percents.mp+=ablty.percents.mp,
-                        ablty.percents.sp+=ablty.percents.sp,
-                        ablty.percents.spd+=ablty.percents.spd,
-                        ablty.percents.atkSpd+=ablty.percents.atkSpd,
+    // Build the list to iterate: specific ability first (if provided), then random ones
+    const abilitiesToProcess = specificAbility
+        ? [specificAbility, ...abilities.filter(a => a.name !== specificAbility.name)]
+        : abilities
 
-                        ablty.percents.accuracy+=ablty.percents.accuracy,
-                        ablty.percents.critical+=ablty.percents.critical,
+    abilitiesToProcess.forEach(ability => {
+        const isSpecific = specificAbility && ability.name === specificAbility.name
+        
+        // Skip random check only for the specific ability
+        if (!isSpecific && Math.random() * 10 > _numberNotGreaterThanTen) return
 
-                        ablty.percents.meeleeDmg.toAdd +=ablty.percents.meeleeDmg.toAdd, 
-                        ablty.percents.meeleeDmg.percent+=ablty.percents.meeleeDmg.percent
-                        ablty.percents.magicDmg.toAdd+=ablty.percents.magicDmg.toAdd
-                        ablty.percents.magicDmg.percent+=ablty.percents.magicDmg.percent
-                        ablty.percents.defense.toAdd+=ablty.percents.defense.toAdd
-                        ablty.percents.defense.percent+=ablty.percents.defense.percent                        
-                        abilitiesReceived.push(ablty)
-                    }
-                })        
-                return
-            }
-            state.blessings.push(ability)
-            abilitiesReceived.push(ability)
+        if (limit && abilitiesReceived.length >= limit) return
+
+        const alreadyHave = state.blessings.find(ablty => ablty.name === ability.name)
+
+        if(alreadyHave) {
+            state.blessings.forEach(ablty => {
+                if(ablty.name === alreadyHave.name){
+                    ablty.lvl += 1
+
+                    ablty.percents.hp += ablty.percents.hp
+                    ablty.percents.mp += ablty.percents.mp
+                    ablty.percents.sp += ablty.percents.sp
+                    ablty.percents.spd += ablty.percents.spd
+                    ablty.percents.atkSpd += ablty.percents.atkSpd
+
+                    ablty.percents.accuracy += ablty.percents.accuracy
+                    ablty.percents.critical += ablty.percents.critical
+
+                    ablty.percents.meeleeDmg.toAdd += ablty.percents.meeleeDmg.toAdd
+                    ablty.percents.meeleeDmg.percent += ablty.percents.meeleeDmg.percent
+                    ablty.percents.magicDmg.toAdd += ablty.percents.magicDmg.toAdd
+                    ablty.percents.magicDmg.percent += ablty.percents.magicDmg.percent
+                    ablty.percents.defense.toAdd += ablty.percents.defense.toAdd
+                    ablty.percents.defense.percent += ablty.percents.defense.percent
+
+                    ablty.regens.hp += 0.025
+                    ablty.regens.mp += 0.025
+                    ablty.regens.sp += 0.05
+                    abilitiesReceived.push(ablty)
+                }
+            })
+            return
         }
+
+        state.blessings.push(ability)
+        abilitiesReceived.push(ability)
     })
-  
+
     if(abilitiesReceived.length){
-        displayEarnedAbility(abilitiesReceived)//only for UI
+        displayEarnedAbility(abilitiesReceived)
     } else if(limit && abilitiesReceived.length <= limit) {
-        receiveAbilities(_numberNotGreaterThanTen, limit)
+        receiveAbilities(_numberNotGreaterThanTen, limit, specificAbility)
     }
-    
 }
 export async function upgradeAbility(ablty){
     ablty.lvl+=1,
@@ -93,6 +107,10 @@ export async function upgradeAbility(ablty){
     ablty.percents.magicDmg.percent+=ablty.percents.magicDmg.percent
     ablty.percents.defense.toAdd+=ablty.percents.defense.toAdd
     ablty.percents.defense.percent+=ablty.percents.defense.percent
+
+    ablty.regens.hp += 0.025
+    ablty.regens.mp += 0.025
+    ablty.regens.sp += 0.05
 }
 export function getMyAbilitiesInfo(){                                         
     let totalHpPercent = 0
@@ -109,40 +127,38 @@ export function getMyAbilitiesInfo(){
     let resistance = []
     const characterState = getCharState()
 
-    if(characterState.blessings > 0){
-        characterState.blessings.forEach(blessing=> {
-            const {hp,mp,sp,spd,atkSpd,meeleeDmg,magicDmg,defense } = blessing.percents
-            if(hp >=0) totalHpPercent+=hp
-            if(mp >=0) totalMpPercent+=mp
-            if(sp >=0) totalSpPercent+=sp
-            if(spd >=0) totalSpdPercent+=spd
-            if(atkSpd >=0) totalAtkSpdPercent+=atkSpd
+  
+    characterState.blessings.forEach(blessing=> {
+        const {hp,mp,sp,spd,atkSpd,meeleeDmg,magicDmg,defense } = blessing.percents
+        if(hp >=0) totalHpPercent+=hp
+        if(mp >=0) totalMpPercent+=mp
+        if(sp >=0) totalSpPercent+=sp
+        if(spd >=0) totalSpdPercent+=spd
+        if(atkSpd >=0) totalAtkSpdPercent+=atkSpd
 
-            totalMeeleeDmg.toAdd+=meeleeDmg.toAdd
-            totalMeeleeDmg.percent+=meeleeDmg.percent
+        totalMeeleeDmg.toAdd+=meeleeDmg.toAdd
+        totalMeeleeDmg.percent+=meeleeDmg.percent
 
-            totalMagicDmg.toAdd+=magicDmg.toAdd
-            totalMagicDmg.percent+=magicDmg.percent
+        totalMagicDmg.toAdd+=magicDmg.toAdd
+        totalMagicDmg.percent+=magicDmg.percent
 
-            totalDefense.toAdd+=defense.toAdd
-            totalDefense.percent+=defense.percent
+        totalDefense.toAdd+=defense.toAdd
+        totalDefense.percent+=defense.percent
 
-            if(blessing.regens.hp>= 0) totalRegens.hp += blessing.regens.hp
-            if(blessing.regens.mp>= 0) totalRegens.mp += blessing.regens.mp
-            if(blessing.regens.sp>= 0) totalRegens.sp += blessing.regens.sp
+        totalRegens.hp += blessing.regens.hp
+        totalRegens.mp += blessing.regens.mp
+        totalRegens.sp += blessing.regens.sp
 
-            if(blessing.resistance.length){
-                blessing.resistance.forEach(restnceName => {
-                    const alreadyHaveThis = resistance.find(res => res.name === restnceName)
-                    if(alreadyHaveThis){
-                        resistance = resistance.map(res => res.name === restnceName ? {...res, lvl: res.lvl+=1 } : res)
-                    }else resistance.push({name: restnceName, lvl: 1})
-                })                
-            }
+        if(blessing.resistance.length){
+            blessing.resistance.forEach(restnceName => {
+                const alreadyHaveThis = resistance.find(res => res.name === restnceName)
+                if(alreadyHaveThis){
+                    resistance = resistance.map(res => res.name === restnceName ? {...res, lvl: res.lvl+=1 } : res)
+                }else resistance.push({name: restnceName, lvl: 1})
+            })                
+        }
 
-        })
-    }
-
+    })
     
     return { 
         totalHpPercent,

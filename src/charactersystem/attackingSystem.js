@@ -55,6 +55,7 @@ export function getAttackInfo(attackAnimName){
     const charState = getCharState()
     if(!charState) return
     const { pos, dirTarg, mode} = getPlayerCoord(charState.owner)
+    if(!pos) return
 
     let hasWeapon = false
     let isMissed = false

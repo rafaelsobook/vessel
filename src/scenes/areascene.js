@@ -30,6 +30,8 @@ import createAllNpcInArea from "../npc/createAllNpcInArea.js";
 import { exitScene } from "../sockets/exitsocket.js";
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js";
 import { createFireParticles } from "../tools/particlesystem.js";
+import { initSounds } from "../components/soundSystem.js";
+import { createSky } from "../creations/creationTools.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -37,9 +39,11 @@ export async function areaScene(placeDetail){
     const spawnPos = getSpawnPos(placeDetail);
     const scene = new Scene(getEngine())
     const cam = createArcCam(scene, placeDetail)
-    setupLighting(scene, placeDetail)
+    const light = setupLighting(scene, placeDetail)
 
     await initializePhysics(scene);
+
+    const allsounds = initSounds(scene);
 
     let reg
     if(placeDetail.areaType === "village"){
@@ -68,12 +72,13 @@ export async function areaScene(placeDetail){
     })
     
     const charState = await initiateCharacter(checkIfTokenSaved())
-    const myCharacter = createMyCharacter(charState, scene)
+    const myCharacter = createMyCharacter(charState, scene, allsounds)
     pushPlayer(myCharacter)
 
     switch(placeDetail.areaType){
         case "village":
             createVillage(scene, placeDetail, reg, myCharacter.body)
+            // createSky(light, scene, false)
         break;
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
@@ -92,11 +97,6 @@ export async function areaScene(placeDetail){
             model.addRotation(0, item.rotation, 0);
             model.name = item.name
 
-            if(item.diffuseTexPath){
-                const mat = createMatV2(scene, item.diffuseTexPath)
-                model.material = mat
-                model.material.backFaceCulling  = false
-            }
             if(item.bumpTexPath){
                 // if model.material.unlit = true bumpTexture has no effect because there's nothing reflecting the light
                 // const bumpTex = new Texture(item.bumpTexPath, scene)
@@ -104,28 +104,37 @@ export async function areaScene(placeDetail){
                 // model.material.bumpTexture = bumpTex
                 // model.material.specularTexture = bumpTex
             }
-
-            // if (model.material instanceof MultiMaterial) {
-            //     console.log(`[${item.name}] MultiMaterial with ${model.material.subMaterials.length} sub-materials — setting each unlit`)
-            //     model.material.subMaterials.forEach(sub => {
-            //         if (sub instanceof PBRMaterial) sub.unlit = true
-            //         else if (sub instanceof StandardMaterial) sub.disableLighting = true
-            //     })
-            // } else if (model.material instanceof PBRMaterial) {
-            //     console.log(`[${item.name}] material is PBRMaterial — setting unlit`)
-            //     // model.material.unlit = true
-            // } else if (model.material instanceof StandardMaterial) {
-            //     console.log(`[${item.name}] material is StandardMaterial — disabling lighting`)
-            //     model.material.disableLighting = true
-            // } else {
-            //     console.log(`[${item.name}] material type:`, model.material?.getClassName())
-            // }
+ 
 
             // shadowGenerator.addShadowCaster(model)
             // model.receiveShadows = true
             if(item.cbAfterMade) item.cbAfterMade(scene)
             // console.log(model.getClassName())
             if(model.getClassName() === "Mesh") createAggregate(model, item.physics.opt, item.physics.type, scene);
+
+            if(item.diffuseTexPath){
+                const mat = createMatV2(scene, item.diffuseTexPath)
+                model.material = mat
+                model.material.backFaceCulling  = false
+                return
+            }
+
+
+            if (model.material instanceof MultiMaterial) {
+                console.log(`[${item.name}] MultiMaterial with ${model.material.subMaterials.length} sub-materials — setting each unlit`)
+                model.material.subMaterials.forEach(sub => {
+                    if (sub instanceof PBRMaterial) sub.unlit = true
+                    else if (sub instanceof StandardMaterial) sub.disableLighting = true
+                })
+            } else if (model.material instanceof PBRMaterial) {
+                console.log(`[${item.name}] material is PBRMaterial — setting unlit`)
+                // model.material.unlit = true
+            } else if (model.material instanceof StandardMaterial) {
+                console.log(`[${item.name}] material is StandardMaterial — disabling lighting`)
+                model.material.disableLighting = true
+            } else {
+                console.log(`[${item.name}] material type:`, model.material?.getClassName())
+            }
         })
     }
     placeDetail.roomPaths?.forEach(path => {
@@ -133,7 +142,7 @@ export async function areaScene(placeDetail){
         const { name, pos,startingPos, placeId ,areaType } = path
         const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { }, scene)
         pathTrigger.position = new Vector3(pos.x, pos.y, pos.z)
-        pathTrigger.isVisible = true
+        pathTrigger.isVisible = false
         pathTrigger.isPickable = false
 
         onIntersecEnterTrig(pathTrigger, myCharacter.body, scene, () => {

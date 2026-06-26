@@ -5,12 +5,14 @@ import { getPlayersOnScene } from '../sockets/worldsocket';
 import { getSceneDet } from '../main/main';
 import { setCanPress } from '../charactersystem/characterState';
 import { receiveAbilities } from '../charactersystem/abilitySystem';
-import { spawnMagicCircle } from '../creations/magiccircles';
+import { createMagicCircle, spawnMagicCircle } from '../creations/magiccircles';
 import { playAnim, stopAllAnim } from '../tools/animation';
 import { playAnimWithCallback, randomNum, stopAnim } from '../tools/tools';
 import { Vector3 } from '@babylonjs/core';
 import { obtain } from '../charactersystem/inventory';
 import { showHideIcons } from '../charactersystem/uimanagement';
+import { getPlayerCoord } from '../charactersystem/createcharacter';
+import abilities from '../staticRecources/abilities';
 
 
 
@@ -31,7 +33,7 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: " I could lend you the powers I gained from this world, Are you Interested ?"
+                message: " I will guide you by lending you powers I gained from this world ..."
             },
         ],
         answers: [
@@ -67,17 +69,17 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "I understand your excitement ! Strong ONE "
+                message: "This is not a simple world that you can mess with ..."
             },
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "Simply I can't waste the souls I used to summon you here"
+                message: "I am not wasting souls, just to summon weak players here"
             },
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "Therefore, Choose one blessing that will help you"
+                message: "Therefore, I will bestow one blessing that will help you"
             },
             {
                 name: "kamisama",
@@ -89,19 +91,37 @@ export const questions = [
             {
                 text: "Osiris' Hearth",
                 cb: () => {
-                    startQuestionare(3)
+                    const charState = getCharState()
+                    const {pos} = getPlayerCoord(charState.owner)
+                    createMagicCircle(pos, getSceneDet().scene, "apt_fire" )
+                    setTimeout(() => {
+                        receiveAbilities(false, false, abilities[0])
+                        setCanPress(true)
+                    }, 2000)
                 }
             },
             {
                 text: "Aether's Core",
                 cb: () => {
-                    startQuestionare(3)
+                    const charState = getCharState()
+                    const {pos} = getPlayerCoord(charState.owner)
+                    createMagicCircle(pos, getSceneDet().scene, "apt_water" )
+                    setTimeout(() => {
+                        receiveAbilities(false, false, abilities[1])
+                        setCanPress(true)
+                    }, 2000)
                 }
             },
             {
-                text: "Gaia's Fortitude",
+                text: "Golden Fortitude",
                 cb: () => {
-                    startQuestionare(3)
+                    const charState = getCharState()
+                    const {pos} = getPlayerCoord(charState.owner)
+                    createMagicCircle(pos, getSceneDet().scene, "apt_earth")
+                    setTimeout(() => {
+                        receiveAbilities(false, false, abilities[2])
+                        setCanPress(true)
+                    }, 2000)
                 }
             },
         ],
@@ -225,6 +245,7 @@ export const questions = [
             const charPos = character.body.position.clone()
             const scene = getSceneDet().scene
             spawnProjectile({x:0,y:-2,z:3}, {x:charPos.x, y:charPos.y+0.5, z:charPos.z}, "yellow", scene, "default", () => {
+                
                 playAnimWithCallback(character.anims, "hit_struct1", false, () => {
                     const disc = spawnMagicCircle(new Vector3(charPos.x, 0.05, charPos.z), scene, "divine1", 0.8)
                     stopAllAnim(character.anims)
@@ -254,24 +275,24 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "Farewell Player, I wish you luck"
+                message: "Farewell Player, You have a potential to be my vesse....."
             },
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "No care for now, and your life will be the next in line"
+                message: "..."
             },
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "So protect yourself with a gift ..."
+                message: "I will now bestow you a weapon useful for your adventure !"
             }
         ],
         answers: [],
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
                 obtain(swordItem)
-                setCanPress(true)
+                startQuestionare(2)
                 showHideIcons("block")
             }, 1000)
         }

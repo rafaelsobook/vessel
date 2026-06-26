@@ -5,6 +5,7 @@ import { getPlayersOnScene } from '../sockets/worldsocket';
 import { getSceneDet } from '../main/main';
 import { setCanPress } from '../charactersystem/characterState';
 import { receiveAbilities } from '../charactersystem/abilitySystem';
+import { getAllSounds } from '../components/soundSystem';
 
 export const myownspeeches = [
     {
@@ -28,6 +29,7 @@ export const myownspeeches = [
             if(!charState) return
             setCanPress(false)
             setCharStateMode("idle")
+            getAllSounds().woodCreakS.play()
             setTimeout( async () => {
                 const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
                 if(!myChar) return

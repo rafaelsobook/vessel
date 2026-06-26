@@ -16,6 +16,7 @@ import { createColorMat, createMatV2 } from '../tools/materials';
 import { getPlayersOnScene, getSocketContainers } from '../sockets/worldsocket';
 import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
+import { createBloodParticle, createBloodSplatter } from '../tools/particlesystem';
 
 let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -25,7 +26,7 @@ export function showHideSword(swordTNode, isVisible){
 }
 export function getPlayerCoord(ownerId){
     const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
-    if(!player) return;
+    if(!player) return false;
     const pos = player.body.position;
     const forward = player.body.getDirection(Vector3.Forward())
     const dirTarg = player.body.position.add(forward)
@@ -57,40 +58,6 @@ function createAnimeBodyMaterials(scene, det){
     }
 }
 
-export function createSword(scene, swordName, parts, rHand, swordMeshes) {
-    const sword = createWeapon(scene, "sword", {x: 0.2, y: 0.2, z: 0}, rHand, parts)
-    const toPush = {name: swordName, mesh: sword}
-    swordMeshes.push(toPush)
-    showHideSword(sword, true)
-    return toPush
-}
-
-export function equipBoots(itemName, boots) {
-    if(!itemName) return
-    boots.forEach(boot => {
-        if(boot.name === itemName){
-            boot.mesh.isVisible = true
-        } else boot.mesh.isVisible = false
-    })
-}
-
-export function equipSword(swordToEquipName, onHand, parts, rHand, scene, swordMeshes) {
-    let toEquip = false
-    if(!swordMeshes.length) {
-        toEquip = createSword(scene, swordToEquipName, parts, rHand, swordMeshes)
-    }
-    swordMeshes.forEach(swrd => {
-        showHideSword(swrd.mesh, false)
-        if(swrd.name === swordToEquipName) toEquip = swrd
-    })
-    if(!toEquip) {
-        toEquip = createSword(scene, swordToEquipName, parts, rHand, swordMeshes)
-    }
-    if(!toEquip) return
-    showHideSword(toEquip.mesh, true)
-    if(onHand) toEquip.mesh.parent = rHand
-}
-
 export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false){
     const isMeshCreated = scene.getMeshByName(`player.${det.ownerId}`)
     if(isMeshCreated){
@@ -103,22 +70,70 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
 
     const containers = getSocketContainers()
-    const {root, animationGroups, rHand, belts, cloaks, boots} = createAnimeBody(containers, body, bodytarget, det, scene)
+    const {root, animationGroups, rHand, belts, cloaks, boots, spineBone} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
 
+    function createSword(swordName, parts, hand) {
+        const sword = createWeapon(scene, "sword", {x: 0.2, y: 0.2, z: 0}, hand, parts)
+        const toPush = {name: swordName, mesh: sword}
+        swordMeshes.push(toPush)
+        showHideSword(sword, true)
+        return toPush
+    }
+
+    function equipBoots(itemName) {
+        if(!itemName) return
+        boots.forEach(boot => {
+            if(boot.name === itemName){
+                boot.mesh.isVisible = true
+            } else boot.mesh.isVisible = false
+        })
+    }
+
+    function equipSword(swordToEquipName, onHand, parts) {
+
+        let toEquip = false
+        if(!swordMeshes.length) {
+            toEquip = createSword(swordToEquipName, parts, rHand)
+        }
+        swordMeshes.forEach(swrd => {
+            showHideSword(swrd.mesh, false)
+            if(swrd.name === swordToEquipName) toEquip = swrd
+        })
+        if(!toEquip) {
+            toEquip = createSword(swordToEquipName, parts, rHand)
+        }
+        if(!toEquip) return
+        showHideSword(toEquip.mesh, true)
+        if(onHand) toEquip.mesh.parent = rHand
+    }
+    function unEquip(itemType){
+        switch(itemType){
+            case "weapon":
+                swordMeshes.forEach(swrd => showHideSword(swrd.mesh, false))
+            break
+        }
+    }
     if(det.items.length){
         det.items.forEach(itm => {
             if(itm.itemCateg === "equipable"){
-                if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name, boots)
-                if(itm.itemType === "weapon" && itm.equiped) {
-                    const toEquip = createSword(scene, itm.name, itm.parts, rHand, swordMeshes)
-                    showHideSword(toEquip.mesh, true)
-                }
+                if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
+                if(itm.itemType === "weapon" && itm.equiped) createSword(itm.name, itm.parts, rHand)
             }
         })
     }
     if(isNpc) return { det, body, currentPlaceId: det.currentPlaceId, mode, anims: animationGroups}
+    
+    
+    const bloodps = createBloodSplatter(scene)
+    bloodps.ps.emitter = spineBone
+
+    // const sec = createBloodParticle(scene)
+    // sec.emitter =spineBone
+    // bloodps.position.y += 1
+    
+    
     return {
         det,
         owner: det.owner,
@@ -135,10 +150,12 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         mode,
         _moving,
         _minning,
-        equipSword: (name, onHand, parts, _rHand) => equipSword(name, onHand, parts, _rHand ?? rHand, scene, swordMeshes),
-        equipBoots: (name) => equipBoots(name, boots),
+        equipSword,
+        equipBoots,
+        unEquip,
+        swordMeshes,
 
-        swordMeshes
+        bloodps,
     }
 }
 
@@ -258,6 +275,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         belts,
         cloaks,
         boots,
+        spineBone
     }
 }
 function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {

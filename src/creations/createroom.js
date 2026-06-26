@@ -22,6 +22,7 @@ import { openCloseInteractBtn } from '../tools/popupUI';
 
 import { startQuestionare } from '../components/conversations';
 import { checkIfTokenSaved } from "../tools/tools"
+import { getAllSounds } from '../components/soundSystem';
 
 const WALL_HEIGHT    = 0.5;
 const WALL_THICKNESS = 0.3;
@@ -132,7 +133,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     if (exitPlaceDetail && characterBody) {
         const exitTrigger = MeshBuilder.CreateBox(`${name}_exit_trig`, { width: width/4, height: 2, depth: 1/2 }, scene)
         exitTrigger.position = new Vector3(0, 1, -halfH + 0.5)
-        exitTrigger.isVisible = true
+        exitTrigger.isVisible = false
         exitTrigger.isPickable = false
 
         onIntersecEnterTrig(exitTrigger, characterBody, scene, () => {
@@ -150,9 +151,11 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
                 charState.y = tcpCharPlaceMD.spawn.y
                 charState.z = tcpCharPlaceMD.spawn.z
                 console.log(tcpCharPlaceMD)
+                getAllSounds().normalDoorOC.play()
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
                 console.log(newCharData)
                 exitScene(false)
+                
                 await changeScene("whatever")
             })
         })

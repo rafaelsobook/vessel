@@ -5,6 +5,7 @@ import {getIsSocketOn } from "../sockets/worldsocket.js";
 import { findMyCurrentPlace } from "../states/placestates.js";
 import { initiateCharacter } from "../charactersystem/characterstate.js";
 import { checkIfTokenSaved } from "../tools/tools.js";
+import { getAllSounds } from "../components/soundSystem.js";
 
 export default async function loadScene(){
 
@@ -25,5 +26,7 @@ export default async function loadScene(){
             sceneDetail = await areaScene(placeDetail)
         break
     }
+
+    getAllSounds().enteredS.play()
     if(sceneDetail) return sceneDetail
 }

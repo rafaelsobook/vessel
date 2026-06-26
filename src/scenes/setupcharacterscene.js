@@ -10,6 +10,7 @@ import { playAnim, stopAllAnim } from "../tools/animation";
 import { checkIfTokenSaved } from "../tools/tools.js";
 import { createRoom } from "../creations/createroom.js";
 import { metaDatas } from "../constants/localroomdb.js"
+import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
 
 export async function setupCharacterScene(engine){
     let toSave = {
@@ -187,7 +188,7 @@ export async function setupCharacterScene(engine){
         if (selectedCategory === "pants") toSave = { ...toSave, pantsColor: { r, g, b } }
         if (selectedCategory === "skin")  toSave = { ...toSave, skinColor:  { r, g, b } }
     })
-
+    disableEnableAttackButtonsContainer(false, true)
     return {scene, isSocketOn: false}
 }
 

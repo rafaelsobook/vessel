@@ -1,6 +1,6 @@
 // roomdb.js
 import { ActionManager, MeshBuilder, Vector3 } from '@babylonjs/core';
-import { getCharState, setCanPress, setCharStateMode } from '../charactersystem/characterstate.js';
+import { getCharState, setCanPress, setCharStateMode, setQuestCompleted } from '../charactersystem/characterstate.js';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager.js';
 import { generateArea } from '../generate-datas/genareamd.js';
 import { generateBSPDungeon } from '../generate-datas/generatebsp.js';
@@ -12,6 +12,7 @@ import { playAnim } from '../tools/animation.js';
 import { disableEnableAttackButtonsContainer } from '../charactersystem/uimanagement.js';
 import { faceForward, getControllerObjects } from '../controllers/inputMovement.js';
 import { createMagicCircle } from '../creations/magiccircles.js';
+import { getAllSounds } from '../components/soundSystem.js';
 
 export const metaDatas = [
 
@@ -58,6 +59,7 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null
             },
+            
         ],
         roomPaths: [
             {
@@ -160,6 +162,19 @@ export const metaDatas = [
         optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
+                name: "roomdoor",
+                position: {x: 0, y: 0, z: -5.5},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/door.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
                 name: "bed",
                 position: {x: 1, y: 0, z: 2},
                 scale: null,
@@ -212,7 +227,11 @@ export const metaDatas = [
                     opt: {mass: 0},
                     type: "box"
                 },
-                functionBeforeMerge: null // this table has a transform node we don't need, so dispose it before merging
+                functionBeforeMerge: null, // this table has a transform node we don't need, so dispose it before merging
+                cbAfterMade: (scene) => {
+                    
+                    getAllSounds().bonfireS.play()
+                }
             },
             {
                 itemId: randNum(1000,9999).toString(),
@@ -222,7 +241,8 @@ export const metaDatas = [
                 rotation:0,
                 glbPath: null,
                 physics: null,
-                functionBeforeMerge: null // this table has a transform node we don't need, so dispose it before merging
+                functionBeforeMerge: null, // this table has a transform node we don't need, so dispose it before merging
+
             }
         ],
         exit: "south",
@@ -262,11 +282,37 @@ export const metaDatas = [
                 placeId: 10,
                 name: "room",
                 areaType: "room",
-                pos: {x: 6, y: 0.5, z: 5},
+                pos: {x: 6, y: 0.5, z: 5.25},
                 startingPos: {x: 0, y: 1, z: -2}
             }
         ],
         optionalObjects: [
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "roomdoor",
+                position: {x: 6, y: 0, z: 6.1},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/door.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "guildgate",
+                position: {x: 0, y: 0, z: -7},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/guilddoor.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
             {
                 itemId: randNum(0,9999).toString(),
                 name: "guildtable",
@@ -352,17 +398,20 @@ export const metaDatas = [
 
                             let timeoutnums = 1000
                             let discPosY = 2
-                            elementNames.forEach(name => {
+                            charState.aptitude.forEach(apt => {
+                                console.log(apt)
                                 const capturedY = discPosY
                                 setTimeout(() => {
-                                    createMagicCircle({x: 1, y: capturedY, z: 3.1}, getSceneDet().scene, name, 2, 4000)
+                                    createMagicCircle({x: 1, y: capturedY, z: 3.1}, getSceneDet().scene, `apt_${apt.element}`, 2, 4000)
                                 }, timeoutnums)
                                 timeoutnums += 2000
                                 discPosY += 0.25
                             })
 
                             setTimeout( async () => {
-                                touchCrystalQuest.questRequirements.completed = true
+                                // touchCrystalQuest.questRequirements.completed = true
+                                const isQuestExist = setQuestCompleted("touchTheCrystal")
+                                if(!isQuestExist) return console.log("quest completion failed")
                                 // save to database
 
                                 setCharStateMode("idle")

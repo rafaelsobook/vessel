@@ -9,9 +9,10 @@ import { getHeroDetail } from "../serverApiFun/getHeroDetail.js";
 import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
-import { getPlayersOnScene } from "../sockets/worldsocket.js";
+import { getPlayersOnScene, setPlayerMode } from "../sockets/worldsocket.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord } from "./createcharacter.js";
+import { getAllSounds } from "../components/soundSystem.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -27,6 +28,8 @@ const hungStat = document.querySelector(".hungStat")
 const restStat = document.querySelector(".restStat")
 // negative stats
 const negativeStatCont = document.querySelector(".negative-stats")
+
+let GAMEOVER = false
 let characterState = null;
 let canPress = false
 let outsideRoomPosition = null
@@ -39,6 +42,10 @@ let hungerInterval
 let restInterval
 
 let addStats = {
+    totalHpRegen: 0,
+    totalMpRegen: 0,
+    totalSpRegen: 0,
+
     additionalHp:0, // worked
     additionalMp:0,
     additionalSp:0, // worked
@@ -55,6 +62,52 @@ let addStats = {
 } 
 export function getCharState(_characterDetail){
     return characterState
+}
+export function getTotal(){
+    summarizeStats()
+
+    const hp = characterState.hp + addStats.additionalHp
+    const mp = characterState.mp + addStats.additionalMp
+    const sp = characterState.sp + addStats.additionalSp
+
+    const maxHp = characterState.maxHp + addStats.additionalHp
+    const maxMp = characterState.maxMp + addStats.additionalMp
+    const maxSp = characterState.maxSp + addStats.additionalSp
+
+    const hpRegen = addStats.totalHpRegen
+    const mpRegen = addStats.totalMpRegen
+    const spRegen = addStats.totalSpRegen
+
+    return { hp,maxHp, mp,maxMp, sp,maxSp, hpRegen, mpRegen, spRegen, }
+}
+export function getTotalDefense(){
+    let totalD = characterState.stats.dex*2
+    // log(`normal def ${totalD}`)
+    characterState.items.forEach(itm => {
+        if(itm.itemCateg === 'equipable' && itm.equiped){
+            if(itm.equipAbilities.def){
+                totalD+=itm.equipAbilities.def
+            }
+        }
+    })
+
+    const abilityDef = addStats.additionalDefense
+
+    if(abilityDef && abilityDef.toAdd){
+        totalD += abilityDef.toAdd
+    }
+    if(abilityDef && abilityDef.percent){
+        const additionalDefByPercent = totalD*abilityDef.percent
+        totalD += additionalDefByPercent 
+    }
+    // log(`total def ${totalD}`)
+    return totalD
+}
+
+export function getTotalAtkSpd(){
+    let totalAtkSpd = characterState.stats.atkSpd
+    if(addStats.additionalAtkSpd) totalAtkSpd += addStats.additionalAtkSpd
+    return totalAtkSpd
 }
 export function setCharState(_characterDetail){
     characterState = _characterDetail;
@@ -86,35 +139,7 @@ export function getCharSocket(){
 export function getAdditionalsFromAbilities(){
     return addStats
 }
-export function getTotalDefense(){
-    let totalD = characterState.stats.dex*2
-    // log(`normal def ${totalD}`)
-    characterState.items.forEach(itm => {
-        if(itm.itemCateg === 'equipable' && itm.equiped){
-            if(itm.equipAbilities.def){
-                totalD+=itm.equipAbilities.def
-            }
-        }
-    })
 
-    const abilityDef = addStats.additionalDefense
-
-    if(abilityDef && abilityDef.toAdd){
-        totalD += abilityDef.toAdd
-    }
-    if(abilityDef && abilityDef.percent){
-        const additionalDefByPercent = totalD*abilityDef.percent
-        totalD += additionalDefByPercent 
-    }
-    // log(`total def ${totalD}`)
-    return totalD
-}
-
-export function getTotalAtkSpd(){
-    let totalAtkSpd = characterState.stats.atkSpd
-    if(addStats.additionalAtkSpd) totalAtkSpd += addStats.additionalAtkSpd
-    return totalAtkSpd
-}
 // ACTIVATIONS
 export function activateLifeSystem(){
     const {name, lvl} = characterState
@@ -126,33 +151,42 @@ export function activateLifeSystem(){
     openCloseLifeDisplay(true)
     // HP
     hpRegenInterval = setInterval( () => {
+        if(GAMEOVER) return
         const totalCLife = characterState.hp+addStats.additionalHp
         const totalMaxLife = characterState.maxHp+addStats.additionalHp
         if(totalCLife <= 0) return clearIntervals()
-        if(totalCLife <= totalMaxLife) characterState.hp += characterState.regens.hp
+        if(totalCLife <= totalMaxLife) characterState.hp += getTotal().hpRegen
         if(totalCLife > totalMaxLife) characterState.hp = characterState.maxHp
         updateHP_UI()
         
     }, 700)
     // MANA
     mpRegenInterval = setInterval( () => {
-        if(characterState.mp < characterState.maxMp) characterState.mp += characterState.regens.mana
+        if(GAMEOVER) return
+        const totalCurrMp = getTotal().mp
+        const totalMaxMp = getTotal().maxMp
+        if(totalCurrMp < characterState.maxMp) characterState.mp += getTotal().mpRegen
         if(characterState.mp > characterState.maxMp) characterState.mp = characterState.maxMp
         updateMP_UI()
     }, 700)
     // STAMINA
     spRegenInterval = setInterval( () => {
-        if(characterState.sp < characterState.maxSp) characterState.sp += characterState.regens.sp
+        if(GAMEOVER) return
+        if(characterState.sp < characterState.maxSp) {
+            characterState.sp += getTotal().spRegen
+        }
         if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
         updateSP_UI()
     }, 500)
     updateHunger()
     
     hungerInterval = setInterval(() => {
+        if(GAMEOVER) return
         updateHunger()
     }, 40.5 * 1000)
     // I PUT THE STATS DEDCUTION HERE
     restInterval = setInterval(() => {
+        if(GAMEOVER) return
         if(characterState.survival.sleep > 0) characterState.survival.sleep-=.2
         if(characterState.survival.sleep < 0.2) characterState.survival.sleep = 0
         updateSurvival_UI();
@@ -189,6 +223,7 @@ export function activateLifeSystem(){
     }, 6.2 * 1000)
 }
 export function summarizeStats(){
+    if(GAMEOVER) return
     const {hp,maxHp,mp, maxMp,sp,maxSp,stats} = characterState
 
     const {
@@ -203,6 +238,7 @@ export function summarizeStats(){
         totalRegens,
         resistance
     } = getMyAbilitiesInfo()
+
     if(totalHpPercent){
         addStats.additionalHp = maxHp*totalHpPercent   
     }
@@ -241,6 +277,10 @@ export function summarizeStats(){
     if(totalDefense.percent){
         addStats.additionalDefense.percent = totalDefense.percent
     }
+
+    addStats.totalHpRegen = totalRegens.hp
+    addStats.totalMpRegen = totalRegens.mp
+    addStats.totalSpRegen = totalRegens.sp
 }
 export async function initiateCharacter(_accountDet){
     characterState = await getHeroDetail(_accountDet)
@@ -325,7 +365,8 @@ export async function deductHp(dmg, effects, enemyStats){
     if(characterState.mp <= 0) characterState.mp = 0
     if(characterState.sp+addStats.additionalSp <=0) characterState.sp = 0
     if(characterState.hp+addStats.additionalHp <= 0) {
-        // await gameOver()
+        clearIntervals()
+        await gameOver()
         return true;
     }
     updateHpMpSp_UI()
@@ -346,6 +387,7 @@ export function addEffectsOnStat(effect){
     updateStatUI()
 }
 export async function gameOver(){
+    GAMEOVER = true
     setCanPress(false)
     disableEnableAttackButtonsContainer(false)
     closeInventory()
@@ -370,7 +412,7 @@ export async function gameOver(){
     setCanPress(false)
     updateHPMPSP_UI_ALLZERO()
 
-    const res =await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
+    const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
     // characterState.deadCount++
     // characterState.isDead=true;
     // await updateMyDetailsOL({...characterState,
@@ -396,8 +438,12 @@ export function updateHP_UI(){
     lifeCap.innerHTML = `${Math.floor(lifeCHp)}/${Math.floor(lifeFullHp)}`
 }
 export function updateMP_UI(){
-    manaBar.style.width = `${(characterState.mp/characterState.maxMp) * 100}%`
-    manaCap.innerHTML = `${Math.floor(characterState.mp)}/${characterState.maxMp}`
+    let manaCurrent = getTotal().mp
+    const manaTotal = getTotal().maxMp
+    if(manaCurrent < manaTotal) characterState.mp += getTotal().mpRegen
+    if(manaCurrent <= 0) manaCurrent = 0
+    manaBar.style.width = `${(manaCurrent/manaTotal) * 100}%`
+    manaCap.innerHTML = `${Math.floor(manaCurrent)}/${Math.floor(manaTotal)}`
 }
 export function updateSP_UI(){
     const lifeCSp = characterState.sp+addStats.additionalSp
@@ -466,6 +512,17 @@ export function defeatedAmonster(data){
     // }
     // getSocket().emit('respawnEnemy', data)
 }
+// QUEST CLEARING
+export function setQuestCompleted(questName){
+    let isQuestExist = false
+     characterState.quests.forEach(qst => {
+        if(qst.qName === questName){
+            isQuestExist = true
+            qst.questRequirements.completed = true
+        }
+    })
+    return isQuestExist;
+}
 // SAVING
 export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState, doNotSavePlace){
     // some tips in using this function if you are already changing your state
@@ -488,10 +545,20 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
 //  Mode status changes 
 export function setCharStateMode(_newMode){
     characterState.mode = _newMode; // idle // structed // paralized 
-    setPlayerMode(_newMode, characterState.owner)
-}
-export function setPlayerMode(_newMode, ownerId){
-    const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
-    if(!player) return;
-    player.mode = _newMode
+    // setPlayerMode(_newMode, characterState.owner)
+
+    switch(_newMode){
+        case "idle":
+            getAllSounds().runningS.setPlaybackRate(0.91)
+            getAllSounds().woodrunS.setPlaybackRate(0.7)
+        break
+        case "fighting":
+            
+            getAllSounds().runningS.setPlaybackRate(1.15)
+            getAllSounds().woodrunS.setPlaybackRate(1)
+        break
+    }
+
+    console.log(getAllSounds().woodrunS)
+    setPlayerMode(characterState.owner, _newMode)
 }
