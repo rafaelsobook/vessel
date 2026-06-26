@@ -125,9 +125,6 @@ export function activateBtnOnce(){
                     } 
                     positionAtkCollider({ reach: 1})
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1
-                    console.log(attackAnimName)
-
-
                 break
                 case "throw":
                     // if(this.myChar.mode !== "weapon") return this._statPopUp("You must hold a weapon")

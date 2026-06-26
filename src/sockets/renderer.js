@@ -1,6 +1,6 @@
 import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene } from "./worldsocket";
 import { getCharState } from "../charactersystem/characterState.js";
-import { playAnim } from "../tools/animation.js";
+import { playAnim, ANIM_STATE } from "../tools/animation.js";
 import { getGameStatus, getSceneDet } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
 import { checkDistance } from "../creations/creationTools.js";
@@ -35,49 +35,32 @@ let renderCallback = function () {
     getPlayersOnScene().forEach(player => {
 
         if(charState.currentPlace.placeId !== player.currentPlaceId) return
-        if(!player.body) return 
-        const isActionPlaying = player.anims.some(anim =>
-            (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("attack") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
-        )
-        player.anims.forEach(anim => {
-            // if(anim.isPlaying) console.log(anim.name)
-        })
-        if (!isActionPlaying) {
-            if(player._attacking) return
-            
-            if(player._moving){
-                // return
-                switch(player.mode){
-                    case "idle":
-                        playAnim(player.anims, "walk")
-                    break
-                    case "fighting":
-                        playAnim(player.anims, "running")
-                    break
-                }
-                return
-            }
+        if(!player.body) return
+        if(!player.characterAnimations) return
+
+        player.characterAnimations.tickBlend()
+
+        if(player._attacking) return
+
+        if(player._moving){
             switch(player.mode){
                 case "idle":
-                    playAnim(player.anims, "idle")
+                    player.characterAnimations.setState(ANIM_STATE.WALK, 8)
                 break
                 case "fighting":
-                    playAnim(player.anims, "combatIdle")
+                    player.characterAnimations.setState(ANIM_STATE.RUNNING, 8)
                 break
             }
-            // const loopAnim = player.anims.find(anim => anim.name.toLowerCase() === player.mode.toLowerCase())
-            // if (loopAnim && !loopAnim.isPlaying) {
-            //     console.log(player.mode)
-            //     playAnim(player.anims, player.mode)
-            //     switch(player.mode){
-            //         case "idle":
-            //             playAnim(player.anims, "idle")
-            //         break
-            //         case "fighting":
-            //             playAnim(player.anims, "combatIdle")
-            //         break
-            //     }
-            // }
+            return
+        }
+
+        switch(player.mode){
+            case "idle":
+                player.characterAnimations.setState(ANIM_STATE.IDLE, 8)
+            break
+            case "fighting":
+                player.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE, 8)
+            break
         }
     })
     getEnemiesOnScene().forEach(en => {

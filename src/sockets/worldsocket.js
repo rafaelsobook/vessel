@@ -365,7 +365,7 @@ export function activateOnSocketListeners(socket){
         player.body.position.y = pos.y
         player.body.position.z = pos.z
 
-        player.body.lookAt(new Vector3(dirTarg.x, dirTarg.y, dirTarg.z),0,0,0)
+        player.body.lookAt(new Vector3(dirTarg.x, player.body.position.y, dirTarg.z),0,0,0)
         // player.body.rotation.y = Math.atan2(dx, dz)
         // player.body.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
 
@@ -385,8 +385,6 @@ export function activateOnSocketListeners(socket){
         player.body.position.z = pos.z
 
         player.body.lookAt(new Vector3(dirTarg.x, dirTarg.y, dirTarg.z),0,0,0)
-        stopAnim(player.anims, "running")
-        stopAnim(player.anims, "walk")
         // player.body.rotation.y = Math.atan2(dx, dz)
         // player.body.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
 

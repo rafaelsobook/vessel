@@ -17,6 +17,7 @@ import { getPlayersOnScene, getSocketContainers } from '../sockets/worldsocket';
 import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
 import { createBloodParticle, createBloodSplatter } from '../tools/particlesystem';
+import { CharacterAnimations } from '../tools/animation';
 
 let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -123,9 +124,12 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             }
         })
     }
-    if(isNpc) return { det, body, currentPlaceId: det.currentPlaceId, mode, anims: animationGroups}
-    
-    
+    if(isNpc) return { det, body, currentPlaceId: det.currentPlaceId, mode, anims: animationGroups }
+
+    const characterAnimations = new CharacterAnimations(animationGroups)
+    characterAnimations.playAll()
+
+
     const bloodps = createBloodSplatter(scene)
     bloodps.ps.emitter = spineBone
 
@@ -145,6 +149,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         aggregate,
         nameMesh,
         anims: animationGroups,
+        characterAnimations,
         rHand,
         root,
         mode,

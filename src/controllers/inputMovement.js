@@ -3,7 +3,7 @@ import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
 import { getPlayersOnScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
-import { playAnim, stopAllAnim } from '../tools/animation';
+import { playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound } from '../components/soundSystem';
@@ -58,8 +58,8 @@ function setupControls(scene, allsounds) {
     }else runsound = allsounds.runningS
     
 
-    let walkSpeed = 1;
-    let sprintSpeed = 20;
+    let walkSpeed = 0.8;
+    let sprintSpeed = 2;
     let currentSpeed = walkSpeed;
     let isMoving = false;
 
@@ -105,11 +105,7 @@ function setupControls(scene, allsounds) {
             }
             if(!runsound.isPlaying) runsound.play()
             if(!value) {
-                // stopAnim(player.anims, "running")
-                // stopAnim(player.anims, "walk")
-                stopAllAnim(player.anims)
                 if(runsound.isPlaying) runsound.stop()
-                // playAnim(player.anims, "runstopped1")
             }
         }
     }

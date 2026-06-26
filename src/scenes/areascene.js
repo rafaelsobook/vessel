@@ -121,7 +121,7 @@ export async function areaScene(placeDetail){
 
 
             if (model.material instanceof MultiMaterial) {
-                console.log(`[${item.name}] MultiMaterial with ${model.material.subMaterials.length} sub-materials — setting each unlit`)
+                // console.log(`[${item.name}] MultiMaterial with ${model.material.subMaterials.length} sub-materials — setting each unlit`)
                 model.material.subMaterials.forEach(sub => {
                     if (sub instanceof PBRMaterial) sub.unlit = true
                     else if (sub instanceof StandardMaterial) sub.disableLighting = true
