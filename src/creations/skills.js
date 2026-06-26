@@ -59,13 +59,16 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
         stuck: false
     }
 
+    let hasHit = false
     const players = getPlayersOnScene()
     players.forEach(pl => {
         const enterAction = onIntersecEnterTrig(instance, pl.bodytarget, scene, () => {
+            if(hasHit) return
+            hasHit = true
             getAllSounds().struckS.play()
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             theProjectile.spd = 2
-            removeIntersecTrig(enterAction)
+            removeIntersecTrig(instance, enterAction)
             setTimeout(() => {  
                 theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
                 if(!theProjectile) return

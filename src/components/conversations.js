@@ -5,7 +5,7 @@ import  Conversation from "../tools/rpgconv"
 import { getPlayersOnScene } from "../sockets/worldsocket";
 import { getCharState, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate";
 import { playAnim } from "../tools/animation";
-import { checkIfTokenSaved, playAnimWithCallback } from "../tools/tools";
+import { checkIfTokenSaved } from "../tools/tools";
 import { disableEnableAttackButtonsContainer, hideShowAllScreenUI } from "../charactersystem/uimanagement";
 
 const conv = new Conversation(document, 30)
@@ -40,12 +40,11 @@ export function startMyOwnSpeech(){
     setCanPress(false)
     hideShowAllScreenUI()
 
-    playAnimWithCallback(mycharacter.anims, ownSpeech.animationName, false, () => {
+    mycharacter.characterAnimations.playAction(mycharacter.anims, ownSpeech.animationName, 1, () => {
         mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
         if(!mycharacter) return
         setCharStateMode("idle")
     })
-    // playAnim(mycharacter.anims, ownSpeech.animationName)
     conv.startConversation(ownSpeech.speeches, 0, () => {
         hideShowAllScreenUI()
         ownSpeech.cb()

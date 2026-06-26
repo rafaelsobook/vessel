@@ -123,7 +123,7 @@ export default function createEnemy(scene, det) {
     function attack(){
         console.log("attacking")
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-        if (getGameStatus() === "loading") return
+        if (getGameStatus() === "loading") return console.log("game status loading")
         if (!thisEnemy) return clearInterval(intervalWillAttack)
         if (thisEnemy._targetId) {
             const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)

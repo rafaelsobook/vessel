@@ -145,6 +145,7 @@ function setupControls(scene, allsounds) {
                 const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
                 pos = pl.body.getAbsolutePosition()
                 console.log(`x: ${pos.x}, z: ${pos.z}`)
+                console.log(charState)
             break;
         }
 

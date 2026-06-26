@@ -8,6 +8,7 @@ import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
 import { positionAtkCollider } from "./createMyCharacter.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
+import { getGameStatus } from "../main/main.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -61,6 +62,7 @@ export function activateBtnOnce(){
     let swordAnimNum = 1
     walkRunBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
+            if(getGameStatus() === "gameover" || getGameStatus() === "loading") return
             const btnName = e.target.className.split(" ")[1]
             const isSocketOn = getIsSocketOn()
             
@@ -94,10 +96,12 @@ export function activateBtnOnce(){
                     const spToDeduct = (dmgDetails.physicalDmg/2) + (dmgDetails.weaponDmg/4)
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
-                    }, 500)
+                    }, 700)
                     if(getTotal().sp < spToDeduct) {
                         // openClosePopup("no stamina", true, 1000)
                         popStatusEffect("no stamina", "yellow")
+                        console.log("physical damage ", dmgDetails.physicalDmg)
+                        console.log("weapon damage ", dmgDetails.weaponDmg)
                         return console.log("not enough sp")
                     }
                     

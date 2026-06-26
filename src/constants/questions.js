@@ -233,7 +233,7 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "Receive some of my Unique Abilities !!!!"
+                message: "Receive this extra abilities"
             }
         ],
         answers: [],
@@ -246,21 +246,24 @@ export const questions = [
             const scene = getSceneDet().scene
             spawnProjectile({x:0,y:-2,z:3}, {x:charPos.x, y:charPos.y+0.5, z:charPos.z}, "yellow", scene, "default", () => {
                 
-                playAnimWithCallback(character.anims, "hit_struct1", false, () => {
-                    const disc = spawnMagicCircle(new Vector3(charPos.x, 0.05, charPos.z), scene, "divine1", 0.8)
-                    stopAllAnim(character.anims)
-                    setCharStateMode("structed")
-                    setTimeout(() => {
-                        receiveAbilities(5, 10)
-                        setTimeout(() => { 
-                            character = getPlayersOnScene().find(player => player.owner === charState.owner)
-                            setCanPress(true)
-                            stopAllAnim(character.anims)
-                            setCharStateMode("idle")
-                            // console.log(`animation ${ownSpeech.animationName} finished playing`)
-                        }, 2000)
-                    }, 3000)
-                })
+                console.log("played")
+                const disc = spawnMagicCircle(new Vector3(charPos.x, 0.05, charPos.z), scene, "divine1", 0.8)
+                character.characterAnimations.playAction(character.anims, "hit_struct1", 1)
+
+                setCharStateMode("structed")
+                setTimeout(() => {
+                    receiveAbilities(5, 10)
+                    setTimeout(() => { 
+                        character = getPlayersOnScene().find(player => player.owner === charState.owner)
+                        setCanPress(true)
+                        // stopAllAnim(character.anims)
+                        setCharStateMode("idle")
+                        // console.log(`animation ${ownSpeech.animationName} finished playing`)
+                    }, 2000)
+                }, 5000)
+                // playAnimWithCallback(character.anims, "hit_struct1", false, () => {
+                    
+                // })
             }, 6500)
         }
     },
@@ -270,7 +273,7 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "I sense something powerful from you .."
+                message: "I sense POWER from you .."
             },
             {
                 name: "kamisama",
@@ -280,7 +283,7 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "..."
+                message: "...Eh Eheemm"
             },
             {
                 name: "kamisama",
@@ -292,6 +295,7 @@ export const questions = [
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
                 obtain(swordItem)
+                obtain(bootsItem)
                 startQuestionare(2)
                 showHideIcons("block")
             }, 1000)

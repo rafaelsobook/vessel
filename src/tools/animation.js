@@ -13,6 +13,8 @@ export const ANIM_STATE = {
     WALK:        'walk',
     COMBAT_IDLE: 'combatIdle',
     RUNNING:     'running',
+    STRUCTED:    'structed',
+    CASTING:    'casting',
 }
 
 export class CharacterAnimations {
@@ -29,6 +31,8 @@ export class CharacterAnimations {
             [ANIM_STATE.WALK]:        find('walk'),
             [ANIM_STATE.COMBAT_IDLE]: find('combatIdle'),
             [ANIM_STATE.RUNNING]:     find('running'),
+            [ANIM_STATE.STRUCTED]:    find('structed'),
+            [ANIM_STATE.CASTING]:    find('casting'),
         }
 
         const missing = Object.entries(this._anims).filter(([,v]) => !v).map(([k]) => k)
@@ -100,10 +104,10 @@ export class CharacterAnimations {
         if (this._anims[ANIM_STATE.RUNNING]) this._anims[ANIM_STATE.RUNNING].speedRatio = ratio
     }
 
-    // Play a one-shot action animation (attack, hit, etc.).
+    // Play a one-shot action animation (attack, hit, cutscene, etc.).
     // Suppresses all looping weights while active, restores them on completion.
     // Returns false if the animation name isn't found.
-    playAction(allAnims, animName, speedRatio = 1) {
+    playAction(allAnims, animName, speedRatio = 1, onComplete = null) {
         const actionAnim = allAnims.find(a => a.name.toLowerCase() === animName.toLowerCase())
         if (!actionAnim) return false
 
@@ -124,6 +128,7 @@ export class CharacterAnimations {
             // Restore whatever looping state we were in.
             const loopAnim = this._anims[this._state]
             if (loopAnim) loopAnim.weight = 1
+            if (onComplete) onComplete()
         })
 
         return true

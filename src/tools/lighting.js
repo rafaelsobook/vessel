@@ -34,9 +34,9 @@ export function setupLighting(scene, placeDetail) {
         }
     })            // no specular from ambient fill
 
-    // scene.fogMode = Scene.FOGMODE_EXP;
-    // scene.fogColor = new Color3(fogColor.r,fogColor.g,fogColor.b);
-    // scene.fogDensity = fogDensity;
+    scene.fogMode = Scene.FOGMODE_EXP;
+    scene.fogColor = new Color3(fogColor.r,fogColor.g,fogColor.b);
+    scene.fogDensity = fogDensity;
     // Ambient
     // scene.ambientColor = new Color3(0.1, 0.25, 0.15);
 

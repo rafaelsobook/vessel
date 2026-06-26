@@ -13,6 +13,7 @@ import { getPlayersOnScene, setPlayerMode } from "../sockets/worldsocket.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
+import { getGameStatus, setGameStatus } from "../main/main.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -29,7 +30,7 @@ const restStat = document.querySelector(".restStat")
 // negative stats
 const negativeStatCont = document.querySelector(".negative-stats")
 
-let GAMEOVER = false
+
 let characterState = null;
 let canPress = false
 let outsideRoomPosition = null
@@ -151,7 +152,7 @@ export function activateLifeSystem(){
     openCloseLifeDisplay(true)
     // HP
     hpRegenInterval = setInterval( () => {
-        if(GAMEOVER) return
+        if(getGameStatus() === "gameover") return
         const totalCLife = characterState.hp+addStats.additionalHp
         const totalMaxLife = characterState.maxHp+addStats.additionalHp
         if(totalCLife <= 0) return clearIntervals()
@@ -162,7 +163,7 @@ export function activateLifeSystem(){
     }, 700)
     // MANA
     mpRegenInterval = setInterval( () => {
-        if(GAMEOVER) return
+        if(getGameStatus() === "gameover") return
         const totalCurrMp = getTotal().mp
         const totalMaxMp = getTotal().maxMp
         if(totalCurrMp < characterState.maxMp) characterState.mp += getTotal().mpRegen
@@ -171,7 +172,7 @@ export function activateLifeSystem(){
     }, 700)
     // STAMINA
     spRegenInterval = setInterval( () => {
-        if(GAMEOVER) return
+        if(getGameStatus() === "gameover") return
         if(characterState.sp < characterState.maxSp) {
             characterState.sp += getTotal().spRegen
         }
@@ -181,12 +182,12 @@ export function activateLifeSystem(){
     updateHunger()
     
     hungerInterval = setInterval(() => {
-        if(GAMEOVER) return
+        if(getGameStatus() === "gameover") return
         updateHunger()
     }, 40.5 * 1000)
     // I PUT THE STATS DEDCUTION HERE
     restInterval = setInterval(() => {
-        if(GAMEOVER) return
+        if(getGameStatus() === "gameover") return
         if(characterState.survival.sleep > 0) characterState.survival.sleep-=.2
         if(characterState.survival.sleep < 0.2) characterState.survival.sleep = 0
         updateSurvival_UI();
@@ -223,7 +224,7 @@ export function activateLifeSystem(){
     }, 6.2 * 1000)
 }
 export function summarizeStats(){
-    if(GAMEOVER) return
+    if(getGameStatus() === "gameover") return
     const {hp,maxHp,mp, maxMp,sp,maxSp,stats} = characterState
 
     const {
@@ -387,7 +388,7 @@ export function addEffectsOnStat(effect){
     updateStatUI()
 }
 export async function gameOver(){
-    GAMEOVER = true
+    setGameStatus("gameover")
     setCanPress(false)
     disableEnableAttackButtonsContainer(false)
     closeInventory()
@@ -558,7 +559,5 @@ export function setCharStateMode(_newMode){
             getAllSounds().woodrunS.setPlaybackRate(1)
         break
     }
-
-    console.log(getAllSounds().woodrunS)
     setPlayerMode(characterState.owner, _newMode)
 }

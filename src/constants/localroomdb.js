@@ -1,6 +1,6 @@
 // roomdb.js
 import { ActionManager, MeshBuilder, Vector3 } from '@babylonjs/core';
-import { getCharState, setCanPress, setCharStateMode, setQuestCompleted } from '../charactersystem/characterstate.js';
+import { getCharState, setCanPress, setCharState, setCharStateMode, setQuestCompleted } from '../charactersystem/characterstate.js';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager.js';
 import { generateArea } from '../generate-datas/genareamd.js';
 import { generateBSPDungeon } from '../generate-datas/generatebsp.js';
@@ -386,7 +386,10 @@ export const metaDatas = [
                         if(!touchCrystalQuest) return
                         openCloseInteractBtn("true", true, () => {
                             openCloseInteractBtn("none", false)
-                            setCharStateMode("casting")
+                            
+                            player.characterAnimations.playAction(player.anims, "cast", 1, () => {
+                                setCharStateMode("casting")
+                            })
                             setCanPress(false)
                             disableEnableAttackButtonsContainer(false, true)
                             playAnim(player.anims, "cast", false)

@@ -18,7 +18,7 @@ export function addRenderObservable(_scene){
 
 
 let renderCallback = function () {
-    if(getGameStatus() === "loading") return;
+    if(getGameStatus() === "loading" || getGameStatus() === "gameover") return;
     const charState = getCharState()
     if(!charState) return
 
@@ -45,10 +45,10 @@ let renderCallback = function () {
         if(player._moving){
             switch(player.mode){
                 case "idle":
-                    player.characterAnimations.setState(ANIM_STATE.WALK, 8)
+                    player.characterAnimations.setState(ANIM_STATE.WALK, 40)
                 break
                 case "fighting":
-                    player.characterAnimations.setState(ANIM_STATE.RUNNING, 8)
+                    player.characterAnimations.setState(ANIM_STATE.RUNNING, 40)
                 break
             }
             return
@@ -60,6 +60,12 @@ let renderCallback = function () {
             break
             case "fighting":
                 player.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE, 8)
+            break
+            case "structed":
+                player.characterAnimations.setState(ANIM_STATE.STRUCTED, 8)
+            break
+            case "casting":
+                player.characterAnimations.setState(ANIM_STATE.CASTING, 8)
             break
         }
     })
