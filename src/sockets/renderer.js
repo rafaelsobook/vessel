@@ -40,7 +40,7 @@ let renderCallback = function () {
 
         player.characterAnimations.tickBlend()
 
-        if(player._attacking) return
+        if(player._attacking || player.characterAnimations.isActionPlaying()) return
 
         if(player._moving){
             switch(player.mode){

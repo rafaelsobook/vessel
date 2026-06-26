@@ -99,4 +99,37 @@ export class CharacterAnimations {
         if (this._anims[ANIM_STATE.WALK])    this._anims[ANIM_STATE.WALK].speedRatio    = ratio
         if (this._anims[ANIM_STATE.RUNNING]) this._anims[ANIM_STATE.RUNNING].speedRatio = ratio
     }
+
+    // Play a one-shot action animation (attack, hit, etc.).
+    // Suppresses all looping weights while active, restores them on completion.
+    // Returns false if the animation name isn't found.
+    playAction(allAnims, animName, speedRatio = 1) {
+        const actionAnim = allAnims.find(a => a.name.toLowerCase() === animName.toLowerCase())
+        if (!actionAnim) return false
+
+        // Suppress all looping anims so they don't blend over the action.
+        Object.values(this._anims).forEach(anim => { if (anim) anim.weight = 0 })
+        this._blendFrom = null
+        this._blendTo   = null
+        this._isActionPlaying = true
+
+        actionAnim.stop()
+        actionAnim.speedRatio = speedRatio
+        actionAnim.play(false)
+        actionAnim.weight = 1
+
+        actionAnim.onAnimationEndObservable.addOnce(() => {
+            actionAnim.weight = 0
+            this._isActionPlaying = false
+            // Restore whatever looping state we were in.
+            const loopAnim = this._anims[this._state]
+            if (loopAnim) loopAnim.weight = 1
+        })
+
+        return true
+    }
+
+    isActionPlaying() {
+        return !!this._isActionPlaying
+    }
 }

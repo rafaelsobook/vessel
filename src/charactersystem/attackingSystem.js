@@ -21,33 +21,19 @@ export function attack(_attackInfo){
     const playerAttacked = getPlayersOnScene().find(pl => pl.owner === owner)
     if (!playerAttacked) return
     playerAttacked._attacking = true
-    playerAttacked.anims.forEach(anim => {
-        if (anim.name === animName) {
-            anim.stop()
-            anim.speedRatio = .8 + atkSpd
-            anim.play()
-            anim.onAnimationEndObservable.addOnce((evntData, evntState) => {
-                const plToanim =  getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
-                if (!plToanim) return
-                if (!plToanim._attacking) return
-                if (plToanim.isDead) return
-                // stopAnim(plToanim.anims, "Idle", true)
-                // playAnim(plToanim.anims, 'combatIdle', true, false, true)
-                playerAttacked._attacking = false
-            })
-            const duraInFrames = anim.to / 60 // anim.to is 49 || 60 if its a second
-            const wholeDura = duraInFrames / anim.speedRatio
-            // setTimeout(() => {
-            //     // log(data.atkSpd)
-            //     if (data.isMissed) {
-            //         poppingTextMesh(`missed`, "white", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight, z: -1 + Math.random() * 2 }, enemy.body, true)
-            //     } 
-            //     // else 
-            //     //     enemyIsHit(data.targetId, data, soundToPlay)
-            // }, wholeDura * 1000 / 3)
-            // anim.onAnimationEndObservable.clear()
-        }
-    })
+
+    const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, animName, 0.8 + atkSpd)
+
+    if (played) {
+        const actionAnim = playerAttacked.anims.find(a => a.name.toLowerCase() === animName.toLowerCase())
+        actionAnim.onAnimationEndObservable.addOnce(() => {
+            const plToanim = getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
+            if (!plToanim || plToanim.isDead) return
+            playerAttacked._attacking = false
+        })
+    } else {
+        playerAttacked._attacking = false
+    }
 }
 
 // tools

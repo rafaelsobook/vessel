@@ -91,7 +91,7 @@ export function activateBtnOnce(){
                     
                     const dmgDetails = calcDmg(charState)
 
-                    const spToDeduct = dmgDetails.physicalDmg + dmgDetails.weaponDmg
+                    const spToDeduct = (dmgDetails.physicalDmg/2) + (dmgDetails.weaponDmg/4)
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
                     }, 500)
