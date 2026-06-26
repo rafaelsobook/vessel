@@ -59,7 +59,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 2;
+    let sprintSpeed = 20;
     let currentSpeed = walkSpeed;
     let isMoving = false;
 

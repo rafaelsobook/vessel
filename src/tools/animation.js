@@ -1,6 +1,7 @@
 
 export function playAnim(animationGroups, name, loop = false){
     const anim = animationGroups.find(a => a.name.toLowerCase() === name.toLowerCase())
+    console.log("playing")
     if(anim) anim.play(loop)
     else console.warn("animation not found:", name)
 }
@@ -104,14 +105,11 @@ export class CharacterAnimations {
         if (this._anims[ANIM_STATE.RUNNING]) this._anims[ANIM_STATE.RUNNING].speedRatio = ratio
     }
 
-    // Play a one-shot action animation (attack, hit, cutscene, etc.).
-    // Suppresses all looping weights while active, restores them on completion.
-    // Returns false if the animation name isn't found.
-    playAction(allAnims, animName, speedRatio = 1, onComplete = null) {
+    // Pass freezeAfter = true to hold the last frame without restoring looping anims (e.g. death).
+    playAction(allAnims, animName, speedRatio = 1, onComplete = null, freezeAfter = false) {
         const actionAnim = allAnims.find(a => a.name.toLowerCase() === animName.toLowerCase())
         if (!actionAnim) return false
 
-        // Suppress all looping anims so they don't blend over the action.
         Object.values(this._anims).forEach(anim => { if (anim) anim.weight = 0 })
         this._blendFrom = null
         this._blendTo   = null
@@ -123,9 +121,9 @@ export class CharacterAnimations {
         actionAnim.weight = 1
 
         actionAnim.onAnimationEndObservable.addOnce(() => {
-            actionAnim.weight = 0
             this._isActionPlaying = false
-            // Restore whatever looping state we were in.
+            if (freezeAfter) return
+            actionAnim.weight = 0
             const loopAnim = this._anims[this._state]
             if (loopAnim) loopAnim.weight = 1
             if (onComplete) onComplete()

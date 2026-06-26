@@ -2,7 +2,7 @@ import { deductHp, getCharState } from "../charactersystem/characterstate"
 import { createCharacter } from "../charactersystem/createcharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
-import { attachCam } from "../tools/camera"
+import { attachCam, camShake } from "../tools/camera"
 import { getSpawnPos } from "../tools/position"
 import { Vector3 } from "@babylonjs/core"
 import { playAnim} from "../tools/animation"
@@ -225,7 +225,8 @@ export function activateOnSocketListeners(socket){
         // enemy animation
         playAnim(theEnemyToAttack.anims, data.attackAnimName)
         // player hit animation
-        playAnim(victimPlayer.anims, "hit1")
+        // playAnim(victimPlayer.anims, "hit1")
+        victimPlayer.characterAnimations.playAction(victimPlayer.anims, "hit1", 1)
         theEnemyToAttack.attackSound.play()
         // playAnim(theEnemyToAttack.anims, data.attackAnimName, false, ()=>{
         //     theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
@@ -236,17 +237,14 @@ export function activateOnSocketListeners(socket){
         if (victimPlayer.owner === charState.owner) {
             setTimeout( async () => {
                 // const vPos = victimPlayer.body.position;
-                // const enemPos = theEnemyToAttack.body.position;
-
-                const heroDistance = Vector3.Distance(victimPlayer.body.position, theEnemyToAttack.body.position)
-                if (heroDistance <= theEnemyToAttack.det.maxDistance) {
-                    const enemyAccuracy = theEnemyToAttack.det.stats.accuracy
-                    // if (charState.stats.accuracy >= Math.random() * enemyAccuracy * 15) return popStatusEffect('missed', "#f5f5f5")
-                    // camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
-                    // victimPlayer.punchedS.play()
-                    const isDead = await deductHp(data.dmg, data.effects)
-                    if (isDead) emitDied()
-                }
+                // const enemPos = theEnemyToAttack.body.position;               
+                // const enemyAccuracy = theEnemyToAttack.det.stats.accuracy
+                // if (charState.stats.accuracy >= Math.random() * enemyAccuracy * 15) return popStatusEffect('missed', "#f5f5f5")
+                camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
+                // victimPlayer.punchedS.play()
+                const isDead = await deductHp(data.dmg, data.effects)
+                if (isDead) emitDied()
+                
             }, data.atkSpd / 5)
         }
     })
@@ -480,7 +478,15 @@ export function playerDied(ownerId, currentPlaceId) {
     player._attacking = false
     player._minning = false
     player.mode = "death"
-    playAnim(player.anims, "death", false)
+
+    console.log(`${ownerId} placeId: ${currentPlaceId} died`)
+    player.anims.forEach(anim => {
+        anim.weight = 0
+        anim.stop()
+        console.log(anim.name)
+        if(anim.name === "death") anim.play()
+    })
+    player.characterAnimations.playAction(player.anims, "death", 1, null, true)
     enemiez.forEach(enem => {
         if (enem._targetId === ownerId) {
             enem._targetId = false
@@ -507,6 +513,14 @@ export function removePlayer({ ownerId, playerName, placeId }){
     if (characterState.currentPlace.placeId !== placeId) return
     playerToRemove.anims.forEach(anim => anim.dispose())
     playersOnScene = playersOnScene.filter(playr => playr.owner !== ownerId)
+
+    // remove this owner from the enemy target
+    enemiez.forEach(enem => {
+        if(enem._targetId === ownerId){
+            enem._targetId = null;
+            enem._attacking = false
+        }
+    })
 
     const { scene } = getSceneDet()
     const bodyOfPlayer = scene.getMeshByName(`player.${ownerId}`)

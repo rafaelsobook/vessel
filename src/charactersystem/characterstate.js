@@ -10,7 +10,7 @@ import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
 import { getPlayersOnScene, setPlayerMode } from "../sockets/worldsocket.js";
-import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, openCloseLifeDisplay } from "./uimanagement.js";
+import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
 import { getGameStatus, setGameStatus } from "../main/main.js";
@@ -178,7 +178,7 @@ export function activateLifeSystem(){
         }
         if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
         updateSP_UI()
-    }, 500)
+    }, 100)
     updateHunger()
     
     hungerInterval = setInterval(() => {
@@ -366,7 +366,6 @@ export async function deductHp(dmg, effects, enemyStats){
     if(characterState.mp <= 0) characterState.mp = 0
     if(characterState.sp+addStats.additionalSp <=0) characterState.sp = 0
     if(characterState.hp+addStats.additionalHp <= 0) {
-        clearIntervals()
         await gameOver()
         return true;
     }
@@ -388,9 +387,10 @@ export function addEffectsOnStat(effect){
     updateStatUI()
 }
 export async function gameOver(){
-    setGameStatus("gameover")
+    hideShowAllScreenUI(false)
+    // setGameStatus("gameover")
     setCanPress(false)
-    disableEnableAttackButtonsContainer(false)
+    disableEnableAttackButtonsContainer(false, true)
     closeInventory()
     closeAllPopupAndUI()
 
@@ -410,10 +410,9 @@ export async function gameOver(){
     characterState.survival.sleep = 0
     updateHpMpSp_UI()
     updateSurvival_UI()
-    setCanPress(false)
     updateHPMPSP_UI_ALLZERO()
 
-    const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
+    // const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
     // characterState.deadCount++
     // characterState.isDead=true;
     // await updateMyDetailsOL({...characterState,

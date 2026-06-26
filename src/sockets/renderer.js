@@ -18,7 +18,7 @@ export function addRenderObservable(_scene){
 
 
 let renderCallback = function () {
-    if(getGameStatus() === "loading" || getGameStatus() === "gameover") return;
+    if(getGameStatus() === "loading") return;
     const charState = getCharState()
     if(!charState) return
 
@@ -38,8 +38,8 @@ let renderCallback = function () {
         if(!player.body) return
         if(!player.characterAnimations) return
 
+        if(player.mode === "death") return
         player.characterAnimations.tickBlend()
-
         if(player._attacking || player.characterAnimations.isActionPlaying()) return
 
         if(player._moving){
@@ -70,16 +70,15 @@ let renderCallback = function () {
         }
     })
     getEnemiesOnScene().forEach(en => {
+        if(!en) return
         if (en._isMoving && en._targetId) {
             const targetPlayer = getSceneDet().scene.getMeshByName(`player.${en._targetId}`)
             if(targetPlayer){
-
-
                 const enPos = en.body.position.clone()
                 const targPos = targetPlayer.position
 
                 const dist = checkDistance(new Vector3(enPos.x, targPos.y, enPos.z), targPos)
-                if(dist <= 0.25) return console.log(dist)
+                if(dist < en.det.maxDistance) return console.log(dist)
                 en.body.lookAt(new Vector3(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z))
                 en.body.locallyTranslate(new Vector3(0, 0, en.spd * dt))
                 // console.log(dist)

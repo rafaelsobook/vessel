@@ -1,5 +1,5 @@
 import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, Quaternion, Sound } from "@babylonjs/core"
-import { createMesh, createMonsterMaterial } from "../creations/creationTools.js"
+import { checkDistance, createMesh, createMonsterMaterial } from "../creations/creationTools.js"
 import { lookAt, randomNumMinMax } from "../tools/tools"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
 import { createTextMesh } from "../gui/textmesh.js"
@@ -121,26 +121,28 @@ export default function createEnemy(scene, det) {
         }, 4400 - attackSpdInterval)
     }
     function attack(){
-        console.log("attacking")
+
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         if (getGameStatus() === "loading") return console.log("game status loading")
         if (!thisEnemy) return clearInterval(intervalWillAttack)
         if (thisEnemy._targetId) {
+            console.log("attacking targetID: ", thisEnemy._targetId)
             const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
-            if (!targetHero) return
-            if (targetHero.isDead) return
+            if (!targetHero) return console.log("hero not found")
+            if (targetHero.isDead) return console.log("hero dead")
             const targBody = scene.getMeshByName(`player.${thisEnemy._targetId}`)
             if (!targBody) return console.warn("targbody cannot found")
-            const { x, z } = targBody.position
-            const targPos = new Vector3(x, thisEnemy.body.position.y, z)
-            const targDist = Vector3.Distance(targPos, thisEnemy.body.position)
+
+            const enPos = thisEnemy.body.position.clone()
+            const targPos = targBody.position
+            const dist = checkDistance(new Vector3(enPos.x, targPos.y, enPos.z), targPos)
             // console.log("targDistance  " + targDist)
             // console.log("maxDistance  " + thisEnemy.det.maxDistance)
-
-            if (targDist <= thisEnemy.det.maxDistance) {
-                emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: thisEnemy.body.position.x, z: thisEnemy.body.position.z })
-
-            }
+            console.log(dist)
+            console.log(thisEnemy.det.maxDistance)
+            if (dist <= thisEnemy.det.maxDistance + 1.3) {  // PLUS 1         
+                emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: enPos.x, z: enPos.z })
+            }else console.log("did not reach distance")
         }
     }
     const charState = getCharState()
