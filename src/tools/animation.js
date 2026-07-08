@@ -94,6 +94,12 @@ export class CharacterAnimations {
         if (t >= 1) {
             this._blendFrom.weight = 0
             this._blendTo.weight   = 1
+            // if we were fading out of a one-shot action clip (re-armed as
+            // a frozen loop by playAction, see below) rather than one of
+            // the six canonical loop states, stop it now that it's silent
+            if (!Object.values(this._anims).includes(this._blendFrom)) {
+                this._blendFrom.stop()
+            }
             this._blendFrom = null
             this._blendTo   = null
         }
@@ -105,15 +111,25 @@ export class CharacterAnimations {
     }
 
     // Pass freezeAfter = true to hold the last frame without restoring looping anims (e.g. death).
-    playAction(allAnims, animName, speedRatio = 1, onComplete = null, freezeAfter = false) {
+    // Pass nextState to settle into a specific state once the action ends (e.g. an idle->ready
+    // draw-weapon action that should land on COMBAT_IDLE, not snap back to whatever state — idle —
+    // was active before the action started).
+    playAction(allAnims, animName, speedRatio = 1, onComplete = null, freezeAfter = false, nextState = null) {
         const actionAnim = allAnims.find(a => a.name.toLowerCase() === animName.toLowerCase())
         if (!actionAnim) return false
+        const targetState = nextState ?? this._state
+        const loopAnim = this._anims[targetState]
 
         Object.values(this._anims).forEach(anim => { if (anim) anim.weight = 0 })
         this._blendFrom = null
         this._blendTo   = null
         this._isActionPlaying = true
 
+        // drop any listener left over from a previous playAction() that got
+        // cut short by actionAnim.stop() below (stop() never fires "end",
+        // so a stale addOnce would otherwise linger and fire later, stomping
+        // the blend state and causing the flicker)
+        actionAnim.onAnimationEndObservable.clear()
         actionAnim.stop()
         actionAnim.speedRatio = speedRatio
         actionAnim.weight = 1
@@ -121,11 +137,36 @@ export class CharacterAnimations {
 
         actionAnim.onAnimationEndObservable.addOnce(() => {
             this._isActionPlaying = false
+            this._state = targetState
             if (freezeAfter) return
-            actionAnim.weight = 0
-            const loopAnim = this._anims[this._state]
-            if (loopAnim) loopAnim.weight = 1
-            if (onComplete) onComplete()           
+
+            if (loopAnim && loopAnim !== actionAnim) {
+                // actionAnim just auto-stopped (loop=false hitting its last
+                // frame — that's literally what fired this event). A stopped
+                // AnimationGroup is skipped entirely by Babylon's per-frame
+                // animation step, so from this point on its weight counts
+                // for nothing — ramping loopAnim's weight up from 0 doesn't
+                // blend against actionAnim's last pose, it blends against
+                // the skeleton's stale original bind pose (captured once,
+                // back when playAll() first started looping it). That
+                // mismatch is what produced the pop/flicker.
+                // Re-arm actionAnim as a live (but visually frozen,
+                // 1-frame-wide) loop pinned to its last frame so it keeps
+                // being evaluated — and its weight keeps counting — for the
+                // duration of the crossfade below.
+
+                actionAnim.stop(true)
+                actionAnim.start(true, actionAnim.speedRatio, actionAnim.to - 1, actionAnim.to)
+                actionAnim.weight = 1
+
+                this._blendFrom   = actionAnim
+                this._blendTo     = loopAnim
+                this._blendFrames = 0
+                this._blendTotal  = 8
+            } else {
+                actionAnim.weight = 0
+            }
+            if (onComplete) onComplete()
         })
 
         return true

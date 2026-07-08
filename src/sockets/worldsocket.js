@@ -5,7 +5,7 @@ import { findPlaceMetaData } from "../states/placestates"
 import { attachCam, camShake } from "../tools/camera"
 import { getSpawnPos } from "../tools/position"
 import { Vector3 } from "@babylonjs/core"
-import { playAnim} from "../tools/animation"
+import { playAnim, ANIM_STATE } from "../tools/animation"
 import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
@@ -539,7 +539,7 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
         // first also think how you can get the character if equiping a weapon
         // the animation of idle to fight will depend if it is wearing weapon
         if(player.hasWeapon && weaponName){
-            player.characterAnimations.playAction(player.anims, "act_idletoready1")
+            player.characterAnimations.playAction(player.anims, "act_idletoready1", 1, null, false, ANIM_STATE.COMBAT_IDLE)
             setTimeout(() => {
                 player.equipSword(weaponName, true)
             }, 400)
@@ -547,7 +547,7 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
     }
     if(prevMode === "fighting" && _newMode === "idle"){
         if(player.hasWeapon && weaponName){
-            player.characterAnimations.playAction(player.anims, "act_readytoidle")
+            player.characterAnimations.playAction(player.anims, "act_readytoidle", 1, null, false, ANIM_STATE.IDLE)
             setTimeout(() => {
                 player.equipSword(weaponName, false)
             }, 300)

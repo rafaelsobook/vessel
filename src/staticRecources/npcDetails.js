@@ -218,14 +218,35 @@ export default [
         z: 0.3,
         _dirTarg: {x:10,z:100},
         cloth: 'style3',
-        pants: 'style1',
+        pants: 'style2',
         hair: 'style1',
         boots: 'style1',
         skinColor: {r:0.45,g:0.30,b:0.16, name: "color2"},
-        hairColor: {r: 0, g: 0, b: 0},
-        clothColor: {r: 0, g: 0, b: 0},
-        pantsColor: {r: 0, g: 0, b: 0},
+        hairColor: {r: 1, g: 1, b: 1},
+        clothColor: {r: 1, g: 1, b: 1},
+        pantsColor: {r: 0.2, g: 0.3, b: 0.4},
         items: [
+        {
+            itemId: randomNum(), // should be string also in client
+            name: "leatherboots", // is also the image name
+            dn: "Leather Boots",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "boots", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            equipAbilities: { 
+                dmg: 0, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: false, // only for weapons
+            enhancedLevel: 0,
+            durability: { current: 100, max: 100},
+            price: 9,
+            qnty: 1,
+            desc: "This Boots is light and useful for first time adventurers",
+            rarity: "common"
+        },
         {
             itemId: randomNum(), // should be string also in client
             name: "ironjaw", // is also the image name

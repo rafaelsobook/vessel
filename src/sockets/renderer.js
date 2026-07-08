@@ -39,8 +39,8 @@ let renderCallback = function () {
         if(!player.characterAnimations) return
 
         if(player.mode === "death") return
-        player.characterAnimations.tickBlend()
         if(player._attacking || player.characterAnimations.isActionPlaying()) return
+        player.characterAnimations.tickBlend()
 
         if(player._moving){
             switch(player.mode){
