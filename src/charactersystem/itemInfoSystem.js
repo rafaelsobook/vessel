@@ -77,7 +77,7 @@ let equipItemFunc = () => {
     openCloseMiniLS(`Equiping ${itemDetail.dn} ...`, true)
     // for UI and setting charState item to equiped
     equipItem(itemDetail, true)
-    const { itemType, name, parts, itemId } = itemDetail
+    const { itemType, name, parts, itemId, metalColor } = itemDetail
     //  for 3d multiplayer sword mesh logic
     const isMultiplayerZone = getIsSocketOn()
     const charState = getCharState()
@@ -88,7 +88,8 @@ let equipItemFunc = () => {
         if(!myChar) return
         
         if (itemType === "boots") myChar.equipBoots(name)
-        if(itemType === "weapon") myChar.equipSword(name, true, parts)
+        if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts)
+        if(itemType === "helmet") myChar.equipHelmet(name, itemDetail.metalColor)
 
     }
     
@@ -201,7 +202,7 @@ export function equipItem(itemDet, updateItemsListUI){
         if(slotName.split(" ")[1] === itemDet.itemType){
             chld.innerHTML = ''
             const eqpdImg = createElement('img', `slot-img slot-${itemDet.rarity ? itemDet.rarity : "normal"}`)
-            eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.name}.png`
+            eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.name}.webp`
             chld.append(eqpdImg)
             const charState = getCharState()
             charState.items.forEach(itm => {                
@@ -248,7 +249,7 @@ export function showItemInfo(_itemDet){
     const {itemCateg, name, dn, price, desc} = _itemDet
     itemInfoCont.style.display = "flex"
 
-    itemImg.src = `./images/items/${itemCateg}/${name}.png`
+    itemImg.src = `./images/items/${itemCateg}/${name}.webp`
 
     itemTtle.innerHTML = dn
     itemPrice.innerHTML = `x${price}`
@@ -293,7 +294,7 @@ export function showItemInfo(_itemDet){
         slotBx.innerHTML = ''
         _itemDet.slots.forEach(cre => {
             const coreImg = createElement('img', 'slotcore-img')
-            coreImg.src = `./images/items/crafting/${cre.name}.png`
+            coreImg.src = `./images/items/crafting/${cre.name}.webp`
 
             slotBx.append(coreImg)
         })

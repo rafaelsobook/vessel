@@ -83,7 +83,8 @@ export function emitEquipItem(itemDet, isHiding) {
         itemModelStyle: itemDet.itemModelStyle ? itemDet.itemModelStyle : false,
         currentPlaceId: charState.currentPlace.placeId,
         isHide: isHiding,
-        parts: itemDet.parts ? itemDet.parts : null
+        parts: itemDet.parts ? itemDet.parts : null,
+        metalColor: itemDet.metalColor
     })
 }
 

@@ -55,7 +55,7 @@ export function insertItemOnInventory(itm){
 
     button.append(itemImg)
     button.append(slotBrder)
-    itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.png`
+    itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     itemSlotList.append(button)
 }
 export function closeInventory(){

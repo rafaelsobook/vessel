@@ -57,6 +57,8 @@ export async function areaScene(placeDetail){
     const HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
     const helmets = await SceneLoader.ImportMeshAsync("", "./models/helmets/", "helmets.glb", scene)
     helmets.meshes.forEach(m => m.isVisible = false)
+    const gauntlets = await SceneLoader.ImportMeshAsync("", "./models/gauntlets/", "gauntlets.glb", scene)
+    gauntlets.meshes.forEach(m => m.isVisible = true)
     // const helmets = await loadModel("./models/helmets/helmets.glb", scene, true)
     console.log(helmets)
     const allweaponParts = await loadMeshOnlyParts("./models/swords/allswords.glb", scene)

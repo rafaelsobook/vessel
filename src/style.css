@@ -1682,13 +1682,15 @@ canvas {
   z-index: 2;
 }
 .inventory-container .armory-bx .armory-list .eqpd-slot {
-  background: url("./images/UI/border2.png") no-repeat;
+  border: 2px solid white;
+  background: url("/images/UI/border3.webp");
   background-size: contain;
   width: 50px;
   height: 50px;
   border-radius: 3px;
   cursor: pointer;
   border: none;
+  z-index: 400;
 }
 .inventory-container .armory-bx .armory-list .eqpd-slot .slot-img {
   pointer-events: none;

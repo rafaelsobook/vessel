@@ -102,6 +102,13 @@ export function activateBtnOnce(){
                     }, 100)
                 break
                 case "attack":
+                    if(currentMode === "idle"){
+                        setCharStateMode("fighting")
+                        clickedTimeOut = setTimeout(() => {
+                            disableEnableAttackButtonsContainer(true)
+                        }, 500)
+                        return
+                    }
                     const dmgDetails = calcDmg(charState)
 
                     const spToDeduct = (dmgDetails.physicalDmg/2) + (dmgDetails.weaponDmg/4)

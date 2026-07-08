@@ -295,15 +295,63 @@ export const questions = [
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
                 obtain(swordItem)
-                setTimeout(()=>obtain(bootsItem), 500)
+                setTimeout(()=>obtain(bootsItem), 250)
+                setTimeout(()=>obtain(helmetItem), 500)
+                setTimeout(()=>obtain(gauntletItem), 800)
                 startQuestionare(2)
                 showHideIcons("block")
             }, 1000)
         }
     }
 ]
-
-
+var gauntletItem = {
+        itemId: randomNum(), // should be string also in client
+        name: "gauntler", // is also the image name
+        dn: "Gauntlet",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: undefined,
+        equipAbilities: { 
+            dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: 10,
+        qnty: 1,
+        desc: undefined,
+        rarity: "rare",
+        metalColor: "adamantine"
+    }
+var helmetItem = {
+        itemId: randomNum(), // should be string also in client
+        name: "ironjaw", // is also the image name
+        dn: "Knight's Helm III",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: undefined,
+        equipAbilities: { 
+            dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: 10,
+        qnty: 1,
+        desc: undefined,
+        rarity: "rare",
+        metalColor: "adamantine"
+    }
 var bootsItem = {
     itemId: randomNum(), // should be string also in client
     name: "leatherboots", // is also the image name
@@ -334,7 +382,7 @@ var swordItem = {
     itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
     weaponType: "sword",
     equipAbilities: { 
-        dmg: 100, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
     // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
     consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
@@ -353,6 +401,9 @@ var swordItem = {
         bladeRarity: "rare2",
         guardRarity: "rare1",
         handleRarity: "common1",
-        pommelRarity: "common1"
+        pommelRarity: "common1",
+
+        bladeColor: "common",
+        
     }
 }

@@ -1665,13 +1665,15 @@ canvas {
       position: relative;
       z-index: 2;
       .eqpd-slot {
-        background: url("./images/UI/border2.png") no-repeat;
+        border: 2px solid white;
+        background: url("/images/UI/border3.webp") ;
         background-size: contain;
         width: 50px;
         height: 50px;
         border-radius: 3px;
         cursor: pointer;
         border: none;
+        z-index: 400;
         .slot-img {
           pointer-events: none;
           width: 100%;
