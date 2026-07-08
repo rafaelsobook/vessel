@@ -10,14 +10,14 @@ import { getGameStatus, getSceneDet } from "../main/main.js"
 import { playAnim } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
-import { calcDmg } from "../charactersystem/attackingSystem.js"
+import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
 import { emitEnemyIsHit } from "../sockets/emits.js"
 import { randBetween } from "../tools/random.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { createSlimeMat } from "./skins.js"
-import { runSound } from "../components/soundSystem.js"
+import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 
 
 
@@ -318,7 +318,6 @@ function monsterSounds(scene, det,body){
     let attackSound = new Sound(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}attack.mp3`, scene, null, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
-    console.log(deathSound)
 
     runSound.attachToMesh(body)
     deathSound.attachToMesh(body)
@@ -378,6 +377,8 @@ function emitRegisterAsEnemy(enemId, heroId, dirTarg) {
 }
 
 export function enemyIsHit(data){
+    const charState = getCharState()
+    if(!charState) return
     const { playerId, targetId, dmgToApply, currentPlaceId, hp, maxHp } = data
     const enemy = getEnemiesOnScene().find(ene => ene._id === targetId)
     if (!enemy) return
@@ -395,6 +396,13 @@ export function enemyIsHit(data){
     const player = getPlayersOnScene().find(pl => pl.owner === playerId)
     if(!player) return
     lookAt(enemy.body, player.body.position)
+
+    if (playerId === getCharState().owner){
+        const { hasWeapon } = getAttackInfo()
+        if(hasWeapon) {
+            playSound(getAllSounds().swordS1)
+        }else playSound(getAllSounds().punchedS)
+    }
 
     if (data.hp <= 0) {
         enemy.deathSound.play()

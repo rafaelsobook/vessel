@@ -1,5 +1,4 @@
 import npcDetails from "../staticRecources/npcDetails"
-import {createCharacter} from "../charactersystem/createcharacter.js"
 import {pushNpc} from "../sockets/worldsocket.js"
 // import registerActionsWhenCollide from "../characterSystem/talkingToNpcSystem.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
@@ -16,11 +15,6 @@ export function createAllNpcInArea(hero, scene){
     npcDetails.forEach( async npcdet => {
         if(npcdet.currentPlaceId !== myHeroDatabase.currentPlace.placeId) return
         let anNpc = await createNpc(scene, npcdet)
-        // if(npcdet.glbPath){
-        //     anNpc = await createNpc(scene, npcdet)
-        // }else{
-        //     anNpc = createCharacter(scene,{x: npcdet.x, y: npcdet.y, z: npcdet.z}, npcdet, false, true)
-        // }
         pushNpc({...anNpc, canSpeak: true})
         onIntersecEnterTrig(anNpc.body, hero.body, scene, () => {
             openCloseInteractBtn("normal", true, () => {

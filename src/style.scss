@@ -4,6 +4,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Graduate&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Bellefair&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Bellefair&family=Jim+Nightshade&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&display=swap');
+
 
 $naturalBlack: rgb(29, 28, 28);
 $superBlack: rgb(15, 17, 17);
@@ -56,6 +58,7 @@ $tipsFont: "Bellefair", serif;
 $numFont: "Graduate", cursive;
 $gamefont: "Bellefair", serif;
 $jim: "Jim Nightshade", cursive;
+$choicefont: "Cormorant Garamond", serif;
 
 // zindexes
 $backz: 1;
@@ -99,6 +102,9 @@ $loadingz: 10;
     padding: 0;
     box-sizing: border-box;
 }
+body{
+  background: $naturalBlack;
+}
 canvas{
     position: fixed;
     top: 0;
@@ -111,7 +117,7 @@ canvas{
   position: fixed;
   top: 60%;
   right: 15%;
-  display: block;
+  display: none;
   z-index: $uiz;
   // border: 2px solid green;
   height: 200px;
@@ -175,6 +181,9 @@ canvas{
   opacity: 0.6;
   pointer-events: none;
 }
+.hidden {
+  display: none !important;
+}
 .page-overlay {
     position: fixed;
     inset: 0;
@@ -185,7 +194,7 @@ canvas{
     background: #0a0a0a;
     color: #e0d6c2;
     font-family: serif;
-    z-index: 100;
+    z-index: 1;
     gap: 10px;
 }
 
@@ -400,6 +409,7 @@ canvas{
         @include rpgbutton();
         width: 70%;
         font-size: 1.1rem;
+        font-family: $choicefont;
     }
     .answer-btn:hover{
         transform: scaleX(1.1);
@@ -1611,20 +1621,34 @@ canvas {
   justify-content: space-between;
   background: none;
   .cont-bx {
+    position: relative;
     color: #dad5d5;
     display: flex;
     flex-direction: column;
     justify-content: space-around;
     align-items: center;
     padding: 10px;
-    border: 1px solid gray;
-    background: #1f1e1e;
-    width: 300px;
-    height: 400px;
+    // border: 1px solid gray;
+    // background: #1f1e1e;
+    width: 350px;
+    height: 450px;
     border-radius: 6px;
     box-shadow: $inset1;
+    overflow: visible;
+    .uiframe{
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      // object-fit: cover;
+      pointer-events: none;
+    }
   }
-
+  .armorycont{
+    padding: 0 35px 20px 35px;
+  }
   .armory-bx {
     position: relative;
     display: flex;
@@ -1691,7 +1715,7 @@ canvas {
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    background: rgba(15, 15, 15, 0.8);
+    // background: rgba(15, 15, 15, 0.8);
     padding: 2px 10px;
     .bx {
       @include flexCenter();
@@ -1723,8 +1747,8 @@ canvas {
     overflow-x: hidden;
     // background: url("images/UI/justframe.png") no-repeat;
     // background-size: contain;
-    background: rgba(19, 18, 18, 0.8);
-    box-shadow: $inset1;
+    // background: rgba(19, 18, 18, 0.8);
+    // box-shadow: $inset1;
   }
   .slot-btn {
     width: 50px;
@@ -1762,6 +1786,8 @@ canvas {
   .slot-btn:active {
     opacity: 0.5;
   }
+
+
 }
 // item info
 .item-info-cont {
@@ -2047,6 +2073,27 @@ canvas {
     // border-radius: 10px;
     // box-shadow: inset 0px 0px 60px 50px rgba(0, 0, 0, 0.6);
   }
+  .circ-backg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(0);
+    width: 140%;
+    z-index: -2;
+    pointer-events: none;
+    background: url("../images/wallpaper/spinningcirc.png") no-repeat center center;
+    background-size: contain;
+    aspect-ratio: 1 / 1;
+    animation: spinning 16s linear infinite;
+  }
+  &.reg-mode {
+    #loginBtn {
+      display: none;
+    }
+    .toreg {
+      display: block;
+    }
+  }
   .login-cont-btns {
     display: flex;
     justify-content: space-around;
@@ -2095,6 +2142,8 @@ canvas {
 
   .toreg {
     display: none;
+  }
+  input.toreg {
     background: none;
     border: none;
   }
@@ -2506,4 +2555,470 @@ canvas {
   z-index: -1;
   height: 100%;
   width: 100%;
+}
+
+.skill-slots{
+  @include centerFix($uiz + 1);
+  width: 500px;
+  height: 100px;
+  // background: rgba(0, 0, 0, 0.5);
+  // border: 1px solid rgba(255, 255, 255, 0);
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  top: 93%;
+  .skill-slot-button{
+
+    position: relative;
+    width: 80px;
+    height: 80px;
+    border: none;
+    background: none;
+    overflow: hidden;
+    .plus-sign{
+      z-index: 1;
+      width: 40%;
+      height: 40%;
+      cursor: pointer;
+      border-radius: 50%;
+    }
+    .plus-sign:hover{
+      z-index: 1;
+      width: 35%;
+      height: 35%;
+      // transform: scale(0.9);
+      transition: 0.2s;
+    }
+    .plus-sign:active{
+      filter: opacity(0.4);
+      transition: 0.1s;
+    }
+    img{
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
+    }
+  }
+}
+
+.skill-container{
+  @include centerFix($uiz + 2);
+  width: 900px;
+  height: 600px;
+  display: none;
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 20px 15px 20px 30px;
+  .skill-background{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .skill-list-left{
+    position: relative;
+    width:40%;
+    height: 100%;
+    .skill-list{
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 14px;
+      height: 100%;
+      padding: 100px 30px 50px 30px;
+      overflow-y: auto;
+      .skill-bx{
+        position: relative;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        transition: 0.15s;
+        .skill-img{
+          position: relative;
+          flex-shrink: 0;
+          width: 50px;
+          height: 50px;
+          border-radius: 4px;
+          object-fit: cover;
+        }
+        .skill-bx-text{
+          display: flex;
+          flex-direction: column;
+          .skill-name{
+            font-family: $tipsFont;
+            font-size: 15px;
+            color: #dcc9f0;
+          }
+          .skill-lvl{
+            font-family: $tipsFont;
+            font-size: 12px;
+            color: rgba(177, 177, 177, 0.6);
+          }
+        }
+        .skill-status{
+          margin-left: auto;
+          font-family: $tipsFont;
+          font-size: 12px;
+          color: rgba(177, 177, 177, 0.6);
+          &.active{
+            color: #edd59f;
+          }
+        }
+      }
+      .skill-bx:hover{
+        border-color: rgba(202, 165, 1, 0.3);
+      }
+      .skill-bx.selected{
+        border-color: rgba(202, 165, 1, 0.6);
+        background: rgba(202, 165, 1, 0.08);
+      }
+    }
+  }
+  .skill-info-right{
+    position: relative;
+    width:60%;
+    height: 100%;
+    .skill-info{
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      padding: 60px 40px 40px 40px;
+      .skill-info-display{
+        position: relative;
+        flex-shrink: 0;
+        width: 180px;
+        height: 180px;
+        .info-circle-bg{
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+        }
+        .info-skill-img{
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 65%;
+          height: 65%;
+          border-radius: 50%;
+          object-fit: cover;
+        }
+      }
+      .skill-info-details{
+        width: 100%;
+        margin-top: 20px;
+        .skill-info-header{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          .skill-info-title{
+            font-family: $gamefont;
+            font-size: 22px;
+            color: #dcc9f0;
+          }
+          .skill-status{
+            font-family: $tipsFont;
+            font-size: 13px;
+            color: rgba(177, 177, 177, 0.6);
+            border: 1px solid rgba(177, 177, 177, 0.3);
+            border-radius: 10px;
+            padding: 2px 10px;
+            &.active{
+              color: #edd59f;
+              border-color: rgba(237, 213, 159, 0.5);
+            }
+          }
+        }
+        .skill-stats{
+          margin-top: 14px;
+          padding: 10px 0;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          .skill-stat-row{
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-family: $tipsFont;
+            font-size: 14px;
+            .stat-label{
+              color: rgba(177, 177, 177, 0.6);
+            }
+            .stat-value{
+              color: #f5f5f5;
+            }
+          }
+        }
+        .skill-info-desc{
+          margin-top: 14px;
+          font-family: $tipsFont;
+          font-size: 13px;
+          line-height: 1.5;
+          color: #d8d5d5;
+        }
+        .level-up-btn{
+          @include rpgbutton();
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          width: 100%;
+          margin-top: 20px;
+          .level-up-cost{
+            font-size: 1rem;
+            letter-spacing: 1px;
+          }
+        }
+      }
+    }
+  }
+}
+.home-page {
+  @include fitToScreen(2);
+  @include flexCenter();
+  background: url("../images/wallpaper/dbhomeback.jpg") no-repeat;
+  background-size: cover;
+  box-shadow: inset 0px 0px 70px 60px rgba(0, 0, 0, 0.7);
+
+  .center-animation {
+    position: fixed;
+    top: 50%;
+    left: 48%;
+    transform: translate(-50%, -50%);
+    z-index: -1;
+    width: 40%;
+    pointer-events: none;
+    height: 70%;
+    .floating-char {
+      position: absolute;
+      top: 55%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%;
+      z-index: 2;
+      animation: floating 4s ease-in-out infinite;
+    }
+    .spinningcirc {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(0);
+      width: 120%;
+      z-index: 1;
+      animation: spinning 10s linear infinite;
+      opacity: 1;
+    }
+    .circ1 {
+      filter: brightness(2) blur(10px);
+    }
+    @keyframes floating {
+      0% {
+        top: 55%;
+      }
+      50% {
+        top: 50%;
+      }
+      100% {
+        top: 55%;
+      }
+    }
+    @keyframes spinning {
+      0% {
+        transform: translate(-50%, -50%) rotate(0);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+        opacity: 1;
+      }
+    }
+  }
+  .enter-button{
+    @include centerAbs(1);
+    width: 300px;
+    height: 90px;
+    aspect-ratio: 1980 / 578;
+    top: 110%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: rgba(210, 176, 133,1);
+    font-family: $tipsFont;
+    letter-spacing: 3px;
+    font-size: 1.1rem;
+    line-height: 10.5;
+    z-index: 1;
+    img{
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      filter: brightness(0.6);
+      transition: 0.3s ease-in-out;
+      pointer-events: none;
+      transform: translateY(-5px);
+      pointer-events: none;
+    }
+    &:hover img{
+      filter: brightness(1);
+    }
+    &:active{
+      transform: translate(-50%, -50%) scale(0.97);
+    }
+  }
+  .wallpaperz {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(100%);
+    z-index: -1;
+  }
+  #installGame {
+    display: none;
+  }
+  .homepage-btn {
+    position: absolute;
+    top: 80%;
+    left: 48%;
+    transform: translate(-50%, -50%) scale(1);
+    cursor: pointer;
+    width: 20%;
+    filter: brightness(0.3);
+    transition: 0.3s ease-in-out;
+  }
+  .homepage-btn:hover {
+    filter: brightness(1);
+    transition: 0.3s ease-in-out;
+  }
+  .homepage-btn:active {
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+}
+.intro-load-screen {
+  @include fitToScreen(11);
+  background-color: rgb(41, 37, 34);
+  @include flexCenter();
+  .ils-cap {
+    font-family: sanserif;
+    color: $littlewhite;
+    font-size: 3.2rem;
+    font-weight: 400;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+  }
+  img{
+    width:350px;
+  }
+  z-index: 100;
+  display: none;
+}
+.db-logo {
+  cursor: pointer;
+  position: fixed;
+  left: 48%;
+  top: 14%;
+  transform: translate(-50%, -50%) scale(0.25);
+  z-index: 10;
+  transition: 0.5s ease-in-out;
+}
+
+.logo-introscreen {
+  transform: scale(0.4);
+}
+
+.login-register-form {
+  position: fixed;
+  top: 70%;
+  left: 48.5%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 500px;
+  height: 256px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 90px;
+
+  .auth-fields {
+    display: contents;
+  }
+
+  .form-background {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .inp {
+    outline: none;
+    width: 70%;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: $littlewhite;
+    border: 1px solid #838383;
+    border-radius: 4px;
+    font-family: $copyrightFont;
+    text-align: center;
+  }
+  .inp::placeholder {
+    color: rgba(177, 177, 177, 0.6);
+  }
+
+  .btn {
+    color: $littlewhite;
+    border: 1px solid #838383;
+    padding: 6px 30px;
+    font-size: 1rem;
+    border-radius: 10%;
+    cursor: pointer;
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 1),
+      rgb(58, 58, 58),
+      rgba(71, 71, 71, 0.8),
+      rgba(117, 117, 117, 0.6)
+    );
+    font-family: $tipsFont;
+    text-transform: capitalize;
+  }
+  .btn:active {
+    color: $littleBlack;
+    background-color: $superBlack;
+  }
+
+  .toggle-auth-mode {
+    background: none;
+    border: none;
+    color: $littlewhite;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px;
+    z-index: 2;
+  }
 }

@@ -121,14 +121,14 @@ let renderCallback = function () {
                 }
                 return
             }
-            switch(player.mode){
-                case "idle":
-                    playAnim(player.anims, "idle")
-                break
-                case "fighting":
-                    playAnim(player.anims, "combatIdle")
-                break
-            }
+            // switch(player.mode){
+            //     case "idle":
+            //         playAnim(player.anims, "idle")
+            //     break
+            //     case "fighting":
+            //         playAnim(player.anims, "combatIdle")
+            //     break
+            // }
             // const loopAnim = player.anims.find(anim => anim.name.toLowerCase() === player.mode.toLowerCase())
             // if (loopAnim && !loopAnim.isPlaying) {
             //     console.log(player.mode)

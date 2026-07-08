@@ -61,14 +61,14 @@ export function emitDied() {
     // enemiez = []
 }
 // Attack Actions
-export function emitAttack(attackAnimName) {
+export function emitAttack(attackInfo,attackAnimName) {
     if (!getIsSocketOn()) return
     const socket = getSocket()
     if(!socket) return
     // const enemyAccuracy = enemy.det.stats.accuracy
     // if (dmgDetails.accuracy < Math.random() * enemyAccuracy * 10) isMissed = true
 
-    socket.emit("emitPlayerAttack", getAttackInfo(attackAnimName))
+    socket.emit("emitPlayerAttack", { ...attackInfo, animName: attackAnimName })
 }
 
 // ITEM EQUIP

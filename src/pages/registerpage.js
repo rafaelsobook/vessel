@@ -1,49 +1,32 @@
-import { showMainPage } from "./mainpage.js"
-import { showCreateCharacterPage } from "./createcharacterpage.js"
 import { APIURL } from "../constants/constants.js"
 import { keepAccountWithTokenDet } from "../constants/api.js"
 import { startScene } from "../main/main.js"
 
+const homePage = document.querySelector(".home-page")
+const usernameInput = document.querySelector("#usernameInp")
+const passwordInput = document.querySelector("#passwordInp")
+const confirmInput = document.querySelector("#confirmpass")
+const enterBtn = document.querySelector("#enterWorldBtn")
+const msg = document.querySelector("#auth-msg")
+
 export function showRegisterPage() {
-    const overlay = document.createElement("div")
-    overlay.id = "register-overlay"
-    overlay.className = "page-overlay"
-
-    overlay.innerHTML = `
-        <h2 class="page-title">Register</h2>
-        <p id="reg-msg" class="page-msg"></p>
-        <input id="reg-username" type="text" placeholder="Username" class="page-input" />
-        <input id="reg-password" type="password" placeholder="Password" class="page-input" />
-        <button id="reg-btn" class="page-btn">Register</button>
-        <button id="reg-back" class="page-btn-back">Back</button>
-    `
-
-    document.body.appendChild(overlay)
-
-    const usernameInput = overlay.querySelector("#reg-username")
-    const passwordInput = overlay.querySelector("#reg-password")
-    const btn = overlay.querySelector("#reg-btn")
-    const msg = overlay.querySelector("#reg-msg")
-
+    confirmInput.classList.remove("hidden")
+    msg.textContent = ""
+    usernameInput.value = ""
+    passwordInput.value = ""
+    confirmInput.value = ""
     usernameInput.focus()
-
-    btn.addEventListener("click", () => register(usernameInput, passwordInput, btn, msg, overlay))
-    passwordInput.addEventListener("keydown", e => e.key === "Enter" && register(usernameInput, passwordInput, btn, msg, overlay))
-
-    overlay.querySelector("#reg-back").addEventListener("click", () => {
-        overlay.remove()
-        showMainPage()
-    })
 }
 
-async function register(usernameInput, passwordInput, btn, msg, overlay) {
+export async function   register() {
     const username = usernameInput.value.trim()
     const password = passwordInput.value
+    const confirmPassword = confirmInput.value
 
     if (!username || !password) { msg.textContent = "Fill in all fields."; return }
+    if (password !== confirmPassword) { msg.textContent = "Passwords do not match."; return }
 
-    btn.disabled = true
-    btn.textContent = "Registering..."
+    enterBtn.disabled = true
     msg.textContent = ""
 
     try {
@@ -57,19 +40,16 @@ async function register(usernameInput, passwordInput, btn, msg, overlay) {
 
         if (data === "Username Exist") {
             msg.textContent = "Username already taken."
-            btn.disabled = false
-            btn.textContent = "Register"
+            enterBtn.disabled = false
             return
         }
         keepAccountWithTokenDet(data)
 
-        overlay.remove()
-        // showCreateCharacterPage()
+        homePage.classList.add("hidden")
         startScene(true)
 
     } catch (err) {
         msg.textContent = "Server error, try again."
-        btn.disabled = false
-        btn.textContent = "Register"
+        enterBtn.disabled = false
     }
 }

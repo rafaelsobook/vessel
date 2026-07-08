@@ -1,7 +1,6 @@
 
 export function playAnim(animationGroups, name, loop = false){
     const anim = animationGroups.find(a => a.name.toLowerCase() === name.toLowerCase())
-    console.log("playing")
     if(anim) anim.play(loop)
     else console.warn("animation not found:", name)
 }
@@ -117,8 +116,8 @@ export class CharacterAnimations {
 
         actionAnim.stop()
         actionAnim.speedRatio = speedRatio
-        actionAnim.play(false)
         actionAnim.weight = 1
+        actionAnim.play(false)
 
         actionAnim.onAnimationEndObservable.addOnce(() => {
             this._isActionPlaying = false
@@ -126,7 +125,7 @@ export class CharacterAnimations {
             actionAnim.weight = 0
             const loopAnim = this._anims[this._state]
             if (loopAnim) loopAnim.weight = 1
-            if (onComplete) onComplete()
+            if (onComplete) onComplete()           
         })
 
         return true

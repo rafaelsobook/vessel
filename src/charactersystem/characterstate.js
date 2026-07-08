@@ -14,6 +14,7 @@ import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScr
 import { getPlayerCoord } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
 import { getGameStatus, setGameStatus } from "../main/main.js";
+import { updateSkillListUI } from "../components/skillsui.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -132,7 +133,12 @@ export function getCharSocket(){
         pos,
         dirTarg,
 
-        items: characterState.items
+        items: characterState.items,
+        skills: characterState.skills,
+        mode: characterState.mode,
+        maxMp: characterState.maxMp,
+        maxHp: characterState.maxHp,
+        maxSp: characterState.maxSp,
     }
 }
 
@@ -287,6 +293,7 @@ export async function initiateCharacter(_accountDet){
     characterState = await getHeroDetail(_accountDet)
  
     activateLifeSystem()
+    updateSkillListUI(characterState.skills)
     // updateStoryQuestUI(characterState.stories[0])
     return characterState
 }
@@ -558,5 +565,7 @@ export function setCharStateMode(_newMode){
             getAllSounds().woodrunS.setPlaybackRate(1)
         break
     }
-    setPlayerMode(characterState.owner, _newMode)
+    const weapon = characterState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+
+    setPlayerMode(characterState.owner, _newMode, weapon ? weapon.name : undefined)
 }

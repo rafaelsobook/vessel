@@ -42,7 +42,6 @@ export function createMyCharacter(charState, scene, allsounds){
     // let spawnPos = getSpawnPos(tcpCharPlaceMD)
     let spawnPos = { x: charState.x, y: charState.y, z: charState.z}
 
-
     const player = createCharacter(scene, spawnPos, {...charState,
         // mode would be by default always Idle if newly joined
     // addiditonal infos because our tcpCharDet does not come from tcp(in tcp we put this additional info) 
@@ -59,7 +58,7 @@ export function createMyCharacter(charState, scene, allsounds){
     sceneCleanupReady(scene, controls)
 
     setCharStateMode(charState.mode)
-    console.log(charState.mode)
+
     return player
 }
 

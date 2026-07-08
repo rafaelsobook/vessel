@@ -186,7 +186,7 @@ export function createMesh(scene, meshName, size, pos, visibility, isVisible, ha
     mesh.isVisible = isVisible
     mesh.isPickable = false
     if(isVisible) mesh.visibility = visibility
-    if(rotations)mesh.addRotation(rotations.x,rotations.y,rotations.z)
+    if(rotations) mesh.rotationQuaternion = Quaternion.FromEulerAngles(rotations.x, rotations.y, rotations.z)
     if(hasActionManager) mesh.actionManager = new ActionManager()
     return mesh
 }
@@ -286,7 +286,56 @@ export function createMainShadow(scene){
     freeze(fakeShadow)
     return fakeShadow
 }
+function createDetailedMaterial(scene, wallDet){
+    let wallMat
+    if(wallDet.emissive) wallMat = createMaterial(scene, wallDet.tex, wallDet.emissive, wallDet.uScale)
+    if(wallDet.tex) wallMat = createMaterial(scene, wallDet.tex, false, wallDet.uScale)
+    if(wallDet.transparent) wallMat = createTransparentMat(scene, wallDet.transparent)
 
+    if(wallDet.isMetal) wallMat.metallic = 1
+
+    if(wallDet.normal){
+        const normalTex = new Texture(`./images/modeltex/${wallDet.normal}.jpg`, scene, false, false)
+        normalTex.uScale = wallDet.uScale
+        normalTex.vScale = wallDet.uScale
+        wallMat.bumpTexture = normalTex
+        wallMat.bump = 1
+    }
+    if(wallDet.rough){
+        const roughTex = new Texture(`./images/modeltex/${wallDet.rough}.jpg`, scene, false, false)
+        roughTex.uScale = wallDet.uScale
+        roughTex.vScale = wallDet.uScale
+        wallMat.roughnessTexture = roughTex
+    }
+
+    wallMat.specularColor = new Color3(.2,.2,.2)
+    wallMat.backFaceCulling = false
+    return wallMat
+}
+export async function createOriginal(scene, pos, rotationY, textureDets, glbPath, willHide){
+    console.log(glbPath)
+    const { meshes } = await SceneLoader.ImportMeshAsync("", glbPath, null, scene)
+    
+
+    const rootModel = meshes[0]
+    rootModel.position = new Vector3(pos.x, pos.y ? pos.y : 0, pos.z)
+    if(rotationY) rootModel.addRotation(0, rotationY, 0)
+
+    meshes.forEach(wallmsh => {
+        if(wallmsh.name.includes('wall')) wallmsh.checkCollisions = true
+
+        const wallDet = textureDets.find(det => det.name === wallmsh.name)
+        if(wallDet){
+            wallmsh.material = createDetailedMaterial(scene, wallDet)
+            wallmsh.checkCollisions = true
+        }
+        freeze(wallmsh)
+    })
+
+    if(willHide) meshes.forEach(mesh => mesh.isVisible = false)
+
+    return rootModel
+}
 
 export function createOriginalMarking(scene, pos, widthHeight, rots, textureName, markName, visibility){
     const markingMesh = MeshBuilder.CreateGround(markName ? markName : "markMesh", widthHeight, scene)

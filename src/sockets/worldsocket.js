@@ -9,7 +9,7 @@ import { playAnim} from "../tools/animation"
 import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
-import { attack } from "../charactersystem/attackingSystem"
+import { attack, activateSkill } from "../charactersystem/attackingSystem"
 import createEnemy, { enemyIsHit } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitDied } from "./emits"
@@ -160,6 +160,15 @@ export function activateOnSocketListeners(socket){
     })
     // ACTIONS
     // PLAYER ATTACK RELATED
+    socket.on("skillactivated", data => {
+        if (!isSocketOn) return
+        const { ownerId, skill, currentPlaceId } = data
+        const charState = getCharState()
+        if (!charState) return
+        if (charState.currentPlace.placeId !== currentPlaceId) return
+        activateSkill(ownerId, skill)
+    
+    })
     socket.on("player-attacked", data => {
         if (!isSocketOn) return
         // const {
@@ -174,7 +183,7 @@ export function activateOnSocketListeners(socket){
         //     currentPlaceId,
         //     atkSpd
         // } = data
-        attack(data)
+        attack(data, data.animName)
         // let soundToPlay
         // switch (data.weaponType) {
         //     case "fist":
@@ -399,8 +408,6 @@ export function activateOnSocketListeners(socket){
 
         if(ownerId === charState.owner) return
         
-        setPlayerMode(mode, player.owner)
-        
         player.body.position.x = pos.x
         player.body.position.y = pos.y
         player.body.position.z = pos.z
@@ -443,13 +450,9 @@ export function reCreateMeshesInScene() {
 
         if (characterState.currentPlace.placeId !== tcpCharDet.currentPlace.placeId) return
 
-        const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === tcpCharDet.owner)
-        
-        if(tcpCharDet.owner === characterState.owner) return console.log("my character return ", tcpCharDet.owner);
-        
-
-        const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
-        const spawnPos = {x: tcpCharDet.x, y: tcpCharDet.y, z: tcpCharDet.z }
+        const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === tcpCharDet.owner)        
+        // const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
+        const spawnPos = {x: tcpCharDet.pos.x, y: 0.01, z: tcpCharDet.pos.z }
 
         let player = createCharacter(sceneDet.scene, spawnPos, tcpCharDet, false)
         if(!player) return
@@ -526,18 +529,29 @@ export function removePlayer({ ownerId, playerName, placeId }){
     const bodyOfPlayer = scene.getMeshByName(`player.${ownerId}`)
     if (bodyOfPlayer) bodyOfPlayer.dispose()
 }
-export function setPlayerMode(ownerId, _newMode){
+export function setPlayerMode(ownerId, _newMode, weaponName){
     const player = playersOnScene.find(pl => pl.owner === ownerId)
     if(!player) return;
     const prevMode = player.mode
+    console.log("has weapon: ", player.hasWeapon)
+    
     if(prevMode === "idle" && _newMode === "fighting"){
         // first also think how you can get the character if equiping a weapon
         // the animation of idle to fight will depend if it is wearing weapon
-        playAnim(player.anims, "act_idletoready1")
+        if(player.hasWeapon && weaponName){
+            player.characterAnimations.playAction(player.anims, "act_idletoready1")
+            setTimeout(() => {
+                player.equipSword(weaponName, true)
+            }, 400)
+        }
     }
     if(prevMode === "fighting" && _newMode === "idle"){
-        playAnim(player.anims, "act_idletoready1", false, true)
-           
+        if(player.hasWeapon && weaponName){
+            player.characterAnimations.playAction(player.anims, "act_readytoidle")
+            setTimeout(() => {
+                player.equipSword(weaponName, false)
+            }, 300)
+        }
     }
     player.mode = _newMode
 }

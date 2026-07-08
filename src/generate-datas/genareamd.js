@@ -336,20 +336,30 @@ function buildIndoorLighting(width, height, wallHeight) {
 }
 
 // ─── Dirt paths ───────────────────────────────────────────────────────────────
-// Returns one {id, x, z} entry per CELL_SIZE tile along the cross-shaped path.
+// Returns one {id, x, z} entry per CELL_SIZE tile: a square clearing at the
+// center (spawnAreaSize) plus cross paths extending to the area edges.
 function buildPaths(width, height) {
-    const hw    = Math.floor(width  / 2 / CELL_SIZE) * CELL_SIZE;
-    const hd    = Math.floor(height / 2 / CELL_SIZE) * CELL_SIZE;
-    const tiles = [];
-    let   id    = 0;
+    const hw         = Math.floor(width  / 2 / CELL_SIZE) * CELL_SIZE;
+    const hd         = Math.floor(height / 2 / CELL_SIZE) * CELL_SIZE;
+    const halfSpawn  = Math.floor(spawnAreaSize / 2 / CELL_SIZE) * CELL_SIZE;
+    const seen       = new Map();
+    let   id         = 0;
 
-    for (let x = -hw; x <= hw; x += CELL_SIZE)
-        tiles.push({ id: id++, x, z: 0 });
+    function add(x, z) {
+        const key = `${x},${z}`;
+        if (!seen.has(key)) seen.set(key, { id: id++, x, z });
+    }
 
-    for (let z = -hd; z <= hd; z += CELL_SIZE)
-        if (z !== 0) tiles.push({ id: id++, x: 0, z });
+    // Square clearing around the spawn center
+    for (let x = -halfSpawn; x <= halfSpawn; x += CELL_SIZE)
+        for (let z = -halfSpawn; z <= halfSpawn; z += CELL_SIZE)
+            add(x, z);
 
-    return tiles;
+    // Cross paths extending to area edges
+    for (let x = -hw; x <= hw; x += CELL_SIZE) add(x, 0);
+    for (let z = -hd; z <= hd; z += CELL_SIZE) add(0, z);
+
+    return [...seen.values()];
 }
 
 // ─── Portal descriptor ────────────────────────────────────────────────────────
@@ -371,6 +381,7 @@ function buildPortal(dir, halfW, halfH, edgeOffset) {
 // from and has the full area ahead of them. The spawn zone is reserved in the
 // occupancy grid before any prop is placed, so nothing blocks the player.
 const SPAWN_CLEARANCE = 6; // world-unit radius kept prop-free around spawn
+const spawnAreaSize   = 20; // world-unit square dirt clearing at the center
 
 function buildSpawn(entry, halfW, halfH, isEnclosed) {
     // 1 Babylon.js unit = 1 metre. Spawn 3 m inside the area boundary so the

@@ -3,6 +3,7 @@ import { createMesh } from '../creations/creationTools.js'
 import { loadAvatarContainer } from '../tools/loadmodel.js'
 import { createTextMesh } from '../gui/textmesh.js'
 import { playAnim } from '../tools/animation.js'
+import { createCharacter } from '../charactersystem/createcharacter.js'
 
 const NPC_HEIGHT  = 1.5
 const NPC_WIDTH   = 0.5
@@ -20,6 +21,14 @@ export async function createNpc(scene, det) {
     const x = det.x ?? 0
     const y = det.y ?? 0
     const z = det.z ?? 0
+
+    if (!det.glbPath) {
+        const npcDet = { ...det, owner: det.owner ?? det._id, ownerId: det.ownerId ?? det._id }
+        const char = createCharacter(scene, { x, y, z }, npcDet, false, true)
+        playAnim(char.anims, "idle", true)
+        return char
+    }
+
     const yPos = y + NPC_HEIGHT / 2 + 0.05
 
     const body = createMesh(
@@ -32,7 +41,7 @@ export async function createNpc(scene, det) {
     body.isPickable = false
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: NPC_HEIGHT,z:0}, 30);
-    
+
 
     if (det._dirTarg) {
         const dx = det._dirTarg.x - x
@@ -41,8 +50,9 @@ export async function createNpc(scene, det) {
             body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), Math.atan2(dx, dz))
         }
     }
-    if(!det.glbPath) return null
+
     const container = await getNpcContainer(scene, det.glbPath)
+
     const entries = container.instantiateModelsToScene()
     entries.animationGroups.map(ani => ani.name = ani.name.split(' ')[2])
 

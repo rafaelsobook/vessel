@@ -17,8 +17,8 @@ export function createArcCam(scene, placeDetail, head){
         scene
     );
     camera.attachControl();
-    camera.lowerRadiusLimit = 5;
-    camera.upperRadiusLimit = 20;
+    camera.lowerRadiusLimit = 2;
+    camera.upperRadiusLimit = 15;
     camera.lowerBetaLimit = Tools.ToRadians(20);
     camera.upperBetaLimit = Tools.ToRadians(85);
     camera.wheelPrecision = 50;

@@ -51,7 +51,7 @@ export const questions = [
                 }
             },
             {
-                text: "How'd I get here",
+                text: "How'd I got here",
                 cb: () => {
                     startQuestionare(3)
                 }
@@ -127,7 +127,7 @@ export const questions = [
         ],
         cb: () => { 
             setTimeout(() => {
-                obtain(bootsItem)
+                
                 setCanPress(true)
                 showHideIcons("block")
             }, 1000)
@@ -295,7 +295,7 @@ export const questions = [
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
                 obtain(swordItem)
-                obtain(bootsItem)
+                setTimeout(()=>obtain(bootsItem), 500)
                 startQuestionare(2)
                 showHideIcons("block")
             }, 1000)

@@ -43,6 +43,26 @@ export const metaDatas = [
         isMultiplayer: true
     }),
     {   
+        originalGlbs: [
+            {
+                pos: {x: -12, y: 0, z: -24}, 
+                rot: Math.PI,
+                textures: [
+                    {name: "clothroof", tex:"wall3", normal: "fabricnormal", uScale: 10.5, lighten: 1.5},
+                    {name: "lightwood", tex:"wood3", normal: "wood3normal", uScale: 10, lighten: 1},
+                    {name: "redwood", tex:"wood2", uScale: 2, lighten: 1.5},
+                    {name: "vase", tex:"wall1", normal: "wall1normal", uScale: 3, lighten: .5},
+                    {name: "wheel", tex:"iron2", uScale: 2, lighten: .5},
+                    {name: "wood", tex:"wood1", normal: "wood1normal", uScale: 5, lighten: 1.15},
+                    {name: "books", tex:"decor1", uScale: 2, lighten: 1.15},
+                    {name: "grass", tex:"fabric2", uScale: 2, lighten: 1.15},
+                    {name: "lemon", tex:"fabric4amb", uScale: 2, lighten: 1.15},
+                    {name: "carrot", tex:"floor2", uScale: .1, lighten: 1.15},
+                    {name: "potatoe", tex:"potatoe", uScale: 1, lighten: 2},
+                ], 
+                glbPath:"./models/outdors/smallmarket.glb"
+            }
+        ],
         optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
@@ -158,7 +178,7 @@ export const metaDatas = [
         areaType: "room",
         layout: { cellSize: 1 },
         spawn: {x: 0, y: 1, z: -2, rotation: 0},
-
+        
         optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),

@@ -7,6 +7,7 @@ import { getCharState, setCanPress, setCharStateMode, updateMyDetailsOL } from "
 import { playAnim } from "../tools/animation";
 import { checkIfTokenSaved } from "../tools/tools";
 import { disableEnableAttackButtonsContainer, hideShowAllScreenUI } from "../charactersystem/uimanagement";
+import { showLoadingScreen } from "../htmlcomp/loadingscreen";
 
 const conv = new Conversation(document, 30)
 
@@ -37,18 +38,20 @@ export function startMyOwnSpeech(){
     let mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!mycharacter) return
 
-    setCanPress(false)
-    hideShowAllScreenUI()
-
-    mycharacter.characterAnimations.playAction(mycharacter.anims, ownSpeech.animationName, 1, () => {
-        mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-        if(!mycharacter) return
-        setCharStateMode("idle")
-    })
-    conv.startConversation(ownSpeech.speeches, 0, () => {
+    showLoadingScreen(ownSpeech.loadingMessage, 5000, () => {
+        setCanPress(false)
         hideShowAllScreenUI()
-        ownSpeech.cb()
-    })
+
+        mycharacter.characterAnimations.playAction(mycharacter.anims, ownSpeech.animationName, 1, () => {
+            mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+            if(!mycharacter) return
+            setCharStateMode("idle")
+        })
+        conv.startConversation(ownSpeech.speeches, 0, () => {
+            hideShowAllScreenUI()
+            ownSpeech.cb()
+        })
+    })    
 }
 export async function setCurrentSpeechId(numberOrNull){
     const charState = getCharState()

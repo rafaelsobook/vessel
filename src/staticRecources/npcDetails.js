@@ -10,7 +10,7 @@ export default [
         glbPath: "./models/avatar/guildavatar.glb",
         currentPlaceId: 9,
         mode: "idle",
-        _id: "101",
+        _id: "101_emry",
         name: "Emry",
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
@@ -139,47 +139,48 @@ export default [
                     {name:"", message: "Let me just finish your registration..."},
                     {name:"", message: "Alright. The crystal has your reading on file now. Mana capacity, aptitudes — all logged. Every adventurer starts somewhere, and this gives us a baseline to track your growth over time."},
                     {name:"", message: "Your rank has been set to F. That is standard for new registrants. It is not a judgment — it simply means you have not yet taken on guild commissions. That changes the moment you start."},
-                    {name:"", message: "Now, I do have something for you if you are willing."},
-                    {name:"", message: "Insects have been crossing the eastern border for about a week now. Small, fast, and relentless when it comes to farmland. The villagers are losing crops every day and their requests have been sitting in the queue longer than they should."},
+                    {name:"", message: "Now, I do have something for you if you."},
+                    {name:"", message: "Slimes have been crossing the eastern border for about a week now. Small, fast, and relentless when it comes to farmland. The villagers are losing crops every day and their requests have been sitting in the queue longer than they should."},
                     {name:"", message: "Most of our available members are out on higher priority commissions right now. We are stretched thin and we simply do not have the hands to spare."},
                     {name:"", message: "So yes — it is an F rank request. But urgent is urgent, and the villagers need someone there soon."},
                     {name:"", message: "Standard reward plus guild points. Nothing flashy, but it is honest work and a good way to get your first commission on the record."},
                     {name:"", message: "I apologize for throwing this at you on your first day. "},
-                    {name:"", message: "Good luck out there."},                   
+                    {name:"", message: "Good luck !!!"},                   
                 ],
                 notCompletedSpeech: [
                     {name:"", message: "Go near the crstal and simply place your hand there"},
                 ],
                 questsToReceive: [
                     { 
-                        qName: "slayYourFirstInsect", 
-                        qTtle: "Hunt Down Insects", 
-                        desc: "Slay insects near the borders", 
-                        questRequirements: { reqType: "enemy", name: "orangelith", current: 0, requiredNum: 3, completed: false }, //reqType'enemy/item/money
+                        qName: "slayFirstSlime", 
+                        qTtle: "Hunt Down Slimes", 
+                        desc: "Slay slimes near the borders", 
+                        questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 3, completed: false }, //reqType'enemy/item/money
                     }
                 ],
                 cb: () => {
                     updateStoryQuestUI({ 
-                        qName: "slayYourFirstInsect", 
-                        qTtle: "Hunt Down Insects", 
-                        desc: "Slay insects near the borders", 
-                        questRequirements: { reqType: "enemy", name: "orangelith", current: 0, requiredNum: 3, completed: false }, //reqType'enemy/item/money
+                        qName: "slayFirstSlime", 
+                        qTtle: "Hunt Down Slimes", 
+                        desc: "Slay slimes near the borders", 
+                        questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 3, completed: false }, //reqType'enemy/item/money
                     })
                 }
             },
             { // storyInfo
-                qName: "slayYourFirstInsect",
+                qName: "slayFirstSlime",
                 desc: false, 
                 questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
                 //receiveRT: //afterTalk//afterHunt//afterFoundItem 
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
                 speech: [
-                    {name:"", message: "I see you have defeated those pesky insects"},
+                    {name:"", message: "Congratulations on exterminating those pesky slimes"},
+                    {name:"", message: "Time for your reward"},
                    
                 ],
                 notCompletedSpeech: [
-                    {name:"", message: "I know you can kill those Insects ! 3 Heads is enough !"},
+                    {name:"", message: "I know you can kill those Slimes ! 3 Heads is enough !"},
                 ],
                 questsToReceive: [
                     { 
@@ -193,6 +194,151 @@ export default [
                     // actually none because the questToReceive will activate when you go near the crystal
                 }
             },
+        ]
+    },
+    {
+        glbPath: null,
+        currentPlaceId: 9,
+        mode: "idle",
+        _id: "102_armin",
+        name: "Armin",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x:-5.9,
+        y: 0.01,
+        z: 0.3,
+        _dirTarg: {x:10,z:100},
+        cloth: 'style3',
+        pants: 'style1',
+        hair: 'style1',
+        boots: 'style1',
+        skinColor: {r:0.45,g:0.30,b:0.16, name: "color2"},
+        hairColor: {r: 0, g: 0, b: 0},
+        clothColor: {r: 0, g: 0, b: 0},
+        pantsColor: {r: 0, g: 0, b: 0},
+        items: [
+        {
+            itemId: randomNum(), // should be string also in client
+            name: "ironjaw", // is also the image name
+            dn: "Knight's Helm III",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            weaponType: undefined,
+            equipAbilities: { 
+                dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: true, // only for equipable items
+            enhancedLevel: 0,
+            slots: [],// { name, dn, equipAbilities } cores
+            durability: { current: 100, max: 100},
+            price: 10,
+            qnty: 1,
+            desc: undefined,
+            rarity: "rare",
+            metalColor: "adamantine"
+        },
+        {
+            itemId: randomNum(), // should be string also in client
+            name: "frostbite", // is also the image name
+            dn: "Frost Bite",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            weaponType: "sword",
+            equipAbilities: { 
+                dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: true, // only for equipable items
+            enhancedLevel: 0,
+            slots: [],// { name, dn, equipAbilities } cores
+            durability: { current: 100, max: 100},
+            price: 10,
+            qnty: 1,
+            desc: undefined,
+            rarity: "rare",
+
+            parts: {
+                bladeRarity: "rare1",
+                guardRarity: "rare2",
+                handleRarity: "common1",
+                pommelRarity: "common1"
+            }
+        },
+        {
+            itemModelStyle: "prieststyle1",
+            name: "priestbelt", // is also the image name
+            dn: "Priest Belt",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "belt", // sword/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            equipAbilities: { 
+                dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: true, // only for equipable items
+            enhancedLevel: 0,
+            durability: { current: 100, max: 100},
+            price: 1000,
+            qnty: 1,
+            desc: "A Priest Vest, Plus Holyness",
+            rarity: "normal"//rare//mystical//legendary
+        },
+        {
+            itemModelStyle: "prieststyle1",
+            name: "priestvest", // is also the image name
+            dn: "Priest Vest",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "cloak", // sword/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            equipAbilities: { 
+                dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: true, // only for equipable items
+            enhancedLevel: 0,
+            durability: { current: 100, max: 100},
+            price: 1000,
+            qnty: 1,
+            desc: "A Priest Cloak, Plus Holyness",
+            rarity: "normal"//rare//mystical//legendary
+        }
+        ],
+        titles: ['priest'],
+        skills: [], 
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['light'],
+        blessings: ["holyHand"],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message:"Time will come, and all evil will be vanquished"},
+            {name: "" ,message: "Set your heart ablaze"}
+        ],
+        forQuests: [
+
         ]
     },
     {

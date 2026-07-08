@@ -152,6 +152,86 @@ export function createBloodSplatter(scene, pos,burst){
 
     return { ps, play }
 }
+export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSize, minMaxLifeTime, minMaxEmitPower, qnty, gravityVector3, rgb1, rgb2, isDefaultSizeGrad, particleType, particleTypeRadius, activateRotations){
+    const particleSystem = new ParticleSystem("particles", 8000, scene);
+    //Texture of each particle
+    particleSystem.particleTexture = new Texture(`./images/particles/${particleImgName}.png`, scene);
+    // lifetime
+    if(minMaxLifeTime){
+        const {min,max} = minMaxLifeTime
+        particleSystem.minLifeTime = min
+        particleSystem.maxLifeTime = max
+    }
+    if(minMaxEmitPower){
+        const {min,max} = minMaxEmitPower
+        particleSystem.minEmitPower = min
+        particleSystem.maxEmitPower = max
+    }
+    if(minMaxSize){
+        const {min,max} = minMaxSize
+        particleSystem.minSize = min
+        particleSystem.maxSize = max
+    }
+    // emit rate
+    particleSystem.emitRate = qnty;
+
+    // gravity
+    if(gravityVector3) particleSystem.gravity = gravityVector3;    
+
+    if(isDefaultSizeGrad){
+        // size gradient
+        particleSystem.addSizeGradient(0, 0.6, .7);
+        particleSystem.addSizeGradient(0.3, 2, .9);
+        particleSystem.addSizeGradient(0.5, 2, 1);
+        particleSystem.addSizeGradient(.9, .8, 2);
+    }
+    // color gradient
+    // yung unang param yan yung 0-1 kung meron kang apat na colorGrad hatiin mo sa apat yung 1 parang add size gradient lang yan sa babylon js playground
+    const Col4 = Color4;
+    const {r,g,b} = rgb1        
+    particleSystem.addColorGradient(0, new Col4(r,g,b, .01), new Col4(rgb2.r,rgb2.g,rgb2.b, .07))
+    particleSystem.addColorGradient(.4, new Col4(r,g,b, .1), new Col4(rgb2.r,rgb2.g,rgb2.b, .2))
+    particleSystem.addColorGradient(.7, new Col4(r,g,b, 1), new Col4(rgb2.r,rgb2.g,rgb2.b,.9))
+    particleSystem.addColorGradient(1, new Col4(r,g,b, .1), new Col4(rgb2.r,rgb2.g,rgb2.b,  .1))
+
+    // speed gradient
+    particleSystem.addVelocityGradient(0, 1, 1.5);
+    particleSystem.addVelocityGradient(0.1, 0.8, 0.9);
+    particleSystem.addVelocityGradient(0.7, 0.4, 0.5);
+    particleSystem.addVelocityGradient(1, 0.1, 0.2);
+
+    // rotation
+    if(activateRotations){
+        particleSystem.minInitialRotation = 0;
+        particleSystem.maxInitialRotation = Math.PI;
+        particleSystem.minAngularSpeed = -1;
+        particleSystem.maxAngularSpeed = 1;
+    }
+
+    // blendmode
+    particleSystem.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+    
+    // emitter shape
+    let psRadius = particleTypeRadius ? particleTypeRadius : 0.1
+    switch(particleType){
+        case "cylinder":                
+            particleSystem.createCylinderEmitter(psRadius, psRadius*3, 1, 1)
+        break;
+        case "mesh":
+            const {x,y,z} = emitter.position
+            particleSystem.createBoxEmitter(new Vector3(0,0,0), new Vector3(0,0,0), new Vector3(-1,0,-1), new Vector3(1,0,1))
+        break;
+        default:
+            // sphere
+            particleSystem.createSphereEmitter(psRadius)
+        break
+    }       
+
+    // particleSystem.createCylinderEmitter(.1,.1,2)
+    if(emitter) particleSystem.emitter = emitter
+    particleSystem.stop()
+    return particleSystem
+}
 function buildBloodSystem(scene, name, capacity, position, opts = {}){
     const ps = new ParticleSystem(name, capacity, scene);
     const bloodTex = new Texture(
@@ -159,10 +239,10 @@ function buildBloodSystem(scene, name, capacity, position, opts = {}){
         scene,
         // false,  // noMipmap
         // true,   // invertY
-        // BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+        // Texture.BILINEAR_SAMPLINGMODE,
         // () => {
         //     // Texture is ready — safe to start the auto-demo now
-        //     spawnSplatter(new BABYLON.Vector3(0, 0.02, 0));
+        //     spawnSplatter(new Vector3(0, 0.02, 0));
         // }
     );
     ps.particleTexture = bloodTex;

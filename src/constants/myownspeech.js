@@ -24,6 +24,7 @@ export const myownspeeches = [
                 message: "What is this room ..."
             }
         ],
+        loadingMessage: ["Not Everyone Is Given A Chance", "To Have A Second Life"],
         cb: function() {
             const charState = getCharState()
             if(!charState) return

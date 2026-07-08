@@ -9,6 +9,7 @@ import { positionAtkCollider } from "./createMyCharacter.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
+import { openCloseSkills } from "../components/skillsui.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -52,8 +53,8 @@ export function activateBtnOnce(){
                 case "stats":           
                    openOrCloseStats()
                 break
-                case 'enhance':
-                    // openCloseEnhanceSystem(true)
+                case 'skills':
+                    openCloseSkills()
                 break
             }
         }) 
@@ -67,12 +68,25 @@ export function activateBtnOnce(){
             const isSocketOn = getIsSocketOn()
             
             disableEnableAttackButtonsContainer(false)
+
+            const charState = getCharState()
+            if(!charState) return
+
+            const hasWeapon = charState.items.some(itm => itm.itemType === "weapon" && itm.equiped)
+            const currentMode = charState.mode
+
+            
+
             clearTimeout(clickedTimeOut)
             switch(btnName){
                 case "walk":
+                    if(hasWeapon && currentMode === "fighting"){
+
+                    }
                     setCharStateMode("idle")
                     
                     if(isSocketOn) emitMyLoc("idle")
+
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
                     }, 500)
@@ -88,15 +102,12 @@ export function activateBtnOnce(){
                     }, 100)
                 break
                 case "attack":
-                    const charState = getCharState()
-                    if(!charState) return
-                    
                     const dmgDetails = calcDmg(charState)
 
                     const spToDeduct = (dmgDetails.physicalDmg/2) + (dmgDetails.weaponDmg/4)
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
-                    }, 700)
+                    },swordAnimNum === 1 ? 400: 800)
                     if(getTotal().sp < spToDeduct) {
                         // openClosePopup("no stamina", true, 1000)
                         popStatusEffect("no stamina", "yellow")
@@ -111,24 +122,29 @@ export function activateBtnOnce(){
                     getAllSounds().voiceAttackS.setPlaybackRate(0.9 + (Math.random()*0.2))
                     getAllSounds().voiceAttackS.play()
                     
-                    let weaponType = ""
-                    let attackAnimName = ""
-                    const attackInfo = getAttackInfo(attackAnimName)
-                    charState.items.find(itm=>{
-                        if(itm.itemType === "weapon" && itm.equiped) weaponType = itm.weaponType
+                    let animName = 'kick1'
+                    charState.items.forEach(itm => {
+                        if (itm.itemType === "weapon" && itm.equiped) {
+ 
+                            animName = `${itm.weaponType}attack${swordAnimNum}`                         
+                        }
                     })
+                    
 
-                    if(weaponType) {
-                        attackAnimName = `${weaponType}attack${swordAnimNum}`
-                        playSound(getAllSounds().swordWhooshS)
-                    }
+                    swordAnimNum = swordAnimNum === 1 ? 2 : 1
+
+                    const attackInfo = getAttackInfo()
+
+                    if(attackInfo.weaponType) playSound(getAllSounds().swordWhooshS)
+                    
+                    console.log(animName)
                     if(isSocketOn){
-                        emitAttack(attackAnimName)
+                        emitAttack(attackInfo, animName)
                     }else{
-                        attack(attackInfo)
+                        attack(attackInfo, animName)
                     } 
                     positionAtkCollider({ reach: 1})
-                    swordAnimNum = swordAnimNum === 1 ? 2 : 1
+
                 break
                 case "throw":
                     // if(this.myChar.mode !== "weapon") return this._statPopUp("You must hold a weapon")
@@ -210,10 +226,15 @@ export function activateBtnOnce(){
 
 export function disableEnableAttackButtonsContainer(enable, hide = false){
     const container = document.querySelector(".walk-run-icons-container")
+    const skillSlotContainer = document.querySelector(".skill-slots")
     if (!container) return  // guard in case element doesn't exist
+    if (!skillSlotContainer) return  // guard in case element doesn't exist
     container.style.display = "block"
+    skillSlotContainer.style.display = "flex"
     container.classList.toggle("disabled", !enable)
+    skillSlotContainer.classList.toggle("disabled", !enable)
     if(hide){
         container.style.display = "none"
+        skillSlotContainer.style.display = "none"
     }
 }

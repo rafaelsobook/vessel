@@ -1,14 +1,12 @@
-import { emitAttack } from "../sockets/emits"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
 import { getAdditionalsFromAbilities, getCharState, getTotalAtkSpd } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 
-export function attack(_attackInfo){  
+export function attack(_attackInfo, attackAnimName){  
     const {
         owner,
         pos,
         dirTarg,
-        animName,
         dmgDetails,
         hasWeapon,
         isMissed,
@@ -22,10 +20,10 @@ export function attack(_attackInfo){
     if (!playerAttacked) return
     playerAttacked._attacking = true
 
-    const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, animName, 0.8 + atkSpd)
+    const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)
 
     if (played) {
-        const actionAnim = playerAttacked.anims.find(a => a.name.toLowerCase() === animName.toLowerCase())
+        const actionAnim = playerAttacked.anims.find(a => a.name.toLowerCase() === attackAnimName.toLowerCase())
         actionAnim.onAnimationEndObservable.addOnce(() => {
             const plToanim = getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
             if (!plToanim || plToanim.isDead) return
@@ -35,9 +33,22 @@ export function attack(_attackInfo){
         playerAttacked._attacking = false
     }
 }
-
+export function activateSkill(ownerId, skillDetail){
+    const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
+    if(!player) return
+    switch(skillDetail.name){
+        case "flexaura":
+            if(skillDetail.isActive){
+                player.auraz.start()
+            } else {
+                player.auraz.stop()
+            }
+        break
+    }
+}
 // tools
-export function getAttackInfo(attackAnimName){
+
+export function getAttackInfo(){
     const charState = getCharState()
     if(!charState) return
     const { pos, dirTarg, mode} = getPlayerCoord(charState.owner)
@@ -46,21 +57,20 @@ export function getAttackInfo(attackAnimName){
     let hasWeapon = false
     let isMissed = false
     let weaponType = "fist"
-    let animName = 'kick1'
+
     charState.items.forEach(itm => {
         if (itm.itemType === "weapon" && itm.equiped) {
             hasWeapon = true
             weaponType = itm.weaponType
-            animName = attackAnimName ? attackAnimName : `${weaponType}attack1`
+            
         }
     })
     const dmgDetails = calcDmg(charState)
-
     return {
         owner: charState.owner,
         pos,
         dirTarg,
-        animName,
+        
         dmgDetails,
         hasWeapon,
         isMissed,

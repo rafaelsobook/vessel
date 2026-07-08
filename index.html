@@ -4,10 +4,119 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/style.css" />
     <title>client</title>
   </head>
-  <body>
+  <body background-color="black">
     <canvas></canvas>
+    <div class="intro-load-screen">
+        <p class="ils-cap"></p>
+        <img class="loading-img" src="./images/UI/ms/vessellogo.webp" alt="" class="src">
+    </div>
+    <div class="home-page">
+        img
+        <img src="./images/UI/ms/vessellogo.webp" alt="" class="db-logo db-placeup">
+        
+        <!-- KEEP -->
+        <div class="center-animation">
+            <img class="floating-char" src="./images/wallpaper/floatingchar.webp" />
+            <img class="spinningcirc circ1" src="./images/wallpaper/spinningcirc.webp" />
+            <img class="spinningcirc" src="./images/wallpaper/spinningcirc.webp" />
+        </div>
+
+        <div class="login-register-form">
+            <div class="auth-fields">
+                <img src="./images/UI/ms/form.webp" alt="" class="form-background">
+                <p class="page-msg" id="auth-msg"></p>
+                <input type="text" placeholder="username" id="usernameInp" class="username inp">
+                <input type="password" placeholder="password" id="passwordInp" class="password inp">
+                <input type="password" placeholder="confirm password" id="confirmpass" class="confirm-password inp hidden">
+
+                <button class="btn toggle-auth-mode" id="toggleAuthMode">Need an account? Register</button>
+            </div>
+            <button class="enter-button" id="enterWorldBtn">
+                <img src="./images/UI/ms/button.webp" />
+                ENTER WORLD
+            </button>
+
+        </div>
+        
+        <!-- <div class="copyright">Ⓒ dungeonBorn 2023 beta</div> -->
+    </div>
+    
+
+
+
+
+
+    <div class="skill-container cont">
+        <img src="./images/UI/xshield.png" class="close-parent btn"/>
+        <img class="skill-background" src="./images/UI/frames/rightbigcont.webp" alt="">
+        
+        <div class="skill-list-left">
+            <img class="skill-background" src="./images/UI/frames/leftbox.webp" alt="">
+            <ul class="skill-list">
+
+            </ul>
+        </div>
+        <div class="skill-info-right">
+            <img class="skill-background" src="./images/UI/frames/rightbox.webp" alt="">
+            <div class="skill-info">
+                <div class="skill-info-display">
+                    <img src="./images/UI/frames/skillring.webp" alt="" class="info-circle-bg">
+                    <img src="" alt="" class="info-skill-img skillInfoImg">
+                </div>
+                <div class="skill-info-details">
+                    <div class="skill-info-header">
+                        <p class="skill-info-title skillInfoTitle"></p>
+                        <span class="skill-status skillInfoStatus"></span>
+                    </div>
+                    <div class="skill-stats">
+                        <div class="skill-stat-row">
+                            <span class="stat-label">Type</span>
+                            <span class="stat-value skillInfoType"></span>
+                        </div>
+                        <div class="skill-stat-row">
+                            <span class="stat-label">Mana Cost</span>
+                            <span class="stat-value skillInfoCost"></span>
+                        </div>
+                        <div class="skill-stat-row">
+                            <span class="stat-label">Cooldown</span>
+                            <span class="stat-value skillInfoCooldown"></span>
+                        </div>
+                    </div>
+                    <p class="skill-info-desc skillInfoDesc"></p>
+                    <button class="level-up-btn skillLevelUpBtn">
+                        <span class="level-up-lbl">Level Up</span>
+                        <span class="level-up-cost skillLevelUpCost"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <ul class="skill-slots">
+        <button class="skill-slot-button 1">
+            <img class="plus-sign" src="./images/UI/frames/plus.webp" alt="" class="src">
+            <img src="./images/UI/frames/skillring.webp" alt="" class="src">
+        </button>
+        <button class="skill-slot-button 2">
+            <img class="plus-sign" src="./images/UI/frames/plus.webp" alt="" class="src">
+            <img src="./images/UI/frames/skillring.webp" alt="" class="src">
+        </button>
+        <button class="skill-slot-button 3">
+            <img class="plus-sign" src="./images/UI/frames/plus.webp" alt="" class="src">
+            <img src="./images/UI/frames/skillring.webp" alt="" class="src">
+        </button>
+        <button class="skill-slot-button 4">
+            <img class="plus-sign" src="./images/UI/frames/plus.webp" alt="" class="src">
+            <img src="./images/UI/frames/skillring.webp" alt="" class="src">
+        </button>
+        <button class="skill-slot-button 5">
+            <img class="plus-sign" src="./images/UI/frames/plus.webp" alt="" class="src">
+            <img src="./images/UI/frames/skillring.webp" alt="" class="src">
+        </button>
+    </ul>
+
     <div class="walk-run-icons-container">
         <button class="icon-btn throw walkrun-btns">
             <img src="./images/UI/throw.png" alt="" class="icon-img">
@@ -37,7 +146,7 @@
     </div>
 
     <div class="icons-container">        
-        <button class="icon-btn btn menu-btns enhance">
+        <button class="icon-btn btn menu-btns skills">
             <img src="./images/UI/enhance.png" alt="" class="icon-img">
         </button>
         <button class="icon-btn btn menu-btns stats">
@@ -52,6 +161,7 @@
     <div class="inventory-container cont">
         <img src="./images/UI/xshield.png" class="close-parent btn"/>
         <div class="cont-bx armorycont">
+            <img class="uiframe" src="./images/UI/frames/rightbox.webp" alt=""/>
             <p class="bx-title">Armory</p>
             <div class="armory-bx">
                 <div class="armory-list gears">
@@ -75,6 +185,7 @@
             </div>
         </div>
         <div class="cont-bx">
+            <img class="uiframe" src="./images/UI/frames/rightbox.webp" alt=""/>
             <p class="bx-title">Inventory</p>
             <div class="assets-bx">
                 <div class="bx">
@@ -202,7 +313,7 @@
       </div>
     </div>
     <div class="stats-container cont">
-        <img src="./images/UI/border4.png" alt="" class="border-backg">
+        <img src="./images/UI/frames/rightbox.webp" alt="" class="border-backg">
         <img src="./images/UI/xshield.png" class="close-parent btn"/>
         <div class="center-glow"></div>
         <div class="stat-upper-detail">

@@ -5,7 +5,7 @@ import "@babylonjs/loaders"
 import { getSocketPlacesMD, initSocket, joinWorld } from "../sockets/joinsocket.js";
 import { metaDatas } from "../constants/localroomdb.js";
 import { setCharState } from "../charactersystem/characterstate.js"
-import { activateBtnOnce } from "../charactersystem/uimanagement.js";
+import { activateBtnOnce, hideShowAllScreenUI } from "../charactersystem/uimanagement.js";
 import { findMyCurrentPlace } from "../states/placestates.js";
 import { disposePhysics } from "../tools/physics.js";
 import { makeSureArraysAreClean } from "../components/cleanup.js";
@@ -58,7 +58,7 @@ export async function changeScene(_sceneName){
     setGameStatus("running")
 }
 export async function startScene(willCreateCharacter){
-
+    hideShowAllScreenUI()
     await initEngine()
     if(!willCreateCharacter){
         closeCharacterPage()

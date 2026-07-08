@@ -11,8 +11,10 @@ import "@babylonjs/loaders";
 //   - material = null    (caller assigns material)
 //   - position = (0,0,0)
 //
-
-export async function loadModel(path, scene) {
+export async function loadglbs(params) {
+    
+}
+export async function loadModel(path, scene, willReturnArray) {
     const container = await SceneLoader.LoadAssetContainerAsync("", path, scene);
     container.addAllToScene();
 
@@ -34,7 +36,7 @@ export async function loadModel(path, scene) {
     mesh.isVisible = false;
 
     // mesh.rotationQuaternion = null
-    return mesh;
+    return willReturnArray ? container.meshes : mesh;
 }
 
 export async function loadModelByIndx(path, meshIndx, scene) {

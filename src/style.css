@@ -4,10 +4,15 @@
 @import url("https://fonts.googleapis.com/css2?family=Graduate&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Bellefair&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Bellefair&family=Jim+Nightshade&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&display=swap");
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+body {
+  background: rgb(29, 28, 28);
 }
 
 canvas {
@@ -22,7 +27,7 @@ canvas {
   position: fixed;
   top: 60%;
   right: 15%;
-  display: block;
+  display: none;
   z-index: 4;
   height: 200px;
   width: 150px;
@@ -82,6 +87,10 @@ canvas {
   pointer-events: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .page-overlay {
   position: fixed;
   inset: 0;
@@ -92,7 +101,7 @@ canvas {
   background: #0a0a0a;
   color: #e0d6c2;
   font-family: serif;
-  z-index: 100;
+  z-index: 1;
   gap: 10px;
 }
 
@@ -305,6 +314,7 @@ canvas {
   font-weight: 500;
   width: 70%;
   font-size: 1.1rem;
+  font-family: "Cormorant Garamond", serif;
 }
 .answers-list .answer-btn:hover {
   transform: scaleX(1.1);
@@ -1629,18 +1639,30 @@ canvas {
   background: none;
 }
 .inventory-container .cont-bx {
+  position: relative;
   color: #dad5d5;
   display: flex;
   flex-direction: column;
   justify-content: space-around;
   align-items: center;
   padding: 10px;
-  border: 1px solid gray;
-  background: #1f1e1e;
-  width: 300px;
-  height: 400px;
+  width: 350px;
+  height: 450px;
   border-radius: 6px;
   box-shadow: inset 0 0 20px 10px rgba(0, 0, 0, 0.5);
+  overflow: visible;
+}
+.inventory-container .cont-bx .uiframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+.inventory-container .armorycont {
+  padding: 0 35px 20px 35px;
 }
 .inventory-container .armory-bx {
   position: relative;
@@ -1713,7 +1735,6 @@ canvas {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  background: rgba(15, 15, 15, 0.8);
   padding: 2px 10px;
 }
 .inventory-container .assets-bx .bx {
@@ -1745,8 +1766,6 @@ canvas {
   padding: 30px 20px 0px 20px;
   overflow-y: scroll;
   overflow-x: hidden;
-  background: rgba(19, 18, 18, 0.8);
-  box-shadow: inset 0 0 20px 10px rgba(0, 0, 0, 0.5);
 }
 .inventory-container .slot-btn {
   width: 50px;
@@ -2080,6 +2099,25 @@ canvas {
   width: 100%;
   background: linear-gradient(to left, transparent, rgba(231, 231, 231, 0.54), rgba(224, 224, 224, 0.54), transparent);
 }
+.login-container .circ-backg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(0);
+  width: 140%;
+  z-index: -2;
+  pointer-events: none;
+  background: url("../images/wallpaper/spinningcirc.png") no-repeat center center;
+  background-size: contain;
+  aspect-ratio: 1/1;
+  animation: spinning 16s linear infinite;
+}
+.login-container.reg-mode #loginBtn {
+  display: none;
+}
+.login-container.reg-mode .toreg {
+  display: block;
+}
 .login-container .login-cont-btns {
   display: flex;
   justify-content: space-around;
@@ -2129,6 +2167,8 @@ canvas {
 }
 .login-container .toreg {
   display: none;
+}
+.login-container input.toreg {
   background: none;
   border: none;
 }
@@ -2550,4 +2590,504 @@ canvas {
   z-index: -1;
   height: 100%;
   width: 100%;
+}
+
+.skill-slots {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 5;
+  width: 500px;
+  height: 100px;
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  top: 93%;
+}
+.skill-slots .skill-slot-button {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border: none;
+  background: none;
+  overflow: hidden;
+}
+.skill-slots .skill-slot-button .plus-sign {
+  z-index: 1;
+  width: 40%;
+  height: 40%;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.skill-slots .skill-slot-button .plus-sign:hover {
+  z-index: 1;
+  width: 35%;
+  height: 35%;
+  transition: 0.2s;
+}
+.skill-slots .skill-slot-button .plus-sign:active {
+  filter: opacity(0.4);
+  transition: 0.1s;
+}
+.skill-slots .skill-slot-button img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+}
+
+.skill-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 6;
+  width: 900px;
+  height: 600px;
+  display: none;
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 20px 15px 20px 30px;
+}
+.skill-container .skill-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+.skill-container .skill-list-left {
+  position: relative;
+  width: 40%;
+  height: 100%;
+}
+.skill-container .skill-list-left .skill-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  height: 100%;
+  padding: 100px 30px 50px 30px;
+  overflow-y: auto;
+}
+.skill-container .skill-list-left .skill-list .skill-bx {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  transition: 0.15s;
+}
+.skill-container .skill-list-left .skill-list .skill-bx .skill-img {
+  position: relative;
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  -o-object-fit: cover;
+     object-fit: cover;
+}
+.skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text {
+  display: flex;
+  flex-direction: column;
+}
+.skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text .skill-name {
+  font-family: "Bellefair", serif;
+  font-size: 15px;
+  color: #dcc9f0;
+}
+.skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text .skill-lvl {
+  font-family: "Bellefair", serif;
+  font-size: 12px;
+  color: rgba(177, 177, 177, 0.6);
+}
+.skill-container .skill-list-left .skill-list .skill-bx .skill-status {
+  margin-left: auto;
+  font-family: "Bellefair", serif;
+  font-size: 12px;
+  color: rgba(177, 177, 177, 0.6);
+}
+.skill-container .skill-list-left .skill-list .skill-bx .skill-status.active {
+  color: #edd59f;
+}
+.skill-container .skill-list-left .skill-list .skill-bx:hover {
+  border-color: rgba(202, 165, 1, 0.3);
+}
+.skill-container .skill-list-left .skill-list .skill-bx.selected {
+  border-color: rgba(202, 165, 1, 0.6);
+  background: rgba(202, 165, 1, 0.08);
+}
+.skill-container .skill-info-right {
+  position: relative;
+  width: 60%;
+  height: 100%;
+}
+.skill-container .skill-info-right .skill-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  padding: 60px 40px 40px 40px;
+}
+.skill-container .skill-info-right .skill-info .skill-info-display {
+  position: relative;
+  flex-shrink: 0;
+  width: 180px;
+  height: 180px;
+}
+.skill-container .skill-info-right .skill-info .skill-info-display .info-circle-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.skill-container .skill-info-right .skill-info .skill-info-display .info-skill-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 65%;
+  height: 65%;
+  border-radius: 50%;
+  -o-object-fit: cover;
+     object-fit: cover;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details {
+  width: 100%;
+  margin-top: 20px;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-info-header .skill-info-title {
+  font-family: "Bellefair", serif;
+  font-size: 22px;
+  color: #dcc9f0;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-info-header .skill-status {
+  font-family: "Bellefair", serif;
+  font-size: 13px;
+  color: rgba(177, 177, 177, 0.6);
+  border: 1px solid rgba(177, 177, 177, 0.3);
+  border-radius: 10px;
+  padding: 2px 10px;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-info-header .skill-status.active {
+  color: #edd59f;
+  border-color: rgba(237, 213, 159, 0.5);
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-stats {
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-stats .skill-stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-family: "Bellefair", serif;
+  font-size: 14px;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-stats .skill-stat-row .stat-label {
+  color: rgba(177, 177, 177, 0.6);
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-stats .skill-stat-row .stat-value {
+  color: #f5f5f5;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .skill-info-desc {
+  margin-top: 14px;
+  font-family: "Bellefair", serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d8d5d5;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .level-up-btn {
+  cursor: pointer;
+  background: rgb(15, 17, 17);
+  color: rgb(202, 165, 1);
+  border: 1px solid rgba(121, 92, 92, 0.54);
+  border-radius: 4px;
+  padding: 4px 0;
+  font-family: "Almendra Display", cursive;
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  margin-top: 20px;
+}
+.skill-container .skill-info-right .skill-info .skill-info-details .level-up-btn .level-up-cost {
+  font-size: 1rem;
+  letter-spacing: 1px;
+}
+
+.home-page {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 2;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: url("../images/wallpaper/dbhomeback.jpg") no-repeat;
+  background-size: cover;
+  box-shadow: inset 0px 0px 70px 60px rgba(0, 0, 0, 0.7);
+}
+.home-page .center-animation {
+  position: fixed;
+  top: 50%;
+  left: 48%;
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  width: 40%;
+  pointer-events: none;
+  height: 70%;
+}
+.home-page .center-animation .floating-char {
+  position: absolute;
+  top: 55%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  z-index: 2;
+  animation: floating 4s ease-in-out infinite;
+}
+.home-page .center-animation .spinningcirc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(0);
+  width: 120%;
+  z-index: 1;
+  animation: spinning 10s linear infinite;
+  opacity: 1;
+}
+.home-page .center-animation .circ1 {
+  filter: brightness(2) blur(10px);
+}
+@keyframes floating {
+  0% {
+    top: 55%;
+  }
+  50% {
+    top: 50%;
+  }
+  100% {
+    top: 55%;
+  }
+}
+@keyframes spinning {
+  0% {
+    transform: translate(-50%, -50%) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+    opacity: 1;
+  }
+}
+.home-page .enter-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 300;
+  width: auto;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 1;
+  width: 300px;
+  height: 90px;
+  aspect-ratio: 1980/578;
+  top: 110%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: rgb(210, 176, 133);
+  font-family: "Bellefair", serif;
+  letter-spacing: 3px;
+  font-size: 1.1rem;
+  line-height: 10.5;
+  z-index: 1;
+}
+.home-page .enter-button img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  filter: brightness(0.6);
+  transition: 0.3s ease-in-out;
+  pointer-events: none;
+  transform: translateY(-5px);
+  pointer-events: none;
+}
+.home-page .enter-button:hover img {
+  filter: brightness(1);
+}
+.home-page .enter-button:active {
+  transform: translate(-50%, -50%) scale(0.97);
+}
+.home-page .wallpaperz {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(100%);
+  z-index: -1;
+}
+.home-page #installGame {
+  display: none;
+}
+.home-page .homepage-btn {
+  position: absolute;
+  top: 80%;
+  left: 48%;
+  transform: translate(-50%, -50%) scale(1);
+  cursor: pointer;
+  width: 20%;
+  filter: brightness(0.3);
+  transition: 0.3s ease-in-out;
+}
+.home-page .homepage-btn:hover {
+  filter: brightness(1);
+  transition: 0.3s ease-in-out;
+}
+.home-page .homepage-btn:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
+.intro-load-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 11;
+  height: 100%;
+  width: 100%;
+  background-color: rgb(41, 37, 34);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.intro-load-screen .ils-cap {
+  font-family: sanserif;
+  color: rgb(173, 173, 173);
+  font-size: 3.2rem;
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+.intro-load-screen img {
+  width: 350px;
+}
+.intro-load-screen {
+  z-index: 100;
+  display: none;
+}
+
+.db-logo {
+  cursor: pointer;
+  position: fixed;
+  left: 48%;
+  top: 14%;
+  transform: translate(-50%, -50%) scale(0.25);
+  z-index: 10;
+  transition: 0.5s ease-in-out;
+}
+
+.logo-introscreen {
+  transform: scale(0.4);
+}
+
+.login-register-form {
+  position: fixed;
+  top: 70%;
+  left: 48.5%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 500px;
+  height: 256px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 90px;
+}
+.login-register-form .auth-fields {
+  display: contents;
+}
+.login-register-form .form-background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+.login-register-form .inp {
+  outline: none;
+  width: 70%;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgb(173, 173, 173);
+  border: 1px solid #838383;
+  border-radius: 4px;
+  font-family: "M PLUS Rounded 1c", sans-serif;
+  text-align: center;
+}
+.login-register-form .inp::-moz-placeholder {
+  color: rgba(177, 177, 177, 0.6);
+}
+.login-register-form .inp::placeholder {
+  color: rgba(177, 177, 177, 0.6);
+}
+.login-register-form .btn {
+  color: rgb(173, 173, 173);
+  border: 1px solid #838383;
+  padding: 6px 30px;
+  font-size: 1rem;
+  border-radius: 10%;
+  cursor: pointer;
+  background: linear-gradient(to bottom, rgb(0, 0, 0), rgb(58, 58, 58), rgba(71, 71, 71, 0.8), rgba(117, 117, 117, 0.6));
+  font-family: "Bellefair", serif;
+  text-transform: capitalize;
+}
+.login-register-form .btn:active {
+  color: rgb(116, 109, 99);
+  background-color: rgb(15, 17, 17);
+}
+.login-register-form .toggle-auth-mode {
+  background: none;
+  border: none;
+  color: rgb(173, 173, 173);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px;
+  z-index: 2;
 }/*# sourceMappingURL=style.css.map */

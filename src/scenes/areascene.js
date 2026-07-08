@@ -24,14 +24,14 @@ import { startMyOwnSpeech } from "../components/conversations.js";
 import { loadMeshOnlyParts } from "../tools/loadmodel.js";
 import { spawnProjectile } from "../creations/skills.js";
 import {runEmitMyLocInterval } from "../sockets/emits.js";
-import { hideShowAllScreenUI, openCloseLifeDisplay, showHideIcons } from "../charactersystem/uimanagement.js";
+import { disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay, showHideIcons } from "../charactersystem/uimanagement.js";
 import { obtain } from "../charactersystem/inventory.js";
 import createAllNpcInArea from "../npc/createAllNpcInArea.js";
 import { exitScene } from "../sockets/exitsocket.js";
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js";
 import { createFireParticles } from "../tools/particlesystem.js";
 import { initSounds } from "../components/soundSystem.js";
-import { createSky } from "../creations/creationTools.js";
+import { createOriginal, createSky } from "../creations/creationTools.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -55,13 +55,17 @@ export async function areaScene(placeDetail){
     let slimeRoot = await loadAvatarContainer("./models/monsters/slime.glb", scene)
 
     const HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
+    const helmets = await SceneLoader.ImportMeshAsync("", "./models/helmets/", "helmets.glb", scene)
+    helmets.meshes.forEach(m => m.isVisible = false)
+    // const helmets = await loadModel("./models/helmets/helmets.glb", scene, true)
+    console.log(helmets)
     const allweaponParts = await loadMeshOnlyParts("./models/swords/allswords.glb", scene)
 
     const containers = setSocketContainers({
         hairs: HairModel.meshes,
         animeBody: animeBodyContainer,
         allweapons: allweaponParts,
-        helmets: null,
+        helmets: helmets.meshes,
         armors: null,
         belts: null,
         cloaks: null,
@@ -84,6 +88,14 @@ export async function areaScene(placeDetail){
             createRoom(scene, placeDetail, myCharacter.body);
         break;
     }
+    
+    if(placeDetail.originalGlbs && placeDetail.originalGlbs.length > 0){
+        placeDetail.originalGlbs.forEach( async origin => {
+            console.log(origin)
+            await createOriginal(scene, origin.pos, origin.rot, origin.textures, origin.glbPath)
+        })
+    }
+
     if(placeDetail.optionalObjects && placeDetail.optionalObjects.length > 0){
         placeDetail.optionalObjects.forEach(async item => {
             if (item.name.includes("particle_fire")) {
@@ -194,12 +206,13 @@ export async function areaScene(placeDetail){
     playSocketScene(scene)
     setCanPress(true)
 
-
-
     showHideIcons("block")
     if(charState.currentspeechId){
         startMyOwnSpeech()
         hideShowAllScreenUI(false)
+    }else{
+        disableEnableAttackButtonsContainer(true)
     }
+
     return {scene, isSocketOn: isMultiplayer }
 }

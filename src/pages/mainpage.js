@@ -1,46 +1,49 @@
-import { showLoginPage } from "./loginpage.js"
-import { showRegisterPage } from "./registerpage.js"
-import { getCharDetFromDB } from "../constants/api.js"
-import { startScene } from "../main/main.js"
+import { hideShowAllScreenUI } from "../charactersystem/uimanagement.js"
+import { showLoadingScreen } from "../htmlcomp/loadingscreen.js"
+import { showLoginPage, login, continueSession } from "./loginpage.js"
+import { showRegisterPage, register } from "./registerpage.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 
-export function showMainPage(accountDet) {
-    const overlay = document.createElement("div")
-    overlay.id = "main-overlay"
-    overlay.className = "page-overlay"
+const homePage = document.querySelector(".home-page")
+const authFields = document.querySelector(".auth-fields")
+const toggleBtn = document.querySelector("#toggleAuthMode")
+const enterBtn = document.querySelector("#enterWorldBtn")
+const passwordInput = document.querySelector("#passwordInp")
+const confirmInput = document.querySelector("#confirmpass")
 
-    if (accountDet) {
-        overlay.innerHTML = `
-            <h1>GRIMWRAITH</h1>
-            <p id="main-msg" class="page-msg"></p>
-            <button id="main-continue-btn" class="page-btn">Continue</button>
-        `
-        document.body.appendChild(overlay)
+let isRegisterMode = false
+let hasSavedSession = false
 
-        overlay.querySelector("#main-continue-btn").addEventListener("click", async () => {
-            if (!navigator.onLine) {
-                const msg = overlay.querySelector("#main-msg")
-                msg.textContent = "No internet connection."
-                return
-            }
-            const charData = await getCharDetFromDB(accountDet)
-            overlay.remove()
-            startScene(charData === "notfound")
-        })
+function submit() {
+    if (hasSavedSession) return continueSession()
+    isRegisterMode ? register() : login()
+}
+
+toggleBtn.addEventListener("click", () => {
+    isRegisterMode = !isRegisterMode
+    if (isRegisterMode) {
+        showRegisterPage()
+        toggleBtn.textContent = "Already have an account? Login"
     } else {
-        overlay.innerHTML = `
-            <h1>GRIMWRAITH</h1>
-            <button id="main-login-btn" class="page-btn">Login</button>
-            <button id="main-register-btn" class="page-btn">Register</button>
-        `
-        document.body.appendChild(overlay)
-
-        overlay.querySelector("#main-login-btn").addEventListener("click", () => {
-            overlay.remove()
-            showLoginPage()
-        })
-        overlay.querySelector("#main-register-btn").addEventListener("click", () => {
-            overlay.remove()
-            showRegisterPage()
-        })
+        showLoginPage()
+        toggleBtn.textContent = "Need an account? Register"
     }
+})
+
+enterBtn.addEventListener("click", submit)
+passwordInput.addEventListener("keydown", e => e.key === "Enter" && !isRegisterMode && submit())
+confirmInput.addEventListener("keydown", e => e.key === "Enter" && isRegisterMode && submit())
+
+export function showMainPage() {
+    // showLoadingScreen(["Welcome to Vessel", "Loading"])
+    hideShowAllScreenUI(false)
+    homePage.classList.remove("hidden")
+
+    hasSavedSession = !!checkIfTokenSaved()
+    authFields.classList.toggle("hidden", hasSavedSession)
+    if (hasSavedSession) return
+
+    isRegisterMode = false
+    showLoginPage()
+    toggleBtn.textContent = "Need an account? Register"
 }

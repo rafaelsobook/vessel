@@ -1,50 +1,31 @@
 import { APIURL } from "../constants/constants.js"
-import { showMainPage } from "./mainpage.js"
-import { showCreateCharacterPage } from "./createcharacterpage.js"
 import { startScene } from "../main/main.js"
-import { keepAccountWithTokenDet } from "../constants/api.js"
+import { keepAccountWithTokenDet, getCharDetFromDB } from "../constants/api.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 
+const homePage = document.querySelector(".home-page")
+const usernameInput = document.querySelector("#usernameInp")
+const passwordInput = document.querySelector("#passwordInp")
+const confirmInput = document.querySelector("#confirmpass")
+const enterBtn = document.querySelector("#enterWorldBtn")
+const msg = document.querySelector("#auth-msg")
 
 export function showLoginPage() {
-    const overlay = document.createElement("div")
-    overlay.id = "login-overlay"
-    overlay.className = "page-overlay"
-
-    overlay.innerHTML = `
-        <h2 class="page-title">Login</h2>
-        <p id="login-msg" class="page-msg"></p>
-        <input id="login-username" type="text" placeholder="Username" class="page-input" />
-        <input id="login-password" type="password" placeholder="Password" class="page-input" />
-        <button id="login-btn" class="page-btn">Login</button>
-        <button id="login-back" class="page-btn-back">Back</button>
-    `
-
-    document.body.appendChild(overlay)
-
-    const usernameInput = overlay.querySelector("#login-username")
-    const passwordInput = overlay.querySelector("#login-password")
-    const btn = overlay.querySelector("#login-btn")
-    const msg = overlay.querySelector("#login-msg")
-
+    confirmInput.classList.add("hidden")
+    msg.textContent = ""
+    usernameInput.value = ""
+    passwordInput.value = ""
+    confirmInput.value = ""
     usernameInput.focus()
-
-    btn.addEventListener("click", () => login(usernameInput, passwordInput, btn, msg, overlay))
-    passwordInput.addEventListener("keydown", e => e.key === "Enter" && login(usernameInput, passwordInput, btn, msg, overlay))
-
-    overlay.querySelector("#login-back").addEventListener("click", () => {
-        overlay.remove()
-        showMainPage()
-    })
 }
 
-async function login(usernameInput, passwordInput, btn, msg, overlay) {
+export async function login() {
     const username = usernameInput.value.trim()
     const password = passwordInput.value
 
     if (!username || !password) { msg.textContent = "Fill in all fields."; return }
 
-    btn.disabled = true
-    btn.textContent = "Logging in..."
+    enterBtn.disabled = true
     msg.textContent = ""
 
     try {
@@ -58,8 +39,7 @@ async function login(usernameInput, passwordInput, btn, msg, overlay) {
 
         if (data === "norecord") {
             msg.textContent = "Invalid username or password."
-            btn.disabled = false
-            btn.textContent = "Login"
+            enterBtn.disabled = false
             return
         }
         keepAccountWithTokenDet(data)
@@ -69,15 +49,29 @@ async function login(usernameInput, passwordInput, btn, msg, overlay) {
         })
         const charData = await charRes.json()
 
-        overlay.remove()
-
-
+        homePage.classList.add("hidden")
         startScene(charData === "notfound")
-        
 
     } catch (err) {
         msg.textContent = "Server error, try again."
-        btn.disabled = false
-        btn.textContent = "Login"
+        enterBtn.disabled = false
+    }
+}
+
+export async function continueSession() {
+    const saved = checkIfTokenSaved()
+    if (!saved) return showLoginPage()
+
+    enterBtn.disabled = true
+    msg.textContent = ""
+
+    try {
+        const charData = await getCharDetFromDB(saved)
+
+        homePage.classList.add("hidden")
+        startScene(charData === "notfound")
+    } catch (err) {
+        msg.textContent = "Server error, try again."
+        enterBtn.disabled = false
     }
 }
