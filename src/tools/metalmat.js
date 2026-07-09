@@ -20,10 +20,10 @@ const METAL_ROUGHNESS = {
     adamantine: 0.2,
 }
 
-export function createHelmetMat(scene, metalColor = "iron") {
+export function createMetalMat(scene, metalColor = "iron") {
     const tint = METAL_TINTS[metalColor] ?? METAL_TINTS.iron
     const roughness = METAL_ROUGHNESS[metalColor] ?? 0.4
-    const mat = new PBRMaterial(`helmetMat_${metalColor}`, scene)
+    const mat = new PBRMaterial(`metalMat_${metalColor}`, scene)
     mat.albedoColor = tint
     mat.metallic = 1
     mat.roughness = roughness

@@ -58,7 +58,9 @@ export async function areaScene(placeDetail){
     const helmets = await SceneLoader.ImportMeshAsync("", "./models/helmets/", "helmets.glb", scene)
     helmets.meshes.forEach(m => m.isVisible = false)
     const gauntlets = await SceneLoader.ImportMeshAsync("", "./models/gauntlets/", "gauntlets.glb", scene)
-    gauntlets.meshes.forEach(m => m.isVisible = true)
+    gauntlets.meshes.forEach(m => m.isVisible = false)
+    const pauldrons = await SceneLoader.ImportMeshAsync("", "./models/pauldrons/", "pauldrons.glb", scene)
+    pauldrons.meshes.forEach(m => m.isVisible = false)
     // const helmets = await loadModel("./models/helmets/helmets.glb", scene, true)
     console.log(helmets)
     const allweaponParts = await loadMeshOnlyParts("./models/swords/allswords.glb", scene)
@@ -68,6 +70,8 @@ export async function areaScene(placeDetail){
         animeBody: animeBodyContainer,
         allweapons: allweaponParts,
         helmets: helmets.meshes,
+        gauntlets: gauntlets.meshes,
+        pauldrons: pauldrons.meshes,
         armors: null,
         belts: null,
         cloaks: null,

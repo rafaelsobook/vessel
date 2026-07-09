@@ -90,6 +90,9 @@ let equipItemFunc = () => {
         if (itemType === "boots") myChar.equipBoots(name)
         if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts)
         if(itemType === "helmet") myChar.equipHelmet(name, itemDetail.metalColor)
+        if(itemType === "gauntlet") myChar.equipGauntlet(name, itemDetail.metalColor)
+        if(itemType === "pauldron") myChar.equipPauldron(name, itemDetail.metalColor)
+        if(itemType === "armor") myChar.equipArmor(name, itemDetail.metalColor)
 
     }
     

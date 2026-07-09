@@ -123,7 +123,7 @@ export function activateBtnOnce(){
                         return console.log("not enough sp")
                     }
                     
-                    charState.sp -= spToDeduct
+                    // charState.sp -= spToDeduct
                     updateSP_UI()
                     
                     getAllSounds().voiceAttackS.setPlaybackRate(0.9 + (Math.random()*0.2))

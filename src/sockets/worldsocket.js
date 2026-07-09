@@ -30,6 +30,8 @@ let containers = {
     animeBody: null,
     allweapons: null,
     helmets: null,
+    gauntlets: null,
+    pauldrons: null,
     armors: null,
     belts: null,
     cloaks: null,
@@ -60,6 +62,8 @@ export function resetArray(){
         animeBody: null,
         allweapons: null,
         helmets: null,
+        gauntlets: null,
+        pauldrons: null,
         armors: null,
         belts: null,
         cloaks: null,
@@ -136,11 +140,14 @@ export function activateOnSocketListeners(socket){
         if (!theEquipingPlayer) return
 
         if (itemType === "boots") theEquipingPlayer.equipBoots(itemName)
+        if(itemType === "armor") theEquipingPlayer.equipArmor(itemName, metalColor)
         if(itemType === "weapon") {
 
             theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts)
         }
         if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemName, metalColor)
+        if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)
+        if(itemType === "pauldron") theEquipingPlayer.equipPauldron(itemName, metalColor)
 
         // if (itemType === "weapon") theEquipingPlayer.equipSword(swordRoot, itemName, theEquipingPlayer._attacking, data.isHide)
         // if (itemType === "helmet") theEquipingPlayer.equipHelmet(helmRoot, itemName)

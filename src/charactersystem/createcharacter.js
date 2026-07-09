@@ -19,7 +19,7 @@ import { pFloat } from '../tools/tools';
 import { createBloodParticle, createBloodSplatter, createCustomizedSmoke } from '../tools/particlesystem';
 import { CharacterAnimations } from '../tools/animation';
 import { createMesh } from '../creations/creationTools';
-import { createHelmetMat } from '../tools/helmetmat';
+import { createMetalMat } from '../tools/metalmat';
 
 let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -27,9 +27,9 @@ let capsuleRadius = 0.25;
 export function showHideSword(swordTNode, isVisible){
     swordTNode.getChildMeshes().forEach(mesh => mesh.isVisible = isVisible)
 }
-export function showHideHelmet(helmetMesh, isVisible){
-    helmetMesh.isVisible = isVisible
-    helmetMesh.getChildMeshes().forEach(mesh => mesh.isVisible = isVisible)
+export function showHideEquip(equipMesh, isVisible){
+    equipMesh.isVisible = isVisible
+    equipMesh.getChildMeshes().forEach(mesh => mesh.isVisible = isVisible)
 }
 export function getPlayerCoord(ownerId){
     const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
@@ -72,6 +72,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     }
     let swordMeshes = []
     let helmetMeshes = []
+    let gauntletMeshes = []
+    let pauldronMeshes = []
     let hasWeapon = false
 
     const { mode, _moving, _minning } = det
@@ -83,8 +85,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     if(auraSkill && auraSkill.isActive) auraz.start()
 
     const containers = getSocketContainers()
-    
-    const {root, animationGroups, rHand, belts, cloaks, boots, spineBone, headBone, characterHair} = createAnimeBody(containers, body, bodytarget, det, scene)
+
+    const {root, animationGroups, rHand, belts, cloaks, armors, boots, spineBone, headBone, lowerArmL, lowerArmR, shoulderL, shoulderR, characterHair} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
@@ -93,6 +95,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     weaponSocket.isPickable = false
     weaponSocket.parent = spineBone;
     weaponSocket.addRotation(0,Math.PI/17,0)
+
+
 
     function createSword(swordName, parts, parentMesh) {
         const sword = createWeapon(scene, "sword", {x: 0.2, y: 0.2, z: 0}, parentMesh, parts)
@@ -120,10 +124,10 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         helmet.parent = headBone
         helmet.rotationQuaternion = Quaternion.Identity()
         helmet.position = Vector3.Zero()
-        const helmetMat = createHelmetMat(scene, metalColor)
+        const helmetMat = createMetalMat(scene, metalColor)
         helmet.material = helmetMat
         helmet.getChildMeshes().forEach(mesh => mesh.material = helmetMat)
-        showHideHelmet(helmet, true)
+        showHideEquip(helmet, true)
         const toPush = {name: helmetName, mesh: helmet}
         helmetMeshes.push(toPush)
         return toPush
@@ -136,15 +140,126 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             toEquip = createHelmet(helmetToEquipName, metalColor)
         }
         helmetMeshes.forEach(hlm => {
-            showHideHelmet(hlm.mesh, false)
+            showHideEquip(hlm.mesh, false)
             if(hlm.name === helmetToEquipName) toEquip = hlm
         })
         if(!toEquip) {
             toEquip = createHelmet(helmetToEquipName, metalColor)
         }
         if(!toEquip) return
-        showHideHelmet(toEquip.mesh, true)
+        showHideEquip(toEquip.mesh, true)
         if(characterHair) characterHair.isVisible = false
+    }
+
+    function createGauntlet(gauntletName, metalColor) {
+        const template = containers.gauntlets.find(msh => msh.name.split(".")[1] === gauntletName)
+        if(!template) return console.warn(`createGauntlet: missing gauntlet "${gauntletName}"`)
+        if(!lowerArmL || !lowerArmR) return console.warn(`createGauntlet: missing lowerArm bone(s), cannot equip "${gauntletName}"`)
+
+        const gauntletMat = createMetalMat(scene, metalColor)
+
+        const rightGauntlet = template.clone(`gauntlet.${gauntletName}.R.${det._id}`)
+        rightGauntlet.parent = lowerArmR
+        // mirrored bone orientation between the left/right arms means the
+        // single gauntlet mesh needs a half turn on this side to face right
+        rightGauntlet.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), Math.PI)
+        rightGauntlet.position = new Vector3(0, 0, 0.1)
+        rightGauntlet.material = gauntletMat
+        rightGauntlet.getChildMeshes().forEach(mesh => mesh.material = gauntletMat)
+
+        // there's only one gauntlet mesh (meant for one hand), so the other
+        // side is just a second clone parented to the opposite arm bone
+        const leftGauntlet = template.clone(`gauntlet.${gauntletName}.L.${det._id}`)
+        leftGauntlet.parent = lowerArmL
+        leftGauntlet.rotationQuaternion = Quaternion.Identity()
+        leftGauntlet.position = Vector3.Zero()
+        leftGauntlet.material = gauntletMat
+        leftGauntlet.getChildMeshes().forEach(mesh => mesh.material = gauntletMat)
+
+        const meshes = [rightGauntlet, leftGauntlet]
+        meshes.forEach(mesh => showHideEquip(mesh, true))
+        const toPush = {name: gauntletName, meshes}
+        gauntletMeshes.push(toPush)
+        return toPush
+    }
+
+    function equipGauntlet(gauntletToEquipName, metalColor) {
+        if(!gauntletToEquipName) return
+        let toEquip = false
+        if(!gauntletMeshes.length) {
+            toEquip = createGauntlet(gauntletToEquipName, metalColor)
+        }
+        gauntletMeshes.forEach(gtl => {
+            gtl.meshes.forEach(mesh => showHideEquip(mesh, false))
+            if(gtl.name === gauntletToEquipName) toEquip = gtl
+        })
+        if(!toEquip) {
+            toEquip = createGauntlet(gauntletToEquipName, metalColor)
+        }
+        if(!toEquip) return
+        toEquip.meshes.forEach(mesh => showHideEquip(mesh, true))
+    }
+
+    function equipArmor(itemName, metalColor){
+        if(!itemName) return
+        armors.forEach(arm => {
+            if(arm.name === itemName){
+                arm.mesh.isVisible = true
+                const armorMat = createMetalMat(scene, metalColor)
+                arm.mesh.material = armorMat
+                arm.mesh.getChildMeshes().forEach(mesh => mesh.material = armorMat)
+            } else arm.mesh.isVisible = false
+        })
+    }
+
+    function createPauldron(pauldronName, metalColor) {
+        const template = containers.pauldrons.find(msh => msh.name.split(".")[1] === pauldronName)
+        if(!template) return console.warn(`createPauldron: missing pauldron "${pauldronName}"`)
+        if(!shoulderL || !shoulderR) return console.warn(`createPauldron: missing shoulder bone(s), cannot equip "${pauldronName}"`)
+
+        const pauldronMat = createMetalMat(scene, metalColor)
+
+        const rightPauldron = template.clone(`pauldron.${pauldronName}.R.${det._id}`)
+        rightPauldron.parent = shoulderR
+        // same mirrored-rig quirk we found on the gauntlets — right side
+        // needs a half turn to face the right way, may still need a small
+        // position tweak like the gauntlet's got once you see it in-game
+        rightPauldron.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), Math.PI)
+        rightPauldron.position = Vector3.Zero()
+        rightPauldron.material = pauldronMat
+        rightPauldron.getChildMeshes().forEach(mesh => mesh.material = pauldronMat)
+
+        // there's only one pauldron mesh (meant for one shoulder), so the
+        // other side is just a second clone parented to the opposite bone
+        const leftPauldron = template.clone(`pauldron.${pauldronName}.L.${det._id}`)
+        leftPauldron.parent = shoulderL
+        leftPauldron.rotationQuaternion = Quaternion.Identity()
+        leftPauldron.position = Vector3.Zero()
+        leftPauldron.material = pauldronMat
+        leftPauldron.getChildMeshes().forEach(mesh => mesh.material = pauldronMat)
+
+        const meshes = [rightPauldron, leftPauldron]
+        meshes.forEach(mesh => showHideEquip(mesh, true))
+        const toPush = {name: pauldronName, meshes}
+        pauldronMeshes.push(toPush)
+        return toPush
+    }
+
+    function equipPauldron(pauldronToEquipName, metalColor) {
+        if(!pauldronToEquipName) return
+        let toEquip = false
+        if(!pauldronMeshes.length) {
+            toEquip = createPauldron(pauldronToEquipName, metalColor)
+        }
+        pauldronMeshes.forEach(pld => {
+            pld.meshes.forEach(mesh => showHideEquip(mesh, false))
+            if(pld.name === pauldronToEquipName) toEquip = pld
+        })
+        if(!toEquip) {
+            toEquip = createPauldron(pauldronToEquipName, metalColor)
+        }
+        if(!toEquip) return
+        toEquip.meshes.forEach(mesh => showHideEquip(mesh, true))
     }
 
     function equipSword(swordToEquipName, onHand, parts) {
@@ -180,9 +295,18 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             case "boots":
                 boots.forEach(boot => boot.mesh.isVisible = false)
             break
+            case "armor":
+                armors.forEach(arm => arm.mesh.isVisible = false)
+            break
             case "helmet":
-                helmetMeshes.forEach(hlm => showHideHelmet(hlm.mesh, false))
+                helmetMeshes.forEach(hlm => showHideEquip(hlm.mesh, false))
                 if(characterHair) characterHair.isVisible = true
+            break
+            case "gauntlet":
+                gauntletMeshes.forEach(gtl => gtl.meshes.forEach(mesh => showHideEquip(mesh, false)))
+            break
+            case "pauldron":
+                pauldronMeshes.forEach(pld => pld.meshes.forEach(mesh => showHideEquip(mesh, false)))
             break
         }
     }
@@ -190,7 +314,10 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         det.items.forEach(itm => {
             if(itm.itemCateg === "equipable"){
                 if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
+                if(itm.itemType === "armor" && itm.equiped) equipArmor(itm.name, itm.metalColor)
                 if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.name, itm.metalColor)
+                if(itm.itemType === "gauntlet" && itm.equiped) equipGauntlet(itm.name, itm.metalColor)
+                if(itm.itemType === "pauldron" && itm.equiped) equipPauldron(itm.name, itm.metalColor)
                 if(itm.itemType === "weapon" && itm.equiped) {
                     console.log(mode)
                     let swordParent = rHand
@@ -235,10 +362,15 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         _minning,
         equipSword,
         equipBoots,
+        equipArmor,
         equipHelmet,
+        equipGauntlet,
+        equipPauldron,
         unEquip,
         swordMeshes,
         helmetMeshes,
+        gauntletMeshes,
+        pauldronMeshes,
         weaponSocket,
         get hasWeapon() { return hasWeapon },
 
@@ -273,10 +405,11 @@ function createMainBodyTargetToClone(scene){
 }
 function createAnimeBody(containers, body, bodytarget, det, scene){
     const { animeBody, hairs } = containers
-    let headBone, spineBone, rHand
+    let headBone, spineBone, rHand, lowerArmL, lowerArmR, shoulderL, shoulderR
 
     let belts = []
     let cloaks = []
+    let armors = []
     let boots = []
     let characterHair = undefined
     const {hairMat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
@@ -288,11 +421,20 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     mainBodyMeshes.position.y -= .74
     mainBodyMeshes.rotationQuaternion = Quaternion.Identity()
 
+
     mainBodyMeshes.getChildren()[0].getChildren().forEach(bne => {
-        if(bne.name.includes("pelvis")){            
+        if(bne.name.includes("pelvis")){
             spineBone = bne.getChildren()[0].getChildren()[0]
             rHand = bne.getChildren()[0].getChildren()[0].getChildren()[2].getChildren()[0].getChildren()[0].getChildren()[1]
             headBone = bne.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
+
+            shoulderL = spineBone.getChildren()[1]
+            shoulderR = spineBone.getChildren()[2]
+            lowerArmL = shoulderL.getChildren()[0].getChildren()[0]
+            lowerArmR = shoulderR.getChildren()[0].getChildren()[0]
+            
+            if(!lowerArmR) console.warn('[createAnimeBody] bone "lowerArm.R" not found')
+            if(!lowerArmL) console.warn('[createAnimeBody] bone "lowerArm.L" not found')
         }
     })
     bodytarget.parent = spineBone
@@ -342,6 +484,15 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             mes.isVisible = false
             cloaks.push({name: cloakName, mesh:mes, isUsed: false})
         }
+        if(mes.name.includes("armor.")){
+            const armorName = mes.name.split(".")[1]
+            if(!armorName) return
+            
+            // const designatedMat = createEquipMat()
+            // mes.material = cloakMat
+            mes.isVisible = false
+            armors.push({name: armorName, mesh:mes, isUsed: false})
+        }
     })
     hairs.forEach(hairMsh => {
         if(hairMsh.name.includes("root")) return hairMsh.parent = headBone
@@ -363,9 +514,14 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         rHand,
         belts,
         cloaks,
+        armors,
         boots,
         spineBone,
         headBone,
+        lowerArmL,
+        lowerArmR,
+        shoulderL,
+        shoulderR,
         characterHair
     }
 }

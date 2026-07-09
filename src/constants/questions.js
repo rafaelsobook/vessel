@@ -298,12 +298,62 @@ export const questions = [
                 setTimeout(()=>obtain(bootsItem), 250)
                 setTimeout(()=>obtain(helmetItem), 500)
                 setTimeout(()=>obtain(gauntletItem), 800)
+                setTimeout(()=>obtain(pauldronItem), 1000)
+                setTimeout(()=>obtain(armorItem), 1200)
                 startQuestionare(2)
                 showHideIcons("block")
             }, 1000)
         }
     }
 ]
+var armorItem = {
+    itemId: randomNum(), // should be string also in client
+    name: "knightscale", // is also the image name
+    dn: "Knight's Scale",
+    itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+    weaponType: undefined,
+    equipAbilities: { 
+        dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+    equiped: false,
+    soulFeed: 0,
+    isEnhanceAble: true, // only for equipable items
+    enhancedLevel: 0,
+    slots: [],// { name, dn, equipAbilities } cores
+    durability: { current: 100, max: 100},
+    price: 10,
+    qnty: 1,
+    desc: undefined,
+    rarity: "rare",
+    metalColor: "adamantine"
+}
+var pauldronItem = {
+    itemId: randomNum(), // should be string also in client
+    name: "ironpaul", // is also the image name
+    dn: "Iron Pauldron",
+    itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    itemType: "pauldron", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+    weaponType: undefined,
+    equipAbilities: { 
+        dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+    equiped: false,
+    soulFeed: 0,
+    isEnhanceAble: true, // only for equipable items
+    enhancedLevel: 0,
+    slots: [],// { name, dn, equipAbilities } cores
+    durability: { current: 100, max: 100},
+    price: 10,
+    qnty: 1,
+    desc: undefined,
+    rarity: "rare",
+    metalColor: "adamantine"
+}
 var gauntletItem = {
         itemId: randomNum(), // should be string also in client
         name: "gauntler", // is also the image name
