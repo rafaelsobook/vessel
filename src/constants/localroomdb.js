@@ -349,7 +349,7 @@ export const metaDatas = [
             },
             {
                 itemId: randNum(0,9999).toString(),
-                name: "guildtable",
+                name: "guildboard",
                 position: {x: -5, y: 0, z: 4.9},
                 scale: null,
                 rotation: -Math.PI/2 - 0.3,
@@ -469,6 +469,6 @@ export const metaDatas = [
                 {name:"hemispheric", intensity: 0.8},
             ],
         },
-        isMultiplayer: false
+        isMultiplayer: true
     }
 ];

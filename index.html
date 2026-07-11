@@ -9,6 +9,53 @@
   </head>
   <body background-color="black">
     <canvas></canvas>
+    <div class="quest-container cont">
+        <img src="./images/UI/xshield.png" class="close-parent btn"/>
+        <div class="quest-header">
+            <img src="./images/UI/quests/questmark.webp" alt="" class="quest-icon">
+            <div class="quest-title-bx">
+                <p class="quest-title">Slime Infestation</p>
+                <p class="quest-subtitle">Kill Quest</p>
+            </div>
+        </div>
+        <p class="quest-desc">Slimes have been multiplying near the eastern fields, threatening the safety of travelers. Please help us by clearing them out.</p>
+
+        <div class="quest-section">
+            <p class="quest-section-title">Objective</p>
+            <div class="quest-divider"></div>
+        </div>
+        <div class="quest-objective-row">
+            <img src="./images/modeltex/quest/slime.webp" alt="" class="quest-objective-img">
+            <p class="quest-objective-name">Defeat Slime</p>
+            <p class="quest-objective-progress">0 / 10</p>
+        </div>
+
+        <div class="quest-section">
+            <p class="quest-section-title">Rewards</p>
+            <div class="quest-divider"></div>
+        </div>
+        <div class="quest-rewards-list">
+            <div class="quest-reward-slot">
+                <img src="./images/UI/coins.png" alt="" class="quest-reward-img">
+                <p class="quest-reward-qty">250</p>
+                <p class="quest-reward-label">Gold</p>
+            </div>
+            <div class="quest-reward-slot">
+                <img src="./images/UI/quests/expicon.webp" alt="" class="quest-reward-img">
+                <p class="quest-reward-qty">1,000</p>
+                <p class="quest-reward-label">EXP</p>
+            </div>
+            <div class="quest-reward-slot">
+                <div class="quest-reward-img-bx">
+                    <img src="./images/UI/quests/hppotionsmall.webp" alt="" class="quest-reward-img">
+                    <span class="quest-reward-badge">5</span>
+                </div>
+                <p class="quest-reward-label">HP Potion (Small)</p>
+            </div>
+        </div>
+
+        <button class="quest-track-btn">Take Contract</button>
+    </div>
     <div class="intro-load-screen">
         <p class="ils-cap"></p>
         <img class="loading-img" src="./images/UI/ms/vessellogo.webp" alt="" class="src">

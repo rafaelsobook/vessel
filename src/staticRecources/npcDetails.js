@@ -35,48 +35,7 @@ export default [
         hairColor: {r: 0, g: 0, b: 0},
         clothColor: {r: 0, g: 0, b: 0},
         pantsColor: {r: 0, g: 0, b: 0},
-        items: [{
-            itemModelStyle: "prieststyle1",
-            name: "priestbelt", // is also the image name
-            dn: "Priest Belt",
-            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
-            itemType: "belt", // sword/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
-            equipAbilities: { 
-                dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
-            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
-            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
-            consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
-            equiped: true,
-            soulFeed: 0,
-            isEnhanceAble: true, // only for equipable items
-            enhancedLevel: 0,
-            durability: { current: 100, max: 100},
-            price: 1000,
-            qnty: 1,
-            desc: "A Priest Vest, Plus Holyness",
-            rarity: "normal"//rare//mystical//legendary
-        },
-        {
-            itemModelStyle: "prieststyle1",
-            name: "priestvest", // is also the image name
-            dn: "Priest Vest",
-            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
-            itemType: "cloak", // sword/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
-            equipAbilities: { 
-                dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
-            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
-            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
-            consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
-            equiped: true,
-            soulFeed: 0,
-            isEnhanceAble: true, // only for equipable items
-            enhancedLevel: 0,
-            durability: { current: 100, max: 100},
-            price: 1000,
-            qnty: 1,
-            desc: "A Priest Cloak, Plus Holyness",
-            rarity: "normal"//rare//mystical//legendary
-        }
+        items: [
         ],
         titles: ['priest'],
         skills: [], 
@@ -226,6 +185,78 @@ export default [
         clothColor: {r: 1, g: 1, b: 1},
         pantsColor: {r: 0.2, g: 0.3, b: 0.4},
         items: [
+        {
+            itemId: randomNum(), // should be string also in client
+            name: "knightscale", // is also the image name
+            dn: "Knight's Scale",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            weaponType: undefined,
+            equipAbilities: { 
+                dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: true, // only for equipable items
+            enhancedLevel: 0,
+            slots: [],// { name, dn, equipAbilities } cores
+            durability: { current: 100, max: 100},
+            price: 10,
+            qnty: 1,
+            desc: undefined,
+            rarity: "rare",
+            metalColor: "adamantine"
+        },
+        {
+            itemId: randomNum(), // should be string also in client
+            name: "ironpaul", // is also the image name
+            dn: "Iron Pauldron",
+            itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+            itemType: "pauldron", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+            weaponType: undefined,
+            equipAbilities: { 
+                dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+            // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+            equiped: true,
+            soulFeed: 0,
+            isEnhanceAble: true, // only for equipable items
+            enhancedLevel: 0,
+            slots: [],// { name, dn, equipAbilities } cores
+            durability: { current: 100, max: 100},
+            price: 10,
+            qnty: 1,
+            desc: undefined,
+            rarity: "rare",
+            metalColor: "adamantine"
+        },
+        {
+        itemId: randomNum(), // should be string also in client
+        name: "gauntler", // is also the image name
+        dn: "Gauntlet",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: undefined,
+        equipAbilities: { 
+            dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+        equiped: true,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: 10,
+        qnty: 1,
+        desc: undefined,
+        rarity: "rare",
+        metalColor: "adamantine"
+    },
         {
             itemId: randomNum(), // should be string also in client
             name: "leatherboots", // is also the image name

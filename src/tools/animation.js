@@ -24,6 +24,7 @@ export class CharacterAnimations {
         this._blendTotal  = 0
         this._blendFrom   = null
         this._blendTo     = null
+        this._activeAction = null
 
         const find = name => animationGroups.find(a => a.name.toLowerCase() === name.toLowerCase())
         this._anims = {
@@ -68,18 +69,35 @@ export class CharacterAnimations {
         }
 
         // Snap any in-progress blend before starting the new one.
-        if (this._blendFrom) {
-            this._blendFrom.weight = 0
-            if (this._blendTo) this._blendTo.weight = 1
-            this._blendFrom = null
-            this._blendTo   = null
-        }
+        this._cancelBlend()
 
         this._blendFrom   = fromAnim
         this._blendTo     = toAnim
         this._blendFrames = 0
         this._blendTotal  = blendFrames
         this._state       = next
+    }
+
+    // Ends whatever blend is currently in flight, leaving both anims at a
+    // sane final weight (0 / 1). A blend endpoint that isn't one of the six
+    // canonical loop states is a one-shot action clip that playAction()
+    // re-armed as a live frozen loop purely so its weight would keep
+    // counting during the fade (see playAction below) — if we just drop the
+    // reference without stopping it, it's left permanently "playing" at
+    // whatever weight it was interrupted at, forever bleeding into every
+    // animation after it. That's what caused the shaking/incomplete-looking
+    // attacks: an old act_idletoready1/readytoidle transition (or a
+    // previous attack) getting cut off mid-fade by the next playAction()
+    // call and never being cleaned up.
+    _cancelBlend() {
+        if (!this._blendFrom) return
+        this._blendFrom.weight = 0
+        if (!Object.values(this._anims).includes(this._blendFrom)) {
+            this._blendFrom.stop()
+        }
+        if (this._blendTo) this._blendTo.weight = 1
+        this._blendFrom = null
+        this._blendTo   = null
     }
 
     // Call once per render frame. Advances the active blend by one step.
@@ -91,18 +109,7 @@ export class CharacterAnimations {
         this._blendTo.weight   = t
         this._blendFrom.weight = 1 - t
 
-        if (t >= 1) {
-            this._blendFrom.weight = 0
-            this._blendTo.weight   = 1
-            // if we were fading out of a one-shot action clip (re-armed as
-            // a frozen loop by playAction, see below) rather than one of
-            // the six canonical loop states, stop it now that it's silent
-            if (!Object.values(this._anims).includes(this._blendFrom)) {
-                this._blendFrom.stop()
-            }
-            this._blendFrom = null
-            this._blendTo   = null
-        }
+        if (t >= 1) this._cancelBlend()
     }
 
     setMoveSpeedRatio(ratio) {
@@ -120,9 +127,25 @@ export class CharacterAnimations {
         const targetState = nextState ?? this._state
         const loopAnim = this._anims[targetState]
 
+        // a *different* one-shot clip from a previous playAction() call can
+        // still be genuinely mid-playthrough here (not yet reached its own
+        // onAnimationEndObservable) — e.g. attacking before act_idletoready1
+        // finishes. If we don't stop it, both clips end up playing at full
+        // weight simultaneously (Babylon just blends them — the muddled
+        // half-swing/vibrating), and the old clip's completion callback
+        // fires later anyway and stomps whatever state this action sets.
+        if (this._activeAction && this._activeAction !== actionAnim) {
+            this._activeAction.onAnimationEndObservable.clear()
+            this._activeAction.stop()
+            this._activeAction.weight = 0
+        }
+        this._activeAction = actionAnim
+
+        // properly stop/reset whatever blend was in flight (e.g. an
+        // interrupted act_idletoready1 still mid-fade) instead of just
+        // discarding the reference — see _cancelBlend for why that leaks
+        this._cancelBlend()
         Object.values(this._anims).forEach(anim => { if (anim) anim.weight = 0 })
-        this._blendFrom = null
-        this._blendTo   = null
         this._isActionPlaying = true
 
         // drop any listener left over from a previous playAction() that got
@@ -136,6 +159,7 @@ export class CharacterAnimations {
         actionAnim.play(false)
 
         actionAnim.onAnimationEndObservable.addOnce(() => {
+            if (this._activeAction === actionAnim) this._activeAction = null
             this._isActionPlaying = false
             this._state = targetState
             if (freezeAfter) return

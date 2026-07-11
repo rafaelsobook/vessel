@@ -1,4 +1,4 @@
-import { PBRMaterial, StandardMaterial, Color3, Texture } from "@babylonjs/core";
+import { PBRMaterial, StandardMaterial, Color3, Texture, Engine } from "@babylonjs/core";
 
 let MatUsed = StandardMaterial
 
@@ -98,5 +98,10 @@ export function createTransparentMat(scene, texturePath, uScale = 1, vScale = 1)
     mat.diffuseTexture = tex;
     mat.diffuseTexture.hasAlpha = true;
     mat.specularColor = new Color3(0,0,0);
+    // additive blending: black pixels contribute nothing to the framebuffer,
+    // so a texture with a black background reads as transparent without
+    // needing an actual alpha channel (same technique as tools/sunrays.js)
+    mat.alphaMode = Engine.ALPHA_ADD;
+    mat.backFaceCulling = false
     return mat;
 }

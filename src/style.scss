@@ -401,20 +401,202 @@ canvas{
     align-items: center;
     align-content: center;
     justify-content: flex-start;
-    gap: 15px;
-    background: url("/images/UI/choicebox.png") no-repeat center center;
+    gap: 25px;
+    background: url("/images/UI/frames/choicebox.webp") no-repeat center center;
     background-size: 100% 100%;  // stretches to exact container dimensions
-    padding: 50px 0;
+    padding: 80px 0;
     .answer-btn{
-        @include rpgbutton();
+        // @include rpgbutton();
+        background: none;
+        border: none;
         width: 70%;
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-family: $choicefont;
+        position: relative;
+        color: #c49737;
+        @include flexCenter();
+        cursor: pointer;
+        align-items: center;
+        align-content: center;
+        padding-top: 6px;
+        .answer-border{
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          z-index: -1;
+        }
     }
     .answer-btn:hover{
         transform: scaleX(1.1);
         opacity: 0.8;
         transition: 0.2s;
+    }
+}
+.quest-container {
+    @include centerFix($popupz);
+    display: none;
+    flex-direction: column;
+    width: 360px;
+    background: url("/images/UI/frames/questcont.webp") no-repeat center center;
+    background-size: 100% 100%;
+    padding: 40px 30px;
+    color: $littlewhite;
+    z-index: 11111;
+    .quest-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+
+        .quest-icon {
+            width: 46px;
+            height: 46px;
+            flex-shrink: 0;
+        }
+        .quest-title-bx {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .quest-title {
+            font-family: $mapfont;
+            font-size: 1.3rem;
+            color: #edd59f;
+        }
+        .quest-subtitle {
+            font-family: $tipsFont;
+            font-size: 0.8rem;
+            color: rgba(237, 213, 159, 0.6);
+        }
+    }
+
+    .quest-desc {
+        font-family: $tipsFont;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        color: rgba(245, 245, 245, 0.75);
+        margin-bottom: 20px;
+    }
+
+    .quest-section {
+        margin-bottom: 10px;
+        .quest-section-title {
+            font-family: $tipsFont;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #c9a86a;
+            margin-bottom: 6px;
+        }
+        .quest-divider {
+            position: relative;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(201, 168, 106, 0.7), transparent);
+            &::after {
+                content: "\25C6"; // ◆
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 0.55rem;
+                color: #c9a86a;
+                background: $superBlack;
+                padding: 0 4px;
+            }
+        }
+    }
+
+    .quest-objective-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+
+        .quest-objective-img {
+            width: 55px;
+            height: 70px;
+            border-radius: 4px;
+        }
+        .quest-objective-name {
+            flex: 1;
+            font-family: $tipsFont;
+            font-size: 0.9rem;
+            color: $littlewhite;
+        }
+        .quest-objective-progress {
+            font-family: $numFont;
+            font-size: 0.9rem;
+            color: rgba(245, 245, 245, 0.6);
+        }
+    }
+
+    .quest-rewards-list {
+        display: flex;
+        justify-content: flex-start;
+        gap: 18px;
+        margin-bottom: 24px;
+
+        .quest-reward-slot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            width: 70px;
+            height: 70px;
+        }
+        .quest-reward-img-bx {
+            position: relative;
+            
+            background: url("/images/UI/frames/rewardborder.webp") no-repeat center;
+            background-size: 100% 100%;
+        }
+        .quest-reward-img {
+            width: 50px;
+            height: 50px;
+            border-radius: 6px;
+            padding: 6px;
+        }
+        .quest-reward-badge {
+            position: absolute;
+            bottom: -4px;
+            right: -4px;
+            background: $superBlack;
+            border: 1px solid rgba(201, 168, 106, 0.6);
+            border-radius: 3px;
+            font-family: $numFont;
+            font-size: 0.65rem;
+            color: $littlewhite;
+            padding: 1px 4px;
+        }
+        .quest-reward-qty {
+            font-family: $numFont;
+            font-size: 0.85rem;
+            color: #edd59f;
+        }
+        .quest-reward-label {
+            font-family: $tipsFont;
+            font-size: 0.7rem;
+            text-align: center;
+            color: rgba(245, 245, 245, 0.7);
+            line-height: 1.2;
+        }
+    }
+
+    .quest-track-btn {
+        @include rpgbutton();
+        width: 100%;
+        text-align: center;
+        font-family: $tipsFont;
+        background: url("/images/UI/frames/longwidth.webp") no-repeat center center;
+        background-size: 100% 100%;
+        border: none;
+        font-size: 1rem;
+        padding: 12px 0;
+    }
+      .quest-track-btn:active {
+        filter: brightness(0.9);
+        color: red;
     }
 }
 //  End of non grimw UI styles
@@ -1343,6 +1525,10 @@ canvas {
         align-items: center;
         justify-content: space-between;
         width: 100%;
+        height: 55px;
+        background: url("/images/UI/frames/statsbox.webp") no-repeat;
+        background-size: 100% 100%;
+        padding: 0 25px;
         .stat-upgrade-name {
           flex: 1;
           margin-left: 8px;

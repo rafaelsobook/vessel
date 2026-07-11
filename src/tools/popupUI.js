@@ -1,3 +1,5 @@
+import { createElement } from "./tools"
+
 const popupStyle1 = document.querySelector(".popstyle1")
 
 const mainLoadingScreen = document.querySelector(".loading-screen")
@@ -51,13 +53,16 @@ export function showAnswerButtons(choices, cb){
 
     choices.forEach( (choice, indx) => {
         const btn = document.createElement("button")
+        const borderimg = createElement("img", "answer-border")
+        borderimg.src = "./images/UI/frames/answerborder.webp"
         btn.classList.add("answer-btn")
         btn.innerHTML = choice.text
         btn.addEventListener("click", () => {
             cb(indx)
             closeAnswerButtons()
         })
-        answersList.appendChild(btn)
+        btn.appendChild(borderimg)
+        answersList.appendChild(btn)        
     })
 }
 

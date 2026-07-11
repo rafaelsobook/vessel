@@ -4,7 +4,10 @@ import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
 import { attachCam, camShake } from "../tools/camera"
 import { getSpawnPos } from "../tools/position"
-import { Vector3 } from "@babylonjs/core"
+import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction } from "@babylonjs/core"
+import { createTransparentMat } from "../tools/materials"
+import { createTextMesh } from "../gui/textmesh"
+import { showGuildQuest } from "../charactersystem/guildQuest"
 import { playAnim, ANIM_STATE } from "../tools/animation"
 import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
@@ -16,12 +19,14 @@ import { emitDied } from "./emits"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
+let allQuests = []
 
 // In Client
 let playersOnScene = []
 let enemiez = []
 let npcz = []
 let projectilesOnScene = []
+let questsOnScene = []
 
 
 let scene;
@@ -112,7 +117,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { newPlayerName, players, placesMD, tcpEnemies } = allDataFromServer
+        const { newPlayerName, players, placesMD, tcpEnemies, quests } = allDataFromServer
         const characterState = getCharState()
         const gameStat = getGameStatus()
         if (gameStat === "loading") return
@@ -121,6 +126,8 @@ export function activateOnSocketListeners(socket){
 
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
+        allQuests = quests
+        console.log(quests)
 
         if (!characterState) return
 
@@ -414,9 +421,6 @@ export function activateOnSocketListeners(socket){
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
         const prevMode = player.mode
-        console.log("prev mode: ", prevMode)
-        console.log("nexr mode: ", mode)
-
         if(ownerId === charState.owner) return
         
         player.body.position.x = pos.x
@@ -477,6 +481,38 @@ export function reCreateMeshesInScene() {
         // enemy._targetId = characterState._id
         // enemy._isMoving = true
         enemiez.push(enemy)
+    })
+    console.log(characterState.currentPlace.placeId)
+    if(characterState.currentPlace.placeId !== 9) return
+    const guildboard = sceneDet.scene.getMeshByName("guildboard")
+    console.log(guildboard)
+    allQuests.length && allQuests.forEach(quest => {
+        const isAlreadyHere = questsOnScene.find(q => q.questId === quest.questId)
+        if (isAlreadyHere) return
+
+        const questPlane = MeshBuilder.CreatePlane(`quest.${quest.questId}`, { height: 0.6, width: 0.4 }, scene)
+        questPlane.material = createTransparentMat(scene, `./images/modeltex/quest/${quest.questRequirements.modelStyle}.webp`)
+        // questPlane.billboardMode = Mesh.BILLBOARDMODE_ALL
+        questPlane.isPickable = true
+        questPlane.parent = guildboard;
+        questPlane.position = new Vector3(-0.01, quest.pos.y, quest.pos.z)
+        questPlane.addRotation(0, Math.PI/2,0)
+
+        questPlane.actionManager = new ActionManager(scene)
+        questPlane.actionManager.registerAction(
+            new ExecuteCodeAction(ActionManager.OnPickTrigger, () => showGuildQuest(quest))
+        )
+
+        // createTextMesh builds its plane at a fixed 5x5 size meant for
+        // world-scale nametags, so it has to be scaled way down to sit as a
+        // small corner badge on this 0.4x0.6 quest plane. It also always
+        // forces billboardMode ON (for nametags following the camera), but
+        // this label should stay flush with the board like questPlane does,
+        // so it's reset to NONE right after.
+        const rankLabel = createTextMesh(scene, questPlane, quest.requiredRank.rankLabel, "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
+        rankLabel.billboardMode = Mesh.BILLBOARDMODE_NONE
+
+        questsOnScene.push({ questId: quest.questId, mesh: questPlane })
     })
 }
 
@@ -544,7 +580,6 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
     const player = playersOnScene.find(pl => pl.owner === ownerId)
     if(!player) return;
     const prevMode = player.mode
-    console.log("has weapon: ", player.hasWeapon)
     
     if(prevMode === "idle" && _newMode === "fighting"){
         // first also think how you can get the character if equiping a weapon
