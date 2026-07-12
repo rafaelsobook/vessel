@@ -402,8 +402,9 @@ export const metaDatas = [
                     collider.actionManager = new ActionManager(scene)
                     onIntersecEnterTrig(collider, player.body, scene, () => {
                         charState = getCharState()
+                        console.log(charState.quests)
                         const touchCrystalQuest = charState.quests.find(qst => qst.qName === "touchTheCrystal")
-                        if(!touchCrystalQuest) return
+                        if(!touchCrystalQuest) return console.log("no touchCrystalQuest")
                         openCloseInteractBtn("true", true, () => {
                             openCloseInteractBtn("none", false)
                             

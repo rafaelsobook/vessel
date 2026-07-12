@@ -101,16 +101,39 @@ export async function changeStory(_newStory){
 
     updateStoryQuestUI(_newStory)
 }
+// story quests (npcDetails.js forQuests) use reqType "enemy"/"item"/"money",
+// guild board contract quests (tcp/recources/quests.ts, carried around as an
+// itemCateg "quest" item wrapping questDetail, see guildQuest.js) use
+// "monster"/"item"/"money" for the same concepts - this maps one to the other
+// so a single kill/gather event can update whichever quest actually cares.
+const CONTRACT_REQ_TYPE = { enemy: "monster", item: "item", money: "money" }
+
 export function checkStoryQuestIfCompleted(_reqType, itemOrEnemyName){
     //_reqType === 'enemy' || 'item'
-    // so if my quest type is correct and the name of requirements is that then ill increment 
-    getCharState().quests.forEach(qst => {
+    // so if my quest type is correct and the name of requirements is that then ill increment
+    const charState = getCharState()
+
+    charState.quests.forEach(qst => {
         if(qst.questRequirements.reqType === _reqType && qst.questRequirements.name === itemOrEnemyName){
             qst.questRequirements.current++
             if(qst.questRequirements.current >= qst.questRequirements.requiredNum) {
                 updateStoryQuestUI(qst)
                 return qst.questRequirements.completed=true
-            }   
+            }
+        }
+    })
+
+    // contract quests claimed from the guild board live in the inventory, not charState.quests
+    const contractReqType = CONTRACT_REQ_TYPE[_reqType] || _reqType
+    charState.items.forEach(itm => {
+        if(itm.itemCateg !== "quest") return
+        const req = itm.questDetail.questRequirements
+        if(req.reqType !== contractReqType || req.name !== itemOrEnemyName || req.completed) return
+
+        req.current++
+        if(req.current >= req.requiredNum){
+            req.completed = true
+            openClosePopup(`${itm.questDetail.qTtle} complete! Turn it in for your reward.`, true, 2000)
         }
     })
 }

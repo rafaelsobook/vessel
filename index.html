@@ -12,7 +12,7 @@
     <div class="quest-container cont">
         <img src="./images/UI/xshield.png" class="close-parent btn"/>
         <div class="quest-header">
-            <img src="./images/UI/quests/questmark.webp" alt="" class="quest-icon">
+            <img src="./images/UI/mark.webp" alt="" class="quest-icon">
             <div class="quest-title-bx">
                 <p class="quest-title">Slime Infestation</p>
                 <p class="quest-subtitle">Kill Quest</p>
@@ -61,7 +61,6 @@
         <img class="loading-img" src="./images/UI/ms/vessellogo.webp" alt="" class="src">
     </div>
     <div class="home-page">
-        img
         <img src="./images/UI/ms/vessellogo.webp" alt="" class="db-logo db-placeup">
         
         <!-- KEEP -->
@@ -269,11 +268,25 @@
             <p class="item-qnty">x1</p>
         </div>
         <p class="item-desc">Lorem ipsum dolor sit amet consectetur, adipisicing elit. Fugit, doloremque! Aspernatur aliquam modi reprehenderit nobis impedit .</p>
+        <div class="item-stats">
+            <div class="item-stat-row def-row">
+                <span class="stat-label">Defense</span>
+                <span class="stat-value itemDefValue"></span>
+            </div>
+            <div class="item-stat-row resistance-row">
+                <span class="stat-label">Resistance</span>
+                <span class="stat-value itemResistanceValue"></span>
+            </div>
+            <div class="item-stat-row dmg-row">
+                <span class="stat-label">Damage</span>
+                <span class="stat-value itemDmgValue"></span>
+            </div>
+            <div class="item-stat-row durability-row">
+                <span class="stat-label">Durability</span>
+                <span class="stat-value itemDurabilityValue"></span>
+            </div>
+        </div>
         <div class="item-btns">
-            <button id="sellItemBtn" class="item-btn btn">
-                <p class="item-lbl">sell</p>
-                <span class="item-selling-price">x 100</span>
-            </button>
             <div class="btn-cont">
                 <div class="sellnft-form">
                     <input type="number" placeholder="value: 0.001" id="inpNft">
@@ -286,6 +299,36 @@
     </div>
     <div class="item-listing-form">
 
+    </div>
+    <!-- BUY / SELL trade window -->
+    <div class="buysell-container cont">
+        <img src="./images/UI/xshield.png" class="close-parent btn"/>
+        <p class="bs-title">Trade</p>
+        <div class="bs-tabs">
+            <button class="bs-tab-btn buy active">Buy</button>
+            <button class="bs-tab-btn sell">Sell</button>
+        </div>
+        <div class="bs-body">
+            <ul class="bs-categories">
+                <li class="bs-categ-btn active" data-categ="all">All</li>
+                <li class="bs-categ-btn" data-categ="weapon">Weapons</li>
+                <li class="bs-categ-btn" data-categ="armor">Armor</li>
+                <li class="bs-categ-btn" data-categ="helmet">Helmets</li>
+                <li class="bs-categ-btn" data-categ="boots">Boots</li>
+                <li class="bs-categ-btn" data-categ="material">Materials</li>
+                <li class="bs-categ-btn" data-categ="consumable">Consumables</li>
+            </ul>
+            <div class="bs-items-grid">
+                <!-- item slots injected by buyorsell.js -->
+            </div>
+        </div>
+        <div class="bs-footer">
+            <div class="bs-wallet">
+                <img src="./images/UI/coins.png" alt="" class="bs-wallet-icon">
+                <p class="bs-wallet-amount">x0</p>
+            </div>
+            <button class="bs-action-btn">Buy</button>
+        </div>
     </div>
     <!-- When Obtain an Item will popup on top screen -->
     <div class="acquired-lists">

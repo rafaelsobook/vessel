@@ -25,8 +25,8 @@ export function showLoadingScreen(arrayOfText = ["Hello", "You dare challenge me
             i++
             caption.textContent = arrayOfText[i]
             caption.style.opacity = 1
-        }, 500)
-    }, 2000)
+        }, 1000) // matches .ils-cap's opacity transition duration in style.scss
+    }, 3000)
 
     clearTimeout(fadeTimeout)
     fadeTimeout = setTimeout(() => {

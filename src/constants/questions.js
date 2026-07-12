@@ -304,8 +304,11 @@ export const questions = [
                 showHideIcons("block")
             }, 1000)
         }
-    }
+    },
 ]
+
+
+
 var armorItem = {
     itemId: randomNum(), // should be string also in client
     name: "knightscale", // is also the image name
@@ -313,8 +316,8 @@ var armorItem = {
     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
     itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
     weaponType: undefined,
-    equipAbilities: { 
-        dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    equipAbilities: {
+        dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
     // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
     consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
@@ -324,7 +327,7 @@ var armorItem = {
     enhancedLevel: 0,
     slots: [],// { name, dn, equipAbilities } cores
     durability: { current: 100, max: 100},
-    price: 10,
+    price: { coinType: "bronze", pieces: 10 },
     qnty: 1,
     desc: undefined,
     rarity: "rare",
@@ -348,7 +351,7 @@ var pauldronItem = {
     enhancedLevel: 0,
     slots: [],// { name, dn, equipAbilities } cores
     durability: { current: 100, max: 100},
-    price: 10,
+    price: { coinType: "bronze", pieces: 10 },
     qnty: 1,
     desc: undefined,
     rarity: "rare",
@@ -361,8 +364,8 @@ var gauntletItem = {
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
         weaponType: undefined,
-        equipAbilities: { 
-            dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        equipAbilities: {
+            dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
         }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
@@ -372,7 +375,7 @@ var gauntletItem = {
         enhancedLevel: 0,
         slots: [],// { name, dn, equipAbilities } cores
         durability: { current: 100, max: 100},
-        price: 10,
+        price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
         desc: undefined,
         rarity: "rare",
@@ -385,8 +388,8 @@ var helmetItem = {
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
         weaponType: undefined,
-        equipAbilities: { 
-            dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        equipAbilities: {
+            dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
         }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
@@ -396,7 +399,7 @@ var helmetItem = {
         enhancedLevel: 0,
         slots: [],// { name, dn, equipAbilities } cores
         durability: { current: 100, max: 100},
-        price: 10,
+        price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
         desc: undefined,
         rarity: "rare",
@@ -408,8 +411,8 @@ var bootsItem = {
     dn: "Leather Boots",
     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
     itemType: "boots", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
-    equipAbilities: { 
-        dmg: 0, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    equipAbilities: {
+        dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
     // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
     consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
@@ -418,7 +421,7 @@ var bootsItem = {
     isEnhanceAble: false, // only for weapons
     enhancedLevel: 0,
     durability: { current: 100, max: 100},
-    price: 9,
+    price: { coinType: "bronze", pieces: 9 },
     qnty: 1,
     desc: "This Boots is light and useful for first time adventurers",
     rarity: "common"
@@ -442,7 +445,7 @@ var swordItem = {
     enhancedLevel: 0,
     slots: [],// { name, dn, equipAbilities } cores
     durability: { current: 100, max: 100},
-    price: 10,
+    price: { coinType: "bronze", pieces: 10 },
     qnty: 1,
     desc: "Frost Bite, A deadly Blade. It's blade is sharp as frozen blade",
     rarity: "rare",

@@ -70,6 +70,10 @@ export async function createNpc(scene, det) {
             mat.directIntensity     = 1
             mat.emissiveIntensity   = 0
         }
+        // console.log(mesh.name)
+        // if(mesh.name.includes(det.name) || mesh.name.includes("Armature")){
+        //     mesh.isVisible = true
+        // }else mesh.isVisible = false
     })
 
     playAnim(entries.animationGroups, "idle", true)

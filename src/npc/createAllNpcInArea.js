@@ -4,7 +4,7 @@ import {pushNpc} from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
-import { startConv } from "../components/conversations.js"
+import { startConv, startQuestionare } from "../components/conversations.js"
 import { createNpc } from "./createnpc.js"
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
@@ -22,19 +22,22 @@ export function createAllNpcInArea(hero, scene){
                 openCloseInteractBtn("normal", false)
                 let myState = getCharState()
 
-                let storyInfo = false
-                let myQuestShortDetail = false
+                let storyInfo = false // the long forquest that has a speech property
+                let myQuestShortDetail = false // the short quest info// has the questRequirements.completed = false|true property
                 myState.quests.forEach(myqst => {
                     storyInfo = anNpc.det.forQuests.find(qst => qst.qName ===myqst.qName)
                     if(storyInfo) myQuestShortDetail = myqst
                 })
                 
-                if(!storyInfo) return startConv(anNpc.det.randomSpeech, () => {})
+                if(!storyInfo) return startConv(anNpc.det.randomSpeech, () => {
+                    if(anNpc.det.callbackAfterRandomSpeech) anNpc.det.callbackAfterRandomSpeech()
+                })
+                
                 if(!myQuestShortDetail) return
                 if(!myQuestShortDetail.questRequirements.completed && storyInfo.notCompletedSpeech) return startConv(storyInfo.notCompletedSpeech)
                 
 
-                if(myQuestShortDetail && myQuestShortDetail.questRequirements.completed) return startConv(storyInfo.speech, async () => {
+                if(myQuestShortDetail.questRequirements.completed) return startConv(storyInfo.speech, async () => {
                     myState = getCharState()
                     myState.quests = myState.quests.filter(stry=> stry.qName !== storyInfo.qName)
                     // then add the new questsToReceive
@@ -55,10 +58,10 @@ export function createAllNpcInArea(hero, scene){
                         }
                     }
                     myState.clearedQuests.push(storyInfo.qName)
+                    if(storyInfo.cbAfterNewQuestReceived) storyInfo.cbAfterNewQuestReceived()
                     const updatedState = await updateMyDetailsOL(myState, checkIfTokenSaved(), true)
                 })
                 
-                startConv(anNpc.det.speech, () => {})
                 // returnCam(scene, freecam)
                 // openCloseChatContainer(true)
                 // theNpc = getNpcArray().find(npz => npz._id === anNpc._id)

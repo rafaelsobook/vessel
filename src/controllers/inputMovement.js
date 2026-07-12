@@ -1,7 +1,7 @@
 import { Quaternion, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getSceneDet } from "../main/main";
-import { setCanPress, getCanPress, getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
-import { getPlayersOnScene } from '../sockets/worldsocket';
+import { setCanPress, getCanPress, getCharState, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
+import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
@@ -145,8 +145,16 @@ function setupControls(scene, allsounds) {
                 const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
                 pos = pl.body.getAbsolutePosition()
                 console.log(`x: ${pos.x}, z: ${pos.z}`)
-                console.log(charState)
+                evaluateRank(13)
+                // evaluateRank(0, { rankNumber: 0, rankLabel: "f"})
+                console.log(state)
+
+                reCreateMeshesInScene()
             break;
+            case "c":
+                console.log("players ", getPlayersOnScene())
+
+            break
         }
 
         if (input.forward === 0 && input.right === 0) {

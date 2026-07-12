@@ -316,13 +316,21 @@ canvas {
   cursor: pointer;
   align-items: center;
   align-content: center;
-  padding-top: 6px;
+  padding: 5px 20px;
 }
 .answers-list .answer-btn .answer-border {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 300;
+  width: auto;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 3;
+  width: 110%;
+  height: 100%;
   z-index: -1;
 }
 .answers-list .answer-btn:hover {
@@ -540,9 +548,7 @@ canvas {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  -webkit-user-select: none;
-     -moz-user-select: none;
-          user-select: none;
+  user-select: none;
 }
 
 ::-webkit-scrollbar {
@@ -2047,9 +2053,29 @@ canvas {
   color: rgb(170, 141, 48);
   font-family: "Bellefair", serif;
 }
-.item-info-cont .item-btns {
+.item-info-cont .item-stats {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  gap: 6px;
+}
+.item-info-cont .item-stats .item-stat-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  font-family: "Bellefair", serif;
+}
+.item-info-cont .item-stats .item-stat-row .stat-label {
+  color: rgba(245, 245, 245, 0.6);
+  font-size: 0.85rem;
+}
+.item-info-cont .item-stats .item-stat-row .stat-value {
+  color: #edd59f;
+  font-size: 0.9rem;
+}
+.item-info-cont .item-btns {
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
   width: 100%;
 }
@@ -2098,36 +2124,6 @@ canvas {
 .item-info-cont .item-btns .btn-cont .item-btn {
   width: 80px;
   padding: 3px 0;
-}
-.item-info-cont .item-btns #sellItemBtn {
-  background: rgb(37, 37, 36);
-  border-radius: 2px;
-  display: flex;
-  justify-content: flex-start;
-  width: 95px;
-  padding: 0;
-  color: #f5f5f5;
-  border: 1px solid rgb(29, 28, 28);
-}
-.item-info-cont .item-btns #sellItemBtn .item-lbl {
-  border-radius: 4px;
-  width: 39%;
-  padding: 5px;
-  background: #8e5120;
-}
-.item-info-cont .item-btns #sellItemBtn .item-selling-price {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(11deg, #494848, #2b2626, #5d4128);
-  justify-content: flex-end;
-  padding-right: 6px;
 }
 .item-info-cont .item-btns #equipItemBtn {
   width: 80px;
@@ -2312,9 +2308,6 @@ canvas {
   padding: 0 20px;
   margin-top: 20px;
 }
-.login-container .inputs::-moz-placeholder {
-  color: rgba(177, 177, 177, 0.6);
-}
 .login-container .inputs::placeholder {
   color: rgba(177, 177, 177, 0.6);
 }
@@ -2413,11 +2406,11 @@ canvas {
   left: 50%;
   transform: translate(-50%, -50%) scale(1);
   z-index: 3;
-  width: 100%;
-  height: 45%;
+  width: 20%;
+  height: 5%;
   color: rgb(199, 199, 199);
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 1rem;
   animation: blinking 2s ease-out infinite;
   font-family: "Caudex", serif;
   z-index: 10;
@@ -2762,8 +2755,7 @@ canvas {
   left: 0;
   width: 110%;
   height: 110%;
-  -o-object-fit: cover;
-     object-fit: cover; /* Cover the entire container */
+  object-fit: cover; /* Cover the entire container */
   z-index: 2; /* Behind the content */
 }
 
@@ -2880,8 +2872,7 @@ canvas {
   width: 50px;
   height: 50px;
   border-radius: 4px;
-  -o-object-fit: cover;
-     object-fit: cover;
+  object-fit: cover;
 }
 .skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text {
   display: flex;
@@ -2946,8 +2937,7 @@ canvas {
   width: 65%;
   height: 65%;
   border-radius: 50%;
-  -o-object-fit: cover;
-     object-fit: cover;
+  object-fit: cover;
 }
 .skill-container .skill-info-right .skill-info .skill-info-details {
   width: 100%;
@@ -3185,7 +3175,7 @@ canvas {
   font-size: 1.5rem;
   font-weight: 400;
   opacity: 0;
-  transition: opacity 0.5s ease-in-out;
+  transition: opacity 1s ease-in-out;
 }
 .intro-load-screen img {
   width: 350px;
@@ -3246,9 +3236,6 @@ canvas {
   font-family: "M PLUS Rounded 1c", sans-serif;
   text-align: center;
 }
-.login-register-form .inp::-moz-placeholder {
-  color: rgba(177, 177, 177, 0.6);
-}
 .login-register-form .inp::placeholder {
   color: rgba(177, 177, 177, 0.6);
 }
@@ -3276,4 +3263,191 @@ canvas {
   font-size: 0.85rem;
   padding: 4px;
   z-index: 2;
-}/*# sourceMappingURL=style.css.map */
+}
+
+.buysell-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 6;
+  display: none;
+  flex-direction: column;
+  width: 480px;
+  height: 520px;
+  background: url("/images/UI/frames/buysellcont.webp") no-repeat center center;
+  background-size: 100% 100%;
+  padding: 30px 26px 20px 26px;
+  color: rgb(173, 173, 173);
+}
+.buysell-container .bs-title {
+  text-align: center;
+  font-family: "Caudex", serif;
+  font-size: 1.3rem;
+  color: #edd59f;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+.buysell-container .bs-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.buysell-container .bs-tabs .bs-tab-btn {
+  cursor: pointer;
+  background: rgb(15, 17, 17);
+  color: rgb(202, 165, 1);
+  border: 1px solid rgba(121, 92, 92, 0.54);
+  border-radius: 4px;
+  padding: 4px 0;
+  font-family: "Almendra Display", cursive;
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  font-weight: 500;
+  width: 110px;
+  padding: 6px 0;
+  font-size: 1rem;
+  opacity: 0.55;
+}
+.buysell-container .bs-tabs .bs-tab-btn.active {
+  opacity: 1;
+  color: #edd59f;
+  border-color: rgba(237, 213, 159, 0.6);
+}
+.buysell-container .bs-body {
+  flex: 1;
+  display: flex;
+  gap: 14px;
+  min-height: 0;
+}
+.buysell-container .bs-body .bs-categories {
+  list-style: none;
+  width: 130px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+.buysell-container .bs-body .bs-categories .bs-categ-btn {
+  cursor: pointer;
+  font-family: "Bellefair", serif;
+  font-size: 0.85rem;
+  color: rgba(245, 245, 245, 0.6);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 8px 10px;
+  transition: 0.15s;
+}
+.buysell-container .bs-body .bs-categories .bs-categ-btn:hover {
+  border-color: rgba(202, 165, 1, 0.3);
+}
+.buysell-container .bs-body .bs-categories .bs-categ-btn.active {
+  color: #edd59f;
+  border-color: rgba(237, 213, 159, 0.5);
+  background: rgba(202, 165, 1, 0.08);
+}
+.buysell-container .bs-body .bs-items-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  align-content: flex-start;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(245, 245, 245, 0.12);
+  border-radius: 6px;
+  padding: 10px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  transition: 0.15s;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-img {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-name {
+  font-family: "Bellefair", serif;
+  font-size: 0.75rem;
+  text-align: center;
+  color: rgb(173, 173, 173);
+  line-height: 1.2;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-price .bs-price-icon {
+  width: 16px;
+  height: 16px;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-price .bs-price-amount {
+  font-family: "Graduate", cursive;
+  font-size: 0.8rem;
+  color: #edd59f;
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot:hover {
+  border-color: rgba(202, 165, 1, 0.4);
+}
+.buysell-container .bs-body .bs-items-grid .bs-item-slot.selected {
+  border-color: rgba(237, 213, 159, 0.8);
+  background: rgba(202, 165, 1, 0.12);
+}
+.buysell-container .bs-body .bs-items-grid .bs-empty-msg {
+  grid-column: 1/-1;
+  text-align: center;
+  font-family: "Bellefair", serif;
+  font-size: 0.85rem;
+  color: rgba(245, 245, 245, 0.4);
+  padding: 30px 0;
+}
+.buysell-container .bs-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+.buysell-container .bs-footer .bs-wallet {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.buysell-container .bs-footer .bs-wallet .bs-wallet-icon {
+  width: 26px;
+  height: 26px;
+}
+.buysell-container .bs-footer .bs-wallet .bs-wallet-amount {
+  font-family: "Graduate", cursive;
+  font-size: 1rem;
+  color: #edd59f;
+}
+.buysell-container .bs-footer .bs-action-btn {
+  cursor: pointer;
+  background: rgb(15, 17, 17);
+  color: rgb(202, 165, 1);
+  border: 1px solid rgba(121, 92, 92, 0.54);
+  border-radius: 4px;
+  padding: 4px 0;
+  font-family: "Almendra Display", cursive;
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  font-weight: 500;
+  width: 140px;
+  padding: 8px 0;
+  font-size: 1rem;
+}
+.buysell-container .bs-footer .bs-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/*# sourceMappingURL=style.css.map */

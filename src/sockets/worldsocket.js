@@ -7,7 +7,7 @@ import { getSpawnPos } from "../tools/position"
 import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction } from "@babylonjs/core"
 import { createTransparentMat } from "../tools/materials"
 import { createTextMesh } from "../gui/textmesh"
-import { showGuildQuest } from "../charactersystem/guildQuest"
+import { showGuildQuest, questToItem } from "../charactersystem/guildQuest"
 import { playAnim, ANIM_STATE } from "../tools/animation"
 import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
@@ -16,6 +16,8 @@ import { attack, activateSkill } from "../charactersystem/attackingSystem"
 import createEnemy, { enemyIsHit } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitDied } from "./emits"
+import { obtain } from "../charactersystem/inventory"
+import { popStatusEffect } from "../tools/popupUI"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -117,16 +119,19 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { newPlayerName, players, placesMD, tcpEnemies, quests } = allDataFromServer
-        const characterState = getCharState()
-        const gameStat = getGameStatus()
-        if (gameStat === "loading") return
-
-        if (socket === undefined) return console.warn("socket UNDEFINED !")
-
+        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests } = allDataFromServer
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
         allQuests = quests
+        
+        const characterState = getCharState()
+        const gameStat = getGameStatus()
+        if (gameStat === "loading") return
+        console.log(`${newPlayerName} joined in ${currentPlaceId}`)
+        if(currentPlaceId !== characterState.currentPlace.placeId) return
+        if (socket === undefined) return console.warn("socket UNDEFINED !")
+
+
         console.log(quests)
 
         if (!characterState) return
@@ -175,6 +180,53 @@ export function activateOnSocketListeners(socket){
         if (!theEquipingPlayer) return
 
         theEquipingPlayer.unEquip(itemType)
+    })
+    // QUESTS (guild board)
+    socket.on("quest-claim-result", data => {
+        if (!isSocketOn) return
+        const { ownerId, questId, success, quest, currentPlaceId } = data
+        const charState = getCharState()
+        if (!charState) return
+        if (charState.currentPlace.placeId !== currentPlaceId) return
+
+        if (success) {
+            // no longer available to anyone — pull its marker off the board
+            const entry = questsOnScene.find(q => q.questId === questId)
+            if (entry) entry.mesh.dispose()
+            questsOnScene = questsOnScene.filter(q => q.questId !== questId)
+            allQuests = allQuests.filter(q => q.questId !== questId)
+        }
+
+        if (ownerId !== charState.owner) return
+        if (success) {
+            obtain(questToItem(quest))
+        } else {
+            popStatusEffect("Quest already taken", "red")
+        }
+    })
+    socket.on("quest-cancelled", data => {
+        if (!isSocketOn) return
+        const { quest, currentPlaceId } = data
+        const charState = getCharState()
+        if (!charState) return
+        if (charState.currentPlace.placeId !== currentPlaceId) return
+
+        const alreadyTracked = allQuests.find(q => q.questId === quest.questId)
+        if (!alreadyTracked) allQuests.push(quest)
+        createQuestPlaneMesh(quest)
+    })
+    // a completed quest got retired and the server topped the board back up
+    // with a fresh one to replace it
+    socket.on("quest-spawned", data => {
+        if (!isSocketOn) return
+        const { quest, currentPlaceId } = data
+        const charState = getCharState()
+        if (!charState) return
+        if (charState.currentPlace.placeId !== currentPlaceId) return
+
+        const alreadyTracked = allQuests.find(q => q.questId === quest.questId)
+        if (!alreadyTracked) allQuests.push(quest)
+        createQuestPlaneMesh(quest)
     })
     // ACTIONS
     // PLAYER ATTACK RELATED
@@ -452,6 +504,41 @@ export function activateOnSocketListeners(socket){
 
 
 
+// Builds one quest marker plane on the guild board. Pulled out of
+// reCreateMeshesInScene so the "quest-cancelled" handler can also call it
+// to bring a single quest's marker back without re-running the whole
+// player/enemy/quest resync.
+function createQuestPlaneMesh(quest) {
+    const isAlreadyHere = questsOnScene.find(q => q.questId === quest.questId)
+    if (isAlreadyHere) return
+
+    const guildboard = scene.getMeshByName("guildboard")
+    if (!guildboard) return
+
+    const questPlane = MeshBuilder.CreatePlane(`quest.${quest.questId}`, { height: 0.6, width: 0.4 }, scene)
+    questPlane.material = createTransparentMat(scene, `./images/modeltex/quest/${quest.questRequirements.modelStyle}.webp`)
+    questPlane.isPickable = true
+    questPlane.parent = guildboard;
+    questPlane.position = new Vector3(-0.01, quest.pos.y, quest.pos.z)
+    questPlane.addRotation(0, Math.PI/2,0)
+
+    questPlane.actionManager = new ActionManager(scene)
+    questPlane.actionManager.registerAction(
+        new ExecuteCodeAction(ActionManager.OnPickTrigger, () => showGuildQuest(quest))
+    )
+
+    // createTextMesh builds its plane at a fixed 5x5 size meant for
+    // world-scale nametags, so it has to be scaled way down to sit as a
+    // small corner badge on this 0.4x0.6 quest plane. It also always
+    // forces billboardMode ON (for nametags following the camera), but
+    // this label should stay flush with the board like questPlane does,
+    // so it's reset to NONE right after.
+    const rankLabel = createTextMesh(scene, questPlane, quest.requiredRank.rankLabel, "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
+    rankLabel.billboardMode = Mesh.BILLBOARDMODE_NONE
+
+    questsOnScene.push({ questId: quest.questId, mesh: questPlane })
+}
+
 export function reCreateMeshesInScene() {
     const gameStat = getGameStatus()
     if (gameStat === "loading") return
@@ -459,13 +546,26 @@ export function reCreateMeshesInScene() {
     const characterState = getCharState()
     const sceneDet = getSceneDet()
 
+    // allPlayersFromTCP is the latest full snapshot from the server, so
+    // anyone on my scene who isn't in it anymore for my place has since
+    // moved elsewhere (or logged off without going through 'removeChar') -
+    // drop their body here too, otherwise it's a ghost stuck in my scene.
+    playersOnScene.forEach(scenePlyr => {
+        const stillHere = allPlayersFromTCP.find(tcpCharDet =>
+            tcpCharDet.owner === scenePlyr.owner &&
+            tcpCharDet.currentPlace.placeId === characterState.currentPlace.placeId
+        )
+        if (stillHere) return
+        removePlayer({ ownerId: scenePlyr.owner, placeId: characterState.currentPlace.placeId })
+    })
 
     allPlayersFromTCP.length && allPlayersFromTCP.forEach(tcpCharDet => {
         if (tcpCharDet.owner === characterState.owner) return
 
         if (characterState.currentPlace.placeId !== tcpCharDet.currentPlace.placeId) return
 
-        const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === tcpCharDet.owner)        
+        const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === tcpCharDet.owner)
+        if (isAlreadyHere) return
         // const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
         const spawnPos = {x: tcpCharDet.pos.x, y: 0.01, z: tcpCharDet.pos.z }
 
@@ -482,38 +582,8 @@ export function reCreateMeshesInScene() {
         // enemy._isMoving = true
         enemiez.push(enemy)
     })
-    console.log(characterState.currentPlace.placeId)
     if(characterState.currentPlace.placeId !== 9) return
-    const guildboard = sceneDet.scene.getMeshByName("guildboard")
-    console.log(guildboard)
-    allQuests.length && allQuests.forEach(quest => {
-        const isAlreadyHere = questsOnScene.find(q => q.questId === quest.questId)
-        if (isAlreadyHere) return
-
-        const questPlane = MeshBuilder.CreatePlane(`quest.${quest.questId}`, { height: 0.6, width: 0.4 }, scene)
-        questPlane.material = createTransparentMat(scene, `./images/modeltex/quest/${quest.questRequirements.modelStyle}.webp`)
-        // questPlane.billboardMode = Mesh.BILLBOARDMODE_ALL
-        questPlane.isPickable = true
-        questPlane.parent = guildboard;
-        questPlane.position = new Vector3(-0.01, quest.pos.y, quest.pos.z)
-        questPlane.addRotation(0, Math.PI/2,0)
-
-        questPlane.actionManager = new ActionManager(scene)
-        questPlane.actionManager.registerAction(
-            new ExecuteCodeAction(ActionManager.OnPickTrigger, () => showGuildQuest(quest))
-        )
-
-        // createTextMesh builds its plane at a fixed 5x5 size meant for
-        // world-scale nametags, so it has to be scaled way down to sit as a
-        // small corner badge on this 0.4x0.6 quest plane. It also always
-        // forces billboardMode ON (for nametags following the camera), but
-        // this label should stay flush with the board like questPlane does,
-        // so it's reset to NONE right after.
-        const rankLabel = createTextMesh(scene, questPlane, quest.requiredRank.rankLabel, "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
-        rankLabel.billboardMode = Mesh.BILLBOARDMODE_NONE
-
-        questsOnScene.push({ questId: quest.questId, mesh: questPlane })
-    })
+    allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest))
 }
 
 

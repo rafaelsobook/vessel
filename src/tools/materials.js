@@ -56,6 +56,7 @@ export function createColorMat(name, color, scene, normalTexPath){
     const mat = new StandardMaterial(name, scene)
 
     mat.diffuseColor = new Color3(color.r,color.g,color.b)
+    mat.specularColor = new Color3(0, 0, 0)
 
     if(normalTexPath){
         const bumpTex = new Texture(normalTexPath, scene)

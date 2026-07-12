@@ -1,5 +1,7 @@
 import { receiveAbilities } from "../charactersystem/abilitySystem.js"
+import { evaluateRank, getCharState } from "../charactersystem/characterstate.js"
 import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
+import { startQuestionare } from "../components/conversations.js"
 // import { openCloseShop, updateShopItem } from "../charactersystem/shopSystem.js"
 // import { activateCinemaOne } from "../tools/cameraTools.js"
 import { randomNum, getNumUntil} from "../tools/tools.js"
@@ -7,7 +9,59 @@ import { randomNum, getNumUntil} from "../tools/tools.js"
 const npcEnemySpd = 4
 export default [
     {
-        glbPath: "./models/avatar/guildavatar.glb",
+        glbPath: "./models/avatar/vanessa.glb",
+        currentPlaceId: 9,
+        mode: "idle",
+        _id: "101_receptionist",
+        name: "Vanessa",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x:0,
+        y: 0.01,
+        z: 4.7,
+        _dirTarg: {x:0,z:0},
+        cloth: 'style3',
+        pants: 'style1',
+        hair: 'style1',
+        boots: 'style1',
+        skinColor: {r:0.45,g:0.30,b:0.16, name: "color2"},
+        hairColor: {r: 0, g: 0, b: 0},
+        clothColor: {r: 0, g: 0, b: 0},
+        pantsColor: {r: 0, g: 0, b: 0},
+        items: [
+        ],
+        titles: ['priest'],
+        skills: [], 
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['light'],
+        blessings: ["holyHand"],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message:"..."}
+        ],
+        forQuests: [
+
+        ],
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(6)
+            
+        }
+    },
+    {
+        glbPath: "./models/avatar/emry.glb",
         currentPlaceId: 9,
         mode: "idle",
         _id: "101_emry",
@@ -83,7 +137,7 @@ export default [
                         questRequirements: { reqType: false, completed: false}, //reqType'enemy/item/money
                     }
                 ],
-                cb: () => {
+                cbAfterNewQuestReceived: () => {
                     // actually none because the questToReceive will activate when you go near the crystal
                 }
             },
@@ -117,7 +171,8 @@ export default [
                         questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 3, completed: false }, //reqType'enemy/item/money
                     }
                 ],
-                cb: () => {
+                cbAfterNewQuestReceived: () => {
+                    evaluateRank(0, { rankNumber: 0, rankLabel: "f"})
                     updateStoryQuestUI({ 
                         qName: "slayFirstSlime", 
                         qTtle: "Hunt Down Slimes", 
@@ -149,7 +204,7 @@ export default [
                         questRequirements: { reqType: false, completed: true }, //reqType'enemy/item/money
                     }
                 ],
-                cb: () => {
+                cbAfterNewQuestReceived: () => {
                     // actually none because the questToReceive will activate when you go near the crystal
                 }
             },
@@ -192,8 +247,8 @@ export default [
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: undefined,
-            equipAbilities: { 
-                dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            equipAbilities: {
+                dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
             // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
@@ -203,7 +258,7 @@ export default [
             enhancedLevel: 0,
             slots: [],// { name, dn, equipAbilities } cores
             durability: { current: 100, max: 100},
-            price: 10,
+            price: { coinType: "bronze", pieces: 10 },
             qnty: 1,
             desc: undefined,
             rarity: "rare",
@@ -227,7 +282,7 @@ export default [
             enhancedLevel: 0,
             slots: [],// { name, dn, equipAbilities } cores
             durability: { current: 100, max: 100},
-            price: 10,
+            price: { coinType: "bronze", pieces: 10 },
             qnty: 1,
             desc: undefined,
             rarity: "rare",
@@ -240,8 +295,8 @@ export default [
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
         weaponType: undefined,
-        equipAbilities: { 
-            dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        equipAbilities: {
+            dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
         }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
@@ -251,7 +306,7 @@ export default [
         enhancedLevel: 0,
         slots: [],// { name, dn, equipAbilities } cores
         durability: { current: 100, max: 100},
-        price: 10,
+        price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
         desc: undefined,
         rarity: "rare",
@@ -263,8 +318,8 @@ export default [
             dn: "Leather Boots",
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "boots", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
-            equipAbilities: { 
-                dmg: 0, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            equipAbilities: {
+                dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
             // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
@@ -273,7 +328,7 @@ export default [
             isEnhanceAble: false, // only for weapons
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 9,
+            price: { coinType: "bronze", pieces: 9 },
             qnty: 1,
             desc: "This Boots is light and useful for first time adventurers",
             rarity: "common"
@@ -285,8 +340,8 @@ export default [
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: undefined,
-            equipAbilities: { 
-                dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            equipAbilities: {
+                dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
             // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
@@ -296,7 +351,7 @@ export default [
             enhancedLevel: 0,
             slots: [],// { name, dn, equipAbilities } cores
             durability: { current: 100, max: 100},
-            price: 10,
+            price: { coinType: "bronze", pieces: 10 },
             qnty: 1,
             desc: undefined,
             rarity: "rare",
@@ -320,7 +375,7 @@ export default [
             enhancedLevel: 0,
             slots: [],// { name, dn, equipAbilities } cores
             durability: { current: 100, max: 100},
-            price: 10,
+            price: { coinType: "bronze", pieces: 10 },
             qnty: 1,
             desc: undefined,
             rarity: "rare",
@@ -348,7 +403,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -369,7 +424,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Cloak, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -434,7 +489,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -455,7 +510,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Cloak, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -576,7 +631,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -695,7 +750,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -866,7 +921,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -983,7 +1038,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -1102,7 +1157,7 @@ export default [
             isEnhanceAble: true, // only for equipable items
             enhancedLevel: 0,
             durability: { current: 100, max: 100},
-            price: 1000,
+            price: { coinType: "bronze", pieces: 1000 },
             qnty: 1,
             desc: "A Priest Vest, Plus Holyness",
             rarity: "normal"//rare//mystical//legendary
@@ -1171,7 +1226,7 @@ export default [
                         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
                         consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
                         equiped: false,
-                        price: 2,
+                        price: { coinType: "bronze", pieces: 2 },
                         qnty: 1,
                         desc: "This key can open gates outside this dimension",
                         rarity: "rare",
@@ -1408,7 +1463,7 @@ export default [
                 enhancedLevel: 0,
                 slots: [],// { name, dn, equipAbilities } cores
                 durability: { current: 100, max: 100},
-                price: 1000,
+                price: { coinType: "bronze", pieces: 1000 },
                 qnty: 1,
                 desc: "From war to war this axe is commendable for battle, durable and sharp",
                 rarity: "rare"
@@ -1419,8 +1474,8 @@ export default [
                 dn: "Bronze Helm",
                 itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
                 itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
-                equipAbilities: { 
-                    dmg: 25, def: 100, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                equipAbilities: {
+                    dmg: 25, def: 100, resistance: 50, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
                 },
                 equiped: true,
                 soulFeed: 0,
@@ -1428,7 +1483,7 @@ export default [
                 enhancedLevel: 0,
                 slots: [],// { name, dn, equipAbilities } cores
                 durability: { current: 100, max: 100},
-                price: 4,
+                price: { coinType: "bronze", pieces: 4 },
                 qnty: 1,
                 desc: "A bronze helmet used for blocking arrows from the goblin and any small attacks",
                 rarity: "rare"

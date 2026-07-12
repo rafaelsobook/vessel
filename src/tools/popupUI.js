@@ -22,7 +22,7 @@ export function activateInteractBtn(){
     interactBtnActivated = true
 }
 
-export function openCloseInteractBtn(_iconImg, isVisible, _callbackAfterClicked) {
+export function openCloseInteractBtn(_iconImg = "normal", isVisible, _callbackAfterClicked) {
     if(!interactBtnActivated) activateInteractBtn()
     
     //_iconImg is if ever we want a different icon to display when it interact with different door or passage etc

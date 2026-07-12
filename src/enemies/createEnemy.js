@@ -448,7 +448,7 @@ export function defeatedAmonster(data){
         }, 1000)
     }
     // log("killed a monster ", data)
-    
+    console.log(characterState.quests)
     getSocket().emit('respawnEnemy', data)
 }
 // ENEMY WHEN HIT RELATED

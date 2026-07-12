@@ -65,6 +65,44 @@ let addStats = {
 export function getCharState(_characterDetail){
     return characterState
 }
+// RANK
+export const rankOrder = ["f", "e", "d", "c", "b", "a", "s"]
+// only these 6 can be handed out directly by story/quest NPCs, "none" is the unranked start and "s" can only be earned through points
+const grantableRanks = rankOrder.slice(1, 6)
+
+export function evaluateRank(addedPoints, assignedRank){
+    // assignedRank = {rankNumber, rankLabel} eg. {rankNumber: 1, rankLabel: "f"}
+    const rank = characterState.rank
+    if(rank.rankNumber === undefined) rank.rankNumber = 0
+    if(rank.curr === undefined) rank.curr = 0
+    if(!rank.pointsToRank) rank.pointsToRank = 12
+    if(!rank.rankLabel) rank.rankLabel = rankOrder[rank.rankNumber]
+
+    const isMaxRank = () => rank.rankNumber >= rankOrder.length - 1
+
+    if(assignedRank){
+
+        rank.rankNumber = assignedRank.rankNumber
+        rank.rankLabel = assignedRank.rankLabel
+        rank.curr = 0
+        rank.pointsToRank =assignedRank.rankNumber === 0 ? 12 : Math.floor(12 * Math.pow(1.5, rank.rankNumber))
+        openClosePopup(`You are now Rank ${rank.rankLabel.toUpperCase()}`, true, 2000)
+        
+    }
+
+    if(addedPoints){
+        rank.curr += addedPoints
+        while(!isMaxRank() && rank.curr >= rank.pointsToRank){
+            rank.curr -= rank.pointsToRank
+            rank.rankNumber += 1
+            rank.rankLabel = rankOrder[rank.rankNumber]
+            rank.pointsToRank = Math.floor(rank.pointsToRank * 1.5)
+            openClosePopup(`Ranked Up! You are now Rank ${rank.rankLabel.toUpperCase()}`, true, 2000)
+        }
+    }
+
+    if(isMaxRank()) rank.curr = 0
+}
 export function getTotal(){
     summarizeStats()
 
@@ -477,48 +515,6 @@ export function updateHpMpSp_UI(){
     stamCap.innerHTML = `0`
 }
 
-export function defeatedAmonster(data){
-    const {name,dn, monsSoul,skills,effects,effectsWhenHit, loots} = data
-
-    characterState.monsSoul += monsSoul
-    const defeatedMonster = characterState.defeatedMonsters.find(monsName => monsName === name)
-
-    checkStoryQuestIfCompleted('enemy', name)
-
-    if(loots.length){
-        let obtainTimeOutCount=0
-        loots.forEach(loot=>{
-            setTimeout(()=>{
-                obtain(loot)
-            }, obtainTimeOutCount)
-            obtainTimeOutCount+=500
-        })
-    }
-    if(!defeatedMonster){
-        characterState.defeatedMonsters.push(name)
-        setTimeout(() => {
-            openClosePopup(`slain a ${dn} `, true, 2000)
-            // getAllSounds().notif1S.play()
-        }, 1000)
-    }
-    // log("killed a monster ", data)
-    
-    
-    
-    // if(characterState.currentPlace.includes("gateplace")){
-    //     const randomPlaceInfo = getRandomPlaceInfo()
-    //     const placeId = randomPlaceInfo.placeId
-    //     if(randomPlaceInfo.placeName === characterState.currentPlace){
-            
-    //         if(data.name===getRandomPlaceInfo().bossInfo.name){
-    //             deleteGate(placeId)
-    //             getSocket().emit('put-gate-status-completed', placeId)
-    //         }else getSocket().emit('respawnEnemy', data)
-    //     }
-    //     return 
-    // }
-    // getSocket().emit('respawnEnemy', data)
-}
 // QUEST CLEARING
 export function setQuestCompleted(questName){
     let isQuestExist = false

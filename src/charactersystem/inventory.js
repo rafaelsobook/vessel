@@ -45,17 +45,22 @@ export function insertItemOnInventory(itm){
     }
     const button = createElement('button',  `slot-btn ${itm.itemId}`)
     const itemImg = createElement("img", `slot-img ${itm.rarity}`)
+
     const slotBrder = createElement("img", 'slot-border')
     slotBrder.src = './images/UI/border3.png'
 
-    if(itm.itemCateg !== "equipable"){
+    if(itm.itemCateg !== "equipable" || itm.itemCateg !== "quest"){
         const itmQntyBorder = createElement('p', 'itm-qnty-border', itm.qnty)
         button.append(itmQntyBorder)
     }
 
     button.append(itemImg)
     button.append(slotBrder)
-    itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
+    if(itm.itemCateg === "quest"){
+        itemImg.src = `./images/UI/mark.webp`
+    }else{
+        itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
+    }
     itemSlotList.append(button)
 }
 export function closeInventory(){

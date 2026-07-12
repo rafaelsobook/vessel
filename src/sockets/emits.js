@@ -88,6 +88,47 @@ export function emitEquipItem(itemDet, isHiding) {
     })
 }
 
+// GUILD BOARD QUESTS
+export function emitClaimQuest(questId) {
+    if (!getIsSocketOn()) return false
+    const socket = getSocket()
+    if(!socket) return false
+    const charState = getCharState()
+    if(!charState) return false
+    socket.emit("emitClaimQuest", {
+        ownerId: charState.owner,
+        questId,
+        currentPlaceId: charState.currentPlace.placeId
+    })
+    return true
+}
+export function emitCancelQuest(questId) {
+    if (!getIsSocketOn()) return false
+    const socket = getSocket()
+    if(!socket) return false
+    const charState = getCharState()
+    if(!charState) return false
+    socket.emit("emitCancelQuest", {
+        ownerId: charState.owner,
+        questId,
+        currentPlaceId: charState.currentPlace.placeId
+    })
+    return true
+}
+export function emitCompleteQuest(questId) {
+    if (!getIsSocketOn()) return false
+    const socket = getSocket()
+    if(!socket) return false
+    const charState = getCharState()
+    if(!charState) return false
+    socket.emit("emitCompleteQuest", {
+        ownerId: charState.owner,
+        questId,
+        currentPlaceId: charState.currentPlace.placeId
+    })
+    return true
+}
+
 export function runEmitMyLocInterval(){
     clearInterval(emitMyLocInterval)
     emitMyLocInterval = setInterval(() => {

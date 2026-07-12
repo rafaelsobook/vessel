@@ -13,6 +13,7 @@ import { updateHeartStatus, updateStatUI } from "./statsSystem.js"
 import { emitEquipItem } from "../sockets/emits.js"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSocket } from "../sockets/joinsocket.js"
+import { showGuildQuest } from "./guildQuest.js"
 
 
 const itemInfoCont = document.querySelector(".item-info-cont")
@@ -21,11 +22,21 @@ const itemTtle = document.querySelector(".iteminfoTtle")
 const slotBx = document.querySelector(".slots-bx")
 const itemQnty = document.querySelector(".item-qnty")
 const itemDesc = document.querySelector(".item-desc")
-const itemPrice = document.querySelector(".item-selling-price")
+
+const itemStatsCont = document.querySelector(".item-stats")
+const defRow = document.querySelector(".def-row")
+const resistanceRow = document.querySelector(".resistance-row")
+const dmgRow = document.querySelector(".dmg-row")
+const durabilityRow = document.querySelector(".durability-row")
+const itemDefValue = document.querySelector(".itemDefValue")
+const itemResistanceValue = document.querySelector(".itemResistanceValue")
+const itemDmgValue = document.querySelector(".itemDmgValue")
+const itemDurabilityValue = document.querySelector(".itemDurabilityValue")
+
+const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots"]
 
 const claimContainer = document.querySelector(".claim-container")
 
-const sellItemBtn = document.getElementById("sellItemBtn")
 const equipOrOpenBtn = document.getElementById("equipItemBtn")
 const listNftBtn = document.getElementById("listNftBtn")
 const inpNft = document.getElementById("inpNft")
@@ -36,24 +47,6 @@ const armorybx = document.querySelector(".armory-bx")
 
 
 let itemDetail= undefined
-let sellItemFunc = async () => {
-    if(!itemDetail) return
-    const charState = getCharState()
-    if(!itemDetail.price) return
-    if(itemDetail.itemCateg === "equipable"){
-        charState.assets.krit += itemDetail.price
-    }else{
-        for(var i = 0;i<=itemDetail.qnty;i++){
-            // charState.coins += itemDetail.price
-            charState.assets.krit += itemDetail.price
-        }
-    }
-    charState.items = charState.items.filter(itm => itm.itemId !== itemDetail.itemId)
-
-    // getAllSounds().coinReceivedS.play()
-    await updateMyDetailsOL(charState, checkIfTokenSaved())
-    openUpdateInventory(true)
-}
 let activateFunc = () => {
     
 }
@@ -243,22 +236,52 @@ export function unEquip(itemType){
 export function closeItemInfo(){
     itemInfoCont.style.display = "none"
 }
-export function enableDisableInfoBtns(_willClose, _timeOut){    
-    setPointerClickable(sellItemBtn, _willClose ? "none" : "visible", _timeOut)
+export function enableDisableInfoBtns(_willClose, _timeOut){
     setPointerClickable(equipOrOpenBtn, _willClose ? "none" : "visible", _timeOut)
     setPointerClickable(listNftBtn, _willClose ? "none" : "visible", _timeOut)
 }
 export function showItemInfo(_itemDet){
-    const {itemCateg, name, dn, price, desc} = _itemDet
+    if(_itemDet.itemCateg === "quest"){
+        showGuildQuest(_itemDet.questDetail, true, _itemDet)
+        return
+    }
+    const {itemCateg, itemType, name, dn, desc} = _itemDet
     itemInfoCont.style.display = "flex"
 
     itemImg.src = `./images/items/${itemCateg}/${name}.webp`
 
     itemTtle.innerHTML = dn
-    itemPrice.innerHTML = `x${price}`
-    itemDesc.innerHTML = desc
 
-    itemDetail = _itemDet 
+    // equipables show their combat stats instead of flavor text - most of
+    // them don't even have a desc set (see helmetItem etc. in questions.js)
+    const isEquipable = itemCateg === "equipable"
+    itemDesc.style.display = isEquipable ? "none" : "block"
+    itemStatsCont.style.display = isEquipable ? "flex" : "none"
+    itemDesc.innerHTML = desc || ''
+
+    if(isEquipable){
+        const isArmorType = ARMOR_TYPES.includes(itemType)
+        defRow.style.display = isArmorType ? "flex" : "none"
+        resistanceRow.style.display = isArmorType ? "flex" : "none"
+        dmgRow.style.display = itemType === "weapon" ? "flex" : "none"
+
+        if(isArmorType){
+            itemDefValue.innerHTML = _itemDet.equipAbilities.def
+            itemResistanceValue.innerHTML = _itemDet.equipAbilities.resistance
+        }
+        if(itemType === "weapon"){
+            itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg
+        }
+
+        if(_itemDet.durability){
+            durabilityRow.style.display = "flex"
+            itemDurabilityValue.innerHTML = `${_itemDet.durability.current} / ${_itemDet.durability.max}`
+        }else{
+            durabilityRow.style.display = "none"
+        }
+    }
+
+    itemDetail = _itemDet
     if(_itemDet.qnty > 1){ 
         itemQnty.style.display="block"
         itemQnty.innerHTML = `x${_itemDet.qnty}`
@@ -347,7 +370,6 @@ export function removeItem(_invItem, updateDetailOnline){
         })
     }
 }
-sellItemBtn.addEventListener("click", () => sellItemFunc())
 equipOrOpenBtn.addEventListener("click", () => activateFunc())
 listNftBtn.addEventListener("click", () => listingThisItem())
 armorybx.addEventListener("click", e => {

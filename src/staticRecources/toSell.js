@@ -20,7 +20,7 @@ export default  [
         enhancedLevel: 0,
         slots: [],// { name, dn, equipAbilities } cores
         durability: { current: 100, max: 100},
-        price: 10,
+        price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
         desc: "From war to war this axe is commendable for battle, durable and sharp",
         rarity: "rare"
@@ -44,7 +44,7 @@ export default  [
         enhancedLevel: 0,
         slots: [],// { name, dn, equipAbilities } cores
         durability: { current: 100, max: 100},
-        price: 10,
+        price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
         desc: "The classic Silver & wood crafted from nature's spirit and silverine",
         rarity: "rare"
@@ -68,7 +68,7 @@ export default  [
         enhancedLevel: 0,
         slots: [],// { name, dn, equipAbilities } cores
         durability: { current: 100, max: 100},
-        price: 10,
+        price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
         desc: "Daedalus Axe, named after Daedalus a fallen meteor that killed dozen of life",
         rarity: "rare"
@@ -84,7 +84,7 @@ export default  [
         itemType: "food", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 100, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 15, fillTireness: 0, cure: []}, //for buffs foods potions
-        price: 1,
+        price: { coinType: "bronze", pieces: 1 },
         qnty: 1,
         desc: "A rare, luminous fruit that shimmers with a soft, otherworldly glow. ",
         rarity: "normal"
@@ -98,7 +98,7 @@ export default  [
         itemType: "food", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 200, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 25, fillTireness: 0, cure: []}, //for buffs foods potions
-        price: 2,
+        price: { coinType: "bronze", pieces: 2 },
         qnty: 1,
         desc: "A delicate, green-skinned fruit, with soft, velvety flesh that emits a fresh, herbal fragrance.",
         rarity: "normal"
@@ -112,7 +112,7 @@ export default  [
         itemType: "food", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 400, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 30, fillTireness: 10, cure: ["poisoned"]}, //for buffs foods potions
-        price: 3,
+        price: { coinType: "bronze", pieces: 3 },
         qnty: 1,
         desc: "A striking fruit with a deep crimson skin that glimmers like molten metal under moonlight. Its content can even cure poisons",
         rarity: "normal"
@@ -126,7 +126,7 @@ export default  [
         itemType: "food", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
         // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 900, plusMp: 200, plusSp: 200, plusDmg: 10, plusSpd: 0, fillHunger: 60, fillTireness: 15 }, //for buffs foods potions
-        price: 13,
+        price: { coinType: "bronze", pieces: 13 },
         qnty: 1,
         desc: "Its rarity stems from the fact that it only grows in the heart of enchanted swamps, blooming at dusk under the watchful eye of ancient spirits.",
         rarity: "rare"

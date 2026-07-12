@@ -156,7 +156,6 @@ export async function areaScene(placeDetail){
         })
     }
     placeDetail.roomPaths?.forEach(path => {
-        console.log(path)
         const { name, pos,startingPos, placeId ,areaType } = path
         const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { }, scene)
         pathTrigger.position = new Vector3(pos.x, pos.y, pos.z)
@@ -178,7 +177,7 @@ export async function areaScene(placeDetail){
                 charState.z = startingPos.z
 
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                exitScene(false)
+                exitScene(charState.owner)
                 await changeScene("whatever")
             })
         })

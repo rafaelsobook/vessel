@@ -1,5 +1,6 @@
 import { questions } from "../constants/questions"
 import { myownspeeches } from "../constants/myownspeech";
+import { vanessasData } from "../constants/flirtdata";
 import { showAnswerButtons } from "../tools/popupUI"
 import  Conversation from "../tools/rpgconv"
 import { getPlayersOnScene } from "../sockets/worldsocket";
@@ -11,12 +12,22 @@ import { showLoadingScreen } from "../htmlcomp/loadingscreen";
 
 const conv = new Conversation(document, 30)
 
+// each NPC that needs its dialogue to react to live player state (rank, etc.)
+// gets its own function here instead of being baked into the static questions array
+const dynamicQuestionSets = [vanessasData]
+
 export function startConv(speechesArray, cb){
     conv.startConversation(speechesArray, 0, cb)
 }
 
 export function startQuestionare(questionId, characterBody){
-    const question = questions.find(q => q.questionId === questionId)
+    let question = questions.find(q => q.questionId === questionId)
+    if(!question){
+        for(const getDynamicSet of dynamicQuestionSets){
+            question = getDynamicSet().find(q => q.questionId === questionId)
+            if(question) break
+        }
+    }
     if(!question) return
     disableEnableAttackButtonsContainer(false, true)
     conv.startConversation(question.conversationWithQuestion,0, () => {

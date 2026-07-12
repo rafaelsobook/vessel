@@ -321,7 +321,7 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBo
                 charState.z = tcpCharPlaceMD.spawn.z
                 
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                exitScene();
+                exitScene(charState.owner);
 
                 const placeDetail = findMyCurrentPlace()
                 await changeScene(placeDetail, "whatever")

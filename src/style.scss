@@ -418,12 +418,17 @@ canvas{
         cursor: pointer;
         align-items: center;
         align-content: center;
-        padding-top: 6px;
+        padding: 5px 20px;
+        // padding-top: 6px;
+        // border-top: 1px solid #725923;
+        // border-bottom: 1px solid #725923;
         .answer-border{
           position: absolute;
           top: 0;
           left: 0;
-          width: 100%;
+          @include centerAbs();
+          width: 110%;
+          height: 100%;
           z-index: -1;
         }
     }
@@ -2031,9 +2036,29 @@ canvas {
     color: rgb(170, 141, 48);
     font-family: $tipsFont;
   }
+  .item-stats {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    gap: 6px;
+    .item-stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: $tipsFont;
+      .stat-label {
+        color: rgba(245, 245, 245, 0.6);
+        font-size: 0.85rem;
+      }
+      .stat-value {
+        color: #edd59f;
+        font-size: 0.9rem;
+      }
+    }
+  }
   .item-btns {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     width: 100%;
     .item-btn {
@@ -2077,35 +2102,6 @@ canvas {
       .item-btn {
         width: 80px;
         padding: 3px 0;
-      }
-    }
-    #sellItemBtn {
-      background: rgb(37, 37, 36);
-      // border: 1px solid rgb(143, 139, 139);
-      border-radius: 2px;
-      display: flex;
-      justify-content: flex-start;
-      width: 95px;
-      padding: 0;
-      color: #f5f5f5;
-      border: 1px solid $naturalBlack;
-      .item-lbl {
-        border-radius: 4px;
-        width: 39%;
-        padding: 5px;
-        background: #8e5120;
-      }
-      .item-selling-price {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        right: 0;
-        @include flexCenter();
-        width: 60%;
-        height: 100%;
-        background: linear-gradient(11deg, #494848, #2b2626, #5d4128);
-        justify-content: flex-end;
-        padding-right: 6px;
       }
     }
     #equipItemBtn {
@@ -2387,11 +2383,11 @@ canvas {
 // LOADING SCREEN
 .mini-loading {
   @include centerFix(3);
-  width: 100%;
-  height: 45%;
+  width: 20%;
+  height: 5%;
   color: rgb(199, 199, 199);
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 1rem;
   animation: blinking 2s ease-out infinite;
   font-family: $mapfont;
   z-index: $loadingz;
@@ -3112,7 +3108,7 @@ canvas {
     font-size: 1.5rem;
     font-weight: 400;
     opacity: 0;
-    transition: opacity 0.5s ease-in-out;
+    transition: opacity 1s ease-in-out;
   }
   img{
     width:350px;
@@ -3208,5 +3204,180 @@ canvas {
     font-size: 0.85rem;
     padding: 4px;
     z-index: 2;
+  }
+}
+
+// TRADE (buy/sell)
+.buysell-container {
+  @include centerFix($uiz + 2);
+  display: none;
+  flex-direction: column;
+  width: 480px;
+  height: 520px;
+  background: url("/images/UI/frames/buysellcont.webp") no-repeat center center;
+  background-size: 100% 100%;
+  padding: 30px 26px 20px 26px;
+  color: $littlewhite;
+
+  .bs-title {
+    text-align: center;
+    font-family: $mapfont;
+    font-size: 1.3rem;
+    color: #edd59f;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  .bs-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 16px;
+
+    .bs-tab-btn {
+      @include rpgbutton();
+      width: 110px;
+      padding: 6px 0;
+      font-size: 1rem;
+      opacity: 0.55;
+    }
+    .bs-tab-btn.active {
+      opacity: 1;
+      color: #edd59f;
+      border-color: rgba(237, 213, 159, 0.6);
+    }
+  }
+
+  .bs-body {
+    flex: 1;
+    display: flex;
+    gap: 14px;
+    min-height: 0;
+
+    .bs-categories {
+      list-style: none;
+      width: 130px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+
+      .bs-categ-btn {
+        cursor: pointer;
+        font-family: $tipsFont;
+        font-size: 0.85rem;
+        color: rgba(245, 245, 245, 0.6);
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 8px 10px;
+        transition: 0.15s;
+      }
+      .bs-categ-btn:hover {
+        border-color: rgba(202, 165, 1, 0.3);
+      }
+      .bs-categ-btn.active {
+        color: #edd59f;
+        border-color: rgba(237, 213, 159, 0.5);
+        background: rgba(202, 165, 1, 0.08);
+      }
+    }
+
+    .bs-items-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      align-content: flex-start;
+      overflow-y: auto;
+      padding-right: 4px;
+
+      .bs-item-slot {
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid rgba(245, 245, 245, 0.12);
+        border-radius: 6px;
+        padding: 10px 6px;
+        background: rgba(0, 0, 0, 0.25);
+        transition: 0.15s;
+
+        .bs-item-img {
+          width: 46px;
+          height: 46px;
+          object-fit: contain;
+        }
+        .bs-item-name {
+          font-family: $tipsFont;
+          font-size: 0.75rem;
+          text-align: center;
+          color: $littlewhite;
+          line-height: 1.2;
+        }
+        .bs-item-price {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          .bs-price-icon {
+            width: 16px;
+            height: 16px;
+          }
+          .bs-price-amount {
+            font-family: $numFont;
+            font-size: 0.8rem;
+            color: #edd59f;
+          }
+        }
+      }
+      .bs-item-slot:hover {
+        border-color: rgba(202, 165, 1, 0.4);
+      }
+      .bs-item-slot.selected {
+        border-color: rgba(237, 213, 159, 0.8);
+        background: rgba(202, 165, 1, 0.12);
+      }
+      .bs-empty-msg {
+        grid-column: 1 / -1;
+        text-align: center;
+        font-family: $tipsFont;
+        font-size: 0.85rem;
+        color: rgba(245, 245, 245, 0.4);
+        padding: 30px 0;
+      }
+    }
+  }
+
+  .bs-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+
+    .bs-wallet {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      .bs-wallet-icon {
+        width: 26px;
+        height: 26px;
+      }
+      .bs-wallet-amount {
+        font-family: $numFont;
+        font-size: 1rem;
+        color: #edd59f;
+      }
+    }
+    .bs-action-btn {
+      @include rpgbutton();
+      width: 140px;
+      padding: 8px 0;
+      font-size: 1rem;
+    }
+    .bs-action-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
   }
 }

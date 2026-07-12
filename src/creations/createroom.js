@@ -154,7 +154,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
                 getAllSounds().normalDoorOC.play()
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
                 console.log(newCharData)
-                exitScene(false)
+                exitScene(charState.owner)
                 
                 await changeScene("whatever")
             })
