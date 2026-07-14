@@ -18,6 +18,7 @@ import { randBetween } from "../tools/random"
 import { emitDied } from "./emits"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
+import { receiveWorldChatMessage } from "../components/worldChatSystem"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -116,6 +117,12 @@ export function getProjectilesOnScene(){
     return projectilesOnScene
 }
 export function activateOnSocketListeners(socket){
+
+    // WORLD CHAT - no rooms/parties, this is just a global relay
+    socket.on("worldChatMessage", data => {
+        if (!isSocketOn) return
+        receiveWorldChatMessage(data)
+    })
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
@@ -467,13 +474,14 @@ export function activateOnSocketListeners(socket){
 
     })
     socket.on("emitted-loc", data => {
-        const { ownerId, pos, dirTarg, mode} = data
+        const { ownerId, pos, dirTarg, mode, weaponName} = data
         const charState = getCharState()
         if(!charState) return
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
         const prevMode = player.mode
         if(ownerId === charState.owner) return
+        setPlayerMode(ownerId, mode, weaponName)
         
         player.body.position.x = pos.x
         player.body.position.y = pos.y
@@ -650,7 +658,7 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
     const player = playersOnScene.find(pl => pl.owner === ownerId)
     if(!player) return;
     const prevMode = player.mode
-    
+    if(_newMode === "minning" && player.hasWeapon) player.equipSword(weaponName, true)
     if(prevMode === "idle" && _newMode === "fighting"){
         // first also think how you can get the character if equiping a weapon
         // the animation of idle to fight will depend if it is wearing weapon
@@ -669,6 +677,7 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
             }, 300)
         }
     }
+    
     player.mode = _newMode
 }
 

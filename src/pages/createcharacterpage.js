@@ -117,14 +117,16 @@ async function createCharacter(input, btn, msg, overlay, getToSaveInfoFromSetup)
     const name = input.value.trim()
     if (!name) { msg.textContent = "Name cannot be empty."; return }
 
-    const token = checkIfTokenSaved().token
-    if (!token) { msg.textContent = "Not logged in."; return }
+    const accountDet = checkIfTokenSaved()
+    if (!accountDet || !accountDet.token) { msg.textContent = "Not logged in."; return }
+    const token = accountDet.token
 
     btn.disabled = true
     btn.textContent = "Creating..."
     msg.textContent = ""
 
     const newChar = getToSaveInfoFromSetup(input.value.trim())
+    newChar.owner = accountDet.details._id
     try {
         const res = await fetch(`${APIURL}/characters/save`, {
             method: "POST",
@@ -136,6 +138,8 @@ async function createCharacter(input, btn, msg, overlay, getToSaveInfoFromSetup)
         })
 
         const data = await res.json()
+
+        console.log(data)
 
         if (data === "exist") {
             msg.textContent = "Name already taken, choose another."

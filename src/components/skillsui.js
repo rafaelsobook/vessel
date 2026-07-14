@@ -1,4 +1,4 @@
-import { getCharState } from "../charactersystem/characterstate.js";
+import { getCharState, setCharStateMode } from "../charactersystem/characterstate.js";
 import { getSocket } from "../sockets/joinsocket.js";
 import { getIsSocketOn } from "../sockets/worldsocket.js";
 import { createElement } from "../tools/tools.js";
@@ -16,8 +16,6 @@ const skillInfoType     = document.querySelector(".skillInfoType");
 const skillInfoCost     = document.querySelector(".skillInfoCost");
 const skillInfoCooldown = document.querySelector(".skillInfoCooldown");
 const skillInfoDesc     = document.querySelector(".skillInfoDesc");
-const skillLevelUpBtn   = document.querySelector(".skillLevelUpBtn");
-const skillLevelUpCost  = document.querySelector(".skillLevelUpCost");
 
 // SLOTS
 const skillslotsContainer = document.querySelector(".skill-slots");
@@ -104,14 +102,8 @@ function renderSkillInfo(skill){
 
     skillInfoCooldown.innerText = `${skill.skillCoolDown / 1000}s`
     skillInfoDesc.innerText = skill.desc
-
-    skillLevelUpCost.innerText = `Cost: ${skill.pointsForUpgrade}`
 }
 
-skillLevelUpBtn.addEventListener("click", () => {
-    // not wired to a backend endpoint yet
-    log("level up clicked")
-})
 slotbuttons.forEach(btn => {
     console.log("asdasd")
     btn.addEventListener("click", () => {
@@ -124,6 +116,10 @@ slotbuttons.forEach(btn => {
         const skill = charState.skills.find(sk => sk.name === skillName)
         console.log(skill)
         skill.isActive = !skill.isActive
+
+        // casting a skill mid-mining should drop it same as walking away or unequipping
+        if(charState.mode === "minning") setCharStateMode("idle")
+
         if(getIsSocketOn()){
             socket.emit("activate-skill", {ownerId: charState.owner, skill, currentPlaceId: charState.currentPlace.placeId})
         } else{

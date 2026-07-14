@@ -8,6 +8,9 @@ import { startConv, startQuestionare } from "../components/conversations.js"
 import { createNpc } from "./createnpc.js"
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { faceForward } from "../controllers/inputMovement.js"
+import { getPlayerCoord } from "../charactersystem/createcharacter.js"
+import { setCanPress } from "../charactersystem/characterstate.js"
 
 
 export function createAllNpcInArea(hero, scene){
@@ -20,6 +23,10 @@ export function createAllNpcInArea(hero, scene){
             openCloseInteractBtn("normal", true, () => {
                 disableEnableAttackButtonsContainer(false, true)
                 openCloseInteractBtn("normal", false)
+                setCanPress(false)
+
+                faceForward(hero.body.position.clone(), anNpc.body)
+
                 let myState = getCharState()
 
                 let storyInfo = false // the long forquest that has a speech property
@@ -75,6 +82,7 @@ export function createAllNpcInArea(hero, scene){
         onIntersecExitTrig(anNpc.body, hero.body, scene, () => {
             openCloseInteractBtn("normal", false)
             disableEnableAttackButtonsContainer(true)
+            setCanPress(true)
         })
     })
     

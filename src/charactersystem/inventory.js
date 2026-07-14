@@ -1,7 +1,9 @@
 import { createElement, setLoadingInAList } from "../tools/GUITools.js"
 import { getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { equipItem, showItemInfo } from "./itemInfoSystem.js"
+import { equipItem, showItemInfo, unEquip } from "./itemInfoSystem.js"
+import { openClosePopup } from "../tools/popupUI.js"
+import { getPlayersOnScene } from "../sockets/worldsocket.js"
 
 
 const inventoryCont  = document.querySelector(".inventory-container")
@@ -103,4 +105,57 @@ export function showItemAcquiredPopUp(displayName, acquiredQnty, cb){
         acquiredLists.style.display = "none"
         cb && cb()
     }, 5000);
+}
+export function reduceDurability(item){
+    if(!item || !item.durability) return
+
+    // durability lives on itemType (weapon/armor/helmet/...), not itemCateg -
+    // itemCateg is always "equipable" for all of these
+    switch(item.itemType){
+        case "weapon":
+            item.durability.current -= 1
+        break
+        case "armor":
+        case "helmet":
+        case "gauntlet":
+        case "boots":
+        case "pauldron":
+            item.durability.current -= 1
+        break
+        default:
+            return
+    }
+
+    if(item.durability.current <= 0){
+        item.durability.current = 0
+        return itemBroke(item)
+    }
+
+    updateMyDetailsOL(getCharState(), checkIfTokenSaved())
+}
+export function itemBroke(item){
+    const charState = getCharState()
+    if(!charState) return
+
+    openClosePopup(`${item.dn} broke!`, true, 2000)
+    unEquip(item.itemType) // clears the armory slot icon, drops mining mode if a weapon just broke mid-swing
+
+    charState.items = charState.items.filter(itm => itm.itemId !== item.itemId)
+
+    // the visible sword mesh lives in the character's own swordMeshes cache
+    // (see createcharacter.js's createSword/equipSword) - unEquip() above
+    // only hides it for possible re-equip later, it doesn't dispose it, so a
+    // broken weapon has to be torn down here instead
+    if(item.itemType === "weapon"){
+        const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+        if(myChar){
+            const idx = myChar.swordMeshes.findIndex(swrd => swrd.name === item.name)
+            if(idx !== -1){
+                myChar.swordMeshes[idx].mesh.dispose(false, true) // recurse into child part-meshes, and dispose their cloned materials too
+                myChar.swordMeshes.splice(idx, 1) // mutate in place - swordMeshes is shared by reference with createcharacter.js's closure, reassigning would only rebind this outer property
+            }
+        }
+    }
+
+    updateMyDetailsOL(charState, checkIfTokenSaved())
 }

@@ -11,6 +11,7 @@ import { createSunRay } from "../tools/sunrays.js";
 import { sceneCleanupReady } from "../components/cleanup.js";
 import { getEngine, setGameStatus } from "../main/main.js";
 import { showHideIcons } from "../charactersystem/uimanagement.js";
+import { setWorldChatAvailable } from "../components/worldChatSystem.js";
 // import { createMobileControls } from "../components/mobilecontrols.js";
 
 export async function dungeonScene(placeDetail){
@@ -45,6 +46,8 @@ export async function dungeonScene(placeDetail){
     const isTouchDevice = navigator.maxTouchPoints > 0;
 
     setGameStatus("running")
-    
+
+    setWorldChatAvailable(isMultiplayer)
+
     return {scene, isSocketOn: isMultiplayer }
 }

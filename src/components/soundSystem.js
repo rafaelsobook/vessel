@@ -52,6 +52,9 @@ export function initSounds(scene){
     const rockSmashS = new Sound("rockSmashS", "./sounds/effects/rockSmashS.mp3", scene,
     null, {volume: 1, autoplay: false, loop: false})
 
+    const minningS = new Sound("minningS", "./sounds/weapons/minning.mp3", scene,
+    null, {volume: 1, autoplay: false, loop: false}) // not spatial - plays the same regardless of camera/mesh position
+
     const pickItemS = new Sound("pickItemS", "./sounds/ui/pickitem.mp3", scene,
     null, {volume: .7, autoplay: false, loop: false})
 
@@ -97,6 +100,7 @@ export function initSounds(scene){
         giantencounterS,
         struckS,
         rockSmashS,
+        minningS,
         // cinema1,cinema2,
         woodCreakS,
         keyUnlockingS, normalDoorOC,
@@ -115,7 +119,7 @@ export function getAllSounds(){
 }
 export function playSound(sound){
     if(sound){
-        sound.setPlaybackRate(0.9 + (Math.random()*0.2))
+        sound.setPlaybackRate(0.9 + (Math.random()*0.6))
         sound.play()
     }
 }

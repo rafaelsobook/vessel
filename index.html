@@ -9,6 +9,7 @@
   </head>
   <body background-color="black">
     <canvas></canvas>
+    <p class="fps-counter">0 FPS</p>
     <div class="quest-container cont">
         <img src="./images/UI/xshield.png" class="close-parent btn"/>
         <div class="quest-header">
@@ -90,11 +91,6 @@
         <!-- <div class="copyright">Ⓒ dungeonBorn 2023 beta</div> -->
     </div>
     
-
-
-
-
-
     <div class="skill-container cont">
         <img src="./images/UI/xshield.png" class="close-parent btn"/>
         <img class="skill-background" src="./images/UI/frames/rightbigcont.webp" alt="">
@@ -132,10 +128,6 @@
                         </div>
                     </div>
                     <p class="skill-info-desc skillInfoDesc"></p>
-                    <button class="level-up-btn skillLevelUpBtn">
-                        <span class="level-up-lbl">Level Up</span>
-                        <span class="level-up-cost skillLevelUpCost"></span>
-                    </button>
                 </div>
             </div>
         </div>
@@ -283,17 +275,15 @@
             </div>
             <div class="item-stat-row durability-row">
                 <span class="stat-label">Durability</span>
-                <span class="stat-value itemDurabilityValue"></span>
+                <div class="durability-bar-outline">
+                    <div class="durability-bar-fill itemDurabilityBar"></div>
+                </div>
             </div>
         </div>
         <div class="item-btns">
             <div class="btn-cont">
-                <div class="sellnft-form">
-                    <input type="number" placeholder="value: 0.001" id="inpNft">
-                    <button id="listNftBtn" class="item-btn btn">sell nft</button>
-                </div>                
-                <button id="equipItemBtn" class="item-btn btn">equip</button>  
-            </div>                      
+                <button id="equipItemBtn" class="item-btn btn">equip</button>
+            </div>
         </div>
 
     </div>
@@ -344,8 +334,17 @@
     </ul>
       <!-- Interact Button -->
     <button id="interactBtn">
-        <img src="./images/UI/interact.png" alt="" class="iteract-img">
+        <img src="./images/UI/normal.png" alt="" class="iteract-img">
     </button>
+    <!-- WORLD CHAT -->
+    <button class="chat-toggle-btn">Show Chat</button>
+    <div class="chat-container">
+        <div class="chats-list"></div>
+        <div class="chat-form">
+            <input type="text" class="chat-inp" placeholder="Say something..." maxlength="200">
+            <button class="chat-sendbtn">Send</button>
+        </div>
+    </div>
     <!-- STORY Container Notifs -->
     <div class="story-notif-container cont">
         <div class="story-bx">
@@ -474,6 +473,31 @@
             <button class="ablty-notif-btn">accept</button>
         </div>
         
+    </div>
+    <!-- GUILD ICON (only visible inside the Guild House, placeId 9) -->
+    <button class="guild-icon-btn">
+        <img src="./images/UI/guildicon.webp" alt="" class="guild-icon-img">
+    </button>
+    <!-- GUILD LEADERBOARD -->
+    <div class="leaderboard-container cont">
+        <img src="./images/UI/xshield.png" class="close-parent btn"/>
+        <p class="lb-title">Top Hunters</p>
+        <div class="lb-table">
+            <div class="lb-row lb-head">
+                <p class="lb-rank"> Top</p>
+                <p class="lb-player">Name</p>
+                <p class="lb-race">Race</p>
+                <p class="lb-lvl">Lvl</p>
+                <p class="lb-ranklabel">Rank</p>
+                <p class="lb-title-lbl">Title</p>
+            </div>
+            <div class="lb-list">
+                <!-- rows injected by guildboard.js -->
+            </div>
+        </div>
+        <div class="lb-footer">
+            My Rank: <span class="lb-my-rank-value">-</span>
+        </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

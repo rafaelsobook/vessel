@@ -1,6 +1,6 @@
 import { Quaternion, MeshBuilder, Vector3 } from '@babylonjs/core';
 import { getSceneDet } from "../main/main";
-import { setCanPress, getCanPress, getCharState, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
+import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { playAnim } from '../tools/animation';
@@ -10,32 +10,57 @@ import { runSound } from '../components/soundSystem';
 
 let aggregate = null
 let rotationHelper = null;
+let saveLocTimeout
+
+export function clearLocTimeOut(){
+    clearTimeout(saveLocTimeout)
+}
 
 export function getControllerObjects(){
     return { aggregate, rotationHelper }
 }
 
-export function faceForward(targP){
+export function faceForward(targP, notPlayerBody){
     const scene = getSceneDet().scene
     if(!scene) return
-    const charState = getCharState()
-    if(!charState) return
-    const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-    if(!player) return
-    const myPos = player.body.position.clone()
 
-    const toFacePos = {x: targP.x-myPos.x, z: targP.z-myPos.z}
-    rotationHelper.lookAt(new Vector3(toFacePos.x, rotationHelper.position.y, toFacePos.z),0,0,0);
-    let faceTargetQuat = rotationHelper.rotationQuaternion.clone();
+    let fromPos, getCurrentQuat
+    if(notPlayerBody){
+        // a plain mesh, not physics-driven - rotate its own rotationQuaternion directly
+        if(!notPlayerBody.rotationQuaternion) notPlayerBody.rotationQuaternion = Quaternion.Identity()
+        fromPos = notPlayerBody.position
+        getCurrentQuat = () => notPlayerBody.rotationQuaternion
+    }else{
+        const charState = getCharState()
+        if(!charState) return
+        const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+        if(!player) return
+        fromPos = player.body.position
+        getCurrentQuat = () => aggregate.transformNode.rotationQuaternion
+    }
+
+    const toFacePos = {x: targP.x-fromPos.x, z: targP.z-fromPos.z}
+    // computed directly instead of via the shared rotationHelper mesh - updateMovement()
+    // copies rotationHelper.rotationQuaternion onto the player's body every single frame,
+    // so calling rotationHelper.lookAt() here (e.g. to face an NPC) clobbers that shared
+    // state and the player's body snaps to match it the instant canPress comes back on
+    const faceAngle = Math.atan2(toFacePos.x, toFacePos.z)
+    let faceTargetQuat = Quaternion.RotationAxis(Vector3.Up(), faceAngle)
 
     let observable = scene.onAfterRenderObservable.add(() => {
-        const cur = aggregate.transformNode.rotationQuaternion;
+        const cur = getCurrentQuat();
         if (faceTargetQuat) {
             Quaternion.SlerpToRef(cur, faceTargetQuat, 0.15, cur);
             if (Math.abs(Quaternion.Dot(cur, faceTargetQuat)) > 0.9998) {
                 cur.copyFrom(faceTargetQuat);
                 faceTargetQuat = null;
                 scene.onAfterRenderObservable.remove(observable);
+                // we're turning an NPC to face the player, not the player itself -
+                // the caller only froze canPress to stop movement input from
+                // fighting this turn, so hand control back the moment it's done
+                // instead of waiting on a proximity-exit trigger that can never
+                // fire while the player is frozen in place
+                if(notPlayerBody) setCanPress(true)
             }
         }
     })
@@ -93,6 +118,11 @@ function setupControls(scene, allsounds) {
         if (!charState) return
         const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
         if(!player) return
+
+        // walking away mid-swing should drop mining same as leaving the ore's
+        // trigger zone or unequipping the weapon
+        if(value && charState.mode === "minning") setCharStateMode("idle")
+
         player._moving = value
         if (player) {
             switch(player.mode){
@@ -109,7 +139,7 @@ function setupControls(scene, allsounds) {
             }
         }
     }
-    let saveLocTimeout
+
     function handleKeyDown(e) {
         if(!getCanPress()) return
         clearTimeout(saveLocTimeout)
@@ -153,7 +183,7 @@ function setupControls(scene, allsounds) {
             break;
             case "c":
                 console.log("players ", getPlayersOnScene())
-
+                clearLocTimeOut()
             break
         }
 
@@ -163,7 +193,7 @@ function setupControls(scene, allsounds) {
             const vel = aggregate.body.getLinearVelocity();
             aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
             emitStop()
-
+            clearTimeout(saveLocTimeout)
             saveLocTimeout = setTimeout( async () => {
                 const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
                 if(!pl) return

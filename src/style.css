@@ -24,6 +24,20 @@ canvas {
   height: 100%;
 }
 
+.fps-counter {
+  position: fixed;
+  bottom: 6px;
+  right: 8px;
+  z-index: 99999;
+  color: #0f0;
+  font-family: monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
 .walk-run-icons-container {
   position: fixed;
   top: 60%;
@@ -44,6 +58,7 @@ canvas {
   border: none;
   position: absolute;
   padding: 3px;
+  outline: none;
 }
 .walk-run-icons-container .icon-btn .icon-img {
   width: 100%;
@@ -1152,17 +1167,38 @@ canvas {
   transition: 0.2s;
 }
 
+.chat-toggle-btn {
+  position: fixed;
+  left: 10px;
+  bottom: calc(31% + 6px);
+  z-index: 1;
+  border: 1px solid rgba(168, 86, 19, 0.4);
+  border-radius: 4px 4px 0 0;
+  background: rgba(32, 31, 31, 0.9);
+  color: rgba(246, 180, 73, 0.8);
+  font-family: "M PLUS Rounded 1c", sans-serif;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  display: none;
+}
+
+.chat-toggle-btn:active {
+  opacity: 0.8;
+}
+
 .chat-container {
   position: fixed;
   bottom: 0;
   left: 0;
-  width: 36%;
+  width: 30%;
   height: 31%;
   border-radius: 4px;
   border: 1px solid rgba(168, 86, 19, 0.4);
   background: rgba(32, 31, 31, 0.9);
   z-index: 2;
   display: none;
+  flex-direction: column;
   opacity: 0.8;
 }
 .chat-container .chats-list {
@@ -1792,22 +1828,28 @@ canvas {
   left: 50%;
   transform: translate(-50%, -50%) scale(1);
   z-index: 4;
-  padding: 4px;
+  padding: 40px;
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  border: 2px solid rgba(206, 206, 206, 0.8);
-  background: #1f1e1e;
+  background: url("/images/UI/goldenring.webp") no-repeat rgba(40, 35, 32, 0.8588235294);
+  background-size: 100% 100%;
   cursor: pointer;
   left: 65%;
   top: 60%;
   display: none;
+  overflow: hidden;
+  border: none;
 }
 #interactBtn .iteract-img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  padding: 12px;
   overflow: hidden;
-  filter: invert(1);
+  border-radius: 50%;
 }
 
 #interactBtn:active {
@@ -2061,9 +2103,9 @@ canvas {
 }
 .item-info-cont .item-stats .item-stat-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   font-family: "Bellefair", serif;
+  gap: 20px;
 }
 .item-info-cont .item-stats .item-stat-row .stat-label {
   color: rgba(245, 245, 245, 0.6);
@@ -2072,6 +2114,22 @@ canvas {
 .item-info-cont .item-stats .item-stat-row .stat-value {
   color: #edd59f;
   font-size: 0.9rem;
+}
+.item-info-cont .item-stats .item-stat-row .durability-bar-outline {
+  width: 50%;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(245, 245, 245, 0.15);
+  overflow: hidden;
+}
+.item-info-cont .item-stats .item-stat-row .durability-bar-outline .durability-bar-fill {
+  height: 100%;
+  background: #2e7d32;
+  transition: width 0.2s;
+}
+.item-info-cont .item-stats .item-stat-row .durability-bar-outline .durability-bar-fill.low {
+  background: #6b0f0f;
 }
 .item-info-cont .item-btns {
   display: flex;
@@ -2084,42 +2142,12 @@ canvas {
   padding: 3px 0;
 }
 .item-info-cont .item-btns .btn-cont {
-  width: 45%;
+  width: auto;
   display: flex;
   justify-content: center;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-}
-.item-info-cont .item-btns .btn-cont .sellnft-form {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  justify-content: flex-end;
-  background: rgb(37, 37, 36);
-  border-radius: 2px;
-  border: 1px solid rgb(29, 28, 28);
-  padding: 1px;
-}
-.item-info-cont .item-btns .btn-cont .sellnft-form #inpNft {
-  width: 100px;
-  background: none;
-  padding: 4px;
-  border: none;
-  color: #c2c2c2;
-  text-align: center;
-  outline: none;
-  display: none;
-}
-.item-info-cont .item-btns .btn-cont .sellnft-form #listNftBtn {
-  padding: 1px 2px;
-  background: #12344b;
-  font-family: "M PLUS Rounded 1c", sans-serif;
-  border-radius: 3px;
-  color: #e4e3d5;
-  font-size: 0.8rem;
-  border: none;
-  width: 70px;
 }
 .item-info-cont .item-btns .btn-cont .item-btn {
   width: 80px;
@@ -2435,8 +2463,11 @@ canvas {
   justify-content: center;
   align-items: center;
   background: rgb(29, 28, 28);
-  display: none;
   z-index: 10;
+  pointer-events: none;
+}
+.loading-screen img {
+  pointer-events: none;
 }
 .loading-screen .loading-bx {
   display: flex;
@@ -2991,28 +3022,6 @@ canvas {
   line-height: 1.5;
   color: #d8d5d5;
 }
-.skill-container .skill-info-right .skill-info .skill-info-details .level-up-btn {
-  cursor: pointer;
-  background: rgb(15, 17, 17);
-  color: rgb(202, 165, 1);
-  border: 1px solid rgba(121, 92, 92, 0.54);
-  border-radius: 4px;
-  padding: 4px 0;
-  font-family: "Almendra Display", cursive;
-  font-size: 1.4rem;
-  letter-spacing: 3px;
-  font-weight: 500;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-  margin-top: 20px;
-}
-.skill-container .skill-info-right .skill-info .skill-info-details .level-up-btn .level-up-cost {
-  font-size: 1rem;
-  letter-spacing: 1px;
-}
 
 .home-page {
   position: fixed;
@@ -3448,6 +3457,156 @@ canvas {
 .buysell-container .bs-footer .bs-action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.guild-icon-btn {
+  position: fixed;
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 110px;
+  cursor: pointer;
+  z-index: 4;
+  transition: 0.15s;
+}
+.guild-icon-btn .guild-icon-img {
+  width: 100%;
+  pointer-events: none;
+}
+
+.guild-icon-btn:hover {
+  filter: brightness(1.2);
+}
+
+.guild-icon-btn:active {
+  transform: translateX(-50%) scale(0.93);
+}
+
+.leaderboard-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 6;
+  display: none;
+  flex-direction: column;
+  width: 620px;
+  height: 520px;
+  background: url("/images/UI/frames/leaderboard.webp") no-repeat center center;
+  background-size: 100% 100%;
+  padding: 120px 34px 20px 34px;
+  color: rgb(173, 173, 173);
+}
+.leaderboard-container .lb-title {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: "Caudex", serif;
+  font-size: 1.4rem;
+  color: #edd59f;
+  letter-spacing: 3px;
+}
+.leaderboard-container .lb-table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.leaderboard-container .lb-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 100px 60px 70px 110px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.leaderboard-container .lb-head {
+  font-family: "Bellefair", serif;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  color: rgba(237, 213, 159, 0.7);
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(237, 213, 159, 0.25);
+}
+.leaderboard-container .lb-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.leaderboard-container .lb-list .lb-row {
+  font-family: "Bellefair", serif;
+  font-size: 0.9rem;
+  border-bottom: 1px solid rgba(245, 245, 245, 0.08);
+  transition: 0.15s;
+}
+.leaderboard-container .lb-list .lb-row .lb-rank {
+  text-align: left;
+  padding-left: 7px;
+}
+.leaderboard-container .lb-list .lb-row:hover {
+  background: rgba(202, 165, 1, 0.06);
+}
+.leaderboard-container .lb-list .lb-row.self {
+  background: rgba(202, 165, 1, 0.14);
+  border-bottom-color: rgba(237, 213, 159, 0.4);
+}
+.leaderboard-container .lb-list .lb-empty-msg {
+  text-align: center;
+  font-family: "Bellefair", serif;
+  font-size: 0.85rem;
+  color: rgba(245, 245, 245, 0.4);
+  padding: 30px 0;
+}
+.leaderboard-container .lb-list .lb-rank {
+  font-family: "Graduate", cursive;
+  color: #cfcfcf;
+  text-align: left;
+}
+.leaderboard-container .lb-list .lb-player {
+  color: rgb(173, 173, 173);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.leaderboard-container .lb-list .lb-race {
+  color: rgba(245, 245, 245, 0.6);
+  text-transform: capitalize;
+  text-align: left;
+}
+.leaderboard-container .lb-list .lb-lvl {
+  font-family: "Graduate", cursive;
+  color: #edd59f;
+  text-align: left;
+}
+.leaderboard-container .lb-list .lb-ranklabel {
+  font-family: "Graduate", cursive;
+  color: #a8d8b9;
+  text-align: left;
+  text-transform: uppercase;
+}
+.leaderboard-container .lb-list .lb-title-lbl {
+  color: #9fd6ed;
+  text-align: left;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+.leaderboard-container .lb-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(237, 213, 159, 0.25);
+  text-align: center;
+  font-family: "Bellefair", serif;
+  font-size: 0.9rem;
+  color: rgba(245, 245, 245, 0.7);
+}
+.leaderboard-container .lb-footer .lb-my-rank-value {
+  color: #edd59f;
+  font-family: "Graduate", cursive;
 }
 
 /*# sourceMappingURL=style.css.map */

@@ -135,6 +135,7 @@ canvas{
     position: absolute;
     // border: 1px solid rgb(170, 141, 48);
     padding: 3px;
+    outline: none;
     .icon-img{
       width: 100%;
       height: 100%;
@@ -1187,17 +1188,36 @@ canvas {
   transition: 0.2s;
 }
 //CHAT STYLES
+.chat-toggle-btn {
+  position: fixed;
+  left: 10px;
+  bottom: calc(31% + 6px);
+  z-index: 1;
+  border: 1px solid $bronze;
+  border-radius: 4px 4px 0 0;
+  background: rgba(32, 31, 31, 0.9);
+  color: rgba(246, 180, 73, 0.8);
+  font-family: $copyrightFont;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  display: none;
+}
+.chat-toggle-btn:active {
+  opacity: 0.8;
+}
 .chat-container {
   position: fixed;
   bottom: 0;
   left: 0;
-  width: 36%;
+  width: 30%;
   height: 31%;
   border-radius: 4px;
   border: 1px solid $bronze;
   background: rgba(32, 31, 31, 0.9);
   z-index: 2;
   display: none;
+  flex-direction: column;
   opacity: 0.8;
 
   .chats-list {
@@ -1777,21 +1797,31 @@ canvas {
 // interact btn
 #interactBtn {
   @include centerFix($uiz);
-  padding: 4px;
+  padding: 40px;
   width: 50px;
   height: 50px;
   border-radius: 50%;
-  border: 2px solid rgba(206, 206, 206, 0.8);
-  background: #1f1e1e;
+  // border: 2px solid rgba(206, 206, 206, 0.8);
+  background: url("/images/UI/goldenring.webp") no-repeat #282320db;
+  background-size: 100% 100%;
   cursor: pointer;
   left: 65%;
   top: 60%;
   display: none;
+  overflow: hidden;
+  border: none;
+  // padding: 10px;
   .iteract-img {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    padding: 12px;
     overflow: hidden;
-    filter: invert(1);
+    
+  border-radius: 50%;
+    // filter: invert(1);
   }
 }
 #interactBtn:active {
@@ -2043,9 +2073,10 @@ canvas {
     gap: 6px;
     .item-stat-row {
       display: flex;
-      justify-content: space-between;
+      // justify-content: space-between;
       align-items: center;
       font-family: $tipsFont;
+      gap: 20px;
       .stat-label {
         color: rgba(245, 245, 245, 0.6);
         font-size: 0.85rem;
@@ -2053,6 +2084,22 @@ canvas {
       .stat-value {
         color: #edd59f;
         font-size: 0.9rem;
+      }
+      .durability-bar-outline {
+        width: 50%;
+        height: 8px;
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(245, 245, 245, 0.15);
+        overflow: hidden;
+        .durability-bar-fill {
+          height: 100%;
+          background: #2e7d32; // green, above the low threshold
+          transition: width 0.2s;
+          &.low {
+            background: #6b0f0f; // dark red, at/below the low threshold
+          }
+        }
       }
     }
   }
@@ -2066,39 +2113,10 @@ canvas {
       padding: 3px 0;
     }
     .btn-cont {
-      width: 45%;
+      width: auto;
       @include flexCenter();
       justify-content: flex-end;
       gap: 6px;
-      .sellnft-form {
-        @include flexCenter();
-        justify-content: flex-end;
-        background: rgb(37, 37, 36);
-        border-radius: 2px;
-        border: 1px solid $naturalBlack;
-        padding: 1px;
-        #inpNft {
-          width: 100px;
-          background: none;
-          padding: 4px;
-          border: none;
-          color: #c2c2c2;
-          text-align: center;
-          outline: none;
-          display: none;
-        }
-        #listNftBtn {
-          padding: 1px 2px;
-          // border: 1px solid #b3c1d8;
-          background: #12344b;
-          font-family: $copyrightFont;
-          border-radius: 3px;
-          color: #e4e3d5;
-          font-size: 0.8rem;
-          border: none;
-          width: 70px;
-        }
-      }
       .item-btn {
         width: 80px;
         padding: 3px 0;
@@ -2409,9 +2427,12 @@ canvas {
   background-size: cover;
   @include flexCenter();
   background: $naturalBlack;
-  display: none;
+  // display: flex;
   z-index: $loadingz;
-
+  pointer-events: none;
+  img{
+    pointer-events: none
+  }
   .loading-bx {
     @include flexCenter();
     flex-direction: column;
@@ -2955,19 +2976,6 @@ canvas {
           line-height: 1.5;
           color: #d8d5d5;
         }
-        .level-up-btn{
-          @include rpgbutton();
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 2px;
-          width: 100%;
-          margin-top: 20px;
-          .level-up-cost{
-            font-size: 1rem;
-            letter-spacing: 1px;
-          }
-        }
       }
     }
   }
@@ -3378,6 +3386,164 @@ canvas {
     .bs-action-btn:disabled {
       opacity: 0.4;
       cursor: not-allowed;
+    }
+  }
+}
+
+// GUILD ICON (Guild House only)
+.guild-icon-btn {
+  position: fixed;
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 110px;
+  cursor: pointer;
+  z-index: $uiz;
+  transition: 0.15s;
+
+  .guild-icon-img {
+    width: 100%;
+    pointer-events: none;
+  }
+}
+.guild-icon-btn:hover {
+  filter: brightness(1.2);
+}
+.guild-icon-btn:active {
+  transform: translateX(-50%) scale(0.93);
+}
+
+// GUILD LEADERBOARD
+.leaderboard-container {
+  @include centerFix($uiz + 2);
+  display: none;
+  flex-direction: column;
+  width: 620px;
+  height: 520px;
+  background: url("/images/UI/frames/leaderboard.webp") no-repeat center center;
+  background-size: 100% 100%;
+  padding: 120px 34px 20px 34px;
+  color: $littlewhite;
+
+  .lb-title {
+    position: absolute;
+    top: 12%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: $mapfont;
+    font-size: 1.4rem;
+    color: #edd59f;
+    letter-spacing: 3px;
+  }
+
+  .lb-table {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .lb-row {
+    display: grid;
+    grid-template-columns: 50px 1fr 100px 60px 70px 110px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .lb-head {
+    font-family: $tipsFont;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    color: rgba(237, 213, 159, 0.7);
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(237, 213, 159, 0.25);
+  }
+
+  .lb-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+
+    .lb-row {
+      font-family: $tipsFont;
+      font-size: 0.9rem;
+      border-bottom: 1px solid rgba(245, 245, 245, 0.08);
+      transition: 0.15s;
+
+      .lb-rank {
+        text-align: left;
+        padding-left: 7px;
+      }
+    }
+    .lb-row:hover {
+      background: rgba(202, 165, 1, 0.06);
+    }
+    .lb-row.self {
+      background: rgba(202, 165, 1, 0.14);
+      border-bottom-color: rgba(237, 213, 159, 0.4);
+    }
+
+    .lb-empty-msg {
+      text-align: center;
+      font-family: $tipsFont;
+      font-size: 0.85rem;
+      color: rgba(245, 245, 245, 0.4);
+      padding: 30px 0;
+    }
+
+    .lb-rank {
+      font-family: $numFont;
+      color: #cfcfcf;
+      text-align: left;
+    }
+    .lb-player {
+      color: $littlewhite;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .lb-race {
+      color: rgba(245, 245, 245, 0.6);
+      text-transform: capitalize;
+      text-align: left;
+    }
+    .lb-lvl {
+      font-family: $numFont;
+      color: #edd59f;
+      text-align: left;
+    }
+    .lb-ranklabel {
+      font-family: $numFont;
+      color: #a8d8b9;
+      text-align: left;
+      text-transform: uppercase;
+    }
+    .lb-title-lbl {
+      color: #9fd6ed;
+      text-align: left;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+  }
+
+  .lb-footer {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(237, 213, 159, 0.25);
+    text-align: center;
+    font-family: $tipsFont;
+    font-size: 0.9rem;
+    color: rgba(245, 245, 245, 0.7);
+
+    .lb-my-rank-value {
+      color: #edd59f;
+      font-family: $numFont;
     }
   }
 }

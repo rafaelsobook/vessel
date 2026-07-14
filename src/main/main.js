@@ -12,11 +12,14 @@ import { makeSureArraysAreClean } from "../components/cleanup.js";
 import { checkIfTokenSaved } from "../tools/tools.js";
 import { setupCharacterScene } from "../scenes/setupcharacterscene.js";
 import { closeCharacterPage } from "../pages/createcharacterpage.js";
-import { activateInteractBtn } from "../tools/popupUI.js";
+import { activateInteractBtn, openCloseLScreen } from "../tools/popupUI.js";
 import { initOnceStatsSystem } from "../charactersystem/statsSystem.js";
 import { initOnceStorySystem } from "../charactersystem/storyQuestSystem.js";
 import { setSocketOn } from "../sockets/worldsocket.js";
+import { initOnceWorldChatSystem } from "../components/worldChatSystem.js";
+import { updateGuildIconVisibility } from "../htmlcomp/guildboard.js";
 const canvas = document.querySelector("canvas")
+const fpsCounter = document.querySelector(".fps-counter")
 
 
 let engine 
@@ -41,6 +44,7 @@ export function getEngine(){
 }
 // 
 export async function changeScene(_sceneName){
+    openCloseLScreen(true)
     setGameStatus("loading")
     setSocketOn(false)
 
@@ -56,6 +60,8 @@ export async function changeScene(_sceneName){
     // })
     setSocketOn(sceneDetail.isSocketOn)
     setGameStatus("running")
+    updateGuildIconVisibility()
+    openCloseLScreen(false)
 }
 export async function startScene(willCreateCharacter){
     hideShowAllScreenUI()
@@ -71,7 +77,7 @@ export async function startScene(willCreateCharacter){
         // beginWorldRenderInWorldSocket(scene)
         activateBtnOnce()
         activateInteractBtn()
-        // initOnceWorlChatSystem()
+        initOnceWorldChatSystem()
         initOnceStatsSystem()
         initOnceStorySystem()
         // initOnceEnhanceSystem()
@@ -81,7 +87,11 @@ export async function startScene(willCreateCharacter){
         const sceneDetail = await setupCharacterScene(engine)
         scene = sceneDetail.scene
     }
-    engine.runRenderLoop(() => gameStatus === "running" && scene.render())
+    engine.runRenderLoop(() => {
+        if(gameStatus !== "running") return
+        scene.render()
+        fpsCounter.textContent = `${engine.getFps().toFixed(0)} FPS`
+    })
     window.addEventListener("resize", ()  => engine.resize())
 }
 

@@ -43,6 +43,7 @@ export async function   register() {
             enterBtn.disabled = false
             return
         }
+        console.log(data)
         keepAccountWithTokenDet(data)
 
         homePage.classList.add("hidden")

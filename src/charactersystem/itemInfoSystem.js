@@ -1,7 +1,7 @@
 import { createElement } from "../tools/GUITools.js"
 import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
-import { checkIfTokenSaved, randomNum, setDisplayALl, setDisplayOfElements, setPointerClickable, useFetch } from "../tools/tools.js"
-import { getCharState, updateHunger, updateMyDetailsOL } from "./characterstate.js"
+import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
+import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL } from "./characterstate.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
 import { getSceneDet } from "../main/main.js"
 // import { getAllSounds } from "./soundSystem.js"
@@ -31,15 +31,15 @@ const durabilityRow = document.querySelector(".durability-row")
 const itemDefValue = document.querySelector(".itemDefValue")
 const itemResistanceValue = document.querySelector(".itemResistanceValue")
 const itemDmgValue = document.querySelector(".itemDmgValue")
-const itemDurabilityValue = document.querySelector(".itemDurabilityValue")
+const itemDurabilityBar = document.querySelector(".itemDurabilityBar")
+
+const DURABILITY_LOW_THRESHOLD = 0.3
 
 const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots"]
 
 const claimContainer = document.querySelector(".claim-container")
 
 const equipOrOpenBtn = document.getElementById("equipItemBtn")
-const listNftBtn = document.getElementById("listNftBtn")
-const inpNft = document.getElementById("inpNft")
 // const weaponAccessoryList = document.querySelector(".weapon-accessory")
 const weaponAccessoryList = document.querySelectorAll(".eqpd-slot")
 
@@ -48,21 +48,7 @@ const armorybx = document.querySelector(".armory-bx")
 
 let itemDetail= undefined
 let activateFunc = () => {
-    
-}
-// functionalities for activateFunc and listNftFunc
-let listingThisItem = async () => {
-    if(!itemDetail) return
-    closeItemInfo()
-    enableDisableInfoBtns(true)
-    const charState = getCharState()    
-    // const isSuccess = await uploadToIpfs(`./images/items/${itemDetail.itemCateg}/${itemDetail.name}.png`, itemDetail)
-    // if(isSuccess){
-    //     // delete item
-    //     charState.items = charState.items.filter(itm => itm.itemId !== itemDetail.itemId)
-    //     await updateMyDetailsOL(charState, checkIfTokenSaved())
-    // }
-    enableDisableInfoBtns(false)
+
 }
 let equipItemFunc = () => {
     if(!itemDetail) return
@@ -221,15 +207,19 @@ export function unEquip(itemType){
         if(slotName === undefined) return
         if(slotName.split(" ")[1] === itemType){
             chld.innerHTML = ''
-            
+
             const charState = getCharState()
-            charState.items.forEach(itm => {                
+            charState.items.forEach(itm => {
                 if(itm.itemType === itemType){
                     itm.equiped = false
                 }
             })
         }
     })
+
+    // no sword in hand, no more mining - drop back to idle same as walking away from the ore
+    if(itemType === "weapon" && getCharState().mode === "minning") setCharStateMode("idle")
+
     openUpdateInventory(false)
     closeItemInfo()
 }
@@ -238,7 +228,6 @@ export function closeItemInfo(){
 }
 export function enableDisableInfoBtns(_willClose, _timeOut){
     setPointerClickable(equipOrOpenBtn, _willClose ? "none" : "visible", _timeOut)
-    setPointerClickable(listNftBtn, _willClose ? "none" : "visible", _timeOut)
 }
 export function showItemInfo(_itemDet){
     if(_itemDet.itemCateg === "quest"){
@@ -275,41 +264,34 @@ export function showItemInfo(_itemDet){
 
         if(_itemDet.durability){
             durabilityRow.style.display = "flex"
-            itemDurabilityValue.innerHTML = `${_itemDet.durability.current} / ${_itemDet.durability.max}`
+            const percent = (_itemDet.durability.current / _itemDet.durability.max) * 100
+            itemDurabilityBar.style.width = `${percent}%`
+            itemDurabilityBar.classList.toggle("low", percent <= DURABILITY_LOW_THRESHOLD * 100)
         }else{
             durabilityRow.style.display = "none"
         }
     }
 
     itemDetail = _itemDet
-    if(_itemDet.qnty > 1){ 
+    if(_itemDet.qnty > 1){
         itemQnty.style.display="block"
         itemQnty.innerHTML = `x${_itemDet.qnty}`
     }else itemQnty.style.display="none"
 
-    let infoContBtns = [equipOrOpenBtn,listNftBtn,inpNft]
-    setDisplayOfElements(infoContBtns, "none")
-    switch(_itemDet.rarity){
-        case "rare":
-            infoContBtns = [equipOrOpenBtn,listNftBtn,inpNft]
-        break;
-        default:
-            infoContBtns = [equipOrOpenBtn]
-        break
-    }
+    equipOrOpenBtn.style.display = "none"
     switch(_itemDet.itemCateg){
         case "equipable":
-            setDisplayOfElements(infoContBtns, "block")
+            equipOrOpenBtn.style.display = "block"
             activateFunc = equipItemFunc
             equipOrOpenBtn.innerHTML = "equip"
         break
         case "keys":
-            setDisplayOfElements(infoContBtns, "block")
+            equipOrOpenBtn.style.display = "block"
             // activateFunc = emitAddGateFunc
             equipOrOpenBtn.innerHTML = "open"
         break
         case "consumable":
-            setDisplayOfElements(infoContBtns, "block")
+            equipOrOpenBtn.style.display = "block"
             activateFunc = consumeItemFunc
             equipOrOpenBtn.innerHTML = "consume"
         break
@@ -371,7 +353,6 @@ export function removeItem(_invItem, updateDetailOnline){
     }
 }
 equipOrOpenBtn.addEventListener("click", () => activateFunc())
-listNftBtn.addEventListener("click", () => listingThisItem())
 armorybx.addEventListener("click", e => {
     const className = e.target.className;
     const state = getCharState()

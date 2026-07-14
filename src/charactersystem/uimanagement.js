@@ -144,7 +144,6 @@ export function activateBtnOnce(){
 
                     if(attackInfo.weaponType) playSound(getAllSounds().swordWhooshS)
                     
-                    console.log(animName)
                     if(isSocketOn){
                         emitAttack(attackInfo, animName)
                     }else{

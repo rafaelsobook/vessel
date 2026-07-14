@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 import { getCharSocket } from "../charactersystem/characterstate.js";
 import { activateOnSocketListeners, getIsSocketOn, setSocketOn } from "./worldsocket.js";
+import { webSocketURL } from "../constants/constants.js";
 
 let socket = null;
 let socketId = null
@@ -22,7 +23,7 @@ export function getSocketPlacesMD() {
 
 
 export function initSocket() {
-    socket = io("ws://localhost:3000", {
+    socket = io(webSocketURL, {
         transports: ["websocket"],
     });
 

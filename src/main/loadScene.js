@@ -11,7 +11,9 @@ export default async function loadScene(){
 
     setGameStatus("loading")
 
-    await initiateCharacter(checkIfTokenSaved())
+    const charState = await initiateCharacter(checkIfTokenSaved())
+    if(!charState) return
+
     const placeDetail = findMyCurrentPlace()
     let sceneDetail;
 

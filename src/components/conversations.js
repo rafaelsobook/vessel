@@ -1,6 +1,7 @@
 import { questions } from "../constants/questions"
 import { myownspeeches } from "../constants/myownspeech";
 import { vanessasData } from "../constants/flirtdata";
+import { kraunsData } from "../constants/kraundata";
 import { showAnswerButtons } from "../tools/popupUI"
 import  Conversation from "../tools/rpgconv"
 import { getPlayersOnScene } from "../sockets/worldsocket";
@@ -14,7 +15,7 @@ const conv = new Conversation(document, 30)
 
 // each NPC that needs its dialogue to react to live player state (rank, etc.)
 // gets its own function here instead of being baked into the static questions array
-const dynamicQuestionSets = [vanessasData]
+const dynamicQuestionSets = [vanessasData, kraunsData]
 
 export function startConv(speechesArray, cb){
     conv.startConversation(speechesArray, 0, cb)

@@ -14,12 +14,12 @@ import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanage
 
 export async function setupCharacterScene(engine){
     let toSave = {
-        owner: checkIfTokenSaved().details._id,
+        owner: undefined,
         name: "",
         hairColor: { r: 0, g: 0, b: 0},
         clothColor: { r: 0.42, g: 0.30, b: 0.16 },
         pantsColor: { r: 0.22, g: 0.13, b: 0.05 },
-        skinColor: { r: 0.45, g: 0.30, b: 0.16 },
+        skinColor: { r: 0.93, g: 0.78, b: 0.63 },
         cloth: "style1",
         pants: "style1",
         hair: "style1",

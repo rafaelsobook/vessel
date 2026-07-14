@@ -4,7 +4,7 @@ import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
 import { createAggregate, initializePhysics } from "../tools/physics.js";
-import { createRock } from "../assetcreation/createRock.js";
+import { createRock, createOre } from "../assetcreation/createRock.js";
 import { loadAvatarContainer, loadModel, mergeAndLoadModel } from "../tools/loadmodel.js";
 import { createSunRay } from "../tools/sunrays.js";
 import { sceneCleanupReady } from "../components/cleanup.js";
@@ -15,23 +15,26 @@ import { createRoom } from "../creations/createroom.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
 import { getSocket, joinWorld } from "../sockets/joinsocket.js";
 import { changeScene, getEngine, setGameStatus } from "../main/main.js";
-import { getCharState, initiateCharacter, setCanPress, updateMyDetailsOL } from "../charactersystem/characterstate.js";
+import { getCharState, initiateCharacter, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
 import { pushPlayer, setSocketContainers, playSocketScene } from "../sockets/worldsocket.js";
-import { openCloseInteractBtn, openCloseLScreen } from "../tools/popupUI.js";
+import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
 import { checkIfTokenSaved, randomNum } from "../tools/tools.js";
 import { startMyOwnSpeech } from "../components/conversations.js";
 import { loadMeshOnlyParts } from "../tools/loadmodel.js";
 import { spawnProjectile } from "../creations/skills.js";
-import {runEmitMyLocInterval } from "../sockets/emits.js";
+import {emitMyLoc, runEmitMyLocInterval } from "../sockets/emits.js";
 import { disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay, showHideIcons } from "../charactersystem/uimanagement.js";
-import { obtain } from "../charactersystem/inventory.js";
+import { obtain, reduceDurability } from "../charactersystem/inventory.js";
 import createAllNpcInArea from "../npc/createAllNpcInArea.js";
 import { exitScene } from "../sockets/exitsocket.js";
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js";
 import { createFireParticles } from "../tools/particlesystem.js";
-import { initSounds } from "../components/soundSystem.js";
+import { initSounds, getAllSounds, playSound } from "../components/soundSystem.js";
 import { createOriginal, createSky } from "../creations/creationTools.js";
+import { setWorldChatAvailable } from "../components/worldChatSystem.js";
+import { faceForward } from "../controllers/inputMovement.js";
+import { createLootItem } from "../staticRecources/resourceLoot.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -155,6 +158,99 @@ export async function areaScene(placeDetail){
             }
         })
     }
+
+    // MINEABLE RESOURCES (ore etc.) - walk up to one, interact button shows up,
+    // pressing it puts you in "minning" mode - a looping state like idle/
+    // fighting (see renderer.js/animation.js), not a one-shot action anim.
+    // Walking away resets it back to idle.
+    if(placeDetail.resources && placeDetail.resources.length > 0){
+        // fixed setInterval timing can never line up with the animation's own
+        // frame-based loop cadence - AnimationGroup already fires its own
+        // event every time it wraps back to the start, so just use that
+        // instead of guessing a frame or a millisecond duration. Guarded so
+        // re-entering the mining trigger doesn't stack a duplicate listener
+        // on the same AnimationGroup each time.
+        // this hook is shared by every resource (registered once on the
+        // character's animation, not per-resource), so it needs to know
+        // which resource is actually being mined right now to know which
+        // loot table applies - startMining()/stopMining() below keep this
+        // pointed at the right one.
+        let currentMiningResource = null
+
+        const miningAnim = myCharacter.anims.find(a => a.name.toLowerCase() === "minning")
+        if(miningAnim && !miningAnim._hookedMiningSound){
+            miningAnim.onAnimationGroupLoopObservable.add(() => {
+                playSound(getAllSounds().minningS)
+                const equippedWeapon = getCharState().items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                // if(equippedWeapon) reduceDurability(equippedWeapon)
+
+                currentMiningResource?.loots?.forEach(loot => {
+                    if(Math.random() > loot.chance) return
+                    const lootItem = createLootItem(loot.name)
+                    if(lootItem) obtain(lootItem)
+                })
+            })
+            miningAnim._hookedMiningSound = true
+        }
+
+        // one shared box built once and cloned per resource, instead of
+        // building fresh box geometry with MeshBuilder.CreateBox for every
+        // single resource - clones share the source's vertex buffer, so it's
+        // cheaper than rebuilding identical geometry over and over.
+        let resourceColliderTemplate = scene.getMeshByName("resource_collider_template")
+        if(!resourceColliderTemplate){
+            resourceColliderTemplate = MeshBuilder.CreateBox("resource_collider_template", { size: 2 }, scene);
+            resourceColliderTemplate.isVisible = false;
+            resourceColliderTemplate.setEnabled(false); // template only - never used directly, just cloned
+        }
+
+        placeDetail.resources.forEach(async res => {
+            // ore is a procedural mesh (see createRock.js's createOre), everything
+            // else falls back to loading a glb like optionalObjects does
+            const model = res.resourceType === "ore"
+                ? createOre(scene, res.position)
+                : await mergeAndLoadModel(res.glbPath, scene, res.functionBeforeMerge);
+
+            if(res.resourceType !== "ore") model.position = new Vector3(res.position.x, res.position.y, res.position.z);
+            model.addRotation(0, res.rotation, 0);
+            model.name = res.name
+
+            if(model.getClassName() === "Mesh" && res.physics) createAggregate(model, res.physics.opt, res.physics.type, scene);
+
+            const collider = resourceColliderTemplate.clone(`${res.name}_collider`, model);
+            collider.isVisible = false;
+            collider.setEnabled(true);
+
+            const stopMining = () => {
+                openCloseInteractBtn("normal", false)
+                if(getCharState().mode === "minning") setCharStateMode("idle")
+                if(currentMiningResource === res) currentMiningResource = null
+            }
+            const startMining = () => {
+                const hasWeaponEquipped = getCharState().items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                if(!hasWeaponEquipped){
+                    // leave the interact button up as-is (still wired to this
+                    // same callback) so you can just retry after equipping,
+                    // without needing to walk away and back
+                    openClosePopup("Required pickaxe", true, 1500)
+                    return
+                }
+
+                openCloseInteractBtn("pickaxe", false)
+                faceForward(res.position)
+                setCharStateMode("minning")
+                currentMiningResource = res
+                myCharacter.equipSword(hasWeaponEquipped.name, true, hasWeaponEquipped.parts)
+                emitMyLoc("minning", hasWeaponEquipped.name)
+            }
+
+            onIntersecEnterTrig(collider, myCharacter.body, scene, () => {
+                openCloseInsssteractBtn("pickaxe", true, () => startMining())
+            })
+            onIntersecExitTrig(collider, myCharacter.body, scene, stopMining)
+        })
+    }
+
     placeDetail.roomPaths?.forEach(path => {
         const { name, pos,startingPos, placeId ,areaType } = path
         const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { }, scene)
@@ -163,7 +259,7 @@ export async function areaScene(placeDetail){
         pathTrigger.isPickable = false
 
         onIntersecEnterTrig(pathTrigger, myCharacter.body, scene, () => {
-            openCloseInteractBtn(true, "none", async () => {
+            openCloseInteractBtn("normal", true, async () => {
                 openCloseInteractBtn(false)
 
                 const charState = getCharState()
@@ -202,9 +298,11 @@ export async function areaScene(placeDetail){
 
     if(isMultiplayer) {
         joinWorld(getCharState().currentPlace.placeId)
-        // openCloseChatContainer() // coming soon
+        setWorldChatAvailable(true)
         runEmitMyLocInterval()
         // emitMyLoc()
+    }else{
+        setWorldChatAvailable(false)
     }
 
     openCloseLScreen("normal", false)

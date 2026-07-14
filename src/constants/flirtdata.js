@@ -251,7 +251,7 @@ export function vanessasData(){
                 {
                     text: "Sell Carcas",
                     cb: () => {
-                        buyOrSell(true)
+                        buyOrSell(true, "crafting")
                     }
                 },
                 {

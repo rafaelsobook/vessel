@@ -16,6 +16,7 @@ const actionBtn   = document.querySelector(".bs-action-btn")
 let mode = "buy" // buy // sell
 let activeCategory = "all"
 let selectedItem = null
+let sellableCategories = null // null = no restriction, otherwise an array of itemCateg values (e.g. ["consumable", "crafting"]) - some shops don't buy weapons/armor
 
 const CATEG_MATCHERS = {
     all: () => true,
@@ -27,7 +28,9 @@ const CATEG_MATCHERS = {
     consumable: itm => itm.itemCateg === "consumable",
 }
 
-export function buyOrSell(willSell){
+// switching tabs inside an already-open shop must NOT touch
+// sellableCategories - only opening the shop (buyOrSell, below) sets it
+function switchMode(willSell){
     mode = willSell ? "sell" : "buy"
     activeCategory = "all"
     selectedItem = null
@@ -35,8 +38,13 @@ export function buyOrSell(willSell){
     tabBtns.forEach(btn => btn.classList.toggle("active", btn.classList.contains(mode)))
     categBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.categ === "all"))
 
-    bsCont.style.display = "flex"
     render()
+}
+
+export function buyOrSell(willSell, arrayOfItemCategoryToSell){
+    sellableCategories = arrayOfItemCategoryToSell || null
+    switchMode(willSell)
+    bsCont.style.display = "flex"
 }
 
 function getSellableItems(){
@@ -44,7 +52,8 @@ function getSellableItems(){
     return charState.items.filter(itm =>
         itm.itemCateg !== "currency" &&
         itm.itemCateg !== "quest" &&
-        !itm.equiped
+        !itm.equiped &&
+        (!sellableCategories || sellableCategories.includes(itm.itemCateg))
     )
 }
 
@@ -93,7 +102,7 @@ function render(){
 
 tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-        buyOrSell(btn.classList.contains("sell"))
+        switchMode(btn.classList.contains("sell"))
     })
 })
 

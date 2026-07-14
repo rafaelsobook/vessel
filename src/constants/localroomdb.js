@@ -5,7 +5,7 @@ import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionMan
 import { generateArea } from '../generate-datas/genareamd.js';
 import { generateBSPDungeon } from '../generate-datas/generatebsp.js';
 import { getSceneDet } from '../main/main.js';
-import { getPlayersOnScene } from '../sockets/worldsocket.js';
+import { getIsSocketOn, getPlayersOnScene } from '../sockets/worldsocket.js';
 import { randNum } from '../tools/random.js';
 import { openCloseInteractBtn } from '../tools/popupUI.js';
 import { playAnim } from '../tools/animation.js';
@@ -13,6 +13,8 @@ import { disableEnableAttackButtonsContainer } from '../charactersystem/uimanage
 import { faceForward, getControllerObjects } from '../controllers/inputMovement.js';
 import { createMagicCircle } from '../creations/magiccircles.js';
 import { getAllSounds } from '../components/soundSystem.js';
+import { getSocket } from '../sockets/joinsocket.js';
+import { emitSpawnCircle } from '../sockets/emits.js';
 
 export const metaDatas = [
 
@@ -90,7 +92,26 @@ export const metaDatas = [
                 startingPos: {x: 0.12, y: 1, z: -4.4}
             }
         ],
-        
+        resources: [
+            {
+                resourceId: randNum(0,9999).toString(),
+                resourceType: "ore", // procedurally generated, see createOre() in createRock.js
+                name: "ore",
+                position: {x: 3, y: 0, z: -5},
+                scale: null,
+                rotation: 0,
+                loots: [
+                    {name: "ore", chance: 0.4},
+                    {name: "crystal", chance: 0.2},
+                    {name: "adamantine", chance: 0.4},
+                ],
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                }
+            }
+        ],
+
         ...generateArea({
         placeId: 1,
         areaType: "village",
@@ -405,7 +426,7 @@ export const metaDatas = [
                         console.log(charState.quests)
                         const touchCrystalQuest = charState.quests.find(qst => qst.qName === "touchTheCrystal")
                         if(!touchCrystalQuest) return console.log("no touchCrystalQuest")
-                        openCloseInteractBtn("true", true, () => {
+                        openCloseInteractBtn("normal", true, () => {
                             openCloseInteractBtn("none", false)
                             
                             player.characterAnimations.playAction(player.anims, "cast", 1, () => {
@@ -427,6 +448,8 @@ export const metaDatas = [
                                 const capturedY = discPosY
                                 setTimeout(() => {
                                     createMagicCircle({x: 1, y: capturedY, z: 3.1}, getSceneDet().scene, `apt_${apt.element}`, 2, 4000)
+                                    const socket = getSocket()
+                                    if(getIsSocketOn()) emitSpawnCircle({x: 1, y: capturedY, z: 3.1},apt.element)
                                 }, timeoutnums)
                                 timeoutnums += 2000
                                 discPosY += 0.25
@@ -441,7 +464,7 @@ export const metaDatas = [
                                 setCharStateMode("idle")
                                 setCanPress(true)
                                 disableEnableAttackButtonsContainer(true)
-                            }, 10000)
+                            }, 8000)
                         });
                     })
                     onIntersecExitTrig(collider, player.body, scene, () => openCloseInteractBtn("none", false))

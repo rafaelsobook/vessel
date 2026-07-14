@@ -273,6 +273,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             if(swrd.name === swordToEquipName) {
                 toEquip = swrd
                 console.log("no need to create a new sword")
+                if(onHand) toEquip.mesh.parent = rHand
+                
+                if(!onHand) toEquip.mesh.parent = weaponSocket
             }
 
         })

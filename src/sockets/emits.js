@@ -36,18 +36,20 @@ export function emitStop(){
         mode
     })
 }
-export function emitMyLoc(newMode){
+export function emitMyLoc(newMode, weaponName){
     const charState = getCharState()
      if(!charState) return
     const socket = getSocket()
     if(!socket) return
     const { pos, dirTarg, mode} = getPlayerCoord(charState.owner)
-
+    
     socket.emit("emitLoc", {
         ownerId: charState.owner,
         pos,
         dirTarg,
-        mode: newMode ? newMode : mode
+        mode: newMode ? newMode : mode,
+        placeId: charState.currentPlace.placeId, 
+        weaponName: weaponName ? weaponName : undefined
     })
 }
 export function emitDied() {
@@ -61,6 +63,13 @@ export function emitDied() {
     // enemiez = []
 }
 // Attack Actions
+export function emitSpawnCircle(pos, element){
+    const socket = getSocket()
+    const placeId = getCharState().currentPlace.placeId
+    if(getIsSocketOn()){
+        socket.emit("spawncirc", {pos, placeId, element})
+    }
+}
 export function emitAttack(attackInfo,attackAnimName) {
     if (!getIsSocketOn()) return
     const socket = getSocket()

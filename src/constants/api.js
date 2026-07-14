@@ -10,5 +10,6 @@ export async function getCharDetFromDB(accountDet){
 }
 
 export function keepAccountWithTokenDet(accoundDetail){
+    console.log(JSON.stringify(accoundDetail))
     sessionStorage.setItem(sessionStorageName, JSON.stringify(accoundDetail))
 }

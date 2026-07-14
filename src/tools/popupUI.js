@@ -1,3 +1,4 @@
+import { clearLocTimeOut } from "../controllers/inputMovement"
 import { createElement } from "./tools"
 
 const popupStyle1 = document.querySelector(".popstyle1")
@@ -11,6 +12,7 @@ const miniLoading = document.querySelector(".mini-loading")
 // status effects pop ups
 const statusList = document.querySelector(".status-effects-list")
 const interactBtn = document.getElementById("interactBtn")
+const interactBtnImg = interactBtn.querySelector(".iteract-img")
 let interactBtnActivated = false
 
 let callbackAfterClicked = () => {}
@@ -25,9 +27,11 @@ export function activateInteractBtn(){
 export function openCloseInteractBtn(_iconImg = "normal", isVisible, _callbackAfterClicked) {
     if(!interactBtnActivated) activateInteractBtn()
     
+    if(_iconImg) interactBtnImg.src = `./images/UI/${_iconImg}.webp`
     //_iconImg is if ever we want a different icon to display when it interact with different door or passage etc
     interactBtn.style.display = isVisible ? "block" : "none"
     callbackAfterClicked = _callbackAfterClicked
+    if(isVisible) clearLocTimeOut()
 }
 
 export function openClosePopup(_popMessage, willOpen, timeOut, cb){
@@ -66,7 +70,7 @@ export function showAnswerButtons(choices, cb){
     })
 }
 
-export function openCloseLScreen(loadType, willOpen, timeOut){
+export function openCloseLScreen(willOpen, timeOut){
     if(willOpen){
         mainLoadingScreen.style.display="flex"
         mainLoadingScreen.classList.remove("screenFadeOff")

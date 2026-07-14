@@ -42,6 +42,7 @@ export async function login() {
             enterBtn.disabled = false
             return
         }
+        console.log(data)
         keepAccountWithTokenDet(data)
 
         const charRes = await fetch(`${APIURL}/characters/${data.details._id}`, {

@@ -298,7 +298,7 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBo
         }
 
         onIntersecEnterTrig(triggerBox, characterBody, scene, async () => {
-            openCloseInteractBtn(null, true, async () => {
+            openCloseInteractBtn("normal", true, async () => {
                 let placeDetailShort
 
                 switch(pathname){

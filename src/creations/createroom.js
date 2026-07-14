@@ -137,7 +137,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         exitTrigger.isPickable = false
 
         onIntersecEnterTrig(exitTrigger, characterBody, scene, () => {
-            openCloseInteractBtn(true, "none", async () => {
+            openCloseInteractBtn("normal", "none", async () => {
                 openCloseInteractBtn(false)
 
                 const charState = getCharState()

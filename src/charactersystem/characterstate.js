@@ -329,7 +329,12 @@ export function summarizeStats(){
 }
 export async function initiateCharacter(_accountDet){
     characterState = await getHeroDetail(_accountDet)
- 
+
+    if(!characterState){
+        window.location.reload()
+        return null
+    }
+
     activateLifeSystem()
     updateSkillListUI(characterState.skills)
     // updateStoryQuestUI(characterState.stories[0])

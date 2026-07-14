@@ -19,7 +19,7 @@ export function attack(_attackInfo, attackAnimName){
     const playerAttacked = getPlayersOnScene().find(pl => pl.owner === owner)
     if (!playerAttacked) return
     playerAttacked._attacking = true
-
+    if(hasWeapon) playerAttacked.equipSword(hasWeapon, true)
     const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)
 
     if (played) {
@@ -60,7 +60,7 @@ export function getAttackInfo(){
 
     charState.items.forEach(itm => {
         if (itm.itemType === "weapon" && itm.equiped) {
-            hasWeapon = true
+            hasWeapon = itm.name
             weaponType = itm.weaponType
             
         }
