@@ -34,7 +34,8 @@ export function showHideEquip(equipMesh, isVisible){
 export function getPlayerCoord(ownerId){
     const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
     if(!player) return false;
-    const pos = player.body.position;
+    const pos = player.body.position.clone();
+    console.log(`${pos.x} ${pos.y} ${pos.z}`)
     const forward = player.body.getDirection(Vector3.Forward())
     const dirTarg = player.body.position.add(forward)
     return {

@@ -37,7 +37,7 @@ export function startQuestionare(questionId, characterBody){
             return question.cb && question.cb(characterBody) // default to 0 if no answer chosen, but should not be the case since showAnswerButtons will only show if there are answers
         }
         showAnswerButtons(question.answers, (indx) => { 
-            question.answers[indx].cb(indx, characterBody)
+            question.answers[indx].cb()
         })
     })
 }

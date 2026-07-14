@@ -44,14 +44,20 @@ export class CharacterAnimations {
         }
     }
 
-    // Start all four looping anims at weight 0 except idle at weight 1.
+    // Only idle actually needs to be playing at rest. The rest are started
+    // on demand in setState()/playAction() and stopped again once a blend
+    // fades them out — leaving a stopped AnimationGroup costs nothing, but a
+    // "playing" one at weight 0 still gets fully interpolated every frame.
     playAll() {
         Object.values(this._anims).forEach(anim => {
             if (!anim) return
-            anim.play(true)
+            anim.stop()
             anim.weight = 0
         })
-        if (this._anims[ANIM_STATE.IDLE]) this._anims[ANIM_STATE.IDLE].weight = 1
+        if (this._anims[ANIM_STATE.IDLE]) {
+            this._anims[ANIM_STATE.IDLE].play(true)
+            this._anims[ANIM_STATE.IDLE].weight = 1
+        }
         this._state = ANIM_STATE.IDLE
     }
 
@@ -73,6 +79,13 @@ export class CharacterAnimations {
         // Snap any in-progress blend before starting the new one.
         this._cancelBlend()
 
+        // toAnim was stopped after its last fade-out (see _cancelBlend) — it
+        // needs to be playing again before we can ramp its weight up.
+        if (!toAnim.isPlaying) {
+            toAnim.play(true)
+            toAnim.weight = 0
+        }
+
         this._blendFrom   = fromAnim
         this._blendTo     = toAnim
         this._blendFrames = 0
@@ -81,22 +94,18 @@ export class CharacterAnimations {
     }
 
     // Ends whatever blend is currently in flight, leaving both anims at a
-    // sane final weight (0 / 1). A blend endpoint that isn't one of the six
-    // canonical loop states is a one-shot action clip that playAction()
-    // re-armed as a live frozen loop purely so its weight would keep
-    // counting during the fade (see playAction below) — if we just drop the
-    // reference without stopping it, it's left permanently "playing" at
-    // whatever weight it was interrupted at, forever bleeding into every
-    // animation after it. That's what caused the shaking/incomplete-looking
-    // attacks: an old act_idletoready1/readytoidle transition (or a
-    // previous attack) getting cut off mid-fade by the next playAction()
-    // call and never being cleaned up.
+    // sane final weight (0 / 1). blendFrom is always fully stopped here,
+    // not just faded to weight 0 — a "playing" AnimationGroup still gets
+    // interpolated every frame regardless of its weight, so leaving it
+    // running would keep costing per-frame evaluation for a clip that's no
+    // longer contributing anything visually. This also fixed the old
+    // shaking/incomplete-looking attacks bug: an old act_idletoready1/
+    // readytoidle transition (or a previous attack) getting cut off
+    // mid-fade by the next playAction() call and never cleaned up.
     _cancelBlend() {
         if (!this._blendFrom) return
         this._blendFrom.weight = 0
-        if (!Object.values(this._anims).includes(this._blendFrom)) {
-            this._blendFrom.stop()
-        }
+        this._blendFrom.stop()
         if (this._blendTo) this._blendTo.weight = 1
         this._blendFrom = null
         this._blendTo   = null
@@ -147,7 +156,14 @@ export class CharacterAnimations {
         // interrupted act_idletoready1 still mid-fade) instead of just
         // discarding the reference — see _cancelBlend for why that leaks
         this._cancelBlend()
-        Object.values(this._anims).forEach(anim => { if (anim) anim.weight = 0 })
+        // Stop the currently-playing loop clip too — the action clip is
+        // taking over completely, so leaving it "playing" at weight 0 would
+        // just be more dead weight getting interpolated every frame.
+        Object.values(this._anims).forEach(anim => {
+            if (!anim) return
+            anim.weight = 0
+            if (anim.isPlaying) anim.stop()
+        })
         this._isActionPlaying = true
 
         // drop any listener left over from a previous playAction() that got
@@ -184,6 +200,13 @@ export class CharacterAnimations {
                 actionAnim.stop(true)
                 actionAnim.start(true, actionAnim.speedRatio, actionAnim.to - 1, actionAnim.to)
                 actionAnim.weight = 1
+
+                // loopAnim was stopped above when the action took over — it
+                // needs to be playing again before we can blend into it.
+                if (!loopAnim.isPlaying) {
+                    loopAnim.play(true)
+                    loopAnim.weight = 0
+                }
 
                 this._blendFrom   = actionAnim
                 this._blendTo     = loopAnim
