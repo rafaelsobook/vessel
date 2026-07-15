@@ -1,9 +1,9 @@
 import { startQuestionare } from '../components/conversations';
 import { spawnProjectile} from "../creations/skills"
-import { getCharState, setCharStateMode } from '../charactersystem/characterState';
+import { getCharState, setCharStateMode } from '../charactersystem/characterstate';
 import { getPlayersOnScene } from '../sockets/worldsocket';
 import { getSceneDet } from '../main/main';
-import { setCanPress } from '../charactersystem/characterState';
+import { setCanPress } from '../charactersystem/characterstate';
 import { receiveAbilities } from '../charactersystem/abilitySystem';
 import { createMagicCircle, spawnMagicCircle } from '../creations/magiccircles';
 import { playAnim, stopAllAnim } from '../tools/animation';

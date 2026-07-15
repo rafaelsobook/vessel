@@ -1,6 +1,6 @@
 import npcDetails from "../staticRecources/npcDetails.js"
 import { getNpcOnScene, getPlayersOnScene } from "../sockets/worldsocket.js"
-import { getCharState, updateMyDetailsOL } from "./characterState.js"
+import { getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { getSceneDet } from "../main/main.js"
 // import { checkDistance } from "../createFunctions/creationTools.js"
 import { openClosePopup } from "../tools/popupUI.js"

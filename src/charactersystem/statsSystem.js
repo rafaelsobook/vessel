@@ -2,7 +2,7 @@ import { getSceneDet } from "../main/main.js"
 import { checkIfTokenSaved, createElement, setBtnsPointerAndVisibility, setDisplayElem } from "../tools/tools.js"
 import { hideAbilityDesc, receiveAbilities, showAbilityDesc } from "./abilitySystem.js"
 // import { beginOrRestartAttack } from "./attackingSystem.js"
-import { getAdditionalsFromAbilities, getCharState, updateMyDetailsOL } from "./characterState.js"
+import { getAdditionalsFromAbilities, getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSocket } from "../sockets/joinsocket.js"
 

@@ -1,5 +1,5 @@
 import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene } from "./worldsocket";
-import { getCharState } from "../charactersystem/characterState.js";
+import { getCharState } from "../charactersystem/characterstate.js";
 import { playAnim, ANIM_STATE } from "../tools/animation.js";
 import { getGameStatus, getSceneDet } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
