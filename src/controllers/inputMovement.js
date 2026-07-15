@@ -84,7 +84,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 20;
+    let sprintSpeed = 5;
     let currentSpeed = walkSpeed;
     let isMoving = false;
 
@@ -175,9 +175,9 @@ function setupControls(scene, allsounds) {
                 const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
                 pos = pl.body.getAbsolutePosition()
                 console.log(`x: ${pos.x}, z: ${pos.z}`)
-                evaluateRank(13)
+                // evaluateRank(13)
                 // evaluateRank(0, { rankNumber: 0, rankLabel: "f"})
-                console.log(state)
+                // console.log(state)
 
                 reCreateMeshesInScene()
             break;

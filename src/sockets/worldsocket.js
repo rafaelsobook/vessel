@@ -312,7 +312,7 @@ export function activateOnSocketListeners(socket){
         playAnim(theEnemyToAttack.anims, data.attackAnimName)
         // player hit animation
         // playAnim(victimPlayer.anims, "hit1")
-        victimPlayer.characterAnimations.playAction(victimPlayer.anims, "hit1", 1)
+        // victimPlayer.characterAnimations.playAction(victimPlayer.anims, "hit1", 1)
         theEnemyToAttack.attackSound.play()
         // playAnim(theEnemyToAttack.anims, data.attackAnimName, false, ()=>{
         //     theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
@@ -472,6 +472,18 @@ export function activateOnSocketListeners(socket){
         // player.body.rotation.y = Math.atan2(dx, dz)
         // player.body.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
 
+    })
+    socket.on("emitted-mode", data => {
+        const { ownerId, mode, weaponName} = data
+        const charState = getCharState()
+        if(!charState) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if(!player) return
+        const prevMode = player.mode
+        if(ownerId === charState.owner) return
+        
+        console.log(`${player.name} `, mode, weaponName)
+        setPlayerMode(ownerId, mode, weaponName)
     })
     socket.on("emitted-loc", data => {
         const { ownerId, pos, dirTarg, mode, weaponName} = data
@@ -659,20 +671,27 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
     if(!player) return;
     const prevMode = player.mode
     if(_newMode === "minning" && player.hasWeapon) player.equipSword(weaponName, true)
+    console.log(prevMode)
+    console.log(_newMode)
+    console.log(player)
     if(prevMode === "idle" && _newMode === "fighting"){
+        
         // first also think how you can get the character if equiping a weapon
         // the animation of idle to fight will depend if it is wearing weapon
-        if(player.hasWeapon && weaponName){
+        // if(player.hasWeapon && weaponName){
+        if(weaponName){
             player.characterAnimations.playAction(player.anims, "act_idletoready1", 1, null, false, ANIM_STATE.COMBAT_IDLE)
             setTimeout(() => {
+                console.log("equiping ", weaponName)
                 player.equipSword(weaponName, true)
             }, 400)
         }
     }
     if(prevMode === "fighting" && _newMode === "idle"){
-        if(player.hasWeapon && weaponName){
+        if(weaponName){
             player.characterAnimations.playAction(player.anims, "act_readytoidle", 1, null, false, ANIM_STATE.IDLE)
             setTimeout(() => {
+                console.log("equiping ", weaponName)
                 player.equipSword(weaponName, false)
             }, 300)
         }

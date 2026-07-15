@@ -3,7 +3,7 @@ import { closeInventory, openUpdateInventory } from "./inventory.js"
 import { openOrCloseStats } from "./statsSystem.js"
 import { getCharState, getTotal, setCanPress, setCharStateMode, updateSP_UI } from "./characterstate.js"
 import { getIsSocketOn } from "../sockets/worldsocket.js"
-import { emitAttack, emitMyLoc } from "../sockets/emits.js"
+import { emitAttack, emitMode, emitMyLoc } from "../sockets/emits.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
 import { positionAtkCollider } from "./createMyCharacter.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
@@ -71,8 +71,8 @@ export function activateBtnOnce(){
 
             const charState = getCharState()
             if(!charState) return
-
-            const hasWeapon = charState.items.some(itm => itm.itemType === "weapon" && itm.equiped)
+            const attackInfo = getAttackInfo()
+            const weapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
             const currentMode = charState.mode
 
             
@@ -80,12 +80,11 @@ export function activateBtnOnce(){
             clearTimeout(clickedTimeOut)
             switch(btnName){
                 case "walk":
-                    if(hasWeapon && currentMode === "fighting"){
 
-                    }
                     setCharStateMode("idle")
                     
-                    if(isSocketOn) emitMyLoc("idle")
+                    
+                    if(isSocketOn) emitMode("idle", attackInfo.hasWeapon)
 
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
@@ -95,7 +94,7 @@ export function activateBtnOnce(){
                 case "running":       
                     setCharStateMode("fighting")
                     
-                    if(isSocketOn) emitMyLoc("fighting")
+                    if(isSocketOn) emitMode("fighting", attackInfo.hasWeapon)
                 //    openOrCloseStats()
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
@@ -140,7 +139,7 @@ export function activateBtnOnce(){
 
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1
 
-                    const attackInfo = getAttackInfo()
+                    
 
                     if(attackInfo.weaponType) playSound(getAllSounds().swordWhooshS)
                     

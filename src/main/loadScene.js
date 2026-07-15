@@ -6,13 +6,23 @@ import { findMyCurrentPlace } from "../states/placestates.js";
 import { initiateCharacter } from "../charactersystem/characterstate.js";
 import { checkIfTokenSaved } from "../tools/tools.js";
 import { getAllSounds } from "../components/soundSystem.js";
+import { openCloseLScreen } from "../tools/popupUI.js";
+import { showMainPage } from "../pages/mainpage.js";
+import { showLoginPage } from "../pages/loginpage.js";
 
 export default async function loadScene(){
 
     setGameStatus("loading")
 
     const charState = await initiateCharacter(checkIfTokenSaved())
-    if(!charState) return
+   
+    if(!charState) {
+        console.log("return to home")
+        sessionStorage.clear()
+        showMainPage()
+        showLoginPage()
+        return openCloseLScreen(false)
+    }
 
     const placeDetail = findMyCurrentPlace()
     let sceneDetail;

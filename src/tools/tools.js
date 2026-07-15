@@ -53,7 +53,11 @@ export function deltaT(scene){
 }
 export function checkIfTokenSaved(){
     const details = JSON.parse(sessionStorage.getItem(sessionStorageName))
-    if(!details) return false
+    if(!details) {
+        sessionStorage.clear()
+        return false
+    }
+    
     return details
 }
 

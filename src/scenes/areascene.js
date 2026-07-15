@@ -182,7 +182,7 @@ export async function areaScene(placeDetail){
             miningAnim.onAnimationGroupLoopObservable.add(() => {
                 playSound(getAllSounds().minningS)
                 const equippedWeapon = getCharState().items.find(itm => itm.itemType === "weapon" && itm.equiped)
-                // if(equippedWeapon) reduceDurability(equippedWeapon)
+                if(equippedWeapon) reduceDurability(equippedWeapon)
 
                 currentMiningResource?.loots?.forEach(loot => {
                     if(Math.random() > loot.chance) return
@@ -237,6 +237,7 @@ export async function areaScene(placeDetail){
                 }
 
                 openCloseInteractBtn("pickaxe", false)
+                console.log(res.position)
                 faceForward(res.position)
                 setCharStateMode("minning")
                 currentMiningResource = res
@@ -245,7 +246,7 @@ export async function areaScene(placeDetail){
             }
 
             onIntersecEnterTrig(collider, myCharacter.body, scene, () => {
-                openCloseInsssteractBtn("pickaxe", true, () => startMining())
+                openCloseInteractBtn("pickaxe", true, () => startMining())
             })
             onIntersecExitTrig(collider, myCharacter.body, scene, stopMining)
         })

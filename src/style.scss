@@ -2781,6 +2781,7 @@ canvas {
     border: none;
     background: none;
     overflow: hidden;
+    outline: none;
     .plus-sign{
       z-index: 1;
       width: 40%;
@@ -3054,11 +3055,16 @@ canvas {
     background: none;
     cursor: pointer;
     color: rgba(210, 176, 133,1);
-    font-family: $tipsFont;
-    letter-spacing: 3px;
-    font-size: 1.1rem;
-    line-height: 10.5;
+  
     z-index: 1;
+    .enter-caption{
+      font-family: $tipsFont;
+      letter-spacing: 3px;
+      font-size: 1.5rem;
+      line-height: 10.5;
+      pointer-events: none;
+      z-index: -1;
+    }
     img{
       position: absolute;
       inset: 0;
@@ -3071,6 +3077,13 @@ canvas {
       transform: translateY(-5px);
       pointer-events: none;
     }
+    .rotating{
+      @include centerAbs();
+      width: 40px;
+      height: 40px;
+      animation: spinning 1s linear infinite;
+      display: none;
+    }
     &:hover img{
       filter: brightness(1);
     }
@@ -3078,6 +3091,7 @@ canvas {
       transform: translate(-50%, -50%) scale(0.97);
     }
   }
+
   .wallpaperz {
     position: fixed;
     top: 50%;

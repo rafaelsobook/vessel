@@ -14,7 +14,25 @@ const confirmInput = document.querySelector("#confirmpass")
 let isRegisterMode = false
 let hasSavedSession = false
 
+export function setLoading(isLoading){
+    // enterBtn.disabled = isLoading
+    // rotatingIcon.classList.toggle("hidden", !isLoading)
+    const rotatingIcon = document.querySelector(".rotating")
+    const caption = document.querySelector(".enter-caption")
+    
+    if(isLoading) {
+        enterBtn.style.pointerEvents = "none"
+        rotatingIcon.style.display = "block"
+        caption.style.display = "none"
+    }else {
+        enterBtn.style.pointerEvents = "visible"
+        rotatingIcon.style.display = "none"
+        caption.style.display = "block"
+    }
+    console.log("loading ...")
+}
 function submit() {
+    setLoading(true)
     if (hasSavedSession) return continueSession()
     isRegisterMode ? register() : login()
 }

@@ -36,6 +36,20 @@ export function emitStop(){
         mode
     })
 }
+export function emitMode(newMode, weaponName){
+    const charState = getCharState()
+     if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    const { pos, dirTarg, mode} = getPlayerCoord(charState.owner)
+    
+    socket.emit("emitMode", {
+        ownerId: charState.owner,
+        mode: newMode ? newMode : mode,
+        placeId: charState.currentPlace.placeId, 
+        weaponName: weaponName ? weaponName : undefined
+    })
+}
 export function emitMyLoc(newMode, weaponName){
     const charState = getCharState()
      if(!charState) return

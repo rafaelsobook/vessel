@@ -52,6 +52,11 @@ export async function changeScene(_sceneName){
     scene?.dispose()
     
     const sceneDetail = await loadScene()
+
+    if(!sceneDetail) {
+        openCloseLScreen(false)
+        return false
+    }
     scene = sceneDetail.scene
     sceneName = _sceneName;
     // // In the village or any path I will intersect the exit() will emit making sure every info of us is deleted
@@ -62,6 +67,7 @@ export async function changeScene(_sceneName){
     setGameStatus("running")
     updateGuildIconVisibility()
     openCloseLScreen(false)
+    return true
 }
 export async function startScene(willCreateCharacter){
     hideShowAllScreenUI()
@@ -70,9 +76,12 @@ export async function startScene(willCreateCharacter){
         closeCharacterPage()
         initSocket()
 
-        await changeScene()
+        const succeed = await changeScene()
 
-        if(!scene) return console.warn("creating scene failed")
+        if(!succeed) {
+            console.warn("creating scene failed")
+            return false
+        }
         // changeScene(scene, "new scene")
         // beginWorldRenderInWorldSocket(scene)
         activateBtnOnce()
@@ -93,6 +102,7 @@ export async function startScene(willCreateCharacter){
         fpsCounter.textContent = `${engine.getFps().toFixed(0)} FPS`
     })
     window.addEventListener("resize", ()  => engine.resize())
+    return true
 }
 
 async function initEngine(){

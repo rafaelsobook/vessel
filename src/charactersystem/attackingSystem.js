@@ -62,10 +62,11 @@ export function getAttackInfo(){
         if (itm.itemType === "weapon" && itm.equiped) {
             hasWeapon = itm.name
             weaponType = itm.weaponType
-            
+            console.log(itm.name)
         }
     })
     const dmgDetails = calcDmg(charState)
+    console.log(hasWeapon)
     return {
         owner: charState.owner,
         pos,

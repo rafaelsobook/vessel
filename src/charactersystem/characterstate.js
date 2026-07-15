@@ -15,6 +15,7 @@ import { getPlayerCoord } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
 import { getGameStatus, setGameStatus } from "../main/main.js";
 import { updateSkillListUI } from "../components/skillsui.js";
+import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -329,9 +330,8 @@ export function summarizeStats(){
 }
 export async function initiateCharacter(_accountDet){
     characterState = await getHeroDetail(_accountDet)
-
+    console.log(characterState)
     if(!characterState){
-        window.location.reload()
         return null
     }
 
@@ -438,7 +438,7 @@ export function addEffectsOnStat(effect){
 }
 export async function gameOver(){
     hideShowAllScreenUI(false)
-    // setGameStatus("gameover")
+    setGameStatus("gameover")
     setCanPress(false)
     disableEnableAttackButtonsContainer(false, true)
     closeInventory()
@@ -462,15 +462,16 @@ export async function gameOver(){
     updateSurvival_UI()
     updateHPMPSP_UI_ALLZERO()
 
-    // const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
-    // characterState.deadCount++
-    // characterState.isDead=true;
-    // await updateMyDetailsOL({...characterState,
-    //     hp: Math.floor(characterState.maxHp*.3),
-    //     mp: Math.floor(characterState.maxMp*.3),
-    //     sp: Math.floor(characterState.maxSp*.3),
-    //     status: []
-    // }, checkIfTokenSaved())
+    const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
+    characterState.deadCount++
+    characterState.isDead=true;
+    setTimeout(() => showLoadingScreen(["I expected more from you", "You Died"]))
+    await updateMyDetailsOL({...characterState,
+        hp: Math.floor(characterState.maxHp*.3),
+        mp: Math.floor(characterState.maxMp*.3),
+        sp: Math.floor(characterState.maxSp*.3),
+        status: []
+    }, checkIfTokenSaved())
 }
 // Enables disables
 export function setCanPress(_canPress){

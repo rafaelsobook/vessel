@@ -71,17 +71,6 @@ let renderCallback = function () {
                 player.characterAnimations.setState(ANIM_STATE.MINNING, 8)
             break
         }
-
-        let animCount = 0
-        let animNames = []
-        player.anims.forEach(anim => {
-            if(anim.isPlaying){
-                animCount++
-                animNames.push(anim.name)
-            }
-        })
-        console.log(animNames)
-        console.log(animCount)
     })
     getEnemiesOnScene().forEach(en => {
         if(!en) return

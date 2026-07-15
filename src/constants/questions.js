@@ -92,8 +92,8 @@ export const questions = [
                 text: "Osiris' Hearth",
                 cb: () => {
                     const charState = getCharState()
-                    const {pos} = getPlayerCoord(charState.owner)
-                    createMagicCircle(pos, getSceneDet().scene, "apt_fire" )
+                    const coord = getPlayerCoord(charState.owner)
+                    if (coord) createMagicCircle(coord.pos, getSceneDet().scene, "apt_fire" )
                     setTimeout(() => {
                         receiveAbilities(false, false, abilities[0])
                         setCanPress(true)
@@ -104,8 +104,8 @@ export const questions = [
                 text: "Aether's Core",
                 cb: () => {
                     const charState = getCharState()
-                    const {pos} = getPlayerCoord(charState.owner)
-                    createMagicCircle(pos, getSceneDet().scene, "apt_water" )
+                    const coord = getPlayerCoord(charState.owner)
+                    if (coord) createMagicCircle(coord.pos, getSceneDet().scene, "apt_water" )
                     setTimeout(() => {
                         receiveAbilities(false, false, abilities[1])
                         setCanPress(true)
@@ -116,8 +116,8 @@ export const questions = [
                 text: "Golden Fortitude",
                 cb: () => {
                     const charState = getCharState()
-                    const {pos} = getPlayerCoord(charState.owner)
-                    createMagicCircle(pos, getSceneDet().scene, "apt_earth")
+                    const coord = getPlayerCoord(charState.owner)
+                    if (coord) createMagicCircle(coord.pos, getSceneDet().scene, "apt_earth")
                     setTimeout(() => {
                         receiveAbilities(false, false, abilities[2])
                         setCanPress(true)
