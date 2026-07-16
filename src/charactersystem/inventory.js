@@ -49,7 +49,7 @@ export function insertItemOnInventory(itm){
     const itemImg = createElement("img", `slot-img ${itm.rarity}`)
 
     const slotBrder = createElement("img", 'slot-border')
-    slotBrder.src = './images/UI/border3.png'
+    slotBrder.src = './images/UI/border3.webp'
 
     if(itm.itemCateg !== "equipable" || itm.itemCateg !== "quest"){
         const itmQntyBorder = createElement('p', 'itm-qnty-border', itm.qnty)

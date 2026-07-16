@@ -24,12 +24,13 @@ export function setLoading(isLoading){
         enterBtn.style.pointerEvents = "none"
         rotatingIcon.style.display = "block"
         caption.style.display = "none"
+        authFields.style.display = "none"
     }else {
+        authFields.style.display = "contents"
         enterBtn.style.pointerEvents = "visible"
         rotatingIcon.style.display = "none"
         caption.style.display = "block"
     }
-    console.log("loading ...")
 }
 function submit() {
     setLoading(true)

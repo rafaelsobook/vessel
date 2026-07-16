@@ -50,7 +50,7 @@ export function startMyOwnSpeech(){
     let mycharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!mycharacter) return
 
-    showLoadingScreen(ownSpeech.loadingMessage, 5000, () => {
+    showLoadingScreen(ownSpeech.loadingMessage, 10000, () => {
         setCanPress(false)
         hideShowAllScreenUI()
 

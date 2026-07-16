@@ -77,13 +77,17 @@ export async function login() {
 
 export async function continueSession() {
     const saved = checkIfTokenSaved()
+    console.log(saved.token)
     if (!saved) return showLoginPage()
 
     setLoading(true)
     msg.textContent = ""
     try {
         const charData = await getCharDetFromDB(saved)
-
+        if(!charData){
+            formMessage("Server Error")
+            return showLoginPage()
+        }
         const entered = await startScene(charData === "notfound")
         if (!entered) {
             msg.textContent = "Server error, try again."

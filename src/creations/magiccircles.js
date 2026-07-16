@@ -14,7 +14,7 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
     scene.setRenderingAutoClearDepthStencil(1, false)
 
     const mat = new StandardMaterial("magic_circle_mat", scene)
-    const circleTexture = new Texture(`./images/circles/${imgName}.png`, scene, false, false)
+    const circleTexture = new Texture(`./images/circles/${imgName}.webp`, scene, false, false)
     mat.diffuseTexture = circleTexture
     mat.diffuseTexture.hasAlpha = true
     mat.useAlphaFromDiffuseTexture = true
@@ -73,7 +73,7 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
     scene.setRenderingAutoClearDepthStencil(1, false)
 
     const mat = new StandardMaterial("magic_circle_mat", scene)
-    const circleTexture = new Texture(`./images/circles/${imgName}.jpg`, scene, false, false)
+    const circleTexture = new Texture(`./images/circles/${imgName}.webp`, scene, false, false)
     
     circleTexture.getAlphaFromRGB = true
     

@@ -18,9 +18,12 @@ import { initOnceStorySystem } from "../charactersystem/storyQuestSystem.js";
 import { setSocketOn } from "../sockets/worldsocket.js";
 import { initOnceWorldChatSystem } from "../components/worldChatSystem.js";
 import { updateGuildIconVisibility } from "../htmlcomp/guildboard.js";
+import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 const canvas = document.querySelector("canvas")
 const fpsCounter = document.querySelector(".fps-counter")
 
+
+showLoadingScreen([], 2000);
 
 let engine 
 let scene

@@ -1,36 +1,38 @@
-let textInterval = null
+import { createElement } from "../tools/tools.js"
+
+let textTimeout = null
 let fadeTimeout = null
 
 export function showLoadingScreen(arrayOfText = ["Hello", "You dare challenge me"], fadeAfterSeconds = 5000, onComplete = null) {
     const loadingScreen = document.querySelector(".intro-load-screen")
-    const caption = document.querySelector(".ils-cap")
     const loadingImg = document.querySelector(".loading-img")
+    let caption = document.querySelector(".ils-cap")
+
     loadingScreen.style.display = "flex"
     loadingScreen.style.backgroundColor = "black"
     loadingScreen.classList.remove("screenFadeOff")
     loadingImg.classList.add("hidden")
 
-    let i = 0
-    caption.textContent = arrayOfText[i]
-    caption.style.opacity = 1
+    clearTimeout(textTimeout)
 
-    clearInterval(textInterval)
-    textInterval = setInterval(() => {
-        if (i >= arrayOfText.length - 1) {
-            clearInterval(textInterval)
-            return
-        }
-        caption.style.opacity = 0
-        setTimeout(() => {
-            i++
-            caption.textContent = arrayOfText[i]
-            caption.style.opacity = 1
-        }, 1000) // matches .ils-cap's opacity transition duration in style.scss
-    }, 3000)
+    // Swap in a fresh <p> per word instead of toggling "opening-closing" on
+    // one reused node. The old version's fade-out leaned on .ils-cap's 3s
+    // CSS transition while only waiting 1s in JS before changing the text,
+    // so it kept yanking the transition mid-flight. A new node each time
+    // guarantees the fade-in keyframe always plays clean from opacity 0.
+    function showWord(i) {
+        const nextCaption = createElement("p", "ils-cap opening-closing", arrayOfText[i])
+        caption.replaceWith(nextCaption)
+        caption = nextCaption
+
+        if (i >= arrayOfText.length - 1) return
+        textTimeout = setTimeout(() => showWord(i + 1), 3000)
+    }
+    showWord(0)
 
     clearTimeout(fadeTimeout)
     fadeTimeout = setTimeout(() => {
-        clearInterval(textInterval)
+        clearTimeout(textTimeout)
         loadingScreen.classList.add("screenFadeOff")
         setTimeout(() => {
             loadingScreen.style.display = "none"

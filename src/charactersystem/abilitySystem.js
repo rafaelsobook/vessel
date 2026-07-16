@@ -187,7 +187,7 @@ export function displayEarnedAbility(_arrayOfAbility){
     _arrayOfAbility.forEach(ablty => {
         const li = createElement('li', 'notif-bx')
         const brderImg = createElement('img', 'notif-borderimg')
-        brderImg.src = './images/UI/border3.png'
+        brderImg.src = './images/UI/border3.webp'
         const img = createElement('img', 'ablty-notif-img')
         const p = createElement('p', 'ablty-name', ablty.dn)
         img.src = `./images/uniques/${ablty.name}.jpeg`

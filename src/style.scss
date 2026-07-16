@@ -2717,7 +2717,10 @@ canvas {
   align-items: center;
   flex-direction: column;
   opacity: 0;
-  transition: 1s;
+  transition: 4s;
+}
+.fps-counter{
+  z-index: 1;
 }
 .slot-normal {
   background: $normalgrad;
@@ -2776,8 +2779,8 @@ canvas {
   .skill-slot-button{
 
     position: relative;
-    width: 80px;
-    height: 80px;
+    width: 70px;
+    height: 70px;
     border: none;
     background: none;
     overflow: hidden;
@@ -3124,19 +3127,35 @@ canvas {
   @include fitToScreen(11);
   background-color: rgb(41, 37, 34);
   @include flexCenter();
+
   .ils-cap {
     font-family: sanserif;
     color: $littlewhite;
     font-size: 1.5rem;
     font-weight: 400;
     opacity: 0;
-    transition: opacity 1s ease-in-out;
+    transition: 3s;
+  }
+
+  .opening-closing{
+    animation: showingHiding 6.5s ease-in-out forwards;
   }
   img{
     width:350px;
   }
   z-index: 100;
-  display: none;
+  display: flex;
+}
+@keyframes showingHiding {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  0% {
+    opacity: 0;
+  }
 }
 .db-logo {
   cursor: pointer;
