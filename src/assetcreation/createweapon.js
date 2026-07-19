@@ -15,15 +15,15 @@ const partMatFns = {
 let partMatCacheScene = null
 const partMatCache = new Map()
 
-function getPartMat(scene, part, rarity, instanceName) {
+function getPartMat(scene, part, rarity, materialName, instanceName) {
     if (partMatCacheScene !== scene) {
         partMatCache.clear()
         partMatCacheScene = scene
     }
-    const key = `${part}_${rarity}`
+    const key = `${part}_${rarity}_${materialName}`
     let baseMat = partMatCache.get(key)
     if (!baseMat) {
-        baseMat = partMatFns[part](scene, rarity)
+        baseMat = partMatFns[part](scene, rarity, materialName)
         partMatCache.set(key, baseMat)
     }
     return baseMat.clone(`${key}_${instanceName}`)
@@ -40,13 +40,18 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
     const { allweapons } = getSocketContainers()
     if (!allweapons) return console.warn("allweapons not yet imported")
 
-    const { bladeRarity, guardRarity, handleRarity, pommelRarity } = options
+    const {
+        bladeRarity, guardRarity, handleRarity, pommelRarity,
+        // defaults match the old hardcoded per-part looks, so weapon data
+        // that predates *Color (npcDetails.js, skills.js) renders unchanged
+        bladeColor = "steel", guardColor = "bronze", handleColor = "leather", pommelColor = "gold",
+    } = options
 
     const partDefs = [
-        { part: "blade",  rarity: bladeRarity  },
-        { part: "guard",  rarity: guardRarity  },
-        { part: "handle", rarity: handleRarity },
-        { part: "pommel", rarity: pommelRarity },
+        { part: "blade",  rarity: bladeRarity,  materialName: bladeColor  },
+        { part: "guard",  rarity: guardRarity,  materialName: guardColor  },
+        { part: "handle", rarity: handleRarity, materialName: handleColor },
+        { part: "pommel", rarity: pommelRarity, materialName: pommelColor },
     ]
 
     const root = new TransformNode(`weapon_${weaponType}_${Date.now()}`,scene)
@@ -60,7 +65,7 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
         mat = createGlowingMat(scene, glowingColor)
     }
 
-    for (const { part, rarity } of partDefs) {
+    for (const { part, rarity, materialName } of partDefs) {
         const key = `${weaponType}_${part}_${rarity}`
         const template = allweapons[key]
         if (!template) {
@@ -76,7 +81,7 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
             inst.material = mat
             addGlow(scene, inst, 0.4)
         } else {
-            inst.material = getPartMat(scene, part, rarity, inst.name)
+            inst.material = getPartMat(scene, part, rarity, materialName, inst.name)
         }
     }
 

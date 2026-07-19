@@ -21,7 +21,7 @@ import { CharacterAnimations } from '../tools/animation';
 import { createMesh } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 
-let capsuleHeight = 1.5;
+export let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
 
 export function showHideSword(swordTNode, isVisible){
@@ -99,7 +99,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
 
     function createSword(swordName, parts, parentMesh) {
-        const sword = createWeapon(scene, "sword", {x: 0.2, y: 0.2, z: 0}, parentMesh, parts)
+        const sword = createWeapon(scene, "sword", {x: 0.1, y: 0.5, z: 0}, parentMesh, parts)
         const toPush = {name: swordName, mesh: sword}
         swordMeshes.push(toPush)
         showHideSword(sword, true)

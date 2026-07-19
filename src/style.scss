@@ -2005,6 +2005,28 @@ canvas {
       z-index: 1;
       pointer-events: none;
     }
+    // every sword shares one placeholder icon, so this is the only way to
+    // tell slots apart at a glance - always on, anchored bottom-left inside
+    // the slot's own box rather than a hover-only reveal
+    .slot-name-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      margin: 0;
+      padding: 1px 2px;
+      background: rgba(15, 14, 14, 0.85);
+      border-radius: 0 0 3px 3px;
+      font-size: 6px;
+      line-height: 1.2;
+      color: #edd59f;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      z-index: 2;
+    }
   }
   .slot-btn:active {
     opacity: 0.5;
@@ -3138,7 +3160,7 @@ canvas {
   }
 
   .opening-closing{
-    animation: showingHiding 6.5s ease-in-out forwards;
+    animation: showingHiding 3.5s ease-in-out forwards;
   }
   img{
     width:350px;

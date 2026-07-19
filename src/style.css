@@ -549,9 +549,7 @@ canvas {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  -webkit-user-select: none;
-     -moz-user-select: none;
-          user-select: none;
+  user-select: none;
 }
 
 ::-webkit-scrollbar {
@@ -2022,6 +2020,25 @@ canvas {
   z-index: 1;
   pointer-events: none;
 }
+.inventory-container .slot-btn .slot-name-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 1px 2px;
+  background: rgba(15, 14, 14, 0.85);
+  border-radius: 0 0 3px 3px;
+  font-size: 6px;
+  line-height: 1.2;
+  color: #edd59f;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 2;
+}
 .inventory-container .slot-btn:active {
   opacity: 0.5;
 }
@@ -2323,9 +2340,6 @@ canvas {
   width: 100%;
   padding: 0 20px;
   margin-top: 20px;
-}
-.login-container .inputs::-moz-placeholder {
-  color: rgba(177, 177, 177, 0.6);
 }
 .login-container .inputs::placeholder {
   color: rgba(177, 177, 177, 0.6);
@@ -2781,8 +2795,7 @@ canvas {
   left: 0;
   width: 110%;
   height: 110%;
-  -o-object-fit: cover;
-     object-fit: cover; /* Cover the entire container */
+  object-fit: cover; /* Cover the entire container */
   z-index: 2; /* Behind the content */
 }
 
@@ -2900,8 +2913,7 @@ canvas {
   width: 50px;
   height: 50px;
   border-radius: 4px;
-  -o-object-fit: cover;
-     object-fit: cover;
+  object-fit: cover;
 }
 .skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text {
   display: flex;
@@ -2966,8 +2978,7 @@ canvas {
   width: 65%;
   height: 65%;
   border-radius: 50%;
-  -o-object-fit: cover;
-     object-fit: cover;
+  object-fit: cover;
 }
 .skill-container .skill-info-right .skill-info .skill-info-details {
   width: 100%;
@@ -3203,7 +3214,7 @@ canvas {
   transition: 3s;
 }
 .intro-load-screen .opening-closing {
-  animation: showingHiding 6.5s ease-in-out forwards;
+  animation: showingHiding 3.5s ease-in-out forwards;
 }
 .intro-load-screen img {
   width: 350px;
@@ -3274,9 +3285,6 @@ canvas {
   border-radius: 4px;
   font-family: "M PLUS Rounded 1c", sans-serif;
   text-align: center;
-}
-.login-register-form .inp::-moz-placeholder {
-  color: rgba(177, 177, 177, 0.6);
 }
 .login-register-form .inp::placeholder {
   color: rgba(177, 177, 177, 0.6);
@@ -3414,8 +3422,7 @@ canvas {
 .buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-img {
   width: 46px;
   height: 46px;
-  -o-object-fit: contain;
-     object-fit: contain;
+  object-fit: contain;
 }
 .buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-name {
   font-family: "Bellefair", serif;
@@ -3641,4 +3648,6 @@ canvas {
 .leaderboard-container .lb-footer .lb-my-rank-value {
   color: #edd59f;
   font-family: "Graduate", cursive;
-}/*# sourceMappingURL=style.css.map */
+}
+
+/*# sourceMappingURL=style.css.map */

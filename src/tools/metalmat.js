@@ -1,6 +1,6 @@
 import { PBRMaterial, Color3 } from "@babylonjs/core"
 
-const METAL_TINTS = {
+export const METAL_TINTS = {
     iron:       new Color3(0.56, 0.57, 0.58),
     steel:      new Color3(0.65, 0.67, 0.7),
     bronze:     new Color3(0.55, 0.42, 0.25),
@@ -10,7 +10,7 @@ const METAL_TINTS = {
     adamantine: new Color3(0.2, 0.55, 0.7),
 }
 
-const METAL_ROUGHNESS = {
+export const METAL_ROUGHNESS = {
     iron: 0.5,
     steel: 0.3,
     bronze: 0.4,

@@ -110,6 +110,7 @@ export async function startScene(willCreateCharacter){
         fpsCounter.textContent = `${engine.getFps().toFixed(0)} FPS`
     })
     window.addEventListener("resize", ()  => engine.resize())
+    engine.resize()
     return true
 }
 

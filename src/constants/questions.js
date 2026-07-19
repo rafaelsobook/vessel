@@ -9,10 +9,11 @@ import { createMagicCircle, spawnMagicCircle } from '../creations/magiccircles';
 import { playAnim, stopAllAnim } from '../tools/animation';
 import { playAnimWithCallback, randomNum, stopAnim } from '../tools/tools';
 import { Vector3 } from '@babylonjs/core';
-import { obtain } from '../charactersystem/inventory';
+import { obtain, obtainAll } from '../charactersystem/inventory';
 import { showHideIcons } from '../charactersystem/uimanagement';
 import { getPlayerCoord } from '../charactersystem/createcharacter';
 import abilities from '../staticRecources/abilities';
+import { swordsData } from '../staticRecources/swordsdata';
 
 
 
@@ -266,12 +267,15 @@ export const questions = [
         answers: [],
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
-                obtain(swordItem)
-                setTimeout(()=>obtain(bootsItem), 250)
-                setTimeout(()=>obtain(helmetItem), 500)
-                setTimeout(()=>obtain(gauntletItem), 800)
-                setTimeout(()=>obtain(pauldronItem), 1000)
-                setTimeout(()=>obtain(armorItem), 1200)
+                // obtain(swordItem)
+                // setTimeout(()=>obtain(bootsItem), 250)
+                // setTimeout(()=>obtain(helmetItem), 500)
+                // setTimeout(()=>obtain(gauntletItem), 800)
+                // setTimeout(()=>obtain(pauldronItem), 1000)
+                // setTimeout(()=>obtain(armorItem), 1200)
+                
+                obtainAll([swordItem, bootsItem, helmetItem, gauntletItem, pauldronItem, armorItem, ...swordsData])
+
                 startQuestionare(2)
                 showHideIcons("block")
             }, 1000)
@@ -423,12 +427,14 @@ var swordItem = {
     rarity: "rare",
 
     parts: {
-        bladeRarity: "rare2",
+        bladeRarity: "rare1",
         guardRarity: "rare1",
         handleRarity: "common1",
         pommelRarity: "common1",
 
-        bladeColor: "common",
-        
+        bladeColor: "iron",
+        guardColor: "sodalite", // bluegranite, Steel, iron, bronze (practical/common)
+        handleColor: "wood", // bone, 
+        pommelColor: "firecrystal", // frostshard, stormcrystal,beastheart
     }
 }

@@ -63,6 +63,16 @@ export function insertItemOnInventory(itm){
     }else{
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
+    if(itm.weaponType === "sword") itemImg.src = `./images/items/${itm.itemCateg}/frostbite.webp`
+
+    // every sword shares the same placeholder icon above, so this is the
+    // only way to tell which generated variant a slot actually is - shown
+    // on hover via CSS (see .slot-name-overlay), covers the icon in place
+    // instead of floating outside the slot's own box
+    const nameOverlay = createElement('p', 'slot-name-overlay', itm.dn)
+    button.append(nameOverlay)
+    button.title = itm.dn // truncated in the slot itself, full name still available on hover
+
     itemSlotList.append(button)
 }
 export function closeInventory(){
@@ -70,10 +80,9 @@ export function closeInventory(){
 }
 
 let timeOutForClearingLists
-export async function obtain(itemToAdd){
-    const charState = getCharState()
+
+function addItemToCharState(charState, itemToAdd){
     let hasSameItem = false
-    if(!charState) return 
     charState.items && charState.items.forEach(itm => {
         if(itm.name === itemToAdd.name && itm.itemCateg !== "equipable"){
             itm.qnty += itemToAdd.qnty
@@ -82,11 +91,28 @@ export async function obtain(itemToAdd){
     })
     // meaning hinde eqiupable kase magkaka same item lang pag ibang itemCateg
     if(!hasSameItem) charState.items.push(itemToAdd)
-    
+}
+
+export async function obtain(itemToAdd){
+    const charState = getCharState()
+    if(!charState) return
+    addItemToCharState(charState, itemToAdd)
+
     showItemAcquiredPopUp(itemToAdd.dn, itemToAdd.qnty, () => {
         updateMyDetailsOL(charState, checkIfTokenSaved())
     })
 
+}
+export function obtainAll(itemsArray){
+    const charState = getCharState()
+    if(!charState) return
+
+    itemsArray.forEach((itemToAdd, i) => {
+        addItemToCharState(charState, itemToAdd)
+        setTimeout(() => showItemAcquiredPopUp(itemToAdd.dn, itemToAdd.qnty, null), i * 500)
+    })
+
+    updateMyDetailsOL(charState, checkIfTokenSaved())
 }
 export function showItemAcquiredPopUp(displayName, acquiredQnty, cb){
     //itemToAdd.itemCateg // consumable // equipable // crafting
