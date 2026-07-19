@@ -570,14 +570,14 @@ export function reCreateMeshesInScene() {
     // anyone on my scene who isn't in it anymore for my place has since
     // moved elsewhere (or logged off without going through 'removeChar') -
     // drop their body here too, otherwise it's a ghost stuck in my scene.
-    playersOnScene.forEach(scenePlyr => {
-        const stillHere = allPlayersFromTCP.find(tcpCharDet =>
-            tcpCharDet.owner === scenePlyr.owner &&
-            tcpCharDet.currentPlace.placeId === characterState.currentPlace.placeId
-        )
-        if (stillHere) return
-        removePlayer({ ownerId: scenePlyr.owner, placeId: characterState.currentPlace.placeId })
-    })
+    // playersOnScene.forEach(scenePlyr => {
+    //     const stillHere = allPlayersFromTCP.find(tcpCharDet =>
+    //         tcpCharDet.owner === scenePlyr.owner &&
+    //         tcpCharDet.currentPlace.placeId === characterState.currentPlace.placeId
+    //     )
+    //     if (stillHere) return
+    //     removePlayer({ ownerId: scenePlyr.owner, placeId: characterState.currentPlace.placeId })
+    // })
 
     allPlayersFromTCP.length && allPlayersFromTCP.forEach(tcpCharDet => {
         if (tcpCharDet.owner === characterState.owner) return
@@ -597,6 +597,8 @@ export function reCreateMeshesInScene() {
         if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return
         const isAlreadyHere = enemiez.find(enem => enem._id === enemTcpInfo._id)
         if (isAlreadyHere) return 
+        const enemyMesh = sceneDet.scene.getMeshByName(`enemy.${enemTcpInfo._id}`)
+        if(enemyMesh) return 
         const enemy = createEnemy(scene, enemTcpInfo)
         // enemy._targetId = characterState._id
         // enemy._isMoving = true

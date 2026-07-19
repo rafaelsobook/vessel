@@ -21,7 +21,7 @@ import { CharacterAnimations } from '../tools/animation';
 import { createMesh } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 
-let capsuleHeight = 1.5;
+export let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
 
 export function showHideSword(swordTNode, isVisible){

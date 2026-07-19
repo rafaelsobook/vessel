@@ -2005,31 +2005,34 @@ canvas {
       z-index: 1;
       pointer-events: none;
     }
+    // every sword shares one placeholder icon, so this is the only way to
+    // tell slots apart at a glance - always on, anchored bottom-left inside
+    // the slot's own box rather than a hover-only reveal
+    .slot-name-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      margin: 0;
+      padding: 1px 2px;
+      background: rgba(15, 14, 14, 0.85);
+      border-radius: 0 0 3px 3px;
+      font-size: 6px;
+      line-height: 1.2;
+      color: #edd59f;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      z-index: 2;
+    }
   }
   .slot-btn:active {
     opacity: 0.5;
   }
 
 
-}
-// every sword shares one placeholder icon, so this tooltip is the only way
-// to tell slots apart - lives outside .inventory-container (which has its
-// own transform, a new containing block for position:fixed) and uses
-// position: fixed so it always renders above the scrollable slot grid
-// instead of getting clipped by .slots-list's overflow.
-.slot-item-tooltip {
-  position: fixed;
-  display: none;
-  margin: 0;
-  padding: 3px 8px;
-  background: rgba(15, 14, 14, 0.9);
-  border: 1px solid rgba(237, 213, 159, 0.4);
-  border-radius: 3px;
-  font-size: 0.8rem;
-  color: #edd59f;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: $popupz + 10;
 }
 // item info
 .item-info-cont {

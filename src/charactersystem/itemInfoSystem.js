@@ -33,6 +33,16 @@ const itemResistanceValue = document.querySelector(".itemResistanceValue")
 const itemDmgValue = document.querySelector(".itemDmgValue")
 const itemDurabilityBar = document.querySelector(".itemDurabilityBar")
 
+// weapon parts material breakdown (blade/guard/handle/pommel) - only
+// meaningful for weapons built from part meshes, see createweapon.js/parts
+const MATERIAL_ROWS = [
+    { part: "blade",  row: document.querySelector(".blade-material-row"),  value: document.querySelector(".itemBladeMaterialValue") },
+    { part: "guard",  row: document.querySelector(".guard-material-row"),  value: document.querySelector(".itemGuardMaterialValue") },
+    { part: "handle", row: document.querySelector(".handle-material-row"), value: document.querySelector(".itemHandleMaterialValue") },
+    { part: "pommel", row: document.querySelector(".pommel-material-row"), value: document.querySelector(".itemPommelMaterialValue") },
+]
+const capitalize = str => str.charAt(0).toUpperCase() + str.slice(1)
+
 const DURABILITY_LOW_THRESHOLD = 0.3
 
 const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots"]
@@ -263,6 +273,12 @@ export function showItemInfo(_itemDet){
             itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg
             itemImg.src = `./images/items/${itemCateg}/frostbite.webp`
         }
+
+        MATERIAL_ROWS.forEach(({ part, row, value }) => {
+            const materialName = _itemDet.parts?.[`${part}Color`]
+            row.style.display = materialName ? "flex" : "none"
+            if(materialName) value.innerHTML = capitalize(materialName)
+        })
 
         if(_itemDet.durability){
             durabilityRow.style.display = "flex"

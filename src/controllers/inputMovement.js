@@ -8,6 +8,8 @@ import { playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound } from '../components/soundSystem';
+import { capsuleHeight } from '../charactersystem/createcharacter';
+import { openClosePopup } from '../tools/popupUI';
 
 let aggregate = null
 let rotationHelper = null;
@@ -88,6 +90,8 @@ function setupControls(scene, allsounds) {
     let sprintSpeed = 5;
     let currentSpeed = walkSpeed;
     let isMoving = false;
+    let jumpSpeed = 6;
+    const GROUND_CHECK_MARGIN = 0.2; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride
 
     const input = { forward: 0, right: 0 };
 
@@ -282,6 +286,7 @@ function setupControls(scene, allsounds) {
             case "a": input.right   = -1; isMoving = true; break;
             case "d": input.right   =  1; isMoving = true; break;
             case "shift": currentSpeed = sprintSpeed; break;
+            case " ": if (!e.repeat) performJump(); break;
         }
 
         if (isMoving) {
@@ -293,25 +298,12 @@ function setupControls(scene, allsounds) {
     function handleKeyUp(e) {
         if(!getCanPress()) return
         const key = e.key.toLowerCase();
-        let state = getCharState()
-        let pos
         switch (key) {
             case "w": input.forward = 0; break;
             case "s": input.forward = 0; break;
             case "a": input.right   = 0; break;
             case "d": input.right   = 0; break;
             case "shift": currentSpeed = walkSpeed; break;
-            case " ":
-                
-                const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
-                pos = pl.body.getAbsolutePosition()
-                console.log(`x: ${pos.x}, z: ${pos.z}`)
-                // evaluateRank(13)
-                // evaluateRank(0, { rankNumber: 0, rankLabel: "f"})
-                // console.log(state)
-
-                reCreateMeshesInScene()
-            break;
             case "c":
                 console.log("players ", getPlayersOnScene())
                 clearLocTimeOut()
@@ -321,6 +313,24 @@ function setupControls(scene, allsounds) {
         if (input.forward === 0 && input.right === 0) {
             stopMovementAndSave();
         }
+    }
+
+    function isGrounded() {
+        const physicsEngine = scene.getPhysicsEngine();
+        if (!physicsEngine || !aggregate) return false;
+
+        const origin = aggregate.body.getObjectCenterWorld();
+        const end = origin.add(new Vector3(0, -(capsuleHeight / 2 + GROUND_CHECK_MARGIN), 0));
+        const result = physicsEngine.raycast(origin, end);
+        return result?.hasHit && result.body !== aggregate.body;
+    }
+
+    function performJump() {
+        if (!aggregate || !isGrounded()) return;
+        const charState = getCharState()
+        if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
+        const vel = aggregate.body.getLinearVelocity();
+        aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
     }
 
     let lastEmit = 0;

@@ -2020,23 +2020,27 @@ canvas {
   z-index: 1;
   pointer-events: none;
 }
+.inventory-container .slot-btn .slot-name-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 1px 2px;
+  background: rgba(15, 14, 14, 0.85);
+  border-radius: 0 0 3px 3px;
+  font-size: 6px;
+  line-height: 1.2;
+  color: #edd59f;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 2;
+}
 .inventory-container .slot-btn:active {
   opacity: 0.5;
-}
-
-.slot-item-tooltip {
-  position: fixed;
-  display: none;
-  margin: 0;
-  padding: 3px 8px;
-  background: rgba(15, 14, 14, 0.9);
-  border: 1px solid rgba(237, 213, 159, 0.4);
-  border-radius: 3px;
-  font-size: 0.8rem;
-  color: #edd59f;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 15;
 }
 
 .item-info-cont {

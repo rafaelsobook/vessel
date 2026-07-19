@@ -10,7 +10,6 @@ const inventoryCont  = document.querySelector(".inventory-container")
 const itemSlotList   = document.querySelector(".slots-list")
 const goldCoinP      = document.querySelector(".gold-coin")
 const acquiredLists  = document.querySelector(".acquired-lists")
-const slotItemTooltip = document.querySelector(".slot-item-tooltip")
 
 
 let isInventoryLoading = false
@@ -30,7 +29,6 @@ export async function openUpdateInventory(willOpen){
     if(willOpen) inventoryCont.style.display = "flex"
     if(isInventoryLoading) return setLoadingInAList(itemSlotList, "Loading")
     itemSlotList.innerHTML =''
-    slotItemTooltip.style.display = 'none'
     const charDet = getCharState()
     // goldCoinP.innerHTML = `${charDet.assets.krit}`
     // getAllSounds().pickItemS.play()
@@ -67,25 +65,18 @@ export function insertItemOnInventory(itm){
     }
     if(itm.weaponType === "sword") itemImg.src = `./images/items/${itm.itemCateg}/frostbite.webp`
 
-    // every sword shares the same placeholder icon above, so hovering is
-    // the only way to tell which generated variant a slot actually is -
-    // positioned off the hovered button's own rect so it reads as
-    // belonging to that slot, not a status line elsewhere on the panel
-    button.addEventListener("mouseenter", () => {
-        const rect = button.getBoundingClientRect()
-        slotItemTooltip.textContent = itm.dn
-        slotItemTooltip.style.display = 'block'
-        slotItemTooltip.style.left = `${rect.left + rect.width / 2}px`
-        slotItemTooltip.style.top = `${rect.top - 6}px`
-        slotItemTooltip.style.transform = 'translate(-50%, -100%)'
-    })
-    button.addEventListener("mouseleave", () => slotItemTooltip.style.display = 'none')
+    // every sword shares the same placeholder icon above, so this is the
+    // only way to tell which generated variant a slot actually is - shown
+    // on hover via CSS (see .slot-name-overlay), covers the icon in place
+    // instead of floating outside the slot's own box
+    const nameOverlay = createElement('p', 'slot-name-overlay', itm.dn)
+    button.append(nameOverlay)
+    button.title = itm.dn // truncated in the slot itself, full name still available on hover
 
     itemSlotList.append(button)
 }
 export function closeInventory(){
     inventoryCont.style.display = "none"
-    slotItemTooltip.style.display = 'none'
 }
 
 let timeOutForClearingLists
