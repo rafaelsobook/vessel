@@ -2012,6 +2012,25 @@ canvas {
 
 
 }
+// every sword shares one placeholder icon, so this tooltip is the only way
+// to tell slots apart - lives outside .inventory-container (which has its
+// own transform, a new containing block for position:fixed) and uses
+// position: fixed so it always renders above the scrollable slot grid
+// instead of getting clipped by .slots-list's overflow.
+.slot-item-tooltip {
+  position: fixed;
+  display: none;
+  margin: 0;
+  padding: 3px 8px;
+  background: rgba(15, 14, 14, 0.9);
+  border: 1px solid rgba(237, 213, 159, 0.4);
+  border-radius: 3px;
+  font-size: 0.8rem;
+  color: #edd59f;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: $popupz + 10;
+}
 // item info
 .item-info-cont {
   @include centerFix(3);
@@ -3138,7 +3157,7 @@ canvas {
   }
 
   .opening-closing{
-    animation: showingHiding 6.5s ease-in-out forwards;
+    animation: showingHiding 3.5s ease-in-out forwards;
   }
   img{
     width:350px;

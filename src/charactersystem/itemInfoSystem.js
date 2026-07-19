@@ -185,6 +185,7 @@ export function equipItem(itemDet, updateItemsListUI){
             chld.innerHTML = ''
             const eqpdImg = createElement('img', `slot-img slot-${itemDet.rarity ? itemDet.rarity : "normal"}`)
             eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.name}.webp`
+            if(itemDet.weaponType === "sword") eqpdImg.src = `./images/items/${itemDet.itemCateg}/frostbite.webp`
             chld.append(eqpdImg)
             const charState = getCharState()
             charState.items.forEach(itm => {                
@@ -260,6 +261,7 @@ export function showItemInfo(_itemDet){
         }
         if(itemType === "weapon"){
             itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg
+            itemImg.src = `./images/items/${itemCateg}/frostbite.webp`
         }
 
         if(_itemDet.durability){

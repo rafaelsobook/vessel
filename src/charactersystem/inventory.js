@@ -10,6 +10,7 @@ const inventoryCont  = document.querySelector(".inventory-container")
 const itemSlotList   = document.querySelector(".slots-list")
 const goldCoinP      = document.querySelector(".gold-coin")
 const acquiredLists  = document.querySelector(".acquired-lists")
+const slotItemTooltip = document.querySelector(".slot-item-tooltip")
 
 
 let isInventoryLoading = false
@@ -29,6 +30,7 @@ export async function openUpdateInventory(willOpen){
     if(willOpen) inventoryCont.style.display = "flex"
     if(isInventoryLoading) return setLoadingInAList(itemSlotList, "Loading")
     itemSlotList.innerHTML =''
+    slotItemTooltip.style.display = 'none'
     const charDet = getCharState()
     // goldCoinP.innerHTML = `${charDet.assets.krit}`
     // getAllSounds().pickItemS.play()
@@ -63,17 +65,33 @@ export function insertItemOnInventory(itm){
     }else{
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
+    if(itm.weaponType === "sword") itemImg.src = `./images/items/${itm.itemCateg}/frostbite.webp`
+
+    // every sword shares the same placeholder icon above, so hovering is
+    // the only way to tell which generated variant a slot actually is -
+    // positioned off the hovered button's own rect so it reads as
+    // belonging to that slot, not a status line elsewhere on the panel
+    button.addEventListener("mouseenter", () => {
+        const rect = button.getBoundingClientRect()
+        slotItemTooltip.textContent = itm.dn
+        slotItemTooltip.style.display = 'block'
+        slotItemTooltip.style.left = `${rect.left + rect.width / 2}px`
+        slotItemTooltip.style.top = `${rect.top - 6}px`
+        slotItemTooltip.style.transform = 'translate(-50%, -100%)'
+    })
+    button.addEventListener("mouseleave", () => slotItemTooltip.style.display = 'none')
+
     itemSlotList.append(button)
 }
 export function closeInventory(){
     inventoryCont.style.display = "none"
+    slotItemTooltip.style.display = 'none'
 }
 
 let timeOutForClearingLists
-export async function obtain(itemToAdd){
-    const charState = getCharState()
+
+function addItemToCharState(charState, itemToAdd){
     let hasSameItem = false
-    if(!charState) return 
     charState.items && charState.items.forEach(itm => {
         if(itm.name === itemToAdd.name && itm.itemCateg !== "equipable"){
             itm.qnty += itemToAdd.qnty
@@ -82,11 +100,28 @@ export async function obtain(itemToAdd){
     })
     // meaning hinde eqiupable kase magkaka same item lang pag ibang itemCateg
     if(!hasSameItem) charState.items.push(itemToAdd)
-    
+}
+
+export async function obtain(itemToAdd){
+    const charState = getCharState()
+    if(!charState) return
+    addItemToCharState(charState, itemToAdd)
+
     showItemAcquiredPopUp(itemToAdd.dn, itemToAdd.qnty, () => {
         updateMyDetailsOL(charState, checkIfTokenSaved())
     })
 
+}
+export function obtainAll(itemsArray){
+    const charState = getCharState()
+    if(!charState) return
+
+    itemsArray.forEach((itemToAdd, i) => {
+        addItemToCharState(charState, itemToAdd)
+        setTimeout(() => showItemAcquiredPopUp(itemToAdd.dn, itemToAdd.qnty, null), i * 500)
+    })
+
+    updateMyDetailsOL(charState, checkIfTokenSaved())
 }
 export function showItemAcquiredPopUp(displayName, acquiredQnty, cb){
     //itemToAdd.itemCateg // consumable // equipable // crafting

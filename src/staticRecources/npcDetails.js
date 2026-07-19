@@ -381,7 +381,7 @@ export default [
             rarity: "rare",
 
             parts: {
-                bladeRarity: "rare1",
+                bladeRarity: "rare2",
                 guardRarity: "rare2",
                 handleRarity: "common1",
                 pommelRarity: "common1"
