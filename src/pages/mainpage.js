@@ -19,30 +19,29 @@ const playersCountBig = document.querySelector(".players-count-big")
 let isRegisterMode = false
 let hasSavedSession = false
 
+function displayOnlinePL(numbertoDisplay){
+    playersCountSmall.textContent = numbertoDisplay
+    playersCountBig.textContent = numbertoDisplay
+}
 async function updatePlayersOnlineDisplay() {
     if (!playersCountSmall || !playersCountBig) return
     let numberToDisplay = 16 + Math.floor(Math.random()*8)
     console.log(numberToDisplay)
     displayOnlinePL(numberToDisplay)
     console.log(tcpHttpURL)
-    try {
-        const res = await fetch(`${tcpHttpURL}`)
-        console.log(res)
-        const tcpPlayers = await res.json()
-        console.log(tcpPlayers)
-        // const count = tcpPlayers.length.toLocaleString()
-        numberToDisplay += tcpPlayers.length
-        console.log(tcpPlayers.length)
 
-        displayOnlinePL(numbertoDisplay)
-    } catch (err) {
-        console.warn("Couldn't reach server status endpoint", err)
-    }
+    const res = await fetch(`${tcpHttpURL}`)
+    console.log(res)
+    const tcpPlayers = await res.json()
+    console.log(tcpPlayers)
+    // const count = tcpPlayers.length.toLocaleString()
+    numberToDisplay += tcpPlayers.length
+    console.log(numberToDisplay)
+
+    displayOnlinePL(numberToDisplay)
+
 }
-function displayOnlinePL(numbertoDisplay){
-    playersCountSmall.textContent = numbertoDisplay
-    playersCountBig.textContent = numbertoDisplay
-}
+
 updatePlayersOnlineDisplay()
 setInterval(updatePlayersOnlineDisplay, 10000)
 
