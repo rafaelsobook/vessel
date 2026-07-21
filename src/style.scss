@@ -2742,7 +2742,14 @@ canvas {
   transition: 4s;
 }
 .fps-counter{
-  z-index: 1;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  z-index: 2;
+  // width: 100px;
+  color: rgb(73, 230, 0);
+  padding: 5px;
+  font-size: 12px;
 }
 .slot-normal {
   background: $normalgrad;
@@ -3007,14 +3014,84 @@ canvas {
   }
 }
 .home-page {
-  @include fitToScreen(2);
   @include flexCenter();
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: 100vh;
   background: url("../images/wallpaper/dbhomeback.jpg") no-repeat;
   background-size: cover;
   box-shadow: inset 0px 0px 70px 60px rgba(0, 0, 0, 0.7);
 
+  .server-status {
+    position: absolute;
+    top: 28px;
+    left: 28px;
+    z-index: 5;
+    min-width: 220px;
+    padding: 14px 20px 16px;
+    background: rgba(10, 9, 9, 0.7);
+    border: 1px solid rgba(168, 86, 19, 0.5);
+    border-radius: 3px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+
+    .server-status-title {
+      font-family: $tipsFont;
+      color: $littlewhite;
+      font-size: 0.95rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(168, 86, 19, 0.4);
+    }
+    .server-status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #2ecc71;
+        box-shadow: 0 0 6px #2ecc71;
+      }
+      .status-text {
+        font-family: $tipsFont;
+        color: #2ecc71;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+    }
+    .server-status-players {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      .players-label {
+        font-family: $tipsFont;
+        color: rgba(211, 202, 219, 0.7);
+        font-size: 0.85rem;
+      }
+      .players-count-small {
+        font-family: $numFont;
+        color: $littlewhite;
+        font-size: 0.95rem;
+      }
+    }
+    .players-count-big {
+      font-family: $numFont;
+      color: #b98cf0;
+      text-shadow: 0 0 12px rgba(185, 140, 240, 0.5);
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+  }
+
   .center-animation {
-    position: fixed;
+    position: absolute;
     top: 50%;
     left: 48%;
     transform: translate(-50%, -50%);
@@ -3145,6 +3222,95 @@ canvas {
     transform: translate(-50%, -50%) scale(0.95);
   }
 }
+.site-footer {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  background: url("../images/UI/frames/navbar.webp") center / 100% 100% no-repeat;
+  text-align: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-content: center;
+  align-items: center;
+  padding: 50px;
+  .footer-copyright {
+    font-family: sans-serif;
+    color: $littlewhite;
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+    transform: translateX(-30px);
+  }
+
+  .socials {
+    // display: flex;
+    // flex-direction: column;
+    // justify-content: center;
+    // // margin-bottom: 8px;
+    // // align-items: center;
+    // align-content: center;
+    // padding: 20px;
+  }
+  .social-icon {
+    position: relative;
+    display: inline-flex;
+    width: 70px;
+    height: 64px;
+    transition: transform 0.2s ease-in-out;
+
+    .s-i {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      pointer-events: none;
+    }
+    .s-i-body {
+      width: 42px;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+    .s-i-left-wing {
+      width: 34px;
+      transform-origin: 75% 88%;
+      z-index: 1;
+      animation: wingFlapLeft 2.4s ease-in-out infinite;
+    }
+    .s-i-right-wing {
+      width: 34px;
+      transform-origin: 25% 88%;
+      z-index: 1;
+      animation: wingFlapRight 2.4s ease-in-out infinite;
+    }
+    &:hover {
+      transform: scale(1.08);
+    }
+    &.flying {
+      position: fixed;
+      top: var(--fly-y, 50%);
+      left: var(--fly-x, 50%);
+      transform: translate(-50%, -50%);
+      z-index: 50;
+      animation: flyAround 16s linear 2s infinite backwards;
+    }
+  }
+}
+@keyframes flyAround {
+  0%   { transform: translate(-50%, -50%) translate(0, 0) rotate(0deg); }
+  15%  { transform: translate(-50%, -50%) translate(calc(78vw - var(--fly-x, 0px)), calc(25vh - var(--fly-y, 0px))) rotate(10deg); }
+  35%  { transform: translate(-50%, -50%) translate(calc(15vw - var(--fly-x, 0px)), calc(15vh - var(--fly-y, 0px))) rotate(-14deg); }
+  55%  { transform: translate(-50%, -50%) translate(calc(12vw - var(--fly-x, 0px)), calc(72vh - var(--fly-y, 0px))) rotate(12deg); }
+  75%  { transform: translate(-50%, -50%) translate(calc(82vw - var(--fly-x, 0px)), calc(78vh - var(--fly-y, 0px))) rotate(-10deg); }
+  92%  { transform: translate(-50%, -50%) translate(calc(50vw - var(--fly-x, 0px)), calc(40vh - var(--fly-y, 0px))) rotate(6deg); }
+  100% { transform: translate(-50%, -50%) translate(0, 0) rotate(0deg); }
+}
+@keyframes wingFlapLeft {
+  0%, 100% { transform: translate(-115%, -60%) rotate(0deg); }
+  50% { transform: translate(-115%, -60%) rotate(-22deg); }
+}
+@keyframes wingFlapRight {
+  0%, 100% { transform: translate(15%, -60%) rotate(0deg); }
+  50% { transform: translate(15%, -60%) rotate(22deg); }
+}
 .intro-load-screen {
   @include fitToScreen(11);
   background-color: rgb(41, 37, 34);
@@ -3166,7 +3332,7 @@ canvas {
     width:350px;
   }
   z-index: 100;
-  display: flex;
+  display: none;
 }
 @keyframes showingHiding {
   0% {
@@ -3181,7 +3347,7 @@ canvas {
 }
 .db-logo {
   cursor: pointer;
-  position: fixed;
+  position: absolute;
   left: 48%;
   top: 14%;
   transform: translate(-50%, -50%) scale(0.25);
@@ -3194,7 +3360,7 @@ canvas {
 }
 
 .login-register-form {
-  position: fixed;
+  position: absolute;
   top: 70%;
   left: 48.5%;
   transform: translate(-50%, -50%);

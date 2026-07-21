@@ -4,6 +4,7 @@ import { playAnim, ANIM_STATE } from "../tools/animation.js";
 import { getGameStatus, getSceneDet } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
 import { checkDistance } from "../creations/creationTools.js";
+import { getIsGrounded } from "../controllers/inputMovement.js";
 
 let scene;
 
@@ -42,19 +43,29 @@ let renderCallback = function () {
         if(player._attacking || player.characterAnimations.isActionPlaying()) return
         player.characterAnimations.tickBlend()
 
-        if(player._moving){
+        // "inAir" is an animation-only concept, computed fresh each frame -
+        // deliberately NOT written into player.mode itself, since that field
+        // is shared with combat/mining/server-sync logic elsewhere (e.g.
+        // setPlayerMoving's speed switch, mining-mode checks). Only the
+        // local player has a physics raycast available (see
+        // inputMovement.js), so remote players just keep their real mode.
+        const effectiveMode = (player.owner === charState.owner && !getIsGrounded())
+            ? "inAir"
+            : player.mode
+
+        if(player._moving && effectiveMode !== "inAir"){
             switch(player.mode){
                 case "idle":
-                    player.characterAnimations.setState(ANIM_STATE.WALK, 40)
+                    player.characterAnimations.setState(ANIM_STATE.WALK, 8)
                 break
                 case "fighting":
-                    player.characterAnimations.setState(ANIM_STATE.RUNNING, 40)
+                    player.characterAnimations.setState(ANIM_STATE.RUNNING, 8)
                 break
             }
             return
         }
 
-        switch(player.mode){
+        switch(effectiveMode){
             case "idle":
                 player.characterAnimations.setState(ANIM_STATE.IDLE, 8)
             break
@@ -69,6 +80,9 @@ let renderCallback = function () {
             break
             case "minning":
                 player.characterAnimations.setState(ANIM_STATE.MINNING, 8)
+            break
+            case "inAir":
+                player.characterAnimations.setState(ANIM_STATE.FALLING, 4)
             break
         }
     })

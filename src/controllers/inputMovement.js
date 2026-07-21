@@ -4,16 +4,27 @@ import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
-import { playAnim } from '../tools/animation';
+import { ANIM_STATE, playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
+import { getSpawnPos } from '../tools/position';
 
 let aggregate = null
+let myPlayer = null
 let rotationHelper = null;
 let saveLocTimeout
+let checkFallInVoidTimeout = undefined
+let isGroundedFlag = true
+
+// updated every physics frame in updateMovement() - lets renderer.js drive
+// the "falling" animation for the local player without needing its own
+// physics raycast (only this module has the local player's aggregate)
+export function getIsGrounded(){
+    return isGroundedFlag
+}
 
 export function clearLocTimeOut(){
     clearTimeout(saveLocTimeout)
@@ -22,7 +33,16 @@ export function clearLocTimeOut(){
 export function getControllerObjects(){
     return { aggregate, rotationHelper }
 }
-
+export function relocatePos(body, newPos){
+    body.position.copyFrom(newPos)
+    // only the local player has a physics aggregate reachable from here - a
+    // teleport without zeroing velocity would carry residual fall speed
+    // (or whatever momentum it had) straight into the new spot
+    if(aggregate?.transformNode === body){
+        aggregate.body.setLinearVelocity(Vector3.Zero())
+        aggregate.body.setAngularVelocity(Vector3.Zero())
+    }
+}
 export function faceForward(targP, notPlayerBody){
     const scene = getSceneDet().scene
     if(!scene) return
@@ -68,9 +88,10 @@ export function faceForward(targP, notPlayerBody){
         }
     })
 }
-export function attachControllerToThisCharacter(_aggregate, scene, allsounds) {
+export function attachControllerToThisCharacter(_player, scene, allsounds) {
     // const { scene } = getSceneDet();
-    aggregate = _aggregate;
+    aggregate = _player.aggregate;
+    myPlayer = _player;
     return setupControls(scene, allsounds);
 }
 
@@ -87,10 +108,10 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 5;
+    let sprintSpeed = 6;
     let currentSpeed = walkSpeed;
     let isMoving = false;
-    let jumpSpeed = 6;
+    let jumpSpeed = 5;
     const GROUND_CHECK_MARGIN = 0.2; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride
 
     const input = { forward: 0, right: 0 };
@@ -158,6 +179,10 @@ function setupControls(scene, allsounds) {
             await updateMyDetailsOL({...state, x: pos.x, y: pos.y, z: pos.z}, checkIfTokenSaved(), false, true)
         }, 5000)
     }
+    clearInterval(checkFallInVoidTimeout)
+    checkFallInVoidTimeout = setInterval(() => {
+        checkVoidFall()
+    }, 5000)
 
     // ── Mobile joystick ──────────────────────────────────────────────
     // Puck drag rotates rotationHelper continuously (via updateRotation's
@@ -329,15 +354,33 @@ function setupControls(scene, allsounds) {
         if (!aggregate || !isGrounded()) return;
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
+        if (myPlayer?.characterAnimations) myPlayer.characterAnimations.playAction(myPlayer.anims, "falling")
+        // myPlayer.characterAnimations.setState(ANIM_STATE.FALLING, 4)
         const vel = aggregate.body.getLinearVelocity();
         aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
+    }
+
+    const VOID_Y_THRESHOLD = -50; // fell through the level's geometry into empty space - gravity is (0, -9.81, 0), so a void fall drops Y, not Z
+
+    function checkVoidFall() {
+        if (!aggregate) return
+        if (aggregate.transformNode.getAbsolutePosition().y >= VOID_Y_THRESHOLD) return
+
+        const spawn = getSpawnPos(findMyCurrentPlace())
+        relocatePos(aggregate.transformNode, new Vector3(spawn.x, spawn.y, spawn.z))
+        openClosePopup("You fell into the void...", true, 1500)
+
+        const state = getCharState()
+        if (state) updateMyDetailsOL({...state, x: spawn.x, y: spawn.y, z: spawn.z}, checkIfTokenSaved(), false, true)
     }
 
     let lastEmit = 0;
     function updateMovement() {
         if (!aggregate) return;
+        isGroundedFlag = isGrounded()
+
         if(!getCanPress()) return
- 
+
         aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
 
         if (isMoving) {
@@ -375,6 +418,7 @@ function setupControls(scene, allsounds) {
             window.removeEventListener("pointercancel", handleJoystickPointerUp);
             joystickTexture.dispose();
             scene.onBeforePhysicsObservable.remove(physicsObserver);
+            clearInterval(checkFallInVoidTimeout);
         }
     }
 }
