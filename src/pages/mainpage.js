@@ -3,6 +3,7 @@ import { showLoadingScreen } from "../htmlcomp/loadingscreen.js"
 import { showLoginPage, login, continueSession } from "./loginpage.js"
 import { showRegisterPage, register } from "./registerpage.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { getAllPlayersFromTCP } from "../sockets/worldsocket.js"
 
 const homePage = document.querySelector(".home-page")
 const authFields = document.querySelector(".auth-fields")
@@ -10,9 +11,48 @@ const toggleBtn = document.querySelector("#toggleAuthMode")
 const enterBtn = document.querySelector("#enterWorldBtn")
 const passwordInput = document.querySelector("#passwordInp")
 const confirmInput = document.querySelector("#confirmpass")
+const siteFooter = document.querySelector(".site-footer")
+const socialIcon = document.querySelector(".social-icon")
+const playersCountSmall = document.querySelector(".players-count-small")
+const playersCountBig = document.querySelector(".players-count-big")
 
 let isRegisterMode = false
 let hasSavedSession = false
+
+function updatePlayersOnlineDisplay() {
+    if (!playersCountSmall || !playersCountBig) return
+    const count = getAllPlayersFromTCP().length.toLocaleString()
+    playersCountSmall.textContent = count
+    playersCountBig.textContent = count
+}
+updatePlayersOnlineDisplay()
+setInterval(updatePlayersOnlineDisplay, 2000)
+
+if (siteFooter && socialIcon) {
+    const footerObserver = new IntersectionObserver(
+        ([entry]) => {
+            if (entry.isIntersecting) {
+                const rect = socialIcon.getBoundingClientRect()
+                const marginX = rect.width / 2 + 10
+                const marginY = rect.height / 2 + 10
+                const cx = Math.min(Math.max(rect.left + rect.width / 2, marginX), window.innerWidth - marginX)
+                const cy = Math.min(Math.max(rect.top + rect.height / 2, marginY), window.innerHeight - marginY)
+                socialIcon.style.setProperty("--fly-x", `${cx}px`)
+                socialIcon.style.setProperty("--fly-y", `${cy}px`)
+                socialIcon.classList.add("flying")
+            } else {
+                socialIcon.classList.remove("flying")
+            }
+        },
+        { threshold: 0.6 }
+    )
+    footerObserver.observe(siteFooter)
+}
+
+export function hideHomePage(){
+    homePage.classList.add("hidden")
+    siteFooter?.classList.add("hidden")
+}
 
 export function setLoading(isLoading){
     // enterBtn.disabled = isLoading
@@ -57,6 +97,7 @@ export function showMainPage() {
     // showLoadingScreen(["Welcome to Vessel", "Loading"])
     hideShowAllScreenUI(false)
     homePage.classList.remove("hidden")
+    siteFooter?.classList.remove("hidden")
 
     hasSavedSession = !!checkIfTokenSaved()
     authFields.classList.toggle("hidden", hasSavedSession)

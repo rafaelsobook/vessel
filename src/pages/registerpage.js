@@ -1,8 +1,7 @@
 import { APIURL } from "../constants/constants.js"
 import { keepAccountWithTokenDet } from "../constants/api.js"
 import { startScene } from "../main/main.js"
-import { setLoading} from "./mainpage.js"
-const homePage = document.querySelector(".home-page")
+import { setLoading, hideHomePage } from "./mainpage.js"
 const usernameInput = document.querySelector("#usernameInp")
 const passwordInput = document.querySelector("#passwordInp")
 const confirmInput = document.querySelector("#confirmpass")
@@ -55,7 +54,7 @@ export async function   register() {
             setLoading(false)
             return
         }
-        homePage.classList.add("hidden")
+        hideHomePage()
 
     } catch (err) {
         msg.textContent = "Server error, try again."
