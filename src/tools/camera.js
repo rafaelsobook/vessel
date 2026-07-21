@@ -23,31 +23,10 @@ export function createArcCam(scene, placeDetail, head){
     camera.upperBetaLimit = Tools.ToRadians(85);
     camera.wheelPrecision = 50;
     camera.minZ = 0.01
+    camera.checkCollisions = true;
+    camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
 
-    // scene.registerBeforeRender(() => {
-    //     const origin = camera.target.position ?? camera.target;
-    //     const direction = camera.position.subtract(origin).normalize();
-    //     const distance = Vector3.Distance(origin, camera.position);
-
-    //     const ray = scene.createPickingRay(
-    //         scene.getEngine().getRenderWidth() / 2,
-    //         scene.getEngine().getRenderHeight() / 2,
-    //         null,
-    //         camera
-    //     );
-
-    //     const hit = scene.pickWithRay(
-    //         { origin, direction, length: distance },
-    //         (mesh) => mesh.isPickable && mesh.isVisible
-    //     );
-
-    //     if (hit?.pickedMesh) {
-    //         console.log("Camera blocked by:", hit.pickedMesh.name);
-    //         hit.pickedMesh.isVisible = false;
-    //     }
-    // });
-
-    if(head) attachCam(head);    
+    if(head) attachCam(head);
     return camera
 }
 

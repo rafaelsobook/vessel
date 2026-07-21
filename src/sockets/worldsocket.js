@@ -90,9 +90,6 @@ export function getSocketContainers(){
 export function getPlayersOnScene(){
     return playersOnScene
 }
-export function getAllPlayersFromTCP(){
-    return allPlayersFromTCP
-}
 export function getEnemiesOnScene(){
     return enemiez
 }

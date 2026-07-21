@@ -3,7 +3,7 @@ import { showLoadingScreen } from "../htmlcomp/loadingscreen.js"
 import { showLoginPage, login, continueSession } from "./loginpage.js"
 import { showRegisterPage, register } from "./registerpage.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { getAllPlayersFromTCP } from "../sockets/worldsocket.js"
+import { tcpHttpURL } from "../constants/constants.js"
 
 const homePage = document.querySelector(".home-page")
 const authFields = document.querySelector(".auth-fields")
@@ -19,14 +19,32 @@ const playersCountBig = document.querySelector(".players-count-big")
 let isRegisterMode = false
 let hasSavedSession = false
 
-function updatePlayersOnlineDisplay() {
+async function updatePlayersOnlineDisplay() {
     if (!playersCountSmall || !playersCountBig) return
-    const count = getAllPlayersFromTCP().length.toLocaleString()
-    playersCountSmall.textContent = count
-    playersCountBig.textContent = count
+    let numberToDisplay = 16 + Math.floor(Math.random()*8)
+    console.log(numberToDisplay)
+    displayOnlinePL(numberToDisplay)
+    console.log(tcpHttpURL)
+    try {
+        const res = await fetch(`${tcpHttpURL}`)
+        console.log(res)
+        const tcpPlayers = await res.json()
+        console.log(tcpPlayers)
+        // const count = tcpPlayers.length.toLocaleString()
+        numberToDisplay += tcpPlayers.length
+        console.log(tcpPlayers.length)
+
+        displayOnlinePL(numbertoDisplay)
+    } catch (err) {
+        console.warn("Couldn't reach server status endpoint", err)
+    }
+}
+function displayOnlinePL(numbertoDisplay){
+    playersCountSmall.textContent = numbertoDisplay
+    playersCountBig.textContent = numbertoDisplay
 }
 updatePlayersOnlineDisplay()
-setInterval(updatePlayersOnlineDisplay, 2000)
+setInterval(updatePlayersOnlineDisplay, 10000)
 
 if (siteFooter && socialIcon) {
     const footerObserver = new IntersectionObserver(
