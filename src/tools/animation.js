@@ -16,6 +16,7 @@ export const ANIM_STATE = {
     STRUCTED:    'structed',
     CASTING:    'casting',
     MINNING:    'minning',
+    FALLING:    'falling',
 }
 
 export class CharacterAnimations {
@@ -36,6 +37,7 @@ export class CharacterAnimations {
             [ANIM_STATE.STRUCTED]:    find('structed'),
             [ANIM_STATE.CASTING]:    find('casting'),
             [ANIM_STATE.MINNING]:    find('minning'),
+            [ANIM_STATE.FALLING]:    find('falling'),
         }
 
         const missing = Object.entries(this._anims).filter(([,v]) => !v).map(([k]) => k)

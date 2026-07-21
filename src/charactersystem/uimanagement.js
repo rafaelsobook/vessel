@@ -10,6 +10,7 @@ import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
 import { openCloseSkills } from "../components/skillsui.js"
+import { getIsGrounded } from "../controllers/inputMovement.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -129,13 +130,20 @@ export function activateBtnOnce(){
                     getAllSounds().voiceAttackS.play()
                     
                     let animName = 'kick1'
+                    let equippedWeaponType = null
                     charState.items.forEach(itm => {
                         if (itm.itemType === "weapon" && itm.equiped) {
- 
-                            animName = `${itm.weaponType}attack${swordAnimNum}`                         
+                            equippedWeaponType = itm.weaponType
+                            animName = `${itm.weaponType}attack${swordAnimNum}`
                         }
                     })
-                    
+
+                    // airborne + weapon equipped uses the dedicated air-attack
+                    // clip instead of the normal grounded combo (no alternating
+                    // swordAnimNum for this one - there's only one air-attack anim)
+                    if(equippedWeaponType && !getIsGrounded()){
+                        animName = `${equippedWeaponType}attack_1_air`
+                    }
 
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1
 

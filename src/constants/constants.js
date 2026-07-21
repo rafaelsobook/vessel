@@ -1,9 +1,10 @@
 export const sessionStorageName = "dungeonwar_account"
 // export const multiplayerScenes = ['wisemanVillage', 'church']
 export const heroLocalStorageName = "msorHeroDet"
-export const webSocketURL =  "https://vessel-tcp.onrender.com" // "ws://localhost:3000"//|| "https://tcp.fly.dev" //|| 
-export const APIURL =  "https://vessel-serv.onrender.com" //"http://localhost:8100"//|| "http://localhost:8100"   //  //
-// "https://server-dawn-rain-1137.fly.dev" // "http://localhost:8100" || "https://grimwraith-serv.onrender.com" ||  'https://grimwraith-a-789c85041789.herokuapp.com'
+// dev/prod-specific values live in .env.development / .env.production -
+// "npm run dev" loads localhost, "npm run prod" loads the onrender.com URLs
+export const webSocketURL = import.meta.env.VITE_WS_URL
+export const APIURL = import.meta.env.VITE_API_URL
 // export const validGatePlaces = ['afterWarScene', 'wisemanVillage', 'ogresforest']
 
 export const avatarGlBpath = "./models/avatar/avatar.glb"

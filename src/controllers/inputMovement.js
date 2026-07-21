@@ -4,7 +4,7 @@ import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
-import { playAnim } from '../tools/animation';
+import { ANIM_STATE, playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound } from '../components/soundSystem';
@@ -13,9 +13,18 @@ import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
 
 let aggregate = null
+let myPlayer = null
 let rotationHelper = null;
 let saveLocTimeout
 let checkFallInVoidTimeout = undefined
+let isGroundedFlag = true
+
+// updated every physics frame in updateMovement() - lets renderer.js drive
+// the "falling" animation for the local player without needing its own
+// physics raycast (only this module has the local player's aggregate)
+export function getIsGrounded(){
+    return isGroundedFlag
+}
 
 export function clearLocTimeOut(){
     clearTimeout(saveLocTimeout)
@@ -79,9 +88,10 @@ export function faceForward(targP, notPlayerBody){
         }
     })
 }
-export function attachControllerToThisCharacter(_aggregate, scene, allsounds) {
+export function attachControllerToThisCharacter(_player, scene, allsounds) {
     // const { scene } = getSceneDet();
-    aggregate = _aggregate;
+    aggregate = _player.aggregate;
+    myPlayer = _player;
     return setupControls(scene, allsounds);
 }
 
@@ -101,7 +111,7 @@ function setupControls(scene, allsounds) {
     let sprintSpeed = 6;
     let currentSpeed = walkSpeed;
     let isMoving = false;
-    let jumpSpeed = 6;
+    let jumpSpeed = 5;
     const GROUND_CHECK_MARGIN = 0.2; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride
 
     const input = { forward: 0, right: 0 };
@@ -344,6 +354,8 @@ function setupControls(scene, allsounds) {
         if (!aggregate || !isGrounded()) return;
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
+        if (myPlayer?.characterAnimations) myPlayer.characterAnimations.playAction(myPlayer.anims, "falling")
+        // myPlayer.characterAnimations.setState(ANIM_STATE.FALLING, 4)
         const vel = aggregate.body.getLinearVelocity();
         aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
     }
@@ -365,7 +377,8 @@ function setupControls(scene, allsounds) {
     let lastEmit = 0;
     function updateMovement() {
         if (!aggregate) return;
-        
+        isGroundedFlag = isGrounded()
+
         if(!getCanPress()) return
 
         aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);

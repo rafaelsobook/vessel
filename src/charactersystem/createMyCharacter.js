@@ -51,7 +51,7 @@ export function createMyCharacter(charState, scene, allsounds){
     if(!player) return
     attachCam(player.camParent)
 
-    const controls = attachControllerToThisCharacter(player.aggregate, scene, allsounds)
+    const controls = attachControllerToThisCharacter(player, scene, allsounds)
 
     const atkCollider = createAttackColliderForEnemy(scene, player.body)
 

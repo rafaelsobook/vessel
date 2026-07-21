@@ -2742,7 +2742,14 @@ canvas {
   transition: 4s;
 }
 .fps-counter{
-  z-index: 1;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  z-index: 2;
+  // width: 100px;
+  color: rgb(73, 230, 0);
+  padding: 5px;
+  font-size: 12px;
 }
 .slot-normal {
   background: $normalgrad;
@@ -3166,7 +3173,7 @@ canvas {
     width:350px;
   }
   z-index: 100;
-  display: flex;
+  display: none;
 }
 @keyframes showingHiding {
   0% {

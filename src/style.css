@@ -549,7 +549,9 @@ canvas {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  user-select: none;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
 }
 
 ::-webkit-scrollbar {
@@ -2341,6 +2343,9 @@ canvas {
   padding: 0 20px;
   margin-top: 20px;
 }
+.login-container .inputs::-moz-placeholder {
+  color: rgba(177, 177, 177, 0.6);
+}
 .login-container .inputs::placeholder {
   color: rgba(177, 177, 177, 0.6);
 }
@@ -2770,7 +2775,13 @@ canvas {
 }
 
 .fps-counter {
-  z-index: 1;
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  z-index: 2;
+  color: rgb(73, 230, 0);
+  padding: 5px;
+  font-size: 12px;
 }
 
 .slot-normal {
@@ -2795,7 +2806,8 @@ canvas {
   left: 0;
   width: 110%;
   height: 110%;
-  object-fit: cover; /* Cover the entire container */
+  -o-object-fit: cover;
+     object-fit: cover; /* Cover the entire container */
   z-index: 2; /* Behind the content */
 }
 
@@ -2913,7 +2925,8 @@ canvas {
   width: 50px;
   height: 50px;
   border-radius: 4px;
-  object-fit: cover;
+  -o-object-fit: cover;
+     object-fit: cover;
 }
 .skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text {
   display: flex;
@@ -2978,7 +2991,8 @@ canvas {
   width: 65%;
   height: 65%;
   border-radius: 50%;
-  object-fit: cover;
+  -o-object-fit: cover;
+     object-fit: cover;
 }
 .skill-container .skill-info-right .skill-info .skill-info-details {
   width: 100%;
@@ -3221,7 +3235,7 @@ canvas {
 }
 .intro-load-screen {
   z-index: 100;
-  display: flex;
+  display: none;
 }
 
 @keyframes showingHiding {
@@ -3285,6 +3299,9 @@ canvas {
   border-radius: 4px;
   font-family: "M PLUS Rounded 1c", sans-serif;
   text-align: center;
+}
+.login-register-form .inp::-moz-placeholder {
+  color: rgba(177, 177, 177, 0.6);
 }
 .login-register-form .inp::placeholder {
   color: rgba(177, 177, 177, 0.6);
@@ -3422,7 +3439,8 @@ canvas {
 .buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-img {
   width: 46px;
   height: 46px;
-  object-fit: contain;
+  -o-object-fit: contain;
+     object-fit: contain;
 }
 .buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-name {
   font-family: "Bellefair", serif;
@@ -3648,6 +3666,4 @@ canvas {
 .leaderboard-container .lb-footer .lb-my-rank-value {
   color: #edd59f;
   font-family: "Graduate", cursive;
-}
-
-/*# sourceMappingURL=style.css.map */
+}/*# sourceMappingURL=style.css.map */
