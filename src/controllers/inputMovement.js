@@ -111,7 +111,7 @@ function setupControls(scene, allsounds) {
     let sprintSpeed = 6;
     let currentSpeed = walkSpeed;
     let isMoving = false;
-    let jumpSpeed = 10;
+    let jumpSpeed = 5;
     const GROUND_CHECK_MARGIN = 0.2; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride
 
     const input = { forward: 0, right: 0 };
