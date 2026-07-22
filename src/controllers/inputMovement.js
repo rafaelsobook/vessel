@@ -18,10 +18,10 @@ let rotationHelper = null;
 let saveLocTimeout
 let checkFallInVoidTimeout = undefined
 let isGroundedFlag = true
+let modeBeforeAir = null
 
-// updated every physics frame in updateMovement() - lets renderer.js drive
-// the "falling" animation for the local player without needing its own
-// physics raycast (only this module has the local player's aggregate)
+// kept for anything still polling ground state directly - the animation
+// switch itself now reads player.mode ("inAir" or not) instead
 export function getIsGrounded(){
     return isGroundedFlag
 }
@@ -111,7 +111,7 @@ function setupControls(scene, allsounds) {
     let sprintSpeed = 6;
     let currentSpeed = walkSpeed;
     let isMoving = false;
-    let jumpSpeed = 5;
+    let jumpSpeed = 10;
     const GROUND_CHECK_MARGIN = 0.2; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride
 
     const input = { forward: 0, right: 0 };
@@ -344,6 +344,16 @@ function setupControls(scene, allsounds) {
         const physicsEngine = scene.getPhysicsEngine();
         if (!physicsEngine || !aggregate) return false;
 
+        // Rising out of a jump, the capsule is still within GROUND_CHECK_MARGIN
+        // of the floor for the first several ticks (jumpSpeed is only 10 m/s,
+        // margin reaches 0.95m below center) - the raycast genuinely still
+        // hits the ground during that window, which isn't stale data, it's
+        // just too close to tell apart from standing. A body moving upward
+        // can't be grounded regardless, so velocity settles it before the ray
+        // has a chance to.
+        const vel = aggregate.body.getLinearVelocity();
+        if (vel.y > 0.1) return false;
+
         const origin = aggregate.body.getObjectCenterWorld();
         const end = origin.add(new Vector3(0, -(capsuleHeight / 2 + GROUND_CHECK_MARGIN), 0));
         const result = physicsEngine.raycast(origin, end);
@@ -354,10 +364,16 @@ function setupControls(scene, allsounds) {
         if (!aggregate || !isGrounded()) return;
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
-        if (myPlayer?.characterAnimations) myPlayer.characterAnimations.playAction(myPlayer.anims, "falling")
-        // myPlayer.characterAnimations.setState(ANIM_STATE.FALLING, 4)
         const vel = aggregate.body.getLinearVelocity();
         aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
+        // no animation call here - updateMovement()'s next tick sees vel.y > 0.1,
+        // isGrounded() flips false immediately, and the mode sync below drives
+        // player.mode to "inAir" (renderer.js's per-frame switch takes it from
+        // there). A one-shot playAction("falling") used to fire here too, but
+        // its own completion callback reset the state back to whatever mode
+        // was active before the jump regardless of still being airborne -
+        // fighting the per-frame switch every tick and causing the
+        // falling/idle flicker.
     }
 
     const VOID_Y_THRESHOLD = -50; // fell through the level's geometry into empty space - gravity is (0, -9.81, 0), so a void fall drops Y, not Z
@@ -378,6 +394,19 @@ function setupControls(scene, allsounds) {
     function updateMovement() {
         if (!aggregate) return;
         isGroundedFlag = isGrounded()
+
+        // player.mode drives renderer.js's animation switch directly now -
+        // flip it to "inAir" the moment we leave the ground, and restore
+        // whatever it was before (idle/fighting/etc) the moment we land.
+        if (myPlayer) {
+            if (!isGroundedFlag && myPlayer.mode !== "inAir") {
+                modeBeforeAir = myPlayer.mode
+                myPlayer.mode = "inAir"
+            } else if (isGroundedFlag && myPlayer.mode === "inAir") {
+                myPlayer.mode = modeBeforeAir ?? "idle"
+                modeBeforeAir = null
+            }
+        }
 
         if(!getCanPress()) return
 
