@@ -1,4 +1,4 @@
-import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial } from "@babylonjs/core"
+import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer } from "@babylonjs/core"
 import { createMatV2, dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
@@ -35,6 +35,7 @@ import { createOriginal, createSky } from "../creations/creationTools.js";
 import { setWorldChatAvailable } from "../components/worldChatSystem.js";
 import { faceForward } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
+import { attachLightning } from "../effects/lightning.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -317,6 +318,19 @@ export async function areaScene(placeDetail){
     }else{
         disableEnableAttackButtonsContainer(true)
     }
+
+    const rod = MeshBuilder.CreateBox("lightningrod", { depth: 2, size: 0.05}, scene)
+    rod.position.y += 1
+
+    // setTimeout(() => {
+    //     attachLightning(scene, rod, "blue")
+    //     setTimeout(() => {
+    //         attachLightning(scene, rod, "blue", true, {width: 0.001})
+    //         attachLightning(scene, rod, "blue", true, {width: 0.004})
+
+    //     }, 2000)
+
+    // }, 1000)
 
     return {scene, isSocketOn: isMultiplayer }
 }

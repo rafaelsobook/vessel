@@ -2,16 +2,19 @@ import { PBRMaterial, StandardMaterial, Color3, Texture, Engine } from "@babylon
 
 let MatUsed = StandardMaterial
 
+// shared with effects/lightning.js so "yellow" (etc) glows the same shade
+// whether it's a weapon, a magic circle, or a lightning arc
+export const GLOW_COLORS = {
+    yellow: { diffuse: new Color3(0.8, 0.7, 0.0), emissive: new Color3(1.0, 0.9, 0.0) },
+    green:  { diffuse: new Color3(0.0, 0.6, 0.0), emissive: new Color3(0.0, 1.0, 0.2) },
+    white:  { diffuse: new Color3(0.8, 0.8, 0.8), emissive: new Color3(1.0, 1.0, 1.0) },
+    blue:   { diffuse: new Color3(0.0, 0.2, 0.8), emissive: new Color3(0.0, 0.4, 1.0) },
+    red:    { diffuse: new Color3(0.8, 0.0, 0.0), emissive: new Color3(1.0, 0.1, 0.1) },
+    violet: { diffuse: new Color3(0.5, 0.0, 0.8), emissive: new Color3(0.7, 0.0, 1.0) },
+};
+
 export function createGlowingMat(scene, colorType = "yellow"){
-    const colors = {
-        yellow: { diffuse: new Color3(0.8, 0.7, 0.0), emissive: new Color3(1.0, 0.9, 0.0) },
-        green:  { diffuse: new Color3(0.0, 0.6, 0.0), emissive: new Color3(0.0, 1.0, 0.2) },
-        white:  { diffuse: new Color3(0.8, 0.8, 0.8), emissive: new Color3(1.0, 1.0, 1.0) },
-        blue:   { diffuse: new Color3(0.0, 0.2, 0.8), emissive: new Color3(0.0, 0.4, 1.0) },
-        red:    { diffuse: new Color3(0.8, 0.0, 0.0), emissive: new Color3(1.0, 0.1, 0.1) },
-        violet: { diffuse: new Color3(0.5, 0.0, 0.8), emissive: new Color3(0.7, 0.0, 1.0) },
-    };
-    const palette = colors[colorType] ?? colors.yellow;
+    const palette = GLOW_COLORS[colorType] ?? GLOW_COLORS.yellow;
     const mat = new StandardMaterial("glowingMat_" + colorType, scene);
     mat.diffuseColor = palette.diffuse;
     mat.emissiveColor = palette.emissive;

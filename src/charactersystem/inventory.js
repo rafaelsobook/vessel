@@ -63,7 +63,7 @@ export function insertItemOnInventory(itm){
     }else{
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
-    if(itm.weaponType === "sword") itemImg.src = `./images/items/${itm.itemCateg}/frostbite.webp`
+    if(itm.weaponType === "sword" || itm.weaponType === "spear") itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
 
     // every sword shares the same placeholder icon above, so this is the
     // only way to tell which generated variant a slot actually is - shown

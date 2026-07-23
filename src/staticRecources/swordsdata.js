@@ -417,5 +417,42 @@ export const swordsData = [
             handleColor: "wood",
             pommelColor: "firecrystal",
         }
+    },
+    // Spear parts only exist at one tier (rare1 blade/guard/handle/pommel,
+    // nothing else in allswords.glb) - unlike the sword parts above, there's
+    // no combination to vary, so this is the only spear item that can exist.
+    {
+        itemId: randomNum(), // should be string also in client
+        name: "stormpiercer",
+        dn: "Stormpiercer",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: "spear",
+        equipAbilities: {
+            dmg: 25, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: { coinType: "bronze", pieces: 19 },
+        qnty: 1,
+        desc: "Stormpiercer, a rare spear forged with a silver guard, a wood shaft, and a stormcrystal butt-cap.",
+        rarity: "rare",
+
+        parts: {
+            bladeRarity: "rare1",
+            guardRarity: "rare1",
+            handleRarity: "rare1",
+            pommelRarity: "rare1",
+
+            bladeColor: "mythril",
+            guardColor: "silver",
+            handleColor: "wood",
+            pommelColor: "stormcrystal",
+        }
     }
 ]

@@ -20,6 +20,7 @@ import { createBloodParticle, createBloodSplatter, createCustomizedSmoke } from 
 import { CharacterAnimations } from '../tools/animation';
 import { createMesh } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
+import { attachLightning } from '../effects/lightning';
 
 export let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -98,9 +99,10 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
 
 
-    function createSword(swordName, parts, parentMesh) {
-        const sword = createWeapon(scene, "sword", {x: 0.1, y: 0.5, z: 0}, parentMesh, parts)
+    function createSword(swordName, parts, parentMesh, weaponType = "sword") {
+        const sword = createWeapon(scene, weaponType, {x: 0.1, y: 0.5, z: 0}, parentMesh, parts)
         const toPush = {name: swordName, mesh: sword}
+        attachLightning(scene, sword, "violet", true)
         swordMeshes.push(toPush)
         showHideSword(sword, true)
         hasWeapon = true
@@ -262,11 +264,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         toEquip.meshes.forEach(mesh => showHideEquip(mesh, true))
     }
 
-    function equipSword(swordToEquipName, onHand, parts) {
+    function equipSword(swordToEquipName, onHand, parts, weaponType) {
 
         let toEquip = false
         if(!swordMeshes.length) {
-            toEquip = createSword(swordToEquipName, parts, rHand)
+            toEquip = createSword(swordToEquipName, parts, rHand, weaponType)
         }
         swordMeshes.forEach(swrd => {
             showHideSword(swrd.mesh, false)
@@ -274,14 +276,14 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                 toEquip = swrd
                 console.log("no need to create a new sword")
                 if(onHand) toEquip.mesh.parent = rHand
-                
+
                 if(!onHand) toEquip.mesh.parent = weaponSocket
             }
 
         })
 
         if(!toEquip) {
-            toEquip = createSword(swordToEquipName, parts, rHand)
+            toEquip = createSword(swordToEquipName, parts, rHand, weaponType)
         }
         if(!toEquip) return
         showHideSword(toEquip.mesh, true)
@@ -327,7 +329,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                     if(mode === "idle") swordParent = weaponSocket;
                     console.log(swordParent)
                     // createSword(itm.name, itm.parts, rHand)
-                    equipSword(itm.name, mode === "fighting", itm.parts)
+                    equipSword(itm.name, mode === "fighting", itm.parts, itm.weaponType)
                 }
             }
         })

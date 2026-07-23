@@ -274,7 +274,7 @@ export const questions = [
                 // setTimeout(()=>obtain(pauldronItem), 1000)
                 // setTimeout(()=>obtain(armorItem), 1200)
                 
-                obtainAll([swordItem, bootsItem, helmetItem, gauntletItem, pauldronItem, armorItem, ...swordsData])
+                obtainAll([swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem, ...swordsData])
 
                 startQuestionare(2)
                 showHideIcons("block")
@@ -380,6 +380,32 @@ var helmetItem = {
         desc: undefined,
         rarity: "rare",
         metalColor: "adamantine"
+    }
+// no matching mesh in helmets.glb yet (only "ironjaw" exists there) - same
+// situation as "bronzehelm" in npcDetails.js, createHelmet() just warns and
+// skips rendering until that mesh gets added
+var ironmaskItem = {
+        itemId: randomNum(), // should be string also in client
+        name: "ironmask", // is also the image name
+        dn: "Iron Mask",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: undefined,
+        equipAbilities: {
+            dmg: 0, def: 12, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: { coinType: "bronze", pieces: 6 },
+        qnty: 1,
+        desc: "A plain iron mask that hides the wearer's face, offering modest protection.",
+        rarity: "common",
+        metalColor: "iron"
     }
 var bootsItem = {
     itemId: randomNum(), // should be string also in client

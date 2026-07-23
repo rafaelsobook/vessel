@@ -195,7 +195,7 @@ export function equipItem(itemDet, updateItemsListUI){
             chld.innerHTML = ''
             const eqpdImg = createElement('img', `slot-img slot-${itemDet.rarity ? itemDet.rarity : "normal"}`)
             eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.name}.webp`
-            if(itemDet.weaponType === "sword") eqpdImg.src = `./images/items/${itemDet.itemCateg}/frostbite.webp`
+            if(itemDet.weaponType === "sword" || itemDet.weaponType === "spear") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.weaponType}.webp`
             chld.append(eqpdImg)
             const charState = getCharState()
             charState.items.forEach(itm => {                
@@ -245,7 +245,7 @@ export function showItemInfo(_itemDet){
         showGuildQuest(_itemDet.questDetail, true, _itemDet)
         return
     }
-    const {itemCateg, itemType, name, dn, desc} = _itemDet
+    const {itemCateg, itemType, weaponType, name, dn, desc} = _itemDet
     itemInfoCont.style.display = "flex"
 
     itemImg.src = `./images/items/${itemCateg}/${name}.webp`
@@ -271,7 +271,7 @@ export function showItemInfo(_itemDet){
         }
         if(itemType === "weapon"){
             itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg
-            itemImg.src = `./images/items/${itemCateg}/frostbite.webp`
+            itemImg.src = `./images/items/${itemCateg}/${weaponType}.webp`
         }
 
         MATERIAL_ROWS.forEach(({ part, row, value }) => {
