@@ -151,7 +151,7 @@ export function activateOnSocketListeners(socket){
     socket.on("equiped-item", data => {
         if (!isSocketOn) return
         const charState = getCharState()
-        const {ownerId, itemName, itemModelStyle,  itemType, currentPlaceId, metalColor} = data
+        const {ownerId, itemName, itemModelStyle,  itemType, currentPlaceId, metalColor, weaponType} = data
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
         // if(ownerId === charState.owner) return console.log("this is me return")
@@ -162,7 +162,7 @@ export function activateOnSocketListeners(socket){
         if(itemType === "armor") theEquipingPlayer.equipArmor(itemName, metalColor)
         if(itemType === "weapon") {
 
-            theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts)
+            theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts, weaponType)
         }
         if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemName, metalColor)
         if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)

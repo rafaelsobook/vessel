@@ -267,14 +267,9 @@ export const questions = [
         answers: [],
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
-                // obtain(swordItem)
-                // setTimeout(()=>obtain(bootsItem), 250)
-                // setTimeout(()=>obtain(helmetItem), 500)
-                // setTimeout(()=>obtain(gauntletItem), 800)
-                // setTimeout(()=>obtain(pauldronItem), 1000)
-                // setTimeout(()=>obtain(armorItem), 1200)
-                
-                obtainAll([swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem, ...swordsData])
+
+                const armorToObtain = [swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem]
+                obtainAll([armorToObtain[Math.floor(Math.random()*armorToObtain.length)], swordsData[Math.floor(Math.random()*swordsData.length)] ])
 
                 startQuestionare(2)
                 showHideIcons("block")

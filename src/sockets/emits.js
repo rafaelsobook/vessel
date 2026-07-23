@@ -107,7 +107,8 @@ export function emitEquipItem(itemDet, isHiding) {
         currentPlaceId: charState.currentPlace.placeId,
         isHide: isHiding,
         parts: itemDet.parts ? itemDet.parts : null,
-        metalColor: itemDet.metalColor
+        metalColor: itemDet.metalColor,
+        weaponType: itemDet.weaponType
     })
 }
 

@@ -242,7 +242,7 @@ export async function areaScene(placeDetail){
                 faceForward(res.position)
                 setCharStateMode("minning")
                 currentMiningResource = res
-                myCharacter.equipSword(hasWeaponEquipped.name, true, hasWeaponEquipped.parts)
+                myCharacter.equipSword(hasWeaponEquipped.name, true, hasWeaponEquipped.parts, hasWeaponEquipped.weaponType)
                 emitMyLoc("minning", hasWeaponEquipped.name)
             }
 
@@ -319,8 +319,8 @@ export async function areaScene(placeDetail){
         disableEnableAttackButtonsContainer(true)
     }
 
-    const rod = MeshBuilder.CreateBox("lightningrod", { depth: 2, size: 0.05}, scene)
-    rod.position.y += 1
+    // const rod = MeshBuilder.CreateBox("lightningrod", { depth: 2, size: 0.05}, scene)
+    // rod.position.y += 1
 
     // setTimeout(() => {
     //     attachLightning(scene, rod, "blue")

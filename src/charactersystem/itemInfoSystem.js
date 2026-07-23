@@ -66,7 +66,7 @@ let equipItemFunc = () => {
     openCloseMiniLS(`Equiping ${itemDetail.dn} ...`, true)
     // for UI and setting charState item to equiped
     equipItem(itemDetail, true)
-    const { itemType, name, parts, itemId, metalColor } = itemDetail
+    const { itemType, name, parts, itemId, metalColor, weaponType } = itemDetail
     //  for 3d multiplayer sword mesh logic
     const isMultiplayerZone = getIsSocketOn()
     const charState = getCharState()
@@ -77,7 +77,7 @@ let equipItemFunc = () => {
         if(!myChar) return
         
         if (itemType === "boots") myChar.equipBoots(name)
-        if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts)
+        if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts, weaponType)
         if(itemType === "helmet") myChar.equipHelmet(name, itemDetail.metalColor)
         if(itemType === "gauntlet") myChar.equipGauntlet(name, itemDetail.metalColor)
         if(itemType === "pauldron") myChar.equipPauldron(name, itemDetail.metalColor)

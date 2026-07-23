@@ -102,7 +102,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     function createSword(swordName, parts, parentMesh, weaponType = "sword") {
         const sword = createWeapon(scene, weaponType, {x: 0.1, y: 0.5, z: 0}, parentMesh, parts)
         const toPush = {name: swordName, mesh: sword}
-        attachLightning(scene, sword, "violet", true)
+        // attachLightning(scene, sword, "violet", true)
         swordMeshes.push(toPush)
         showHideSword(sword, true)
         hasWeapon = true
