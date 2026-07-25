@@ -78,7 +78,7 @@ let equipItemFunc = () => {
         
         if (itemType === "boots") myChar.equipBoots(name)
         if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts, weaponType)
-        if(itemType === "helmet") myChar.equipHelmet(name, itemDetail.metalColor)
+        if(itemType === "helmet") myChar.equipHelmet(itemDetail.modelName, itemDetail.metalColor, name)
         if(itemType === "gauntlet") myChar.equipGauntlet(name, itemDetail.metalColor)
         if(itemType === "pauldron") myChar.equipPauldron(name, itemDetail.metalColor)
         if(itemType === "armor") myChar.equipArmor(name, itemDetail.metalColor)
@@ -196,6 +196,7 @@ export function equipItem(itemDet, updateItemsListUI){
             const eqpdImg = createElement('img', `slot-img slot-${itemDet.rarity ? itemDet.rarity : "normal"}`)
             eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.name}.webp`
             if(itemDet.weaponType === "sword" || itemDet.weaponType === "spear") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.weaponType}.webp`
+            if(itemDet.itemType === "helmet") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.modelName}.webp`
             chld.append(eqpdImg)
             const charState = getCharState()
             charState.items.forEach(itm => {                
@@ -273,6 +274,9 @@ export function showItemInfo(_itemDet){
             itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg
             itemImg.src = `./images/items/${itemCateg}/${weaponType}.webp`
         }
+        if(itemType === "helmet"){
+            itemImg.src = `./images/items/${itemCateg}/${_itemDet.modelName}.webp`
+        }
 
         MATERIAL_ROWS.forEach(({ part, row, value }) => {
             const materialName = _itemDet.parts?.[`${part}Color`]
@@ -338,6 +342,7 @@ export function openClaimableItems(_claimableItems){
         imgBorder.src="./images/UI/border.png"
         const itmImgTag = createElement('img', 'item-img')
         itmImgTag.src=`./images/items/${itm.itemCateg}/${itm.name}.png`
+        if(itm.itemType === "helmet") itmImgTag.src=`./images/items/${itm.itemCateg}/${itm.modelName}.png`
     
         const itemTagName = createElement('p', 'item-ttle', itm.dn)
 

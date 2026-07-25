@@ -2,6 +2,12 @@ import { questions } from "../constants/questions"
 import { myownspeeches } from "../constants/myownspeech";
 import { vanessasData } from "../constants/flirtdata";
 import { kraunsData } from "../constants/kraundata";
+import { strongData } from "../constants/strongdata";
+import { vordzData } from "../constants/vordzdata";
+import { wagonData } from "../constants/wagondata";
+import { wrenData } from "../constants/wrendata";
+import { corinData } from "../constants/corindata";
+import { talinData } from "../constants/talindata";
 import { showAnswerButtons } from "../tools/popupUI"
 import  Conversation from "../tools/rpgconv"
 import { getPlayersOnScene } from "../sockets/worldsocket";
@@ -15,7 +21,7 @@ const conv = new Conversation(document, 30)
 
 // each NPC that needs its dialogue to react to live player state (rank, etc.)
 // gets its own function here instead of being baked into the static questions array
-const dynamicQuestionSets = [vanessasData, kraunsData]
+const dynamicQuestionSets = [vanessasData, kraunsData, strongData, vordzData, wagonData, wrenData, corinData, talinData]
 
 export function startConv(speechesArray, cb){
     conv.startConversation(speechesArray, 0, cb)
@@ -25,7 +31,11 @@ export function startQuestionare(questionId, characterBody){
     let question = questions.find(q => q.questionId === questionId)
     if(!question){
         for(const getDynamicSet of dynamicQuestionSets){
-            question = getDynamicSet().find(q => q.questionId === questionId)
+            try {
+                question = getDynamicSet().find(q => q.questionId === questionId)
+            } catch(e) {
+                console.error("dynamic question set failed to build:", e)
+            }
             if(question) break
         }
     }

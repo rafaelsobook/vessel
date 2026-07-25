@@ -20,6 +20,14 @@ export const METAL_ROUGHNESS = {
     adamantine: 0.2,
 }
 
+// Name-safe keys into METAL_TINTS/METAL_ROUGHNESS (derived, not hand-copied,
+// so it can't drift out of sync) - use METAL_COLOR.ADAMANTINE etc. instead of
+// bare strings so a typo is a ReferenceError instead of a silent fallback to
+// iron (see createMetalMat's ?? METAL_TINTS.iron below).
+export const METAL_COLOR = Object.fromEntries(
+    Object.keys(METAL_TINTS).map(key => [key.toUpperCase(), key])
+)
+
 export function createMetalMat(scene, metalColor = "iron") {
     const tint = METAL_TINTS[metalColor] ?? METAL_TINTS.iron
     const roughness = METAL_ROUGHNESS[metalColor] ?? 0.4

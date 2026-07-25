@@ -18,13 +18,17 @@ export function createAllNpcInArea(hero, scene){
     npcDetails.forEach( async npcdet => {
         if(npcdet.currentPlaceId !== myHeroDatabase.currentPlace.placeId) return
         let anNpc = await createNpc(scene, npcdet)
-        pushNpc({...anNpc, canSpeak: true})
+        anNpc.canSpeak = true
+        // pushed by reference (not a {...anNpc} copy) so the _patrolFrozen/_patrolIndex
+        // flags set here and read by updateNpcPatrol() in renderer.js stay in sync
+        pushNpc(anNpc)
         onIntersecEnterTrig(anNpc.body, hero.body, scene, () => {
             openCloseInteractBtn("normal", true, () => {
                 disableEnableAttackButtonsContainer(false, true)
                 openCloseInteractBtn("normal", false)
                 setCanPress(false)
 
+                anNpc._patrolFrozen = true
                 faceForward(hero.body.position.clone(), anNpc.body)
 
                 let myState = getCharState()
@@ -83,6 +87,7 @@ export function createAllNpcInArea(hero, scene){
             openCloseInteractBtn("normal", false)
             disableEnableAttackButtonsContainer(true)
             setCanPress(true)
+            anNpc._patrolFrozen = false
         })
     })
     

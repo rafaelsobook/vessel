@@ -4,6 +4,7 @@ import { playAnim, ANIM_STATE } from "../tools/animation.js";
 import { getGameStatus, getSceneDet } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
 import { checkDistance } from "../creations/creationTools.js";
+import { updateNpcPatrol } from "../npc/npcPatrol.js";
 
 let scene;
 
@@ -74,9 +75,9 @@ let renderCallback = function () {
                 player.characterAnimations.setState(ANIM_STATE.FALLING, 4)
             break
         }
-        player.anims.forEach(anim => {
-            if(anim.isPlaying) console.log(anim.name)
-        })
+        // player.anims.forEach(anim => {
+        //     if(anim.isPlaying) console.log(anim.name)
+        // })
     })
     getEnemiesOnScene().forEach(en => {
         if(!en) return
@@ -111,7 +112,10 @@ let renderCallback = function () {
     })
     getNpcOnScene().forEach(player => {
         if(charState.currentPlace.placeId !== player.currentPlaceId) return
-        if(!player.body) return 
+        if(!player.body) return
+
+        updateNpcPatrol(player, dt)
+
         const isActionPlaying = player.anims.some(anim =>
             (anim.name.includes("act_") || anim.name.includes("hit") || anim.name.includes("walk") || anim.name.includes("running")) && anim.isPlaying
         )

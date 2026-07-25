@@ -102,6 +102,7 @@ export function emitEquipItem(itemDet, isHiding) {
     socket.emit("emitEquipItem", {
         ownerId: charState.owner,
         itemName: itemDet.name,
+        itemModelName: itemDet.modelName,
         itemType: itemDet.itemType,
         itemModelStyle: itemDet.itemModelStyle ? itemDet.itemModelStyle : false,
         currentPlaceId: charState.currentPlace.placeId,

@@ -553,9 +553,11 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
 
 //  Mode status changes 
 export function setCharStateMode(_newMode){
+    const prevMode = characterState.mode
     characterState.mode = _newMode; // idle // structed // paralized 
     // setPlayerMode(_newMode, characterState.owner)
 
+    const weapon = characterState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
     switch(_newMode){
         case "idle":
             getAllSounds().runningS.setPlaybackRate(0.91)
@@ -565,9 +567,9 @@ export function setCharStateMode(_newMode){
             
             getAllSounds().runningS.setPlaybackRate(1.15)
             getAllSounds().woodrunS.setPlaybackRate(1)
+            if(weapon && prevMode !== "fighting") getAllSounds().drawSword.play()
         break
     }
-    const weapon = characterState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
 
     setPlayerMode(characterState.owner, _newMode, weapon ? weapon.name : undefined)
 }

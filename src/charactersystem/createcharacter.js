@@ -81,7 +81,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
     const auraz = createBodyAura(det, scene, body)
-    console.log(det)
+
     const auraSkill = det.skills.find(skl => skl.name === "flexaura")
     if(auraSkill && auraSkill.isActive) auraz.start()
 
@@ -106,7 +106,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         swordMeshes.push(toPush)
         showHideSword(sword, true)
         hasWeapon = true
-        console.log("created sword")
         return toPush
     }
 
@@ -119,14 +118,18 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         })
     }
 
-    function createHelmet(helmetName, metalColor) {
+    function createHelmet(helmetName, metalColor, itemName) {
         const template = containers.helmets.find(msh => msh.name.split(".")[1] === helmetName)
         if(!template) return console.warn(`createHelmet: missing helmet "${helmetName}"`)
         const helmet = template.clone(`helmet.${helmetName}.${det._id}`)
         helmet.parent = headBone
         helmet.rotationQuaternion = Quaternion.Identity()
         helmet.position = Vector3.Zero()
-        const helmetMat = createMetalMat(scene, metalColor)
+        // cloth/leather hats are painted with their own texture instead of a
+        // metal tint - metalColor only makes sense for actual armor helmets
+        const helmetMat = itemName?.includes("hat")
+            ? createMatV2(scene, `./images/modeltex/helmets/${itemName}.jpg`)
+            : createMetalMat(scene, metalColor)
         helmet.material = helmetMat
         helmet.getChildMeshes().forEach(mesh => mesh.material = helmetMat)
         showHideEquip(helmet, true)
@@ -135,18 +138,18 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         return toPush
     }
 
-    function equipHelmet(helmetToEquipName, metalColor) {
+    function equipHelmet(helmetToEquipName, metalColor, itemName) {
         if(!helmetToEquipName) return
         let toEquip = false
         if(!helmetMeshes.length) {
-            toEquip = createHelmet(helmetToEquipName, metalColor)
+            toEquip = createHelmet(helmetToEquipName, metalColor, itemName)
         }
         helmetMeshes.forEach(hlm => {
             showHideEquip(hlm.mesh, false)
             if(hlm.name === helmetToEquipName) toEquip = hlm
         })
         if(!toEquip) {
-            toEquip = createHelmet(helmetToEquipName, metalColor)
+            toEquip = createHelmet(helmetToEquipName, metalColor, itemName)
         }
         if(!toEquip) return
         showHideEquip(toEquip.mesh, true)
@@ -274,7 +277,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             showHideSword(swrd.mesh, false)
             if(swrd.name === swordToEquipName) {
                 toEquip = swrd
-                console.log("no need to create a new sword")
                 if(onHand) toEquip.mesh.parent = rHand
 
                 if(!onHand) toEquip.mesh.parent = weaponSocket
@@ -320,21 +322,30 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             if(itm.itemCateg === "equipable"){
                 if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
                 if(itm.itemType === "armor" && itm.equiped) equipArmor(itm.name, itm.metalColor)
-                if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.name, itm.metalColor)
+                if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.modelName, itm.metalColor, itm.name)
                 if(itm.itemType === "gauntlet" && itm.equiped) equipGauntlet(itm.name, itm.metalColor)
                 if(itm.itemType === "pauldron" && itm.equiped) equipPauldron(itm.name, itm.metalColor)
                 if(itm.itemType === "weapon" && itm.equiped) {
-                    console.log(mode)
                     let swordParent = rHand
                     if(mode === "idle") swordParent = weaponSocket;
-                    console.log(swordParent)
                     // createSword(itm.name, itm.parts, rHand)
                     equipSword(itm.name, mode === "fighting", itm.parts, itm.weaponType)
                 }
             }
         })
     }
-    if(isNpc) return { det, body, currentPlaceId: det.currentPlaceId, mode, anims: animationGroups, nameMesh, get hasWeapon() { return hasWeapon } }
+    if(isNpc){
+        // npcs only ever play idle/walk - dispose the rest (combat, casting,
+        // mining, hit/death reactions, etc.) so each spawned npc isn't carrying
+        // the full player animation set around in memory for nothing
+        const keptAnims = animationGroups.filter(anim => {
+            const name = anim.name.toLowerCase()
+            const keep = name === "idle" || name === "walk"
+            if(!keep) anim.dispose()
+            return keep
+        })
+        return { det, body, currentPlaceId: det.currentPlaceId, mode, anims: keptAnims, nameMesh, get hasWeapon() { return hasWeapon } }
+    }
 
     const characterAnimations = new CharacterAnimations(animationGroups)
     characterAnimations.playAll()
@@ -498,6 +509,15 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             mes.isVisible = false
             armors.push({name: armorName, mesh:mes, isUsed: false})
         }
+        if(mes.name === "eyes") {
+            // instantiateModelsToScene() above doesn't clone materials, so every
+            // character shares this mesh's original material - mutating it in
+            // place would make the last-created character's race win for everyone
+            const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race}eye.jpg`, scene, false, false)
+            const eyeMat = mes.material.clone(`eye_mat_${det._id}`)
+            eyeMat.emissiveTexture = eyeTexture
+            mes.material = eyeMat
+        }
     })
     hairs.forEach(hairMsh => {
         if(hairMsh.name.includes("root")) return hairMsh.parent = headBone
@@ -562,7 +582,6 @@ function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
         spawnPos.y + capsuleHeight / 2, 
         spawnPos.z
     );
-    console.log(spawnPos)
     body.rotationQuaternion = Quaternion.FromEulerVector(body.rotation)
 
     if (det._dirTarg) {
@@ -627,7 +646,6 @@ function createBodyAura(det, scene, body, auraType = "human"){
 
     // const templates = getAuraTemplates(scene, aurabox)
 
-    console.log(`${det.name} maxMp: ${det.maxMp}`)
     switch(auraType){
         case "human":
             const auraPS = createCustomizedSmoke(scene, auramesh, "smoke2", false, {min:1,max:1.1}, {min:1,max:1}, 1, new Vector3(0,1.2,0), {r:0,g:0.22,b:0.55}, {r:0.32,g:0.55,b:0.89}, false, "sphere", 0.2)
@@ -669,13 +687,9 @@ function createBodyAura(det, scene, body, auraType = "human"){
         break;
     }
     auras.start = function(){
-        console.log("starting auras")
-        console.log(auras)
         auras.forEach(ps => ps.start())
     }
     auras.stop = function(){
-        console.log("stoping auras")
-        console.log(auras)
         auras.forEach(ps => ps.stop())
     }
     // auras.forEach(ps => ps.start())

@@ -81,7 +81,21 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null
             },
-            
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "Travel Wagon",
+                position: {x: 12, y: 0, z: -1.6},
+                scale: null,
+                rotation:Math.PI/2 + 0.5,
+                glbPath: "./models/outdors/wagon.glb",
+                diffuseTexPath:null,
+                // bumpTexPath: "./images/textures/houses/guild1.jpg",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
         ],
         roomPaths: [
             {

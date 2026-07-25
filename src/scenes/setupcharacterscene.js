@@ -11,15 +11,17 @@ import { checkIfTokenSaved } from "../tools/tools.js";
 import { createRoom } from "../creations/createroom.js";
 import { metaDatas } from "../constants/localroomdb.js"
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
+import { SKIN_COLORS, SKIN_COLOR_LIST } from "../constants/skinColors.js";
+import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
 
 export async function setupCharacterScene(engine){
     let toSave = {
         owner: undefined,
         name: "",
-        hairColor: { r: 0, g: 0, b: 0},
-        clothColor: { r: 0.42, g: 0.30, b: 0.16 },
-        pantsColor: { r: 0.22, g: 0.13, b: 0.05 },
-        skinColor: { r: 0.93, g: 0.78, b: 0.63 },
+        hairColor: ADVENTURER_COLORS.black,
+        clothColor: ADVENTURER_COLORS.tan,
+        pantsColor: ADVENTURER_COLORS.darkBrown,
+        skinColor: SKIN_COLORS.light,
         cloth: "style1",
         pants: "style1",
         hair: "style1",
@@ -146,12 +148,6 @@ export async function setupCharacterScene(engine){
         if (colorPicker) colorPicker.isVisible = category !== "skin"
     }
 
-    const skinColors = [
-        { r: 0.45, g: 0.30, b: 0.16 },
-        { r: 0.76, g: 0.57, b: 0.38 },
-        { r: 0.93, g: 0.78, b: 0.63 },
-    ]
-
     const onSkinSelect = (color) => {
         toSave.skinColor = color
         skinMat.diffuseColor.set(color.r, color.g, color.b)
@@ -159,7 +155,7 @@ export async function setupCharacterScene(engine){
 
     showCreateCharacterPage(
         (characterNameFromInput) => { toSave.name = characterNameFromInput; return toSave },
-        { hair: hairs, cloth: clothes, pants, skinColors },
+        { hair: hairs, cloth: clothes, pants, skinColors: SKIN_COLOR_LIST },
         onStyleSelect,
         onCategoryChange,
         onSkinSelect

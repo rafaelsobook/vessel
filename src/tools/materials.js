@@ -48,11 +48,12 @@ export function createMatV2(scene, diffuseTexPath, normalTexPath, uVscaleTex = 1
         mat.bumpTexture = normalTex
     }
     if(diffuseTexPath){
-        const diffuseTex = new Texture(diffuseTexPath, scene)
+        const diffuseTex = new Texture(diffuseTexPath, scene, false, false)
         diffuseTex.uScale = uVscaleTex
         diffuseTex.vScale = uVscaleTex
         mat.diffuseTexture = diffuseTex
     }
+    mat.backFaceCulling = false
     return mat
 }
 export function createColorMat(name, color, scene, normalTexPath){

@@ -19,6 +19,9 @@ export function initSounds(scene){
     const swordWhooshS = new Sound("swordWhooshS", "./sounds/weapons/swordWhooshS.mp3", scene,
     null, {volume: .5, autoplay: false, loop: false})
 
+    const drawSword = new Sound("drawSword", "./sounds/weapons/drawSword.mp3", scene,
+    null, {volume: 0.8, autoplay: false, loop: false})
+
     const voiceAttackS = new Sound("voiceAttackS", "./sounds/weapons/voiceAttackS.mp3", scene,
     null, {volume: .3, autoplay: false, loop: false})
 
@@ -108,7 +111,7 @@ export function initSounds(scene){
         runningS, woodrunS,
         poisonS,
         pickItemS,
-        swordS1,punchedS,swordWhooshS,voiceAttackS,
+        swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
         staffS1,goblinDeathS,notif1S,notif2S
     }
     return allSounds;

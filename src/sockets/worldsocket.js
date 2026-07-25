@@ -151,7 +151,7 @@ export function activateOnSocketListeners(socket){
     socket.on("equiped-item", data => {
         if (!isSocketOn) return
         const charState = getCharState()
-        const {ownerId, itemName, itemModelStyle,  itemType, currentPlaceId, metalColor, weaponType} = data
+        const {ownerId, itemName, itemModelStyle, itemModelName, itemType, currentPlaceId, metalColor, weaponType} = data
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
         // if(ownerId === charState.owner) return console.log("this is me return")
@@ -164,7 +164,7 @@ export function activateOnSocketListeners(socket){
 
             theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts, weaponType)
         }
-        if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemName, metalColor)
+        if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemModelName, metalColor, itemName)
         if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)
         if(itemType === "pauldron") theEquipingPlayer.equipPauldron(itemName, metalColor)
 
@@ -705,7 +705,7 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
 
 // npc
 export function pushNpc(npcMeshDetail) {
-    const theNpc = npcz.find(npc => npc._id === npcMeshDetail._id)
+    const theNpc = npcz.find(npc => npc.det?._id === npcMeshDetail.det?._id)
     if (theNpc) return
     npcz.push(npcMeshDetail)
 }

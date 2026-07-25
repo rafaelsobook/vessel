@@ -8,6 +8,7 @@ import { receiveAbilities } from '../charactersystem/abilitySystem';
 import { createMagicCircle, spawnMagicCircle } from '../creations/magiccircles';
 import { playAnim, stopAllAnim } from '../tools/animation';
 import { playAnimWithCallback, randomNum, stopAnim } from '../tools/tools';
+import { METAL_COLOR } from '../tools/metalmat';
 import { Vector3 } from '@babylonjs/core';
 import { obtain, obtainAll } from '../charactersystem/inventory';
 import { showHideIcons } from '../charactersystem/uimanagement';
@@ -269,7 +270,7 @@ export const questions = [
             setTimeout(() => {
 
                 const armorToObtain = [swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem]
-                obtainAll([armorToObtain[Math.floor(Math.random()*armorToObtain.length)], swordsData[Math.floor(Math.random()*swordsData.length)] ])
+                obtainAll([farmhatItem, laurietsHatItem, armorToObtain[Math.floor(Math.random()*armorToObtain.length)], swordsData[Math.floor(Math.random()*swordsData.length)] ])
 
                 startQuestionare(2)
                 showHideIcons("block")
@@ -278,8 +279,56 @@ export const questions = [
     },
 ]
 
-
-
+var farmhatItem = {
+    itemId: randomNum(), // should be string also in client
+    name: "farmhat", // is also the image name
+    modelName: "farmhat",
+    dn: "Farmer's Hat",
+    itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+    weaponType: undefined,
+    equipAbilities: {
+        dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+    equiped: false,
+    soulFeed: 0,
+    isEnhanceAble: true, // only for equipable items
+    enhancedLevel: 0,
+    slots: [],// { name, dn, equipAbilities } cores
+    durability: { current: 100, max: 100},
+    price: { coinType: "bronze", pieces: 10 },
+    qnty: 1,
+    desc: undefined,
+    rarity: "rare",
+    metalColor: METAL_COLOR.ADAMANTINE
+}
+var laurietsHatItem = {
+    itemId: randomNum(), // should be string also in client
+    name: "lauriethat", // is also the image name
+    modelName: "magicianhat",
+    dn: "Lauriet's Hat",
+    itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+    weaponType: undefined,
+    equipAbilities: {
+        dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+    equiped: false,
+    soulFeed: 0,
+    isEnhanceAble: true, // only for equipable items
+    enhancedLevel: 0,
+    slots: [],// { name, dn, equipAbilities } cores
+    durability: { current: 100, max: 100},
+    price: { coinType: "bronze", pieces: 10 },
+    qnty: 1,
+    desc: undefined,
+    rarity: "rare",
+    metalColor: METAL_COLOR.ADAMANTINE
+}
 var armorItem = {
     itemId: randomNum(), // should be string also in client
     name: "knightscale", // is also the image name
@@ -302,7 +351,7 @@ var armorItem = {
     qnty: 1,
     desc: undefined,
     rarity: "rare",
-    metalColor: "adamantine"
+    metalColor: METAL_COLOR.ADAMANTINE
 }
 var pauldronItem = {
     itemId: randomNum(), // should be string also in client
@@ -326,7 +375,7 @@ var pauldronItem = {
     qnty: 1,
     desc: undefined,
     rarity: "rare",
-    metalColor: "adamantine"
+    metalColor: METAL_COLOR.ADAMANTINE
 }
 var gauntletItem = {
         itemId: randomNum(), // should be string also in client
@@ -350,11 +399,12 @@ var gauntletItem = {
         qnty: 1,
         desc: undefined,
         rarity: "rare",
-        metalColor: "adamantine"
+        metalColor: METAL_COLOR.ADAMANTINE
     }
 var helmetItem = {
         itemId: randomNum(), // should be string also in client
         name: "ironjaw", // is also the image name
+        modelName: "ironjaw",
         dn: "Knight's Helm III",
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
@@ -374,7 +424,7 @@ var helmetItem = {
         qnty: 1,
         desc: undefined,
         rarity: "rare",
-        metalColor: "adamantine"
+        metalColor: METAL_COLOR.ADAMANTINE
     }
 // no matching mesh in helmets.glb yet (only "ironjaw" exists there) - same
 // situation as "bronzehelm" in npcDetails.js, createHelmet() just warns and
@@ -382,6 +432,7 @@ var helmetItem = {
 var ironmaskItem = {
         itemId: randomNum(), // should be string also in client
         name: "ironmask", // is also the image name
+        modelName: "ironmask",
         dn: "Iron Mask",
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
@@ -400,7 +451,7 @@ var ironmaskItem = {
         qnty: 1,
         desc: "A plain iron mask that hides the wearer's face, offering modest protection.",
         rarity: "common",
-        metalColor: "iron"
+        metalColor: METAL_COLOR.IRON
     }
 var bootsItem = {
     itemId: randomNum(), // should be string also in client

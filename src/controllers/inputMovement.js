@@ -3,7 +3,7 @@ import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
-import { checkIfTokenSaved, stopAnim } from '../tools/tools';
+import { checkIfTokenSaved, randomNum, stopAnim } from '../tools/tools';
 import { ANIM_STATE, playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
@@ -11,6 +11,8 @@ import { runSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
+import { obtain } from '../charactersystem/inventory';
+import { METAL_COLOR } from '../tools/metalmat';
 
 let aggregate = null
 let myPlayer = null
@@ -108,7 +110,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 6;
+    let sprintSpeed = 30;
     let currentSpeed = walkSpeed;
     let isMoving = false;
     let jumpSpeed = 5;
@@ -361,7 +363,34 @@ function setupControls(scene, allsounds) {
     }
 
     function performJump() {
+        var helmetItem = {
+                itemId: randomNum(), // should be string also in client
+                name: "orionhelm", // is also the image name
+                modelName: "orionhelm",
+                dn: "Orion Helm",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: undefined,
+                equipAbilities: {
+                    dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true, // only for equipable items
+                enhancedLevel: 0,
+                slots: [],// { name, dn, equipAbilities } cores
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: undefined,
+                rarity: "rare",
+                metalColor: METAL_COLOR.steel
+            }
+        obtain(helmetItem)
         if (!aggregate || !isGrounded()) return;
+        if(myPlayer.body) console.log(myPlayer.body.position)
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
         const vel = aggregate.body.getLinearVelocity();
