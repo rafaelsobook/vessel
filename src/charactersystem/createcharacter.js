@@ -80,10 +80,17 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const { mode, _moving, _minning } = det
 
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
-    const auraz = createBodyAura(det, scene, body)
 
-    const auraSkill = det.skills.find(skl => skl.name === "flexaura")
-    if(auraSkill && auraSkill.isActive) auraz.start()
+    // npcs never reach a code path that grants/activates skills, and auraz isn't
+    // even part of the isNpc return value below - two 8000-capacity particle
+    // systems were getting built and immediately stopped for every single npc
+    // spawned, for nothing. Skip it entirely for them.
+    const auraz = isNpc ? null : createBodyAura(det, scene, body)
+
+    if(!isNpc){
+        const auraSkill = det.skills.find(skl => skl.name === "flexaura")
+        if(auraSkill && auraSkill.isActive) auraz.start()
+    }
 
     const containers = getSocketContainers()
 
@@ -594,7 +601,7 @@ function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
     // Only create physics if enabled
     let aggregate
     if (usePhysics) {
-        aggregate = createAggregate(body, {mass: 10}, "capsule", scene)
+        aggregate = createAggregate(body, {mass: 10, linearDamping: 0.5}, "box", scene)
         
         // Lock rotation so capsule doesn't tip over
         aggregate.body.setMassProperties({

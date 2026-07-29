@@ -282,12 +282,12 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBo
             dir === 'east'  ? new Vector3(-3, 0, 0) :
                               new Vector3( 3, 0, 0);
 
-        const triggerBox = MeshBuilder.CreateBox(`gate_${pathname}`, {
-            width: w/2, height: stakeHeight/2, depth: d,
-        }, scene);
-        triggerBox.position  = new Vector3(x + approachOffset.x, stakeHeight / 4, z + approachOffset.z);
-        triggerBox.isVisible = false;
-        triggerBox.isPickable = false;
+        // const triggerBox = MeshBuilder.CreateBox(`gate_${pathname}`, {
+        //     width: w/2, height: stakeHeight/2, depth: d,
+        // }, scene);
+        // triggerBox.position  = new Vector3(x + approachOffset.x, stakeHeight / 4, z + approachOffset.z);
+        // triggerBox.isVisible = false;
+        // triggerBox.isPickable = false;
 
         if (gateTemplate) {
             const gateModel = gateTemplate.createInstance(`gate_model_${pathname}`)
@@ -297,40 +297,40 @@ function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBo
             new PhysicsAggregate(gateModel, PhysicsShapeType.BOX, { mass: 0 }, scene)
         }
 
-        onIntersecEnterTrig(triggerBox, characterBody, scene, async () => {
-            openCloseInteractBtn("normal", true, async () => {
-                let placeDetailShort
+        // onIntersecEnterTrig(triggerBox, characterBody, scene, async () => {
+        //     openCloseInteractBtn("normal", true, async () => {
+        //         let placeDetailShort
 
-                switch(pathname){
-                    case "entry":
-                        placeDetailShort = entryPlaceDetail
-                    break
-                    case "exit":
-                        placeDetailShort = exitPlaceDetail
-                    break
-                }
-                const charState = getCharState()
-                const tcpCharPlaceMD = findPlaceMetaData(placeDetailShort.placeId)
+        //         switch(pathname){
+        //             case "entry":
+        //                 placeDetailShort = entryPlaceDetail
+        //             break
+        //             case "exit":
+        //                 placeDetailShort = exitPlaceDetail
+        //             break
+        //         }
+        //         const charState = getCharState()
+        //         const tcpCharPlaceMD = findPlaceMetaData(placeDetailShort.placeId)
 
-                charState.currentPlace.placeId = placeDetailShort.placeId
-                charState.currentPlace.name = placeDetailShort.name
-                charState.currentPlace.areaType = placeDetailShort.areaType
+        //         charState.currentPlace.placeId = placeDetailShort.placeId
+        //         charState.currentPlace.name = placeDetailShort.name
+        //         charState.currentPlace.areaType = placeDetailShort.areaType
 
-                charState.x = tcpCharPlaceMD.spawn.x
-                charState.y = tcpCharPlaceMD.spawn.y
-                charState.z = tcpCharPlaceMD.spawn.z
+        //         charState.x = tcpCharPlaceMD.spawn.x
+        //         charState.y = tcpCharPlaceMD.spawn.y
+        //         charState.z = tcpCharPlaceMD.spawn.z
                 
-                const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                exitScene(charState.owner);
+        //         const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+        //         exitScene(charState.owner);
 
-                const placeDetail = findMyCurrentPlace()
-                await changeScene(placeDetail, "whatever")
-            })
+        //         const placeDetail = findMyCurrentPlace()
+        //         await changeScene(placeDetail, "whatever")
+        //     })
             
-        })
-        onIntersecExitTrig(triggerBox, characterBody, scene, () => {
-            openCloseInteractBtn(false, false)
-        })
+        // })
+        // onIntersecExitTrig(triggerBox, characterBody, scene, () => {
+        //     openCloseInteractBtn(false, false)
+        // })
     }
 
     if (entry?.direction) place(entry.direction, 'entry');

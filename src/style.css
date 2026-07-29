@@ -549,7 +549,9 @@ canvas {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  user-select: none;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
 }
 
 ::-webkit-scrollbar {
@@ -2341,6 +2343,9 @@ canvas {
   padding: 0 20px;
   margin-top: 20px;
 }
+.login-container .inputs::-moz-placeholder {
+  color: rgba(177, 177, 177, 0.6);
+}
 .login-container .inputs::placeholder {
   color: rgba(177, 177, 177, 0.6);
 }
@@ -2801,7 +2806,8 @@ canvas {
   left: 0;
   width: 110%;
   height: 110%;
-  object-fit: cover; /* Cover the entire container */
+  -o-object-fit: cover;
+     object-fit: cover; /* Cover the entire container */
   z-index: 2; /* Behind the content */
 }
 
@@ -2814,6 +2820,76 @@ canvas {
   z-index: -1;
   height: 100%;
   width: 100%;
+}
+
+.output-sliders-cont {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 5;
+  width: 500px;
+  height: 56px;
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  top: 84%;
+}
+.output-sliders-cont .output-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 22px;
+}
+.output-sliders-cont .output-slider-label {
+  width: 26px;
+  flex-shrink: 0;
+  color: rgb(228, 227, 225);
+  font-family: "Bellefair", serif;
+  font-size: 14px;
+  text-align: center;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+.output-sliders-cont .output-slider-value {
+  width: 42px;
+  flex-shrink: 0;
+  color: #f5f5f5;
+  font-family: "Bellefair", serif;
+  font-size: 13px;
+  text-align: center;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+.output-sliders-cont .output-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+       appearance: none;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(168, 86, 19, 0.4);
+  outline: none;
+  cursor: pointer;
+}
+.output-sliders-cont .output-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(202, 165, 1);
+  border: 1px solid #464545;
+  cursor: pointer;
+}
+.output-sliders-cont .output-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(134, 133, 126);
+  border: 5px solid #464545;
+  cursor: pointer;
+  box-sizing: border-box;
 }
 
 .skill-slots {
@@ -2919,7 +2995,8 @@ canvas {
   width: 50px;
   height: 50px;
   border-radius: 4px;
-  object-fit: cover;
+  -o-object-fit: cover;
+     object-fit: cover;
 }
 .skill-container .skill-list-left .skill-list .skill-bx .skill-bx-text {
   display: flex;
@@ -2984,7 +3061,8 @@ canvas {
   width: 65%;
   height: 65%;
   border-radius: 50%;
-  object-fit: cover;
+  -o-object-fit: cover;
+     object-fit: cover;
 }
 .skill-container .skill-info-right .skill-info .skill-info-details {
   width: 100%;
@@ -3454,6 +3532,9 @@ canvas {
   font-family: "M PLUS Rounded 1c", sans-serif;
   text-align: center;
 }
+.login-register-form .inp::-moz-placeholder {
+  color: rgba(177, 177, 177, 0.6);
+}
 .login-register-form .inp::placeholder {
   color: rgba(177, 177, 177, 0.6);
 }
@@ -3590,7 +3671,8 @@ canvas {
 .buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-img {
   width: 46px;
   height: 46px;
-  object-fit: contain;
+  -o-object-fit: contain;
+     object-fit: contain;
 }
 .buysell-container .bs-body .bs-items-grid .bs-item-slot .bs-item-name {
   font-family: "Bellefair", serif;
@@ -3816,4 +3898,4 @@ canvas {
 .leaderboard-container .lb-footer .lb-my-rank-value {
   color: #edd59f;
   font-family: "Graduate", cursive;
-}
+}/*# sourceMappingURL=style.css.map */

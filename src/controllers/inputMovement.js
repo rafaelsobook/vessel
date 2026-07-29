@@ -22,6 +22,12 @@ let checkFallInVoidTimeout = undefined
 let isGroundedFlag = true
 let modeBeforeAir = null
 
+// reused every physics tick instead of `new Vector3(...)` inline in
+// isGrounded()/updateMovement() below - both run unconditionally every tick
+const _groundCheckOffset = new Vector3()
+const _groundCheckEnd = new Vector3()
+const _velocityVec = new Vector3()
+
 // kept for anything still polling ground state directly - the animation
 // switch itself now reads player.mode ("inAir" or not) instead
 export function getIsGrounded(){
@@ -110,11 +116,13 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 30;
+    let sprintSpeed = 300;
     let currentSpeed = walkSpeed;
     let isMoving = false;
     let jumpSpeed = 5;
-    const GROUND_CHECK_MARGIN = 0.2; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride
+    // both tunable to taste - raise either if small bounces/jitter still flip to "inAir" too easily
+    const GROUND_CHECK_MARGIN = 0.4; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride or after a small bounce
+    const GROUNDED_VELOCITY_TOLERANCE = 5.5; // upward speed still treated as "grounded" (bounce/jitter, not an actual jump - jumpSpeed is 5)
 
     const input = { forward: 0, right: 0 };
 
@@ -158,7 +166,11 @@ function setupControls(scene, allsounds) {
                     currentSpeed = sprintSpeed
                 break
             }
-            if(!runsound.isPlaying) runsound.play()
+            // no footstep/run sound while airborne - moving your input stick mid-jump
+            // shouldn't start the sound up; landing/mode-change handles resuming it
+            if(value && player.mode !== "inAir"){
+                if(!runsound.isPlaying) runsound.play()
+            }
             if(!value) {
                 if(runsound.isPlaying) runsound.stop()
             }
@@ -350,15 +362,16 @@ function setupControls(scene, allsounds) {
         // of the floor for the first several ticks (jumpSpeed is only 10 m/s,
         // margin reaches 0.95m below center) - the raycast genuinely still
         // hits the ground during that window, which isn't stale data, it's
-        // just too close to tell apart from standing. A body moving upward
-        // can't be grounded regardless, so velocity settles it before the ray
-        // has a chance to.
+        // just too close to tell apart from standing. A real jump (jumpSpeed=5)
+        // still clears GROUNDED_VELOCITY_TOLERANCE easily; only small bounce/
+        // jitter velocities get tolerated here instead of flipping to "inAir".
         const vel = aggregate.body.getLinearVelocity();
-        if (vel.y > 0.1) return false;
+        if (vel.y > GROUNDED_VELOCITY_TOLERANCE) return false;
 
         const origin = aggregate.body.getObjectCenterWorld();
-        const end = origin.add(new Vector3(0, -(capsuleHeight / 2 + GROUND_CHECK_MARGIN), 0));
-        const result = physicsEngine.raycast(origin, end);
+        _groundCheckOffset.set(0, -(capsuleHeight / 2 + GROUND_CHECK_MARGIN), 0)
+        origin.addToRef(_groundCheckOffset, _groundCheckEnd)
+        const result = physicsEngine.raycast(origin, _groundCheckEnd);
         return result?.hasHit && result.body !== aggregate.body;
     }
 
@@ -388,9 +401,12 @@ function setupControls(scene, allsounds) {
                 rarity: "rare",
                 metalColor: METAL_COLOR.steel
             }
-        obtain(helmetItem)
+        // obtain(helmetItem)
         if (!aggregate || !isGrounded()) return;
         if(myPlayer.body) console.log(myPlayer.body.position)
+            myPlayer.body.position.x = 0
+            myPlayer.body.position.z = -500
+            myPlayer.body.position.y = 20
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
         const vel = aggregate.body.getLinearVelocity();
@@ -431,9 +447,15 @@ function setupControls(scene, allsounds) {
             if (!isGroundedFlag && myPlayer.mode !== "inAir") {
                 modeBeforeAir = myPlayer.mode
                 myPlayer.mode = "inAir"
+                // going airborne mid-stride - setPlayerMoving() already started this and
+                // won't be called again until the next press/release, so cut it here
+                if(runsound.isPlaying) runsound.stop()
             } else if (isGroundedFlag && myPlayer.mode === "inAir") {
                 myPlayer.mode = modeBeforeAir ?? "idle"
                 modeBeforeAir = null
+                // landing while still holding a movement key - resume the sound setPlayerMoving()
+                // was blocked from starting (or was stopped from) while inAir
+                if(isMoving && !runsound.isPlaying) runsound.play()
             }
         }
 
@@ -446,11 +468,8 @@ function setupControls(scene, allsounds) {
             fwd.y = 0;
             fwd.normalize();
             const vel = aggregate.body.getLinearVelocity();
-            aggregate.body.setLinearVelocity(new Vector3(
-                (fwd.x * currentSpeed),
-                vel.y,
-                (fwd.z * currentSpeed)
-            ));
+            _velocityVec.set(fwd.x * currentSpeed, vel.y, fwd.z * currentSpeed)
+            aggregate.body.setLinearVelocity(_velocityVec);
             const now = performance.now();
             if (now - lastEmit > 50) {
                 emitMove();

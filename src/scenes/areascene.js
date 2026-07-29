@@ -1,4 +1,4 @@
-import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer } from "@babylonjs/core"
+import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsShapeMesh, PhysicsAggregate, Mesh, VertexData, VertexBuffer } from "@babylonjs/core"
 import { createMatV2, dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
@@ -36,6 +36,8 @@ import { setWorldChatAvailable } from "../components/worldChatSystem.js";
 import { faceForward } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
+import { createOpenWorld, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
+import { showGamePerformanceUI } from "babylonstats"
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -66,7 +68,7 @@ export async function areaScene(placeDetail){
     const pauldrons = await SceneLoader.ImportMeshAsync("", "./models/pauldrons/", "pauldrons.glb", scene)
     pauldrons.meshes.forEach(m => m.isVisible = false)
     // const helmets = await loadModel("./models/helmets/helmets.glb", scene, true)
-    console.log(helmets)
+  
     const allweaponParts = await loadMeshOnlyParts("./models/swords/allswords.glb", scene)
 
     const containers = setSocketContainers({
@@ -96,6 +98,130 @@ export async function areaScene(placeDetail){
         break;
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
+        break;
+        case "openworld":
+            // Use the InfiniteTerrain here
+              const sun = new HemisphericLight('sun', new Vector3(0.5, 1, 0.3), scene)
+            sun.intensity   = 1.6
+            sun.diffuse     = new Color3(1.00, 0.94, 0.84)
+            sun.groundColor = new Color3(0.27, 0.37, 0.22)
+            scene.fogMode  = Scene.FOGMODE_LINEAR
+            scene.fogColor = new Color3(0.65, 0.78, 0.88)
+            scene.fogStart = 400
+            scene.fogEnd   = 1400
+            const {chunks} = await createOpenWorld(scene, {
+                // viewRadius: 1,
+                // verts: 12, // 17 // 36
+                onChunkBuilt: (mesh) => { 
+                    createAggregate(mesh, { mass: 0 }, 'mesh', scene)
+                    // PhysicsShapeGroundMesh (havokPlugin.js's _createOptionsFromGroundMesh)
+                    // stores heights as (y - minY) and implicitly assumes the mesh's own
+                    // .position already sits at its bounding-box center - true for a plain
+                    // MeshBuilder.CreateGround() mesh, but infterrain's chunks bake absolute
+                    // world coordinates directly into every vertex and leave mesh.position
+                    // at (0,0,0). Left as-is, every chunk's heightfield body gets placed at
+                    // world (0,~0,0) instead of its actual location - whichever chunk's
+                    // misplaced surface happens to intersect near the player is what they
+                    // land on, at the wrong height. Building an invisible, re-centered proxy
+                    // (real position = chunk's true world center, geometry shifted to be
+                    // local to that center) satisfies the assumption without touching
+                    // infterrain's rendering mesh at all.
+                    // try {
+                    //     const positions = mesh.getVerticesData(VertexBuffer.PositionKind)
+
+                    //     mesh.computeWorldMatrix(true)
+                    //     const center = mesh.getBoundingInfo().boundingBox.centerWorld.clone()
+
+                    //     let minY = Infinity, maxY = -Infinity
+                    //     for (let i = 1; i < positions.length; i += 3) {
+                    //         if (positions[i] < minY) minY = positions[i]
+                    //         if (positions[i] > maxY) maxY = positions[i]
+                    //     }
+
+                    //     const localPositions = new Float32Array(positions.length)
+                    //     for (let i = 0; i < positions.length; i += 3) {
+                    //         localPositions[i]     = positions[i]     - center.x
+                    //         localPositions[i + 1] = positions[i + 1] - center.y
+                    //         localPositions[i + 2] = positions[i + 2] - center.z
+                    //     }
+
+                    //     const proxy = new Mesh(`${mesh.name}_physproxy`, scene)
+                    //     const vd = new VertexData()
+                    //     vd.positions = localPositions
+                    //     vd.indices = mesh.getIndices()
+                    //     vd.applyToMesh(proxy)
+                    //     proxy.position.copyFrom(center)
+                    //     proxy.isVisible = false
+                    //     proxy.isPickable = false
+
+                    //     // testing PhysicsShapeMesh instead of PhysicsShapeGroundMesh/HEIGHTFIELD -
+                    //     // same recentering, different shape type, to isolate whether HEIGHTFIELD
+                    //     // itself is the broken part rather than the positioning
+                    //     const groundShape = new PhysicsShapeMesh(proxy, scene)
+                    //     new PhysicsAggregate(proxy, groundShape, { mass: 0 }, scene)
+
+                    //     mesh.onDisposeObservable.add(() => proxy.dispose())
+
+                    //     // self-test: raycast straight down through THIS chunk's own center,
+                    //     // guaranteed to be over its own ground - isolates "proxy construction
+                    //     // doesn't work at all" from "proxy works but isn't where the player is"
+                    //     const physicsEngine = scene.getPhysicsEngine()
+                    //     const selfTestResult = physicsEngine.raycast(
+                    //         new Vector3(center.x, center.y + 500, center.z),
+                    //         new Vector3(center.x, center.y - 500, center.z)
+                    //     )
+                    //     // console.log(`[terrain] ${mesh.name} rawVertY=[${minY.toFixed(1)}, ${maxY.toFixed(1)}] center=`, center.asArray().map(n => n.toFixed(1)),
+                    //     //     ' SELF-TEST raycast hasHit=', selfTestResult?.hasHit, ' hitY=', selfTestResult?.hitPointWorld?.y, ' hitBody=', selfTestResult?.body?.transformNode?.name)
+                    // } catch (err) {
+                    //     console.error(`[terrain] onChunkBuilt FAILED for ${mesh.name}:`, err)
+                    // }
+                },
+                onChunkDisposed: (mesh) => {
+                    // proxy (and its physics body) disposed via mesh.onDisposeObservable above
+                }
+            })
+            showGamePerformanceUI(scene.getEngine(), scene, chunks)
+            // chunks only ever get queued/built around infterrain's own SPAWN_X/SPAWN_Z
+            // (world.js: 0, 500) - dropping the player anywhere else means there's no
+            // terrain built under them at all, physics or not. Spawning right at the
+            // real ground height (instead of dropping from a fixed y and hoping physics
+            // catches it) sidesteps fall-speed/tunneling risk entirely - this runs once,
+            // not per-chunk like the old myCharacter.body.position.y assignment did.
+            // myCharacter.body.position.x = SPAWN_X
+            // myCharacter.body.position.z = SPAWN_Z
+            // myCharacter.body.position.y = terrainHeight(SPAWN_X, SPAWN_Z) + 10
+
+            // teleporting .position directly doesn't necessarily wake a physics body Havok
+            // has flagged as resting/asleep - setting velocity to exactly zero probably reads
+            // as "no change, stay asleep". A tiny non-zero nudge is a real perturbation that
+            // should force an actual wake through the physics API instead of just theorizing it.
+            // if (myCharacter.aggregate?.body) {
+            //     myCharacter.aggregate.body.setLinearVelocity(new Vector3(0, -0.5, 0))
+            // }
+
+            // console.log(`[terrain] terrainHeight(${SPAWN_X},${SPAWN_Z}) =`, terrainHeight(SPAWN_X, SPAWN_Z), ' spawnY set to', myCharacter.body.position.y)
+            // console.log('[terrain] character aggregate motionType/mass check - body exists?', !!myCharacter.aggregate?.body)
+            // for (let s = 1; s <= 3; s++) {
+            //     setTimeout(() => {
+            //         const vel = myCharacter.aggregate?.body?.getLinearVelocity()
+            //         console.log(`[terrain] t+${s}s: y=`, myCharacter.body.position.y.toFixed(3),
+            //             ' velocity=', vel ? [vel.x.toFixed(3), vel.y.toFixed(3), vel.z.toFixed(3)] : 'NO BODY')
+            //     }, s * 1000)
+            // }
+            // setTimeout(() => {
+            //     const physicsEngine = scene.getPhysicsEngine()
+            //     // start BELOW the character's current resting spot so the ray can't hit its own capsule
+            //     const startY = myCharacter.body.position.y - 1
+            //     const origin = new Vector3(SPAWN_X, startY, SPAWN_Z)
+            //     const end    = new Vector3(SPAWN_X, -5000, SPAWN_Z)
+            //     const result = physicsEngine.raycast(origin, end)
+            //     console.log(`[terrain] 3s after spawn - raycast DOWN FROM BELOW CHARACTER (y=${startY.toFixed(2)}) at (${SPAWN_X},${SPAWN_Z}):`,
+            //         ' hasHit=', result?.hasHit,
+            //         ' hitY=', result?.hitPointWorld?.y,
+            //         ' hitBodyName=', result?.body?.transformNode?.name,
+            //         ' actualCharacterY=', myCharacter.body.position.y,
+            //         ' terrainHeight()=', terrainHeight(SPAWN_X, SPAWN_Z))
+            // }, 3000)
         break;
     }
     

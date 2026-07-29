@@ -14,11 +14,13 @@
     "vite-plugin-static-copy": "^3.1.4"
   },
   "dependencies": {
-    "@babylonjs/core": "^9.1.0",
-    "@babylonjs/gui": "^9.1.0",
-    "@babylonjs/havok": "^1.3.12",
-    "@babylonjs/loaders": "^9.1.0",
+    "@babylonjs/core": "^9.18.1",
+    "@babylonjs/gui": "^9.18.1",
+    "@babylonjs/havok": "^1.3.13",
+    "@babylonjs/loaders": "^9.18.1",
     "@babylonjs/materials": "^9.10.1",
+    "babylonstats": "file:../../../web/module/babylonstats",
+    "infterrain": "file:C:/web/module/infterrain",
     "socket.io-client": "^4.8.3"
   }
 }

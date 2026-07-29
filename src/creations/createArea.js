@@ -110,6 +110,8 @@ export function createArea(scene, area, tileTemplate = null) {
                 inst.position = new Vector3(wx, -halfFt + jitter, wz);
             }
 
+            inst.freezeWorldMatrix();
+
             const agg = new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
             agg.shape.material = { restitution: 0, friction: 1 };
         }

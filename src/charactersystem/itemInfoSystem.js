@@ -93,6 +93,29 @@ let equipItemFunc = () => {
         openCloseMiniLS(`Equiping ${itemDetail.dn} ...`, false)
     })
 }
+let unequipItemFunc = () => {
+    if(!itemDetail) return
+    if(itemDetail.itemCateg !== "equipable") return
+
+    const { itemType } = itemDetail
+    const state = getCharState()
+    const myChar = getPlayersOnScene().find(pl => pl.owner === state.owner)
+
+    unEquip(itemType)
+
+    const isMultiplayerZone = getIsSocketOn()
+    if(isMultiplayerZone){
+        const socket = getSocket()
+        socket.emit("emitUnEquip",
+            {
+                ownerId: state.owner,
+                itemType,
+                currentPlaceId: state.currentPlace.placeId
+            })
+    }else if(myChar){
+        myChar.unEquip(itemType)
+    }
+}
 // let emitAddGateFunc = async () => {
 //     if(!itemDetail) return
 //     const charState = getCharState()
@@ -304,8 +327,13 @@ export function showItemInfo(_itemDet){
     switch(_itemDet.itemCateg){
         case "equipable":
             equipOrOpenBtn.style.display = "block"
-            activateFunc = equipItemFunc
-            equipOrOpenBtn.innerHTML = "equip"
+            if(_itemDet.equiped){
+                activateFunc = unequipItemFunc
+                equipOrOpenBtn.innerHTML = "unequip"
+            }else{
+                activateFunc = equipItemFunc
+                equipOrOpenBtn.innerHTML = "equip"
+            }
         break
         case "keys":
             equipOrOpenBtn.style.display = "block"
@@ -385,28 +413,11 @@ armorybx.addEventListener("click", e => {
         const itemType = className.split(" ")[1] //weapon //boots// belt // armor
         if(!itemType) return console.log("category undefined");
 
-        unEquip(itemType)
-        const isMultiplayerZone = getIsSocketOn()
-        if(isMultiplayerZone){
-            const socket = getSocket()
-            socket.emit("emitUnEquip", 
-                { 
-                    ownerId: state.owner, 
-                    itemType,
-                    currentPlaceId: state.currentPlace.placeId
-                })
-        }else{
-            myChar.unEquip(itemType)
-        }
-        // switch(categname){
-        //     case "weapon":
-        //         const state = getCharState()
-        //         state.items.forEach(item => {
-        //             console.log(item)
-        //             if(item.equiped) console.log(item)
-        //             // console.log(item.isEquiped)
-        //         })
-        //     break
-        // }
+        // show details first, same as tapping an inventory item - unequipping
+        // now only happens if the "unequip" button in that popup gets pressed
+        const equippedItem = state.items.find(itm => itm.itemType === itemType && itm.equiped)
+        if(!equippedItem) return
+
+        showItemInfo(equippedItem)
     }
 })

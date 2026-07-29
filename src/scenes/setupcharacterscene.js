@@ -44,7 +44,7 @@ export async function setupCharacterScene(engine){
     light.specular = new Color3(0,0,0)
     
     const cam = new ArcRotateCamera("camera",-Math.PI/2 + Math.PI/10, Math.PI/2 - 0.2,5,new Vector3(0,0.8,0), scene)
-    cam.attachControl()
+    // cam.attachControl()
 
     const container = await LoadAssetContainerAsync(avatarGlBpath, scene)
     container.addAllToScene()

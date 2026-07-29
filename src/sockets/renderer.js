@@ -1,12 +1,19 @@
 import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene } from "./worldsocket";
 import { getCharState } from "../charactersystem/characterstate.js";
 import { playAnim, ANIM_STATE } from "../tools/animation.js";
-import { getGameStatus, getSceneDet } from "../main/main.js";
+import { getGameStatus } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
-import { checkDistance } from "../creations/creationTools.js";
 import { updateNpcPatrol } from "../npc/npcPatrol.js";
+import { terrainHeight } from 'infterrain'
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js";
 
 let scene;
+
+// reused every frame instead of `new Vector3(...)` inline below - this loop
+// runs for every projectile/enemy/npc every single frame, so allocating a
+// fresh Vector3 per call adds up to real GC pressure under load
+const _moveVec = new Vector3()
+const _lookTarget = new Vector3()
 
 
 export function removeRenderObservable(_scene){
@@ -26,11 +33,12 @@ let renderCallback = function () {
     const dt = scene.getEngine().getDeltaTime()/1000
     
     getProjectilesOnScene().forEach(proj => {
-        if(charState.currentPlace.placeId !== proj.placeId) return 
+        if(charState.currentPlace.placeId !== proj.placeId) return
         if(!proj.body) return
         if(proj.stuck) return
 
-        proj.body.locallyTranslate(new Vector3(0, 0, proj.spd * dt))
+        _moveVec.set(0, 0, proj.spd * dt)
+        proj.body.locallyTranslate(_moveVec)
     })
 
     getPlayersOnScene().forEach(player => {
@@ -82,16 +90,35 @@ let renderCallback = function () {
     getEnemiesOnScene().forEach(en => {
         if(!en) return
         if (en._isMoving && en._targetId) {
-            const targetPlayer = getSceneDet().scene.getMeshByName(`player.${en._targetId}`)
+            // was scene.getMeshByName() - an O(n) linear scan over every mesh in
+            // the scene (thousands, counting village foliage instances), done
+            // every frame per chasing enemy. getPlayersOnScene() is a tiny array.
+            const targetPlayer = getPlayersOnScene().find(pl => pl.owner === en._targetId)?.body
             if(targetPlayer){
-                const enPos = en.body.position.clone()
-                const targPos = targetPlayer.position
+                // planar (Y-ignoring) distance, computed inline instead of via
+                // checkDistance() - that helper clones both of its arguments
+                // internally, so combined with the Vector3s built just to call
+                // it, this avoided ~4 short-lived Vector3 allocations/frame/enemy
+                const dx = en.body.position.x - targetPlayer.position.x
+                const dz = en.body.position.z - targetPlayer.position.z
+                const dist = Math.sqrt(dx * dx + dz * dz)
 
-                const dist = checkDistance(new Vector3(enPos.x, targPos.y, enPos.z), targPos)
-                if(dist < en.det.maxDistance) return console.log(dist)
-                en.body.lookAt(new Vector3(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z))
-                en.body.locallyTranslate(new Vector3(0, 0, en.spd * dt))
-                // console.log(dist)
+                // enemies only ever translate horizontally (no physics/gravity) - on
+                // openworld's uneven terrain this needs to run regardless of attack
+                // range, since nothing else corrects height once the enemy stops
+                // advancing. Placing this AFTER the maxDistance return below meant
+                // it never ran once close enough to attack - the enemy would freeze
+                // at its last pre-attack height and visibly float/sink while attacking.
+                if(en.det.currentPlaceId === OPENWORLD_PLACE_ID){
+                    en.body.position.y = terrainHeight(en.body.position.x, en.body.position.z) + en.det.bodyHeight / 2 + 0.05
+                }
+
+                if(dist < en.det.maxDistance) return
+
+                _lookTarget.set(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z)
+                en.body.lookAt(_lookTarget)
+                _moveVec.set(0, 0, en.spd * dt)
+                en.body.locallyTranslate(_moveVec)
             }
             
             // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle 

@@ -403,6 +403,19 @@ export function activateOnSocketListeners(socket){
 
         enemyIsHit(data)
     })
+    socket.on("enemy-y-corrected", data => {
+        const { _id, y, x, z } = data
+        const enem = enemiez.find(enem => enem._id === _id)
+        if (!enem?.body) return
+        // this correction was computed for wherever the enemy WAS at emit time -
+        // if it's since moved (still chasing, or another client moved it further),
+        // this y no longer applies to its current x/z, so skip it rather than
+        // snapping the enemy to a height that belongs to a position it left behind
+        const dx = enem.body.position.x - x
+        const dz = enem.body.position.z - z
+        if((dx * dx + dz * dz) > 4) return // > 2 units drifted since this was computed
+        enem.body.position.y = y
+    })
     socket.on("enemy-chasing", data => {
         const { currentPlaceId, _id, targetId, actionType } = data
         if (!isSocketOn) return

@@ -471,5 +471,79 @@ export const metaDatas = [
             ],
         },
         isMultiplayer: true
-    }
+    },
+
+
+    // openworld
+    {
+        // "Travel Wagon" removed - it was leftover from copy-pasting this area's
+        // structure from another placeDetail, hardcoded at y:0 which only made
+        // sense on the old flat village ground, not procedural terrain height.
+        optionalObjects: [
+        ],
+        roomPaths: [
+
+        ],
+        resources: [
+            // {
+            //     resourceId: randNum(0,9999).toString(),
+            //     resourceType: "ore", // procedurally generated, see createOre() in createRock.js
+            //     name: "ore",
+            //     position: {x: 3, y: 0, z: -5},
+            //     scale: null,
+            //     rotation: 0,
+            //     loots: [
+            //         {name: "ore", chance: 0.4},
+            //         {name: "crystal", chance: 0.2},
+            //         {name: "adamantine", chance: 0.4},
+            //     ],
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     }
+            // }
+        ],
+
+        ...generateArea({
+        placeId: 888,
+        areaType: "openworld",
+        width:      300,
+        height:     300,
+        seed: 12365,
+        totalBigHouse: 4,
+        totalSmallHouse : 3,
+        totalMediumHouse: 0,
+        totalBigTrees: 5,
+        totalMediumTrees: 10,
+        totalSmallTrees: 100,
+        totalRocks: 500,
+        totalGrass: 10000,
+        totalBushes: 5000,
+        // entry: "south",
+        exit: "east",
+        entryExitPlaceIds: {
+            // entryPlaceDetail: {
+            //     placeId: 1,
+            //     name: "village",
+            //     areaType: "village",
+            // },
+            exitPlaceDetail: {
+                placeId: 2,
+                name: "village",
+                areaType: "village",
+            }
+        },
+        sceneTemp: {
+            fogDensity: 0.008,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+                // {name:"hemispheric", intensity: 0.1},
+            ],
+        },
+        isMultiplayer: true
+        }),
+        spawn: {x: 0.6, y: 10, z: -10},
+    },
 ];

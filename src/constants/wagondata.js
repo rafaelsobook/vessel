@@ -1,7 +1,21 @@
 import { startQuestionare } from '../components/conversations'
+import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate.js'
+import { checkIfTokenSaved } from '../tools/tools.js'
+import { exitScene } from '../sockets/exitsocket.js'
+import { changeScene } from '../main/main.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Doran", isLeft: false, message }))
+}
+
+// destination for the "Travel" answer below - the openworld area added to
+// localroomdb.js's metaDatas (placeId 888). Its own `spawn` field is the
+// canonical entry point, same convention the dungeon (placeId 12) uses.
+const TRAVEL_DESTINATION = {
+    placeId: 888,
+    name: "Wilderness",
+    areaType: "openworld",
+    startingPos: { x: 0.6, y: 5, z: -10 },
 }
 
 const doranOpener = [
@@ -9,9 +23,8 @@ const doranOpener = [
     { name: "Doran", isLeft: false, message: "Looking to travel, or just admiring the cart?" },
 ]
 
-const doranTravelStub = [
-    "Ha, I like the enthusiasm.",
-    "Truth is the routes aren't running yet, still waiting on the guildmaster to sort out the roads. Check back soon.",
+const doranTravel = [
+    "Hop in, then. Hold onto something.",
 ]
 
 const doranAck = [
@@ -31,10 +44,24 @@ export function wagonData(){
         },
         {
             questionId: 81,
-            conversationWithQuestion: toLines(doranTravelStub),
+            conversationWithQuestion: toLines(doranTravel),
             answers: [],
-            cb: () => {
-                // TODO: wire to a real destination once fast-travel between areas exists
+            cb: async () => {
+                // same transition procedure areascene.js's roomPaths trigger uses
+                const { placeId, name, areaType, startingPos } = TRAVEL_DESTINATION
+                const charState = getCharState()
+
+                charState.currentPlace.placeId = placeId
+                charState.currentPlace.name = name
+                charState.currentPlace.areaType = areaType
+
+                charState.x = startingPos.x
+                charState.y = startingPos.y
+                charState.z = startingPos.z
+
+                await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                exitScene(charState.owner)
+                await changeScene("whatever")
             }
         },
         {

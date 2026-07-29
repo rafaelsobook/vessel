@@ -43,7 +43,7 @@ async function updatePlayersOnlineDisplay() {
 }
 
 updatePlayersOnlineDisplay()
-setInterval(updatePlayersOnlineDisplay, 10000)
+// setInterval(updatePlayersOnlineDisplay, 10000)
 
 if (siteFooter && socialIcon) {
     const footerObserver = new IntersectionObserver(

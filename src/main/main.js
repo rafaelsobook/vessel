@@ -17,6 +17,7 @@ import { initOnceStatsSystem } from "../charactersystem/statsSystem.js";
 import { initOnceStorySystem } from "../charactersystem/storyQuestSystem.js";
 import { setSocketOn } from "../sockets/worldsocket.js";
 import { initOnceWorldChatSystem } from "../components/worldChatSystem.js";
+import { initOnceOutputSliders } from "../charactersystem/outputSliders.js";
 import { updateGuildIconVisibility } from "../htmlcomp/guildboard.js";
 import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 const canvas = document.querySelector("canvas")
@@ -97,6 +98,7 @@ export async function startScene(willCreateCharacter){
         initOnceWorldChatSystem()
         initOnceStatsSystem()
         initOnceStorySystem()
+        initOnceOutputSliders()
         // initOnceEnhanceSystem()
         // initOnceEmojiActions()
         // playSocketScene(_scene)

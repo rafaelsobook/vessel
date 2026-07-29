@@ -67,6 +67,17 @@ export function createAggregate(mesh, options = { mass: 0 }, shapeType, scene){
     }
     let agg = new PhysicsAggregate(mesh, shape, options, scene);
     agg.shape.material = { restitution: 0, friction: 1 };
+
+    // opt-in only - PhysicsAggregate doesn't read these from options itself, and every
+    // existing caller (houses, trees, rocks, the player capsule, etc.) goes through this
+    // same function, so damping should never apply unless a caller explicitly asks for it
+    if(options.linearDamping !== undefined) agg.body.setLinearDamping(options.linearDamping)
+    if(options.angularDamping !== undefined) agg.body.setAngularDamping(options.angularDamping)
+
+
+    // the setMassProp mass to 1 will not work unless you set the PhysicsMotionType.DYNAMIC
+    // agg.body.setMotionType(PhysicsMotionType.DYNAMIC)
+    // agg.body.setMassProperties({ mass: 1 })
     return agg
 }
 /**

@@ -26,7 +26,7 @@ export default async function loadScene(){
 
     const placeDetail = findMyCurrentPlace()
     let sceneDetail;
-
+    console.log(placeDetail)
     switch(placeDetail.areaType){
         case "dungeon":
             sceneDetail = await dungeonScene(placeDetail)
@@ -36,6 +36,10 @@ export default async function loadScene(){
         break
         case "village":
             sceneDetail = await areaScene(placeDetail)
+        break
+        case "openworld":
+            sceneDetail = await areaScene(placeDetail)
+            console.log(sceneDetail)
         break
     }
 

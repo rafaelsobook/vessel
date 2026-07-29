@@ -10,7 +10,7 @@ import { METAL_COLOR } from "../tools/metalmat.js"
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js"
 
 const npcEnemySpd = 4
-const npcPatrolSpd = 1.4
+const npcPatrolSpd = 1
 export default [
     {
         glbPath: "./models/avatar/vanessa.glb",

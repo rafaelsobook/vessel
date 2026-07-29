@@ -11,6 +11,7 @@ import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
 import { openCloseSkills } from "../components/skillsui.js"
 import { getIsGrounded } from "../controllers/inputMovement.js"
+import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSliders.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -244,10 +245,13 @@ export function disableEnableAttackButtonsContainer(enable, hide = false){
     if (!skillSlotContainer) return  // guard in case element doesn't exist
     container.style.display = "block"
     skillSlotContainer.style.display = "flex"
+    showHideOutputSliders("flex")
     container.classList.toggle("disabled", !enable)
     skillSlotContainer.classList.toggle("disabled", !enable)
+    toggleDisableOutputSliders(enable)
     if(hide){
         container.style.display = "none"
         skillSlotContainer.style.display = "none"
+        showHideOutputSliders("none")
     }
 }

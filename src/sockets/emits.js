@@ -171,3 +171,11 @@ export function emitEnemyIsHit(data){
     if(!socket) return
     socket.emit("enemyIsHit", data)
 }
+export function emitEnemyYCorrection(enemyId, y, x, z){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    // x/z included so receivers can tell if this correction is stale by the time
+    // it arrives (the enemy may have kept moving) instead of blindly applying it
+    socket.emit("correctEnemyY", { _id: enemyId, y, x, z })
+}

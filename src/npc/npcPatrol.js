@@ -2,7 +2,12 @@ import { Vector3 } from '@babylonjs/core'
 import { playAnim, stopAllAnim } from '../tools/animation.js'
 
 const ARRIVE_DIST = 0.3
-const PAUSE_SECONDS = 2.5
+const PAUSE_SECONDS = 6.5
+
+// reused every frame per npc instead of `new Vector3(...)` inline - this runs
+// for every patrolling npc every frame, see the same fix in renderer.js
+const _lookTarget = new Vector3()
+const _moveVec = new Vector3()
 
 // plain NPCs have no CharacterAnimations wrapper (see createcharacter.js's isNpc
 // branch), so playAnim() alone never stops whatever was previously playing -
@@ -66,6 +71,8 @@ export function updateNpcPatrol(npc, dt){
     }
 
     const speed = npc.det.patrolSpeed ?? 1.2
-    npc.body.lookAt(new Vector3(target.x, pos.y, target.z))
-    npc.body.locallyTranslate(new Vector3(0, 0, Math.min(speed * dt, dist)))
+    _lookTarget.set(target.x, pos.y, target.z)
+    npc.body.lookAt(_lookTarget)
+    _moveVec.set(0, 0, Math.min(speed * dt, dist))
+    npc.body.locallyTranslate(_moveVec)
 }

@@ -249,6 +249,7 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 const elev = isBossWall ? BOSS_ELEVATION : 0;
                 const inst = wallTemplate.createInstance(`wall_${wallCount++}`);
                 inst.position = new Vector3(cx, elev + wallH / 2, cz);
+                inst.freezeWorldMatrix();
                 new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
                 continue;
             }
@@ -268,7 +269,7 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 fi.position = new Vector3(cx, elev + FLOOR_Y + tileJitter, cz);
             }
             fi.rotationQuaternion = null
-   
+            fi.freezeWorldMatrix();
 
             const fiAggregate = new PhysicsAggregate(fi, PhysicsShapeType.BOX, { mass: 0 }, scene);
             fiAggregate.shape.material = {
@@ -279,6 +280,7 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
             const ch = getCeilHeight(dungeon, gx, gz);
             const ci = ceilTemplate.createInstance(`ceil_${ceilCount++}`);
             ci.position = new Vector3(cx, elev + ch + FLOOR_THICKNESS / 2, cz);
+            ci.freezeWorldMatrix();
         }
     }
 
@@ -412,6 +414,7 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
             inst.rotation.x = Tools.ToRadians(rock.rotX ?? 0);
             inst.rotation.y = Tools.ToRadians(rock.rotY ?? rock.rotation ?? 0);
             inst.rotation.z = Tools.ToRadians(rock.rotZ ?? 0);
+            inst.freezeWorldMatrix();
 
             const avgScale = ((rock.scaleX ?? 1.5) + (rock.scaleZ ?? 1.5)) / 2;
             new PhysicsAggregate(inst, PhysicsShapeType.SPHERE,

@@ -12,3 +12,9 @@ export const tcpHttpURL = webSocketURL.replace(/^wss:/, "https:").replace(/^ws:/
 // export const validGatePlaces = ['afterWarScene', 'wisemanVillage', 'ogresforest']
 
 export const avatarGlBpath = "./models/avatar/avatar.glb"
+
+// localroomdb.js's placeId for the procedural infterrain openworld area - the
+// tcp server has no notion of terrain height (enemyDetails.ts/genenemy.ts
+// hardcode y:0), so anything needing real ground height on uneven terrain
+// checks against this placeId and looks it up client-side via terrainHeight()
+export const OPENWORLD_PLACE_ID = 888

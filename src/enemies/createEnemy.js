@@ -11,23 +11,45 @@ import { playAnim } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
-import { emitEnemyIsHit } from "../sockets/emits.js"
+import { emitEnemyIsHit, emitEnemyYCorrection } from "../sockets/emits.js"
 import { randBetween } from "../tools/random.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { createSlimeMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
-
+import { terrainHeight } from 'infterrain'
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 
 
 
 export default function createEnemy(scene, det) {
 
     const {goblinRoot, monolithRoot, slimeRoot} = getSocketContainers()
-    let yPos = det.y+(det.bodyHeight/2) + 0.05
+    // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
+    // on openworld's uneven terrain, so look up the real ground height instead
+    const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? terrainHeight(det.x, det.z) : det.y
+    let yPos = groundY+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
         { x: det.x, y:yPos , z: det.z }, 1, false, true)
+
+    // openworld's terrain is uneven and this enemy's y can drift (chunk streaming,
+    // chase movement across slopes, etc.) - periodically verify against the real
+    // terrain height and correct + report it to the server so other clients (now,
+    // via the broadcast, or later when they join/re-sync) see the right height.
+    // Covers idle/attacking states too, unlike the per-frame resnap in renderer.js's
+    // chase loop, which only runs while actively chasing beyond attack range.
+    if(det.currentPlaceId === OPENWORLD_PLACE_ID){
+        const Y_CORRECTION_THRESHOLD = 1 // ignore tiny float noise, only correct real desync
+        const yCheckInterval = setInterval(() => {
+            const correctY = terrainHeight(body.position.x, body.position.z) + det.bodyHeight / 2 + 0.05
+            if(Math.abs(body.position.y - correctY) > Y_CORRECTION_THRESHOLD){
+                body.position.y = correctY
+                emitEnemyYCorrection(det._id, correctY, body.position.x, body.position.z)
+            }
+        }, 500)
+        body.onDisposeObservable.add(() => clearInterval(yCheckInterval))
+    }
 
     // const agg = createAggregate(body, { mass: 0.1}, "box", scene)
     // // Make it kinematic
