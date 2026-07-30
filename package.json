@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "prod": "vite --host --mode production",
+    "trial": "vite --host --mode trial",
     "build": "vite build",
     "preview": "vite preview"
   },

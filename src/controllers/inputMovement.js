@@ -116,7 +116,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 300;
+    let sprintSpeed = 20;
     let currentSpeed = walkSpeed;
     let isMoving = false;
     let jumpSpeed = 5;
@@ -346,6 +346,9 @@ function setupControls(scene, allsounds) {
             case "c":
                 console.log("players ", getPlayersOnScene())
                 clearLocTimeOut()
+                            myPlayer.body.position.x = 0
+            myPlayer.body.position.z = 200
+            myPlayer.body.position.y = 20
             break
         }
 
@@ -404,9 +407,7 @@ function setupControls(scene, allsounds) {
         // obtain(helmetItem)
         if (!aggregate || !isGrounded()) return;
         if(myPlayer.body) console.log(myPlayer.body.position)
-            myPlayer.body.position.x = 0
-            myPlayer.body.position.z = -500
-            myPlayer.body.position.y = 20
+
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
         const vel = aggregate.body.getLinearVelocity();
