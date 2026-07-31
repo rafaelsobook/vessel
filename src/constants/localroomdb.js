@@ -161,7 +161,7 @@ export const metaDatas = [
 
             lights: [
                 {name:"directional", intensity: 0.9},
-                // {name:"hemispheric", intensity: 0.1},
+                {name:"hemispheric", intensity: 1},
             ],
         },
         isMultiplayer: true
@@ -534,12 +534,13 @@ export const metaDatas = [
             }
         },
         sceneTemp: {
-            fogDensity: 0.008,
-            fogColor:{ r:0.05, g:0.15, b:0.1},
+            fogDensity: 0.0055, // thicker than open-sky haze — swamp air is heavy/humid
+            fogColor:{ r:0.38, g:0.45, b:0.3 }, // murky olive-green mist, same hue family as the grass instead of fighting it
+            skyColor:{ r:0.15, g:0.19, b:0.15 }, // dark overcast green-gray — swamp canopy/cloud cover, not open sky
 
             lights: [
-                {name:"directional", intensity: 0.9},
-                // {name:"hemispheric", intensity: 0.1},
+                {name:"directional", intensity: 0.55, color:{ r:0.75, g:0.8, b:0.55 }, direction:{x:-0.6, y:-0.5, z:-0.4}}, // pale sickly green-yellow light filtering down through canopy, steeper angle than a horizon sun
+                {name:"hemispheric", intensity: 0.5, color:{ r:0.3, g:0.38, b:0.28 }}, // green ambient fill, moderate so it doesn't flatten everything
             ],
         },
         isMultiplayer: true

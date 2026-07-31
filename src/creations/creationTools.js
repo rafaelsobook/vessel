@@ -45,12 +45,12 @@ export function createSky(light, scene, isNight){
         skyMaterial.turbidity = 15; // Adjust the sky turbidity
         skyMaterial.luminance = 0.1; // Adjust the sky luminance
         skyMaterial.rayleigh = 2; // Adjust the sky rayleigh
-        light.intensity = .3
+        // light.intensity = .6
         // skyMaterial.useSunPosition = true;
         // light.position = skyMaterial.sunPosition
         // skyMaterial.sunPosition = light.position; // Sync with directional light
     }else{
-        light.intensity = .9
+        // light.intensity = .9
         skyMaterial.inclination = 0.2; // Sun position (0 is sunrise, 0.5 is noon, 1 is sunset)
         skyMaterial.turbidity = 2; // Lower turbidity for a clearer sky
         skyMaterial.luminance = 1; // Higher luminance for a brighter sky

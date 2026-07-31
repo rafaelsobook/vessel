@@ -1,4 +1,4 @@
-import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh } from "@babylonjs/core"
+import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight } from "@babylonjs/core"
 import { createMatV2, dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
@@ -17,7 +17,7 @@ import { getSocket, joinWorld } from "../sockets/joinsocket.js";
 import { changeScene, getEngine, setGameStatus } from "../main/main.js";
 import { getCharState, initiateCharacter, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
-import { pushPlayer, setSocketContainers, playSocketScene } from "../sockets/worldsocket.js";
+import { pushPlayer, setSocketContainers, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
 import { checkIfTokenSaved, randomNum } from "../tools/tools.js";
 import { startMyOwnSpeech } from "../components/conversations.js";
@@ -36,7 +36,7 @@ import { setWorldChatAvailable } from "../components/worldChatSystem.js";
 import { faceForward } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
-import { createOpenWorld, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
+import { createOpenWorld, createOpenWorldGrass, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
 import { showGamePerformanceUI } from "babylonstats"
 import { setStartingContainers } from "./containers.js";
 
@@ -46,7 +46,12 @@ export async function areaScene(placeDetail){
     const spawnPos = getSpawnPos(placeDetail);
     const scene = new Scene(getEngine())
     const cam = createArcCam(scene, placeDetail)
-    const light = setupLighting(scene, placeDetail)
+    const lights = setupLighting(scene, placeDetail)
+    // const light = new DirectionalLight("asd", new Vector3(-1,-1, 1), scene)
+    // scene.fogMode = Scene.FOGMODE_EXP;
+    // scene.fogColor = new Color3(1,0,0.2);
+    // scene.fogDensity = 0.01;
+
 
     await initializePhysics(scene);
 
@@ -64,6 +69,7 @@ export async function areaScene(placeDetail){
 
     switch(placeDetail.areaType){
         case "village":
+            createSky(lights[0], scene, false)
             createVillage(scene, placeDetail, reg, myCharacter.body)
             // createSky(light, scene, false)
         break;
@@ -71,6 +77,7 @@ export async function areaScene(placeDetail){
             createRoom(scene, placeDetail, myCharacter.body);
         break;
         case "openworld":
+            createSky(lights[0], scene, true)
             // Use the InfiniteTerrain here
             //   const sun = new HemisphericLight('sun', new Vector3(0.5, 1, 0.3), scene)
             // sun.intensity   = 1.6
@@ -82,9 +89,14 @@ export async function areaScene(placeDetail){
             // scene.fogEnd   = 1400
             console.log(scene.fogStart)
             console.log(scene.fogEnd)
-            const {chunks} = await createOpenWorld(scene, {
-                viewRadius: 1,
-                verts: 12, // 17 // 36
+            const {chunks} = await createOpenWorld(scene, [
+                "./models/trees/tree_1.glb",
+                "./models/trees/dead_tree_1.glb",
+                "./models/trees/deadtree1.glb" ], "./images/fakeprops/faketree.webp", 
+            
+                {
+                    viewRadius: 1,
+                    verts: 12, // 17 // 36
                 // 'mesh' shape never collides in this Havok build (confirmed: raycast
                 // AND real dynamic-body contact both fail on every chunk). 'box' DOES
                 // collide (confirmed) but createAggregate's box auto-fit uses the
@@ -126,6 +138,13 @@ export async function areaScene(placeDetail){
                         ' SELF-TEST hasHit=', selfTest?.hasHit, ' hitY=', selfTest?.hitPointWorld?.y, ' hitBody=', selfTest?.body?.transformNode?.name)
                 }
             })
+
+            // await createOpenWorldGrass(scene, [
+            //     { texturePath: "./images/textures/grass/flower1.jpg", qnty: 100, size: "small" },
+            //     { texturePath: "./images/textures/grass/grass2_black.jpg", qnty: 200, size: "medium" },
+            //     { texturePath: "./images/textures/grass/bush1.jpg", qnty: 100, size: "large" },
+            // ], { viewRadius: 1, verts: 12 })
+
             setInterval(() => {
                 // const box = MeshBuilder.CreateBox("asd", {}, scene)
                 // const bpos = myCharacter.body.position.clone()
@@ -135,7 +154,7 @@ export async function areaScene(placeDetail){
      
             }, 1000)
 
-            showGamePerformanceUI(scene.getEngine(), scene, chunks)
+            // showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
             console.log('[terrain] physics plugin=', scene.getPhysicsEngine()?.getPhysicsPlugin?.()?.name,
                 ' gravity=', scene.getPhysicsEngine()?.gravity?.asArray?.())
@@ -397,6 +416,19 @@ export async function areaScene(placeDetail){
     //     }, 2000)
 
     // }, 1000)
+
+    setInterval(() => {
+        // getEnemiesOnScene().forEach( enem => {
+        //     if(enem.name === "waterslime") console.log("slime ",enem.anims)
+        //     if(enem.name === "orangelith") console.log("orangelith ",enem.anims)
+            
+        //     const enemPos = enem.body.position
+        //     const myPos = myCharacter.body.position
+
+        //     const length = Vector3.Distance(enemPos, new Vector3(0,enemPos.y,500))
+        //     // console.log(length)
+        // })
+    }, 10000)
 
     return {scene, isSocketOn: isMultiplayer }
 }

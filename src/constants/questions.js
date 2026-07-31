@@ -506,7 +506,12 @@ var swordItem = {
 
         bladeColor: "iron",
         guardColor: "sodalite", // bluegranite, Steel, iron, bronze (practical/common)
-        handleColor: "wood", // bone, 
+        handleColor: "wood", // bone,
         pommelColor: "firecrystal", // frostshard, stormcrystal,beastheart
     }
+}
+
+export {
+    farmhatItem, laurietsHatItem, armorItem, pauldronItem,
+    gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
 }

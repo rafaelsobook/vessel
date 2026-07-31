@@ -4,6 +4,26 @@ export function playAnim(animationGroups, name, loop = false){
     if(anim) anim.play(loop)
     else console.warn("animation not found:", name)
 }
+
+// Different monster rigs number (or don't number) their clips differently -
+// slime has "idle1"/"idle2", orangelith has "0Idle" and no second idle at
+// all. Matches a base name with any digit prefix/suffix ("idle" -> "idle1",
+// "0idle", "idle") instead of requiring the exact naming scheme.
+export function findAnimVariants(animationGroups, baseName){
+    const re = new RegExp(`^\\d*${baseName.toLowerCase()}\\d*$`)
+    return animationGroups.filter(a => re.test(a.name.toLowerCase()))
+}
+export function pickAnimVariant(animationGroups, baseName){
+    const variants = findAnimVariants(animationGroups, baseName)
+    if(!variants.length) return null
+    return variants[Math.floor(Math.random() * variants.length)]
+}
+export function playRandomAnim(animationGroups, baseName, loop = false){
+    const anim = pickAnimVariant(animationGroups, baseName)
+    if(anim) anim.play(loop)
+    else console.warn("no animation variant found for:", baseName)
+    return anim
+}
 export function stopAllAnim(animationGroups){
     animationGroups.forEach(anim => anim.stop())
 }

@@ -601,7 +601,7 @@ function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
     // Only create physics if enabled
     let aggregate
     if (usePhysics) {
-        aggregate = createAggregate(body, {mass: 10, linearDamping: 0.5, friction: 1, restitution: 0}, "box", scene)
+        aggregate = createAggregate(body, {mass: 10, friction: 1, restitution: 0}, "box", scene)
         
         // Lock rotation so capsule doesn't tip over
         aggregate.body.setMassProperties({

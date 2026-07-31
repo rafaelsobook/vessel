@@ -313,7 +313,7 @@ export function activateOnSocketListeners(socket){
         // player hit animation
         // playAnim(victimPlayer.anims, "hit1")
         // victimPlayer.characterAnimations.playAction(victimPlayer.anims, "hit1", 1)
-        theEnemyToAttack.attackSound.play()
+        theEnemyToAttack.attackSound?.play()
         // playAnim(theEnemyToAttack.anims, data.attackAnimName, false, ()=>{
         //     theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
         //     if(!theEnemyToAttack) return

@@ -44,3 +44,4 @@ export function createLootItem(name){
     if(!factory) return null
     return factory()
 }
+export const lootNames = Object.keys(LOOT_TEMPLATES)

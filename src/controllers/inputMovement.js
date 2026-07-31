@@ -11,7 +11,7 @@ import { runSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
-import { obtain } from '../charactersystem/inventory';
+import { obtain, giveAllItems } from '../charactersystem/inventory';
 import { METAL_COLOR } from '../tools/metalmat';
 
 let aggregate = null
@@ -116,7 +116,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 0.8;
-    let sprintSpeed = 20;
+    let sprintSpeed = 200;
     let currentSpeed = walkSpeed;
     let isMoving = false;
     let jumpSpeed = 5;
@@ -349,6 +349,9 @@ function setupControls(scene, allsounds) {
                             myPlayer.body.position.x = 0
             myPlayer.body.position.z = 200
             myPlayer.body.position.y = 20
+            break
+            case "i":
+                giveAllItems()
             break
         }
 

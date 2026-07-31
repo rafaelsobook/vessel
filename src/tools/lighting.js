@@ -1,4 +1,4 @@
-import { SpotLight, HemisphericLight, DirectionalLight,Color3, Vector3, Scene } from "@babylonjs/core";
+import { SpotLight, HemisphericLight, DirectionalLight,Color3, Color4, Vector3, Scene } from "@babylonjs/core";
 
 export function setupLighting(scene, placeDetail) {
     // ── Environment texture ────────────────────────────────────────────────
@@ -13,36 +13,37 @@ export function setupLighting(scene, placeDetail) {
 
     // ── Hemispheric ambient fill ───────────────────────────────────────────
     // Prevents pitch-black shadows. Very dim — just lifts the floor off zero.
-    const hemi = new HemisphericLight("hemi_ambient", new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.7
-    const {fogColor, fogDensity} = placeDetail.sceneTemp
-    let lightUsed
+
+    const {fogColor, fogDensity, skyColor} = placeDetail.sceneTemp
+    let lightsUsed = []
     placeDetail.sceneTemp?.lights?.forEach((light) => {
-        // if (light.name === "directional") {
-        //     const dirLight = new DirectionalLight("dir_light", new Vector3(-1, -3, -1), scene);
-        //     lightUsed = dirLight
-        //     dirLight.intensity = light.intensity
-        //     // dirLight.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
-            
-        // }
+        const tint = light.color ?? fogColor
+        if (light.name === "directional") {
+            const dir = light.direction ?? {x: -1, y: -2, z: -1}
+            const dirLight = new DirectionalLight("dir_light", new Vector3(dir.x, dir.y, dir.z), scene);
+            dirLight.intensity = light.intensity
+            dirLight.diffuse = new Color3(tint.r, tint.g, tint.b);
+            lightsUsed.push(dirLight)
+        }
         if(light.name === "hemispheric"){
             const hemi = new HemisphericLight("hemi_ambient", new Vector3(0, 1, 0), scene);
-            hemi.position = new Vector3(-2, 4, 2);
+            hemi.position = new Vector3(0, 1, 0);
             hemi.intensity = light.intensity
-            hemi.diffuse = new Color3(fogColor.r,fogColor.g,fogColor.b);
-            lightUsed = hemi
+            // hemi.diffuse = new Color3(tint.r, tint.g, tint.b);
+            lightsUsed.push(hemi)
         }
     })            // no specular from ambient fill
 
+    // scene.fogMode = Scene.FOGMODE_EXP;
     scene.fogMode = Scene.FOGMODE_EXP;
     scene.fogColor = new Color3(fogColor.r,fogColor.g,fogColor.b);
-    scene.fogDensity = fogDensity;
-    // Ambient
-    // scene.ambientColor = new Color3(0.1, 0.25, 0.15);
+    scene.fogDensity = 0.003;
 
-    // Fog
-    // scene.fogColor = new Color3(0.05, 0.15, 0.1);
-    return lightUsed
+    // Sky — with no skybox mesh, scene.clearColor IS the sky. Lets sceneTemp
+    // paint a dusk/sunset backdrop instead of Babylon's default dark grey-blue.
+    if(skyColor) scene.clearColor = new Color4(skyColor.r, skyColor.g, skyColor.b, 1);
+
+    return lightsUsed
 
     // Accent light
 

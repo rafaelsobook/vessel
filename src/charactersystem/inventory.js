@@ -1,9 +1,16 @@
 import { createElement, setLoadingInAList } from "../tools/GUITools.js"
 import { getCharState, updateMyDetailsOL } from "./characterstate.js"
-import { checkIfTokenSaved } from "../tools/tools.js"
+import { checkIfTokenSaved, randomNum } from "../tools/tools.js"
 import { equipItem, showItemInfo, unEquip } from "./itemInfoSystem.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
+import { swordsData } from "../staticRecources/swordsdata.js"
+import toSellCatalog from "../staticRecources/toSell.js"
+import { createLootItem, lootNames } from "../staticRecources/resourceLoot.js"
+import {
+    farmhatItem, laurietsHatItem, armorItem, pauldronItem,
+    gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
+} from "../constants/questions.js"
 
 
 const inventoryCont  = document.querySelector(".inventory-container")
@@ -114,6 +121,30 @@ export function obtainAll(itemsArray){
     })
 
     updateMyDetailsOL(charState, checkIfTokenSaved())
+}
+// DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Pulls
+// one of every item definition currently in the game (swords catalog, shop
+// catalog minus a couple duplicate-feeling axes, craftable loot materials,
+// and the armor set handed out by questions.js) and drops them straight into
+// the inventory. Each item needs a fresh itemId - these are all shared static
+// objects/arrays, so reusing their itemId as-is would give every pickup the
+// same id instead of a distinct inventory entry.
+const EXCLUDED_SHOP_ITEMS = ["silverwood", "daedalus", "knightaxe"]
+const questArmorItems = [
+    farmhatItem, laurietsHatItem, armorItem, pauldronItem,
+    gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
+]
+
+export function giveAllItems(){
+    const allItems = [
+        ...swordsData.map(itm => ({ ...itm, itemId: randomNum() })),
+        ...toSellCatalog
+            .filter(({ name }) => !EXCLUDED_SHOP_ITEMS.includes(name))
+            .map(({ sellerId, ...itm }) => ({ ...itm, itemId: randomNum() })),
+        ...lootNames.map(name => createLootItem(name)),
+        ...questArmorItems.map(itm => ({ ...itm, itemId: randomNum() })),
+    ]
+    obtainAll(allItems)
 }
 export function showItemAcquiredPopUp(displayName, acquiredQnty, cb){
     //itemToAdd.itemCateg // consumable // equipable // crafting

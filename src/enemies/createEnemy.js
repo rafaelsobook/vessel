@@ -1,18 +1,17 @@
 import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, Quaternion, Sound } from "@babylonjs/core"
 import { checkDistance, createMesh, createMonsterMaterial } from "../creations/creationTools.js"
-import { lookAt, randomNumMinMax } from "../tools/tools"
+import { lookAt } from "../tools/tools"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
 import { getCharState } from "../charactersystem/characterstate.js"
 import { getGameStatus, getSceneDet } from "../main/main.js"
-import { playAnim } from "../tools/animation.js"
+import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
 import { emitEnemyIsHit, emitEnemyYCorrection } from "../sockets/emits.js"
-import { randBetween } from "../tools/random.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
@@ -162,8 +161,8 @@ export default function createEnemy(scene, det) {
             // console.log("maxDistance  " + thisEnemy.det.maxDistance)
             console.log(dist)
             console.log(thisEnemy.det.maxDistance)
-            if (dist <= thisEnemy.det.maxDistance + 1.3) {  // PLUS 1         
-                emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: enPos.x, z: enPos.z })
+            if (dist <= thisEnemy.det.maxDistance + 1.3) {  // PLUS 1
+                emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: enPos.x, z: enPos.z }, thisEnemy.anims)
             }else console.log("did not reach distance")
         }
     }
@@ -286,7 +285,7 @@ export default function createEnemy(scene, det) {
             })
         })
     }
-    playAnim(entries.animationGroups, "idle1", true)
+    playRandomAnim(entries.animationGroups, "idle", true)
 
     //  sounds
     const  { runSound, deathSound, hitSound, attackSound } = monsterSounds(scene, det, body)
@@ -322,29 +321,38 @@ export default function createEnemy(scene, det) {
         intervalWillAttack
     }
 }
-function monsterSounds(scene, det,body){
-    // let runSound = scene.getSoundByName(`${det.modelStyle}run`)
-
-    let runSound = new Sound(`${det.modelStyle}run`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}run.mp3`, scene, null, {
+// missing mp3s don't throw synchronously - Sound fetches async and fails later
+// (unhandled promise rejection), so wrap creation defensively and let callers
+// treat a null sound as "nothing to play" instead of crashing on .play()/.attachToMesh()
+function createSoundSafe(name, url, scene, options){
+    try{
+        return new Sound(name, url, scene, null, options)
+    }catch(err){
+        console.warn(`[monsterSounds] failed to load "${url}"`, err)
+        return null
+    }
+}
+function monsterSounds(scene, det, body){
+    const runSound = createSoundSafe(`${det.modelStyle}run`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}run.mp3`, scene, {
         maxDistance: 30, spatialSound: true, loop: false, autoplay: false
     })
-    runSound.setPlaybackRate(0.5)
+    runSound?.setPlaybackRate(0.5)
 
-    let deathSound = new Sound(`${det.modelStyle}death`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}death.mp3`, scene, null, {
+    const deathSound = createSoundSafe(`${det.modelStyle}death`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}death.mp3`, scene, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
 
-    let hitSound = new Sound(`${det.modelStyle}hitbynosharp`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}hitbynosharp.mp3`, scene, null, {
+    const hitSound = createSoundSafe(`${det.modelStyle}hitbynosharp`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}hitbynosharp.mp3`, scene, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
-    let attackSound = new Sound(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}attack.mp3`, scene, null, {
+    const attackSound = createSoundSafe(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}attack.mp3`, scene, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
 
-    runSound.attachToMesh(body)
-    deathSound.attachToMesh(body)
-    hitSound.attachToMesh(body)
-    attackSound.attachToMesh(body)
+    runSound?.attachToMesh(body)
+    deathSound?.attachToMesh(body)
+    hitSound?.attachToMesh(body)
+    attackSound?.attachToMesh(body)
 
     return { runSound, deathSound, hitSound, attackSound }
 }
@@ -354,8 +362,9 @@ function createChaseDetector(scene){
     return detector
 }
 // tools
-function emitAttack(detail, enemId, targetId, placeId, pos) {
+function emitAttack(detail, enemId, targetId, placeId, pos, anims) {
     // log(`enemy will attack ${detail.name}`)
+    const attackAnim = pickAnimVariant(anims, "attack")
     getSocket().emit("enemyWillAttack", {
         currentPlaceId: placeId,
         _id: enemId,
@@ -363,11 +372,12 @@ function emitAttack(detail, enemId, targetId, placeId, pos) {
         targetId: targetId,
         dmg: detail.stats.dmg,
         atkSpd: detail.stats.atkSpd,
-        attackAnimName: `attack${randBetween(1,2)}`,
+        attackAnimName: attackAnim ? attackAnim.name : "attack1",
         effects: detail.effects
     })
 }
-function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, rangeAtkDetails){
+function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, rangeAtkDetails, anims){
+    const attackAnim = pickAnimVariant(anims, "attack")
     getSocket().emit("enemyAttackedRange", {
         currentPlace: cPlace,
         _id: enemId,
@@ -376,7 +386,7 @@ function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, range
         targetId: false,
         dmg: detail.stats.dmg,
         atkSpd: detail.stats.atkSpd,
-        attackAnimName: `attack${randomNumMinMax(0, 1.5)}`,
+        attackAnimName: attackAnim ? attackAnim.name : "attack1",
         effects: detail.effects,
         rangeAtkDetails
     })
@@ -412,8 +422,8 @@ export function enemyIsHit(data){
     poppingTextMesh(`-${dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`
-    playAnim(enemy.anims, `hit${randBetween(1,2)}`)
-    enemy.hitSound.play()
+    playRandomAnim(enemy.anims, "hit")
+    enemy.hitSound?.play()
 
     const player = getPlayersOnScene().find(pl => pl.owner === playerId)
     if(!player) return
@@ -427,7 +437,7 @@ export function enemyIsHit(data){
     }
 
     if (data.hp <= 0) {
-        enemy.deathSound.play()
+        enemy.deathSound?.play()
         removeEnemyOnScene(targetId)
         clearInterval(enemy.intervalWillAttack)
         playAnim(enemy.anims, "death")

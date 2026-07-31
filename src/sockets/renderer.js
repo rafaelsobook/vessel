@@ -1,6 +1,6 @@
 import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene } from "./worldsocket";
 import { getCharState } from "../charactersystem/characterstate.js";
-import { playAnim, ANIM_STATE } from "../tools/animation.js";
+import { playAnim, ANIM_STATE, findAnimVariants } from "../tools/animation.js";
 import { getGameStatus } from "../main/main.js";
 import { Vector3 } from "@babylonjs/core";
 import { updateNpcPatrol } from "../npc/npcPatrol.js";
@@ -121,9 +121,9 @@ let renderCallback = function () {
                 en.body.locallyTranslate(_moveVec)
             }
             
-            // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle 
-            en.anims.forEach(anim => {
-                if (anim.name === "running1" && !anim.isPlaying) {
+            // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle
+            findAnimVariants(en.anims, "running").forEach(anim => {
+                if (!anim.isPlaying) {
                     anim.speedRatio = .9 + en.spd * .05
                     anim.play()
                 }

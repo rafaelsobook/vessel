@@ -23,6 +23,19 @@ import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 const canvas = document.querySelector("canvas")
 const fpsCounter = document.querySelector(".fps-counter")
 
+// Missing/placeholder monster sound files (see createEnemy.js's monsterSounds)
+// fail deep inside Babylon's async audio loader (sound.pure.js's internal
+// _initAsync(...).then(...) has no .catch), so the rejection can't be caught
+// at the call site - it only ever surfaces here. Only swallow this specific
+// case (a bad/missing audio asset) so other unrelated bugs still show up as
+// uncaught like normal.
+window.addEventListener("unhandledrejection", (event) => {
+    if (event.reason instanceof DOMException && event.reason.name === "EncodingError") {
+        console.warn("[audio] failed to decode a sound file (missing or invalid asset) - ignoring:", event.reason.message)
+        event.preventDefault()
+    }
+})
+
 
 showLoadingScreen([], 2000);
 
