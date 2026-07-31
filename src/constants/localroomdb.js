@@ -480,9 +480,37 @@ export const metaDatas = [
         // structure from another placeDetail, hardcoded at y:0 which only made
         // sense on the old flat village ground, not procedural terrain height.
         optionalObjects: [
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "Travel Wagon",
+                position: {x: 0, y: 2, z: 500},
+                scale: null,
+                rotation:Math.PI/2 + 0.5,
+                glbPath: "./models/outdors/wagon.glb",
+                diffuseTexPath:null,
+                // bumpTexPath: "./images/textures/houses/guild1.jpg",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
         ],
         roomPaths: [
-
+            {
+                placeId: 1,
+                name: "Village",
+                areaType: "village",
+                pos: {x: 1.5, y: 3, z: 502},
+                startingPos: {x: 11, y: 1.75, z: -10}
+            },
+            {
+                placeId: 1,
+                name: "Village",
+                areaType: "village",
+                pos: {x: -1.5, y: 3, z: 497},
+                startingPos: {x: 11, y: 1.75, z: -10}
+            },
         ],
         resources: [
             // {
@@ -545,6 +573,6 @@ export const metaDatas = [
         },
         isMultiplayer: true
         }),
-        spawn: {x: 0.6, y: 10, z: -10},
+        spawn: {x: 0.6, y: 10, z: 500},
     },
 ];

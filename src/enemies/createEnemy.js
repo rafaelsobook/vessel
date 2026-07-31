@@ -23,8 +23,8 @@ import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 
 
 export default function createEnemy(scene, det) {
-
-    const {goblinRoot, monolithRoot, slimeRoot} = getSocketContainers()
+    console.log(det)
+    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
     // on openworld's uneven terrain, so look up the real ground height instead
     const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? terrainHeight(det.x, det.z) : det.y
@@ -54,11 +54,10 @@ export default function createEnemy(scene, det) {
     // // Make it kinematic
     // agg.body.setMotionType(PhysicsMotionType.STATIC);
     // agg.disablePreStep = false; // must be false for ANIMATED to work
-    const atkDetection = createMesh(scene, `atkDetection.${det._id}`, { size: det.bodyWidenes*2, height: 0.5 },
+    const atkDetection = createMesh(scene, `atkDetection.${det._id}`, { size: det.bodyWidenes*2, height: det.bodyWidenes },
         { x: 0, y: 0, z: 0 }, 1, false, true)  
     atkDetection.parent = body
     atkDetection.isPickable = false
-    
     let mainChaseDetector = scene.getMeshByName("chasedetector")
     let chaseDetector 
     if(mainChaseDetector){
@@ -76,14 +75,26 @@ export default function createEnemy(scene, det) {
     let entries
     switch(det.modelStyle){
         case "goblin":
-            entries = goblinRoot.instantiateModelsToScene()
+            entries = goblinRoot?.instantiateModelsToScene()
         break
         case "monolith":
-            entries = monolithRoot.instantiateModelsToScene()
+            entries = monolithRoot?.instantiateModelsToScene()
         break
         case "slime":
-            entries = slimeRoot.instantiateModelsToScene()
+            entries = slimeRoot?.instantiateModelsToScene()
         break
+        case "lesserdemon":
+            entries = lesserDemonRoot?.instantiateModelsToScene()
+        break
+    }
+    // model container failed to load (missing glb) or modelStyle has no case
+    // above - skip rendering this enemy instead of crashing the whole scene
+    if(!entries){
+        console.warn(`[createEnemy] no model available for modelStyle "${det.modelStyle}" (${det.name}) - skipping`)
+        atkDetection.dispose()
+        chaseDetector.dispose()
+        body.dispose()
+        return null
     }
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
     const mainBodyMeshes = entries.rootNodes[0]
@@ -96,7 +107,7 @@ export default function createEnemy(scene, det) {
         
     // const fshadow = putFakeShadow(body, fakeShadowRoot, det.bodyHeight * .7, -yPos + .01)
     const nameMesh = createTextMesh(scene, body, det.dn, "white", { x: 0, y: yPos + 0.5, z: 0 }, 35)
-    
+    nameMesh.isVisible = true
     const { hpbar, hpmesh } = createHpBar(yPos + .1, det._id, body, det.hp, det.maxHp)
     // const theCharacterRoot = monsRoots.find(rootInfo => rootInfo.name === det.modelStyle)
     // if (!theCharacterRoot) return
@@ -171,24 +182,13 @@ export default function createEnemy(scene, det) {
     const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!myChar) return
 
-
-    onIntersecEnterTrig(body, myChar.body, getSceneDet().scene, () => {
-        // const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-        // if (!thisEnemy) return
-        // thisEnemy._isMoving = false
-        // const myCharId = myChar.body.name.split(".")[1]
-        // const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
-
-        // const plPos = enemyTargetBody.position
-        // emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})
-    })
-    onIntersecEnterTrig(atkDetection, myChar.body, getSceneDet().scene, () => {
+    onIntersecEnterTrig(atkDetection, myChar.body, scene, () => {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         const myCharId = myChar.body.name.split(".")[1]
 
         if (!thisEnemy) return
         thisEnemy._isMoving = false
-        const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
+        const enemyTargetBody = scene.getMeshByName(`player.${myCharId}`)
 
         const plPos = enemyTargetBody.position
         emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})
@@ -197,7 +197,7 @@ export default function createEnemy(scene, det) {
         clearTimeout(timeOutWillChase)
         initAttack()
     })
-    onIntersecExitTrig(atkDetection, myChar.body, getSceneDet().scene, () => {
+    onIntersecExitTrig(atkDetection, myChar.body, scene, () => {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         if (!thisEnemy) return
 
@@ -210,13 +210,13 @@ export default function createEnemy(scene, det) {
         }, 1000)
     })
 
-    // onIntersecEnterTrig(chaseDetector, myChar.body, getSceneDet().scene, () => {
+    // onIntersecEnterTrig(chaseDetector, myChar.body, scene, () => {
     //     const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
     //     const myCharId = myChar.body.name.split(".")[1]
 
     //     if (!thisEnemy) return
 
-    //     const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${myCharId}`)
+    //     const enemyTargetBody = scene.getMeshByName(`player.${myCharId}`)
 
 
     //     const plPos = enemyTargetBody.position
@@ -225,13 +225,13 @@ export default function createEnemy(scene, det) {
     //     initAttack(det)
         
     // })
-    onIntersecExitTrig(chaseDetector, myChar.body, getSceneDet().scene, () => {
+    onIntersecExitTrig(chaseDetector, myChar.body, scene, () => {
         // const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         // const myCharId = myChar.body.name.split(".")[1]
 
         // if (!thisEnemy) return
 
-        // const enemyTargetBody = getSceneDet().scene.getMeshByName(`player.${thisEnemy._targetId}`)
+        // const enemyTargetBody = scene.getMeshByName(`player.${thisEnemy._targetId}`)
         // const plPos = enemyTargetBody.position
         // if (!enemyTargetBody) {
         //     emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})

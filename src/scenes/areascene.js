@@ -31,11 +31,12 @@ import { exitScene } from "../sockets/exitsocket.js";
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js";
 import { createFireParticles } from "../tools/particlesystem.js";
 import { initSounds, getAllSounds, playSound } from "../components/soundSystem.js";
-import { createOriginal, createSky } from "../creations/creationTools.js";
+import { createOriginal, createSky, createMainShadow, putFakeShadow } from "../creations/creationTools.js";
 import { setWorldChatAvailable } from "../components/worldChatSystem.js";
 import { faceForward } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
+import { capsuleHeight } from "../charactersystem/createcharacter.js";
 import { createOpenWorld, createOpenWorldGrass, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
 import { showGamePerformanceUI } from "babylonstats"
 import { setStartingContainers } from "./containers.js";
@@ -51,7 +52,7 @@ export async function areaScene(placeDetail){
     // scene.fogMode = Scene.FOGMODE_EXP;
     // scene.fogColor = new Color3(1,0,0.2);
     // scene.fogDensity = 0.01;
-
+    const fakeShadowRoot = createMainShadow(scene)
 
     await initializePhysics(scene);
 
@@ -78,6 +79,13 @@ export async function areaScene(placeDetail){
         break;
         case "openworld":
             createSky(lights[0], scene, true)
+            // real ShadowGenerator didn't work here - infterrain's streaming chunk
+            // mesh/material isn't set up to receive a projected shadow map, and a
+            // directional light's shadow frustum doesn't track a moving player over
+            // an effectively unbounded terrain anyway. Blob shadow instead - same
+            // trick already wired up (but unused) for enemies in createEnemy.js.
+            
+            
             // Use the InfiniteTerrain here
             //   const sun = new HemisphericLight('sun', new Vector3(0.5, 1, 0.3), scene)
             // sun.intensity   = 1.6
@@ -87,8 +95,7 @@ export async function areaScene(placeDetail){
             // scene.fogColor = new Color3(0.65, 0.78, 0.88)
             // scene.fogStart = 400
             // scene.fogEnd   = 1400
-            console.log(scene.fogStart)
-            console.log(scene.fogEnd)
+
             const {chunks} = await createOpenWorld(scene, [
                 "./models/trees/tree_1.glb",
                 "./models/trees/dead_tree_1.glb",
@@ -132,10 +139,10 @@ export async function areaScene(placeDetail){
                         new Vector3(bb.centerWorld.x, bb.centerWorld.y + 500, bb.centerWorld.z),
                         new Vector3(bb.centerWorld.x, bb.centerWorld.y - 500, bb.centerWorld.z)
                     )
-                    console.log(`[terrain] ${mesh.name} bodyMotionType=`, agg?.body?.getMotionType?.(),
-                        ' anchorPos=', anchor.position.asArray().map(n => n.toFixed(1)),
-                        ' expectedSurfaceY~=', bb.centerWorld.y.toFixed(1),
-                        ' SELF-TEST hasHit=', selfTest?.hasHit, ' hitY=', selfTest?.hitPointWorld?.y, ' hitBody=', selfTest?.body?.transformNode?.name)
+                    // console.log(`[terrain] ${mesh.name} bodyMotionType=`, agg?.body?.getMotionType?.(),
+                    //     ' anchorPos=', anchor.position.asArray().map(n => n.toFixed(1)),
+                    //     ' expectedSurfaceY~=', bb.centerWorld.y.toFixed(1),
+                    //     ' SELF-TEST hasHit=', selfTest?.hasHit, ' hitY=', selfTest?.hitPointWorld?.y, ' hitBody=', selfTest?.body?.transformNode?.name)
                 }
             })
 
@@ -340,7 +347,7 @@ export async function areaScene(placeDetail){
 
     placeDetail.roomPaths?.forEach(path => {
         const { name, pos,startingPos, placeId ,areaType } = path
-        const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { }, scene)
+        const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { size: 2 }, scene)
         pathTrigger.position = new Vector3(pos.x, pos.y, pos.z)
         pathTrigger.isVisible = false
         pathTrigger.isPickable = false

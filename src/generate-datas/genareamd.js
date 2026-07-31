@@ -123,7 +123,7 @@ function makeGrid() {
  * Stakes along all 4 sides. entryDir / exitDir each open a doorWidth-wide gap
  * at the centre of that side so a gate mesh can be placed there.
  */
-function buildPalisade(width, height, spacing, stakeHeight, stakeRadius, entryDir, exitDir, doorWidth) {
+function buildPalisade(width, height, spacing, stakeHeight, stakeRadius, entryDir, exitDir, doorWidth, staggered = true) {
     const stakes = [];
     let id = 0;
 
@@ -168,21 +168,24 @@ function buildPalisade(width, height, spacing, stakeHeight, stakeRadius, entryDi
     for (let z = -halfH + spacing; z < halfH; z += spacing)
         if (!inGap(z, 'east')) addStake( halfW, z);
 
-    // Back row — offset inward by 1.5 units, staggered by half-spacing to fill gaps
-    const rowOffset = 1.5;
-    const halfS = spacing / 2;
+    // Back row — offset inward by 1.5 units, staggered by half-spacing to fill gaps.
+    // Skipped for a single straight row (e.g. the outer wall ring).
+    if (staggered) {
+        const rowOffset = 1.5;
+        const halfS = spacing / 2;
 
-    for (let x = -halfW + halfS; x <= halfW; x += spacing)
-        if (!inGap(x, 'north')) addStake(x,  halfH - rowOffset);
+        for (let x = -halfW + halfS; x <= halfW; x += spacing)
+            if (!inGap(x, 'north')) addStake(x,  halfH - rowOffset);
 
-    for (let x = -halfW + halfS; x <= halfW; x += spacing)
-        if (!inGap(x, 'south')) addStake(x, -(halfH - rowOffset));
+        for (let x = -halfW + halfS; x <= halfW; x += spacing)
+            if (!inGap(x, 'south')) addStake(x, -(halfH - rowOffset));
 
-    for (let z = -halfH + spacing + halfS; z < halfH; z += spacing)
-        if (!inGap(z, 'west')) addStake(-(halfW - rowOffset), z);
+        for (let z = -halfH + spacing + halfS; z < halfH; z += spacing)
+            if (!inGap(z, 'west')) addStake(-(halfW - rowOffset), z);
 
-    for (let z = -halfH + spacing + halfS; z < halfH; z += spacing)
-        if (!inGap(z, 'east')) addStake( halfW - rowOffset, z);
+        for (let z = -halfH + spacing + halfS; z < halfH; z += spacing)
+            if (!inGap(z, 'east')) addStake( halfW - rowOffset, z);
+    }
 
     return { stakeHeight, stakeRadius, spacing, doorWidth, stakes };
 }
@@ -469,6 +472,10 @@ export function generateArea({
     palisadeStakeRadius  = 1.1,
     palisadeMargin       = 6,
     palisadeDoorWidth    = 8,
+    // second, shorter wall ring further out - the inner palisade alone isn't
+    // enough of a barrier in some layouts
+    outerWallOffset      = 2,
+    outerWallHeightRatio = 0.5,
     // enclosed room
     wallHeight = 0,
     difficulty = 1,
@@ -631,6 +638,20 @@ export function generateArea({
                 // Full outer extent so createVillage can size the ground to match.
                 outerWidth:  width  + palisadeMargin * 2,
                 outerHeight: height + palisadeMargin * 2,
+              }
+            : null,
+        // Second perimeter ring, further out and shorter than the main palisade -
+        // same door gaps (entry/exit) so it doesn't block the portal paths.
+        outerPalisade: isVillage
+            ? {
+                ...buildPalisade(
+                    width  + (palisadeMargin + outerWallOffset) * 2,
+                    height + (palisadeMargin + outerWallOffset) * 2,
+                    palisadeSpacing, palisadeStakeHeight * outerWallHeightRatio, palisadeStakeRadius,
+                    entry, exit, palisadeDoorWidth, false,
+                ),
+                outerWidth:  width  + (palisadeMargin + outerWallOffset) * 2,
+                outerHeight: height + (palisadeMargin + outerWallOffset) * 2,
               }
             : null,
 

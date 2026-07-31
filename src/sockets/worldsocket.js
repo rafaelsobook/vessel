@@ -46,7 +46,8 @@ let containers = {
 
     goblinRoot: null,
     monolithRoot: null,
-    slimeRoot: null
+    slimeRoot: null,
+    lesserDemonRoot: null
 }
 
 
@@ -78,7 +79,8 @@ export function resetArray(){
 
         goblinRoot: null,
         monolithRoot: null,
-        slimeRoot: null
+        slimeRoot: null,
+        lesserDemonRoot: null
     }
 }
 export function setSocketContainers(newContainers){
@@ -425,11 +427,14 @@ export function activateOnSocketListeners(socket){
         let enemyToChase = enemiez.find(enem => enem._id === data._id)
         if (!enemyToChase) return
         enemyToChase._targetId = data.targetId
+
         if (data.actionType === "idle") {
             enemyToChase._isMoving = false
             enemyToChase._attacking = true
         } else {
-            enemyToChase._isMoving = true
+            const targetPlayer = playersOnScene.find(pl => pl.owner === data.targetId)
+            const isFar = targetPlayer && Vector3.Distance(enemyToChase.body.position, targetPlayer.body.position) > 1
+            enemyToChase._isMoving = isFar
             enemyToChase._attacking = false
         }
     })
@@ -612,10 +617,12 @@ export function reCreateMeshesInScene() {
         if (isAlreadyHere) return 
         const enemyMesh = sceneDet.scene.getMeshByName(`enemy.${enemTcpInfo._id}`)
         if(enemyMesh) return 
+        console.log(enemTcpInfo)
         const enemy = createEnemy(scene, enemTcpInfo)
         // enemy._targetId = characterState._id
         // enemy._isMoving = true
-        enemiez.push(enemy)
+        console.log(`${enemy.name}, pos: `, enemy.body.position)
+        if(enemy) enemiez.push(enemy)
     })
     if(characterState.currentPlace.placeId !== 9) return
     allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest))

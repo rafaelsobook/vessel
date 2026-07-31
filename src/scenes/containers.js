@@ -2,12 +2,26 @@ import {SceneLoader} from "@babylonjs/core"
 import { loadAvatarContainer, loadMeshOnlyParts } from "../tools/loadmodel"
 import { setSocketContainers } from "../sockets/worldsocket"
 
+// monster model containers are added incrementally as new enemy types get
+// modeled - a not-yet-added glb (404) shouldn't take the whole scene down
+// with it, since setStartingContainers loads everything (avatar body,
+// weapons, helmets...) in one sequence
+async function loadMonsterRoot(path, scene){
+    try {
+        return await loadAvatarContainer(path, scene)
+    } catch (error) {
+        console.warn(`[containers] monster model missing/failed to load: "${path}"`, error)
+        return null
+    }
+}
+
 export async function setStartingContainers(scene){
     try {
         const animeBodyContainer = await loadAvatarContainer("./models/avatar/avatar.glb", scene)
-        let goblinRoot = await loadAvatarContainer("./models/monsters/goblin.glb", scene)
-        let monolithRoot = await loadAvatarContainer("./models/monsters/monolith.glb", scene)
-        let slimeRoot = await loadAvatarContainer("./models/monsters/slime.glb", scene)
+        let goblinRoot = await loadMonsterRoot("./models/monsters/goblin.glb", scene)
+        let monolithRoot = await loadMonsterRoot("./models/monsters/monolith.glb", scene)
+        let slimeRoot = await loadMonsterRoot("./models/monsters/slime.glb", scene)
+        let lesserDemonRoot = await loadMonsterRoot("./models/monsters/lesserdemon.glb", scene)
 
         const HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
         const helmets = await SceneLoader.ImportMeshAsync("", "./models/helmets/", "helmets.glb", scene)
@@ -33,7 +47,8 @@ export async function setStartingContainers(scene){
 
             goblinRoot,
             monolithRoot,
-            slimeRoot
+            slimeRoot,
+            lesserDemonRoot
         })
         return { animeBodyContainer }
     } catch (error) {

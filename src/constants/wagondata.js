@@ -3,6 +3,7 @@ import { getCharState, updateMyDetailsOL } from '../charactersystem/charactersta
 import { checkIfTokenSaved } from '../tools/tools.js'
 import { exitScene } from '../sockets/exitsocket.js'
 import { changeScene } from '../main/main.js'
+import { findPlaceMetaData } from '../states/placestates.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Doran", isLeft: false, message }))
@@ -48,7 +49,8 @@ export function wagonData(){
             answers: [],
             cb: async () => {
                 // same transition procedure areascene.js's roomPaths trigger uses
-                const { placeId, name, areaType, startingPos } = TRAVEL_DESTINATION
+                const { placeId, name, areaType, startingPos } = findPlaceMetaData(888)
+                
                 const charState = getCharState()
 
                 charState.currentPlace.placeId = placeId

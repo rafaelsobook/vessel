@@ -18,7 +18,7 @@ import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
 import { createBloodParticle, createBloodSplatter, createCustomizedSmoke } from '../tools/particlesystem';
 import { CharacterAnimations } from '../tools/animation';
-import { createMesh } from '../creations/creationTools';
+import { createMesh, putFakeShadow } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 import { attachLightning } from '../effects/lightning';
 
@@ -81,6 +81,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
 
+    let fakeShadowRoot = scene.getMeshByName("fakeShadow")
+    
+    if(fakeShadowRoot) putFakeShadow(body, fakeShadowRoot, 1, -capsuleHeight / 2 + 0.02)
     // npcs never reach a code path that grants/activates skills, and auraz isn't
     // even part of the isNpc return value below - two 8000-capacity particle
     // systems were getting built and immediately stopped for every single npc
@@ -365,7 +368,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     // sec.emitter =spineBone
     // bloodps.position.y += 1
     
-    
+    nameMesh.isVisible =false
     return {
         det,
         owner: det.owner,

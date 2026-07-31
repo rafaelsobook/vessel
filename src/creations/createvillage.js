@@ -240,7 +240,7 @@ function spawnNonPhysics(scene, items, mainMesh, yRotOffset = 0) {
 function buildPalisade(scene, palisade, woodenstake, namePrefix) {
     if (!palisade?.stakes?.length) return;
 
-    const { stakeHeight, stakeRadius, stakes } = palisade;
+    const { stakes } = palisade;
     woodenstake.isVisible = false
 
     stakes.forEach(stake => {
@@ -252,6 +252,44 @@ function buildPalisade(scene, palisade, woodenstake, namePrefix) {
 
         // Static physics so player cannot walk through the wall
         const agg = new PhysicsAggregate(inst, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+        agg.shape.material = { restitution: 0, friction: 1 };
+    });
+}
+// ─── Outer wall (boxes) ─────────────────────────────────────────────────────────
+/**
+ * Builds the outer wall ring from instanced boxes instead of stake meshes -
+ * a plainer, shorter defensive barrier further out than the main palisade.
+ * One hidden template box is instanced per position (still just instancing,
+ * same as the stake wall - no per-mesh geometry duplication). Square
+ * footprint (width === depth) so the same template works on every side of
+ * the perimeter without needing per-side rotation.
+ *
+ * @param {BABYLON.Scene} scene
+ * @param {object}        outerPalisade - from village.outerPalisade
+ * @param {string}        namePrefix
+ */
+function buildOuterWall(scene, outerPalisade, namePrefix) {
+    if (!outerPalisade?.stakes?.length) return;
+
+    const { stakeHeight, spacing, stakes } = outerPalisade;
+    const boxSize = spacing * 1.1; // slight overlap so adjacent boxes leave no gap
+
+    const template = MeshBuilder.CreateBox(`${namePrefix}_box_template`, {
+        width: boxSize, height: stakeHeight, depth: boxSize,
+    }, scene);
+    const mat = new StandardMaterial(`${namePrefix}_boxMat`, scene);
+    mat.diffuseColor = new Color3(0.35, 0.32, 0.28);
+    template.material = mat;
+    template.isVisible = false;
+
+    stakes.forEach(stake => {
+        const inst = template.createInstance(`${namePrefix}_${stake.id}`);
+        // box pivot is centered (unlike the stake mesh, which pivots at its
+        // base) - lift by half its height so it sits on the ground, not y=0
+        inst.position  = new Vector3(stake.x, stakeHeight / 2, stake.z);
+        inst.isVisible = true;
+
+        const agg = new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
         agg.shape.material = { restitution: 0, friction: 1 };
     });
 }
@@ -395,11 +433,14 @@ export function createVillage(scene, village, assetRegistry = {}, characterBody)
     // applyLighting(scene, village.lighting, prefix);
 
     // ── 2. Ground ─────────────────────────────────────────────────────────────
-    buildFloor(scene, village.layout, village.palisade, prefix);
+    // size to whichever ring is outermost - the new outer wall extends past
+    // the inner palisade, and buildFloor only reads outerWidth/outerHeight
+    buildFloor(scene, village.layout, village.outerPalisade ?? village.palisade, prefix);
 
     // console.log(village.paths)
 
     buildPalisade(scene, village.palisade, assetRegistry.woodenstake, prefix);
+    buildOuterWall(scene, village.outerPalisade, `${prefix}_outerwall`);
     buildGates(scene, village.palisade, village.entry, village.exit, entryExitPlaceIds, characterBody, assetRegistry.gate);
 
     // ── 4. Props ──────────────────────────────────────────────────────────────

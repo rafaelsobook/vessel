@@ -269,7 +269,7 @@ export const questions = [
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
 
-                const armorToObtain = [swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem]
+                const armorToObtain = [swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem, lightArmorItem]
                 obtainAll([farmhatItem, laurietsHatItem, armorToObtain[Math.floor(Math.random()*armorToObtain.length)], swordsData[Math.floor(Math.random()*swordsData.length)] ])
 
                 startQuestionare(2)
@@ -352,6 +352,30 @@ var armorItem = {
     desc: undefined,
     rarity: "rare",
     metalColor: METAL_COLOR.ADAMANTINE
+}
+var lightArmorItem = {
+    itemId: randomNum(), // should be string also in client
+    name: "lightarmor", // is also the image name
+    dn: "Light Armor",
+    itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+    weaponType: undefined,
+    equipAbilities: {
+        dmg: 0, def: 10, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+    }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+    equiped: false,
+    soulFeed: 0,
+    isEnhanceAble: true, // only for equipable items
+    enhancedLevel: 0,
+    slots: [],// { name, dn, equipAbilities } cores
+    durability: { current: 100, max: 100},
+    price: { coinType: "bronze", pieces: 7 },
+    qnty: 1,
+    desc: "A light and flexible armor favoring mobility over raw protection.",
+    rarity: "common",
+    metalColor: METAL_COLOR.STEEL
 }
 var pauldronItem = {
     itemId: randomNum(), // should be string also in client
@@ -512,6 +536,6 @@ var swordItem = {
 }
 
 export {
-    farmhatItem, laurietsHatItem, armorItem, pauldronItem,
+    farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
     gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
 }

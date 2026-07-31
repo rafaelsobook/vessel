@@ -8,7 +8,7 @@ import { swordsData } from "../staticRecources/swordsdata.js"
 import toSellCatalog from "../staticRecources/toSell.js"
 import { createLootItem, lootNames } from "../staticRecources/resourceLoot.js"
 import {
-    farmhatItem, laurietsHatItem, armorItem, pauldronItem,
+    farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
     gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
 } from "../constants/questions.js"
 
@@ -131,7 +131,7 @@ export function obtainAll(itemsArray){
 // same id instead of a distinct inventory entry.
 const EXCLUDED_SHOP_ITEMS = ["silverwood", "daedalus", "knightaxe"]
 const questArmorItems = [
-    farmhatItem, laurietsHatItem, armorItem, pauldronItem,
+    farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
     gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
 ]
 

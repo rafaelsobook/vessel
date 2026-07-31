@@ -44,25 +44,36 @@ let spRegenInterval
 let hungerInterval
 let restInterval
 
-let addStats = {
-    totalHpRegen: 0,
-    totalMpRegen: 0,
-    totalSpRegen: 0,
+// shared by the initial declaration below AND gameOver()'s reset - both need
+// the FULL shape (additionalMeeleeDmg/additionalMagicDmg/additionalDefense
+// are objects, not numbers). gameOver() used to reset addStats to a
+// hand-picked subset of fields, which left those three undefined and crashed
+// summarizeStats() the next time getTotal() ran (updateMP_UI's regen tick,
+// or updateHpMpSp_UI() called from within gameOver() itself) - the crash
+// happening synchronously mid-gameOver() meant everything after it (server
+// delete, deadCount++, the death screen, persisting the revive state) never ran.
+function getDefaultAddStats(){
+    return {
+        totalHpRegen: 0,
+        totalMpRegen: 0,
+        totalSpRegen: 0,
 
-    additionalHp:0, // worked
-    additionalMp:0,
-    additionalSp:0, // worked
-    additionalSpd:0,
-    additionalAtkSpd:0,
+        additionalHp:0, // worked
+        additionalMp:0,
+        additionalSp:0, // worked
+        additionalSpd:0,
+        additionalAtkSpd:0,
 
-    additionalMeeleeDmg:{ toAdd: 0, percent: 0, },
-    additionalMagicDmg:{ toAdd: 0, percent: 0, },
-    additionalDefense:{ toAdd: 0, percent: 0, },
-    
-    additionalAccuracy:0,
-    additionalCrit: 0,
-    resistances: []
-} 
+        additionalMeeleeDmg:{ toAdd: 0, percent: 0, },
+        additionalMagicDmg:{ toAdd: 0, percent: 0, },
+        additionalDefense:{ toAdd: 0, percent: 0, },
+
+        additionalAccuracy:0,
+        additionalCrit: 0,
+        resistances: []
+    }
+}
+let addStats = getDefaultAddStats()
 export function getCharState(_characterDetail){
     return characterState
 }
@@ -270,6 +281,13 @@ export function activateLifeSystem(){
 }
 export function summarizeStats(){
     // if(getGameStatus() === "gameover") return
+    try {
+        summarizeStatsUnsafe()
+    } catch (err) {
+        console.warn("[summarizeStats] failed to apply ability stat totals", err)
+    }
+}
+function summarizeStatsUnsafe(){
     const {hp,maxHp,mp, maxMp,sp,maxSp,stats} = characterState
 
     const {
@@ -450,17 +468,21 @@ export async function gameOver(){
     characterState.mp = 0
     characterState.sp = 0
 
-    addStats = {
-        additionalHp:0,
-        additionalMp:0,
-        additionalSp:0,
-    } 
+    addStats = getDefaultAddStats()
 
     characterState.survival.hunger = 0
     characterState.survival.sleep = 0
-    updateHpMpSp_UI()
-    updateSurvival_UI()
-    updateHPMPSP_UI_ALLZERO()
+
+    // UI refresh is best-effort here - a failure in it must not skip the
+    // server-side cleanup below (character delete, revive-state persist),
+    // which is what actually matters for game state
+    try {
+        updateHpMpSp_UI()
+        updateSurvival_UI()
+        updateHPMPSP_UI_ALLZERO()
+    } catch (err) {
+        console.warn("[gameOver] UI update failed, continuing with cleanup", err)
+    }
 
     const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
     characterState.deadCount++
