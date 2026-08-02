@@ -94,3 +94,18 @@ export function setWorldChatAvailable(isAvailable){
     chatToggleBtn.style.display = isAvailable ? "block" : "none"
     openCloseChatContainer(isAvailable)
 }
+
+// used by uimanagement.js's hideShowAllScreenUI - saves/restores whatever
+// display setWorldChatAvailable last put it in, instead of forcing it back
+// to visible, so a temporary full-UI hide can't make the toggle button
+// reappear in a place where world chat isn't available at all
+let toggleBtnDisplayBeforeHide = null
+export function hideShowChatToggleBtn(hide){
+    if(hide){
+        toggleBtnDisplayBeforeHide = chatToggleBtn.style.display
+        chatToggleBtn.style.display = "none"
+    }else if(toggleBtnDisplayBeforeHide !== null){
+        chatToggleBtn.style.display = toggleBtnDisplayBeforeHide
+        toggleBtnDisplayBeforeHide = null
+    }
+}

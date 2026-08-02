@@ -12,6 +12,7 @@ import { getGameStatus } from "../main/main.js"
 import { openCloseSkills } from "../components/skillsui.js"
 import { getIsGrounded } from "../controllers/inputMovement.js"
 import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSliders.js"
+import { openCloseChatContainer, hideShowChatToggleBtn } from "../components/worldChatSystem.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -36,8 +37,11 @@ export function closeAllPopupAndUI(){
 }
 export function hideShowAllScreenUI(_isVisible = false){
     showHideIcons(_isVisible ?  "block" : "none")
-    disableEnableAttackButtonsContainer(false, !_isVisible)
+    disableEnableAttackButtonsContainer(_isVisible, !_isVisible)
     openCloseLifeDisplay(_isVisible)
+    openCloseChatContainer(_isVisible)
+    showHideOutputSliders(_isVisible ? "flex" : "none")
+    hideShowChatToggleBtn(!_isVisible)
 }
 export function openCloseLifeDisplay(_isVisible){
     lifeManaStamCont.style.display = _isVisible ? "block":"none"

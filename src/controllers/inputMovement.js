@@ -1,4 +1,5 @@
-import { Quaternion, MeshBuilder, Vector3 } from '@babylonjs/core';
+import { Quaternion, MeshBuilder, Vector3, FreeCamera } from '@babylonjs/core';
+import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
@@ -13,6 +14,7 @@ import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
 import { obtain, giveAllItems } from '../charactersystem/inventory';
 import { METAL_COLOR } from '../tools/metalmat';
+import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
 
 let aggregate = null
 let myPlayer = null
@@ -108,6 +110,12 @@ function setupControls(scene, allsounds) {
     const charState = getCharState()
     const placeDetail = findMyCurrentPlace()
     const areaType = placeDetail.areaType;
+
+    // dedicated camera for cinematic camera-tricks (e.g. "1" below) - kept
+    // separate from the gameplay ArcRotateCamera so a trick can freely take
+    // over scene.activeCamera and hand it back to `camera` when it's done
+    const trickCamera = new FreeCamera("camTrickCam", camera.position.clone(), scene)
+    const camTrick = createCamTricks(trickCamera, camera)
     
     let runsound
     if(areaType === "room"){
@@ -115,7 +123,7 @@ function setupControls(scene, allsounds) {
     }else runsound = allsounds.runningS
     
 
-    let walkSpeed = 0.8;
+    let walkSpeed = 1.1;
     let sprintSpeed = 30;
     let currentSpeed = walkSpeed;
     let isMoving = false;
@@ -346,12 +354,47 @@ function setupControls(scene, allsounds) {
             case "c":
                 console.log("players ", getPlayersOnScene())
                 clearLocTimeOut()
-                            myPlayer.body.position.x = 0
-            myPlayer.body.position.z = 200
-            myPlayer.body.position.y = 20
+                myPlayer.body.position.x = 0
+                myPlayer.body.position.z = 200
+                myPlayer.body.position.y = 20
             break
             case "i":
                 giveAllItems()
+            break
+            case "1":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickOne(scene, myPlayer.body, {
+                    duration: 4,
+                    behindHeight: 0,
+                    frontHeight: 0,
+                    behindDistance: 11,
+                    onComplete: () => {
+                        console.log("trick 1 complete")
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "2":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickTwo(scene, myPlayer.body, {
+                    startRadius: 10,
+                    endRadius: 10,
+                    duration: 8,
+                    direction: -1,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "3":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickThree(scene, myPlayer.body, {
+                    startHeight: -capsuleHeight / 2,
+                    endHeight: capsuleHeight / 2 + 0.3,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
             break
         }
 
@@ -500,6 +543,8 @@ function setupControls(scene, allsounds) {
             joystickTexture.dispose();
             scene.onBeforePhysicsObservable.remove(physicsObserver);
             clearInterval(checkFallInVoidTimeout);
+            camTrick.stop();
+            trickCamera.dispose();
         }
     }
 }
