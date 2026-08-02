@@ -16,7 +16,7 @@ const TRAVEL_DESTINATION = {
     placeId: 888,
     name: "Wilderness",
     areaType: "openworld",
-    startingPos: { x: 0.6, y: 5, z: -10 },
+    spawn: { x: 0.6, y: 5, z: -10 },
 }
 
 const doranOpener = [
@@ -49,17 +49,18 @@ export function wagonData(){
             answers: [],
             cb: async () => {
                 // same transition procedure areascene.js's roomPaths trigger uses
-                const { placeId, name, areaType, startingPos } = findPlaceMetaData(888)
+
+                const { placeId, meta, areaType, spawn } = findPlaceMetaData(888)
                 
                 const charState = getCharState()
 
                 charState.currentPlace.placeId = placeId
-                charState.currentPlace.name = name
+                charState.currentPlace.name = meta.name
                 charState.currentPlace.areaType = areaType
 
-                charState.x = startingPos.x
-                charState.y = startingPos.y
-                charState.z = startingPos.z
+                charState.x = spawn.x
+                charState.y = spawn.y
+                charState.z = spawn.z
 
                 await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
                 exitScene(charState.owner)

@@ -1,15 +1,16 @@
-import { Scene, HemisphericLight, Vector3, ArcRotateCamera, SceneLoader, LoadAssetContainerAsync, MeshBuilder, DirectionalLight, Quaternion, Color3 } from "@babylonjs/core";
+import { Scene, HemisphericLight, Vector3, ArcRotateCamera, SceneLoader, LoadAssetContainerAsync, MeshBuilder, DirectionalLight, Quaternion, Color3, ShadowGenerator } from "@babylonjs/core";
 import { getEngine, setGameStatus } from "../main/main";
 import { createArcCam } from "../tools/camera";
 import { avatarGlBpath } from "../constants/constants";
 import { showCreateCharacterPage } from "../pages/createcharacterpage";
 import * as GUI from "@babylonjs/gui"
-import { createColorMat, createMatV2 } from "../tools/materials";
+import { createColorMat, createMat, createMatV2 } from "../tools/materials";
 import { createColorPicker } from "../gui/colorpicker";
 import { playAnim, stopAllAnim } from "../tools/animation";
 import { checkIfTokenSaved } from "../tools/tools.js";
 import { createRoom } from "../creations/createroom.js";
 import { metaDatas } from "../constants/localroomdb.js"
+import { mergeAndLoadModel } from "../tools/loadmodel.js";
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
 import { SKIN_COLORS, SKIN_COLOR_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
@@ -35,6 +36,9 @@ export async function setupCharacterScene(engine){
     const spawnPos = new Vector3(0,0,0)
     const scene = new Scene(engine)
 
+    // createRoom() only builds the ground/walls for this scene (characterBody
+    // is false here, so it skips optionalObjects entirely) - the bare room
+    // otherwise has nothing lining it, so dress the perimeter with shelves.
     createRoom(scene, metaDatas[3], false, false)
 
     const hemLight = new HemisphericLight("HemiLight", new Vector3(0, 1, 0), scene);
@@ -42,7 +46,18 @@ export async function setupCharacterScene(engine){
 
     const light = new DirectionalLight("light", new Vector3(-1,-2,0 ), scene)
     light.specular = new Color3(0,0,0)
-    
+
+    const shadowGenerator = new ShadowGenerator(1024, light)
+    shadowGenerator.useBlurExponentialShadowMap = true
+    shadowGenerator.blurKernel = 16
+
+    placeCornerShelves(scene, metaDatas[3].width, metaDatas[3].height, shadowGenerator)
+    // placeCornerShelves only insets 2.5 units from each corner, leaving the
+    // low room wall exposed (with black void above it, since there's no
+    // ceiling/skybox) along the middle stretch of every wall - fill the one
+    // visible behind the character (north wall) with a plain textured box.
+    coverBackWallGap(scene, metaDatas[3].width, metaDatas[3].height, shadowGenerator)
+
     const cam = new ArcRotateCamera("camera",-Math.PI/2 + Math.PI/10, Math.PI/2 - 0.2,5,new Vector3(0,0.8,0), scene)
     // cam.attachControl()
 
@@ -116,7 +131,12 @@ export async function setupCharacterScene(engine){
     })
     HairModel.meshes[0].dispose()
 
-    
+    // registered after the hair model is loaded/parented (not right after
+    // container.addAllToScene()) so addShadowCaster's recursive includeChildren
+    // walk actually finds it - it's parented under headBone, a descendant of
+    // meshes[0], not attached yet at that earlier point
+    shadowGenerator.addShadowCaster(meshes[0], true)
+
     stopAllAnim(animationGroups)
     playAnim(animationGroups, "idle", true)
     // hideOrDisposeAllByGroupNames(meshes[0].getChildren(), ["armor", "gear"], true)
@@ -186,6 +206,70 @@ export async function setupCharacterScene(engine){
     })
     disableEnableAttackButtonsContainer(false, true)
     return {scene, isSocketOn: false}
+}
+
+// Lines the room's perimeter with shelves near each corner - two per corner
+// (one along each of its two adjoining walls), instanced off one hidden
+// template. Rotation assumes the shelf model's authored front faces +Z;
+// nudge the four rotation values below if it's actually flush against the
+// wrong wall once you see it in-scene.
+async function placeCornerShelves(scene, width, height, shadowGenerator){
+    // mergeAndLoadModel (not loadModel, which assumes a single simple mesh) -
+    // same convention used for every other multi-part decor prop (houses,
+    // trees, poles, gates in assetregistry.js) - merges the glb's parts into
+    // one instanceable mesh instead of risking orphaned sub-meshes.
+    const template = await mergeAndLoadModel("./models/indors/shelves.glb", scene)
+    template.isVisible = false
+
+    const halfW = width / 2
+    const halfH = height / 2
+    const wallInset  = 0.9  // clears the wall's own thickness so it doesn't clip
+    const cornerInset = 2.5 // distance along the wall away from the exact corner
+
+    const ROT = { north: Math.PI, south: 0, east: Math.PI / 2, west: -Math.PI / 2 }
+
+    const placements = [
+        // NW corner
+        { x: -halfW + cornerInset, z:  halfH - wallInset,  rot: ROT.north },
+        { x: -halfW + wallInset,   z:  halfH - cornerInset, rot: ROT.west },
+        // NE corner
+        { x:  halfW - cornerInset, z:  halfH - wallInset,  rot: ROT.north },
+        { x:  halfW - wallInset,   z:  halfH - cornerInset, rot: ROT.east },
+        // SW corner
+        { x: -halfW + cornerInset, z: -halfH + wallInset,  rot: ROT.south },
+        { x: -halfW + wallInset,   z: -halfH + cornerInset, rot: ROT.west },
+        // SE corner
+        { x:  halfW - cornerInset, z: -halfH + wallInset,  rot: ROT.south },
+        { x:  halfW - wallInset,   z: -halfH + cornerInset, rot: ROT.east },
+    ]
+
+    placements.forEach((p, i) => {
+        const inst = template.createInstance(`corner_shelf_${i}`)
+        inst.position = new Vector3(p.x, 0, p.z)
+        inst.rotation.y = p.rot
+        inst.isVisible = true
+        inst.receiveShadows = true
+        if(shadowGenerator) shadowGenerator.addShadowCaster(inst)
+    })
+}
+
+// Fills the gap placeCornerShelves leaves along the middle of the north wall
+// (the room's actual wall is only WALL_HEIGHT=0.5 tall, so that stretch is
+// otherwise just black void above a low curb) with a plain textured box.
+function coverBackWallGap(scene, width, height, shadowGenerator){
+    const cornerInset = 2.5 // must match placeCornerShelves' own inset
+    const fillHeight = 8
+    const fillDepth = 0.3
+
+    const wallMat = createMat("charroom_backwall_fill_mat", false, "./images/modeltex/wall4.jpg", scene, { uScale: 11, vScale: 11 })
+
+    const fillWall = MeshBuilder.CreateBox("charroom_backwall_fill", {
+        width: width - cornerInset * 2, height: fillHeight, depth: fillDepth,
+    }, scene)
+    fillWall.material = wallMat
+    fillWall.position = new Vector3(0, fillHeight / 2, height / 2)
+    fillWall.receiveShadows = true
+    if(shadowGenerator) shadowGenerator.addShadowCaster(fillWall)
 }
 
 export function hideOrDisposeAllByGroupNames(meshes, groupNames = [], willDisposeAll, keepThisArmors = []){
