@@ -380,7 +380,7 @@ var lightArmorItem = {
 var pauldronItem = {
     itemId: randomNum(), // should be string also in client
     name: "ironpaul", // is also the image name
-    dn: "Iron Pauldron",
+    dn: "Arms Plate",
     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
     itemType: "pauldron", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
     weaponType: undefined,
@@ -450,6 +450,32 @@ var helmetItem = {
         rarity: "rare",
         metalColor: METAL_COLOR.ADAMANTINE
     }
+var orionHelmItem = {
+        itemId: randomNum(), // should be string also in client
+        name: "orionhelm", // is also the image name
+        modelName: "orionhelm",
+        dn: "Orion Helm",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: undefined,
+        equipAbilities: {
+            dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: { coinType: "bronze", pieces: 10 },
+        qnty: 1,
+        desc: undefined,
+        rarity: "rare",
+        metalColor: METAL_COLOR.STEEL
+    }
+
 // no matching mesh in helmets.glb yet (only "ironjaw" exists there) - same
 // situation as "bronzehelm" in npcDetails.js, createHelmet() just warns and
 // skips rendering until that mesh gets added
@@ -537,5 +563,5 @@ var swordItem = {
 
 export {
     farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
-    gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
+    gauntletItem, helmetItem, orionHelmItem, ironmaskItem, bootsItem, swordItem,
 }

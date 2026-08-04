@@ -8,6 +8,7 @@ export const METAL_TINTS = {
     gold:       new Color3(0.83, 0.68, 0.21),
     mythril:    new Color3(0.55, 0.85, 0.9),
     adamantine: new Color3(0.2, 0.55, 0.7),
+    ruby:       new Color3(0.55, 0.08, 0.1),
 }
 
 export const METAL_ROUGHNESS = {
@@ -18,6 +19,7 @@ export const METAL_ROUGHNESS = {
     gold: 0.25,
     mythril: 0.15,
     adamantine: 0.2,
+    ruby: 0.25,
 }
 
 // Name-safe keys into METAL_TINTS/METAL_ROUGHNESS (derived, not hand-copied,

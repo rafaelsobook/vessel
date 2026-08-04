@@ -128,12 +128,19 @@ export function spawnMultipleCircles(){
 
 }
 function despawnMagicCircle(disc, scene) {
+    // runs off a setTimeout (see spawnMagicCircle/createMagicCircle) - the
+    // scene can change or the disc can get cleaned up some other way before
+    // that timeout fires, leaving disc disposed (material already null) by
+    // the time this runs
+    if (!disc || disc.isDisposed() || !disc.material) return
+
     const fadeOut = new Animation("fadeOut", "material.alpha", 30, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CONSTANT)
     fadeOut.setKeys([
         { frame: 0,  value: disc.material.alpha },
         { frame: 15, value: 0 },
     ])
     scene.beginDirectAnimation(disc, [fadeOut], 0, 15, false, 1, () => {
+        if (disc.isDisposed()) return
         if (disc._glowLayer) disc._glowLayer.removeIncludedOnlyMesh(disc)
         disc.dispose()
     })

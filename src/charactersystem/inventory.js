@@ -9,8 +9,9 @@ import toSellCatalog from "../staticRecources/toSell.js"
 import { createLootItem, lootNames } from "../staticRecources/resourceLoot.js"
 import {
     farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
-    gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
+    gauntletItem, helmetItem, orionHelmItem, ironmaskItem, bootsItem, swordItem,
 } from "../constants/questions.js"
+import { METAL_COLOR } from "../tools/metalmat.js"
 
 
 const inventoryCont  = document.querySelector(".inventory-container")
@@ -130,10 +131,27 @@ export function obtainAll(itemsArray){
 // objects/arrays, so reusing their itemId as-is would give every pickup the
 // same id instead of a distinct inventory entry.
 const EXCLUDED_SHOP_ITEMS = ["silverwood", "daedalus", "knightaxe"]
-const questArmorItems = [
-    farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
-    gauntletItem, helmetItem, ironmaskItem, bootsItem, swordItem,
+const singleQuestItems = [
+    farmhatItem, laurietsHatItem, lightArmorItem, ironmaskItem, bootsItem, swordItem,
 ]
+// these four get one copy per METAL_COLOR (see below) instead of a single
+// copy - createcharacter.js's equip*() functions cache the created mesh by
+// name+metalColor, so reusing the same base name/modelName across colors is
+// safe and needs no new icon assets (the inventory icon is keyed off name,
+// which metalColor doesn't affect)
+const METAL_TINTABLE_ITEMS = [armorItem, pauldronItem, gauntletItem, helmetItem, orionHelmItem]
+
+function capitalize(str){
+    return str.charAt(0) + str.slice(1).toLowerCase()
+}
+function withEveryMetalColor(baseItem){
+    return Object.entries(METAL_COLOR).map(([colorKey, metalColor]) => ({
+        ...baseItem,
+        itemId: randomNum(),
+        dn: `${baseItem.dn} (${capitalize(colorKey)})`,
+        metalColor,
+    }))
+}
 
 export function giveAllItems(){
     const allItems = [
@@ -142,7 +160,8 @@ export function giveAllItems(){
             .filter(({ name }) => !EXCLUDED_SHOP_ITEMS.includes(name))
             .map(({ sellerId, ...itm }) => ({ ...itm, itemId: randomNum() })),
         ...lootNames.map(name => createLootItem(name)),
-        ...questArmorItems.map(itm => ({ ...itm, itemId: randomNum() })),
+        ...singleQuestItems.map(itm => ({ ...itm, itemId: randomNum() })),
+        ...METAL_TINTABLE_ITEMS.flatMap(withEveryMetalColor),
     ]
     obtainAll(allItems)
 }

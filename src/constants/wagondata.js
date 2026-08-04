@@ -58,6 +58,7 @@ export function wagonData(){
                 charState.currentPlace.name = meta.name
                 charState.currentPlace.areaType = areaType
 
+                console.log(spawn)
                 charState.x = spawn.x
                 charState.y = spawn.y
                 charState.z = spawn.z

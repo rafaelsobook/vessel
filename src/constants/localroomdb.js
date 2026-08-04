@@ -511,6 +511,13 @@ export const metaDatas = [
                 pos: {x: -1.5, y: 3, z: 497},
                 startingPos: {x: 11, y: 1.75, z: -6}
             },
+
+            {
+                placeId: 12,
+                name: "Dungeon",
+                areaType: "dungeon",
+                pos: {x: -1.5, y: 3, z: 510}
+            },
         ],
         resources: [
             // {

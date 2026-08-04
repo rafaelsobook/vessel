@@ -4,7 +4,7 @@ import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
-import { checkIfTokenSaved, randomNum, stopAnim } from '../tools/tools';
+import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { ANIM_STATE, playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
@@ -12,9 +12,9 @@ import { runSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
-import { obtain, giveAllItems } from '../charactersystem/inventory';
-import { METAL_COLOR } from '../tools/metalmat';
+import { giveAllItems } from '../charactersystem/inventory';
 import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
+import { attachLightning } from '../effects/lightning';
 
 let aggregate = null
 let myPlayer = null
@@ -23,6 +23,12 @@ let saveLocTimeout
 let checkFallInVoidTimeout = undefined
 let isGroundedFlag = true
 let modeBeforeAir = null
+// highest Y reached during the current airborne stretch - a jump climbs
+// before it falls, so "distance fallen" has to be measured from this peak,
+// not from wherever they left the ground
+let fallPeakY = null
+// handle returned by attachLightning() - toggled on/off by repeated "e" presses
+let weaponLightning = null
 
 // reused every physics tick instead of `new Vector3(...)` inline in
 // isGrounded()/updateMovement() below - both run unconditionally every tick
@@ -127,7 +133,7 @@ function setupControls(scene, allsounds) {
     let sprintSpeed = 30;
     let currentSpeed = walkSpeed;
     let isMoving = false;
-    let jumpSpeed = 5;
+    let jumpSpeed = 15;
     // both tunable to taste - raise either if small bounces/jitter still flip to "inAir" too easily
     const GROUND_CHECK_MARGIN = 0.4; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride or after a small bounce
     const GROUNDED_VELOCITY_TOLERANCE = 5.5; // upward speed still treated as "grounded" (bounce/jitter, not an actual jump - jumpSpeed is 5)
@@ -341,10 +347,11 @@ function setupControls(scene, allsounds) {
         }
         updateRotation(getCamDir());
     }
-
+    let hideUIToggle = true
     function handleKeyUp(e) {
         if(!getCanPress()) return
         const key = e.key.toLowerCase();
+        
         switch (key) {
             case "w": input.forward = 0; break;
             case "s": input.forward = 0; break;
@@ -354,23 +361,41 @@ function setupControls(scene, allsounds) {
             case "c":
                 console.log("players ", getPlayersOnScene())
                 clearLocTimeOut()
-                myPlayer.body.position.x = 0
-                myPlayer.body.position.z = 200
-                myPlayer.body.position.y = 20
+                // myPlayer.body.position.x = 0
+                // myPlayer.body.position.z = 200
+                // myPlayer.body.position.y = 20
+                hideShowAllScreenUI(hideUIToggle)
+                hideUIToggle = !hideUIToggle
+            break
+            case "e":
+                if(weaponLightning){
+                    weaponLightning.dispose()
+                    weaponLightning = null
+                } else {
+                    // swordMeshes can hold more than one cached weapon (equipSword's
+                    // per-name mesh cache, same pattern as helmet/gauntlet/pauldron) -
+                    // showHideSword only toggles isVisible on the currently-equipped
+                    // one's child meshes, so that's the reliable way to pick it out
+                    const equippedSword = myPlayer?.swordMeshes?.find(swrd => swrd.mesh.getChildMeshes().some(m => m.isVisible))
+                    if(equippedSword) weaponLightning = attachLightning(scene, equippedSword.mesh, "blue", true)
+                }
             break
             case "i":
                 giveAllItems()
             break
             case "1":
                 hideShowAllScreenUI(false)
+                myPlayer?.characterAnimations?.setMoveSpeedRatio(0.65)
                 if(myPlayer?.body) camTrick.playTrickOne(scene, myPlayer.body, {
                     duration: 4,
                     behindHeight: 0,
                     frontHeight: 0,
-                    behindDistance: 11,
+                    behindDistance: 8,
+                    lookHeight: 2,
                     onComplete: () => {
                         console.log("trick 1 complete")
                         hideShowAllScreenUI(true)
+                        // myPlayer?.characterAnimations?.setMoveSpeedRatio(1)
                     }
                 })
             break
@@ -389,8 +414,30 @@ function setupControls(scene, allsounds) {
             case "3":
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickThree(scene, myPlayer.body, {
-                    startHeight: -capsuleHeight / 2,
-                    endHeight: capsuleHeight / 2 + 0.3,
+                    startHeight: (-capsuleHeight / 2) + 1,
+                    endHeight: capsuleHeight / 2 + 0.1,
+                    duration: 8,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "4":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickFour(scene, myPlayer.body, {
+                    height: (-capsuleHeight / 2) + 1,
+                    lookHeight: (-capsuleHeight / 2) + 0.4,
+                    duration: 6,
+                    behindDistance: 2,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "5":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickFive(scene, myPlayer.body, {
+                    lookHeight: capsuleHeight / 2,
                     onComplete: () => {
                         hideShowAllScreenUI(true)
                     }
@@ -425,32 +472,6 @@ function setupControls(scene, allsounds) {
     }
 
     function performJump() {
-        var helmetItem = {
-                itemId: randomNum(), // should be string also in client
-                name: "orionhelm", // is also the image name
-                modelName: "orionhelm",
-                dn: "Orion Helm",
-                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
-                itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
-                weaponType: undefined,
-                equipAbilities: {
-                    dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
-                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
-                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
-                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
-                equiped: false,
-                soulFeed: 0,
-                isEnhanceAble: true, // only for equipable items
-                enhancedLevel: 0,
-                slots: [],// { name, dn, equipAbilities } cores
-                durability: { current: 100, max: 100},
-                price: { coinType: "bronze", pieces: 10 },
-                qnty: 1,
-                desc: undefined,
-                rarity: "rare",
-                metalColor: METAL_COLOR.steel
-            }
-        // obtain(helmetItem)
         if (!aggregate || !isGrounded()) return;
         if(myPlayer.body) console.log(myPlayer.body.position)
 
@@ -494,15 +515,32 @@ function setupControls(scene, allsounds) {
             if (!isGroundedFlag && myPlayer.mode !== "inAir") {
                 modeBeforeAir = myPlayer.mode
                 myPlayer.mode = "inAir"
+                fallPeakY = aggregate.transformNode.position.y
+                if(myPlayer.fshadow) myPlayer.fshadow.isVisible = false
                 // going airborne mid-stride - setPlayerMoving() already started this and
                 // won't be called again until the next press/release, so cut it here
                 if(runsound.isPlaying) runsound.stop()
+            } else if (!isGroundedFlag && myPlayer.mode === "inAir") {
+                // still airborne - keep tracking the highest point reached this
+                // stretch, since a jump climbs before it falls back down
+                const currentY = aggregate.transformNode.position.y
+                if (fallPeakY === null || currentY > fallPeakY) fallPeakY = currentY
             } else if (isGroundedFlag && myPlayer.mode === "inAir") {
                 myPlayer.mode = modeBeforeAir ?? "idle"
                 modeBeforeAir = null
+                if(myPlayer.fshadow) myPlayer.fshadow.isVisible = true
                 // landing while still holding a movement key - resume the sound setPlayerMoving()
                 // was blocked from starting (or was stopped from) while inAir
                 if(isMoving && !runsound.isPlaying) runsound.play()
+
+                // hard landing - only react to an actual fall, not every small
+                // hop/step off a curb
+                const FALL_IMPACT_THRESHOLD = 3
+                const fallDistance = fallPeakY !== null ? fallPeakY - aggregate.transformNode.position.y : 0
+                if (fallDistance >= FALL_IMPACT_THRESHOLD) {
+                    myPlayer.characterAnimations?.playAction(myPlayer.anims, "fallimpact", 1)
+                }
+                fallPeakY = null
             }
         }
 

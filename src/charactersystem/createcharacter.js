@@ -82,8 +82,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
 
     let fakeShadowRoot = scene.getMeshByName("fakeShadow")
-    
-    if(fakeShadowRoot) putFakeShadow(body, fakeShadowRoot, 1, -capsuleHeight / 2 + 0.02)
+
+    const fshadow = fakeShadowRoot ? putFakeShadow(body, fakeShadowRoot, 1, -capsuleHeight / 2 + 0.02) : null
     // npcs never reach a code path that grants/activates skills, and auraz isn't
     // even part of the isNpc return value below - two 8000-capacity particle
     // systems were getting built and immediately stopped for every single npc
@@ -143,7 +143,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         helmet.material = helmetMat
         helmet.getChildMeshes().forEach(mesh => mesh.material = helmetMat)
         showHideEquip(helmet, true)
-        const toPush = {name: helmetName, mesh: helmet}
+        const toPush = {name: helmetName, metalColor, mesh: helmet}
         helmetMeshes.push(toPush)
         return toPush
     }
@@ -156,7 +156,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         }
         helmetMeshes.forEach(hlm => {
             showHideEquip(hlm.mesh, false)
-            if(hlm.name === helmetToEquipName) toEquip = hlm
+            // same modelName can exist in every metal tint - cache key needs
+            // both, or equipping a differently-colored copy of a helmet
+            // that's already been worn once just reused the first mesh/
+            // material instead of creating a newly-tinted one
+            if(hlm.name === helmetToEquipName && hlm.metalColor === metalColor) toEquip = hlm
         })
         if(!toEquip) {
             toEquip = createHelmet(helmetToEquipName, metalColor, itemName)
@@ -193,7 +197,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
         const meshes = [rightGauntlet, leftGauntlet]
         meshes.forEach(mesh => showHideEquip(mesh, true))
-        const toPush = {name: gauntletName, meshes}
+        const toPush = {name: gauntletName, metalColor, meshes}
         gauntletMeshes.push(toPush)
         return toPush
     }
@@ -206,7 +210,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         }
         gauntletMeshes.forEach(gtl => {
             gtl.meshes.forEach(mesh => showHideEquip(mesh, false))
-            if(gtl.name === gauntletToEquipName) toEquip = gtl
+            // see equipHelmet - same name can exist in every metal tint
+            if(gtl.name === gauntletToEquipName && gtl.metalColor === metalColor) toEquip = gtl
         })
         if(!toEquip) {
             toEquip = createGauntlet(gauntletToEquipName, metalColor)
@@ -255,7 +260,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
         const meshes = [rightPauldron, leftPauldron]
         meshes.forEach(mesh => showHideEquip(mesh, true))
-        const toPush = {name: pauldronName, meshes}
+        const toPush = {name: pauldronName, metalColor, meshes}
         pauldronMeshes.push(toPush)
         return toPush
     }
@@ -268,7 +273,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         }
         pauldronMeshes.forEach(pld => {
             pld.meshes.forEach(mesh => showHideEquip(mesh, false))
-            if(pld.name === pauldronToEquipName) toEquip = pld
+            // see equipHelmet - same name can exist in every metal tint
+            if(pld.name === pauldronToEquipName && pld.metalColor === metalColor) toEquip = pld
         })
         if(!toEquip) {
             toEquip = createPauldron(pauldronToEquipName, metalColor)
@@ -401,6 +407,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         get hasWeapon() { return hasWeapon },
 
         bloodps,
+        fshadow,
 
         auraz
     }
