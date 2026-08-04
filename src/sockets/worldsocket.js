@@ -546,21 +546,21 @@ export function activateOnSocketListeners(socket){
 // reCreateMeshesInScene so the "quest-cancelled" handler can also call it
 // to bring a single quest's marker back without re-running the whole
 // player/enemy/quest resync.
-function createQuestPlaneMesh(quest) {
+function createQuestPlaneMesh(quest, _scene) {
     const isAlreadyHere = questsOnScene.find(q => q.questId === quest.questId)
     if (isAlreadyHere) return
 
-    const guildboard = scene.getMeshByName("guildboard")
+    const guildboard = _scene.getMeshByName("guildboard")
     if (!guildboard) return
 
-    const questPlane = MeshBuilder.CreatePlane(`quest.${quest.questId}`, { height: 0.6, width: 0.4 }, scene)
-    questPlane.material = createTransparentMat(scene, `./images/modeltex/quest/${quest.questRequirements.modelStyle}.webp`)
+    const questPlane = MeshBuilder.CreatePlane(`quest.${quest.questId}`, { height: 0.6, width: 0.4 }, _scene)
+    questPlane.material = createTransparentMat(_scene, `./images/modeltex/quest/${quest.questRequirements.modelStyle}.webp`)
     questPlane.isPickable = true
     questPlane.parent = guildboard;
     questPlane.position = new Vector3(-0.01, quest.pos.y, quest.pos.z)
     questPlane.addRotation(0, Math.PI/2,0)
 
-    questPlane.actionManager = new ActionManager(scene)
+    questPlane.actionManager = new ActionManager(_scene)
     questPlane.actionManager.registerAction(
         new ExecuteCodeAction(ActionManager.OnPickTrigger, () => showGuildQuest(quest))
     )
@@ -571,7 +571,7 @@ function createQuestPlaneMesh(quest) {
     // forces billboardMode ON (for nametags following the camera), but
     // this label should stay flush with the board like questPlane does,
     // so it's reset to NONE right after.
-    const rankLabel = createTextMesh(scene, questPlane, quest.requiredRank.rankLabel, "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
+    const rankLabel = createTextMesh(_scene, questPlane, quest.requiredRank.rankLabel, "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
     rankLabel.billboardMode = Mesh.BILLBOARDMODE_NONE
 
     questsOnScene.push({ questId: quest.questId, mesh: questPlane })
@@ -624,8 +624,12 @@ export function reCreateMeshesInScene() {
         console.log(`${enemy.name}, pos: `, enemy.body.position)
         if(enemy) enemiez.push(enemy)
     })
-    if(characterState.currentPlace.placeId !== 9) return
-    allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest))
+    console.log("currentPlace.placeId: ", characterState.currentPlace.placeId)
+    if(characterState.currentPlace.placeId === 9){
+        console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)
+
+        // allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest, sceneDet.scene))
+    }
 }
 
 
