@@ -39,6 +39,7 @@ import {
     PhysicsShapeType,
     PhysicsShapeConvexHull,
     PhysicsShapeMesh,
+    PhysicsShapeCylinder,
     PhysicsBody,
     PhysicsMotionType,
     StandardMaterial,
@@ -243,6 +244,14 @@ function buildPalisade(scene, palisade, woodenstake, namePrefix) {
     const { stakes } = palisade;
     woodenstake.isVisible = false
 
+    // One shared collision shape reused by every stake instead of a full
+    // PhysicsAggregate per stake - a village perimeter runs to ~1000 stakes,
+    // and each aggregate cooks its own Havok shape from scratch, which was
+    // real synchronous cost on every village scene load. Same shared-shape
+    // approach spawnProps() already uses for trees/houses below.
+    const sharedShape = PhysicsShapeCylinder.FromMesh(woodenstake);
+    sharedShape.material = { restitution: 0, friction: 1 };
+
     stakes.forEach(stake => {
         const inst = woodenstake.createInstance(`${namePrefix}_${stake.id}`);
         inst.position  = new Vector3(stake.x, 0, stake.z);
@@ -251,8 +260,8 @@ function buildPalisade(scene, palisade, woodenstake, namePrefix) {
         inst.isVisible = true;
 
         // Static physics so player cannot walk through the wall
-        const agg = new PhysicsAggregate(inst, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
-        agg.shape.material = { restitution: 0, friction: 1 };
+        const body = new PhysicsBody(inst, PhysicsMotionType.STATIC, false, scene);
+        body.shape = sharedShape;
     });
 }
 // ─── Outer wall (boxes) ─────────────────────────────────────────────────────────
@@ -282,6 +291,11 @@ function buildOuterWall(scene, outerPalisade, namePrefix) {
     template.material = mat;
     template.isVisible = false;
 
+    // One shared box shape reused by every segment instead of a
+    // PhysicsAggregate per instance - see buildPalisade above for why.
+    const sharedShape = PhysicsShapeBox.FromMesh(template);
+    sharedShape.material = { restitution: 0, friction: 1 };
+
     stakes.forEach(stake => {
         const inst = template.createInstance(`${namePrefix}_${stake.id}`);
         // box pivot is centered (unlike the stake mesh, which pivots at its
@@ -289,8 +303,8 @@ function buildOuterWall(scene, outerPalisade, namePrefix) {
         inst.position  = new Vector3(stake.x, stakeHeight / 2, stake.z);
         inst.isVisible = true;
 
-        const agg = new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
-        agg.shape.material = { restitution: 0, friction: 1 };
+        const body = new PhysicsBody(inst, PhysicsMotionType.STATIC, false, scene);
+        body.shape = sharedShape;
     });
 }
 // ─── Gate slabs ───────────────────────────────────────────────────────────────

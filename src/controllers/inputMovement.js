@@ -129,8 +129,8 @@ function setupControls(scene, allsounds) {
     }else runsound = allsounds.runningS
     
 
-    let walkSpeed = 1.1;
-    let sprintSpeed = 30;
+    let walkSpeed = 1;
+    let sprintSpeed = 10;
     let currentSpeed = walkSpeed;
     let isMoving = false;
     let jumpSpeed = 15;
@@ -505,6 +505,7 @@ function setupControls(scene, allsounds) {
 
     let lastEmit = 0;
     function updateMovement() {
+
         if (!aggregate) return;
         isGroundedFlag = isGrounded()
 
@@ -545,7 +546,6 @@ function setupControls(scene, allsounds) {
         }
 
         if(!getCanPress()) return
-
         aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
 
         if (isMoving) {
@@ -553,6 +553,14 @@ function setupControls(scene, allsounds) {
             fwd.y = 0;
             fwd.normalize();
             const vel = aggregate.body.getLinearVelocity();
+
+            // setLinearVelocity takes a rate (units/second), not a per-frame
+            // delta - Havok's own integrator already multiplies this by real
+            // elapsed time each physics substep, which is what makes this
+            // framerate-independent already. Scaling it by deltaTime here
+            // would double-apply time scaling (and onBeforePhysicsObservable,
+            // which this runs on, fires once per fixed-size physics substep,
+            // not once per render frame - not a 1:1 deltaTime to begin with).
             _velocityVec.set(fwd.x * currentSpeed, vel.y, fwd.z * currentSpeed)
             aggregate.body.setLinearVelocity(_velocityVec);
             const now = performance.now();

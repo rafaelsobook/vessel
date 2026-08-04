@@ -161,7 +161,7 @@ export async function areaScene(placeDetail){
      
             }, 1000)
 
-            // showGamePerformanceUI(scene.getEngine(), scene, chunks)
+            showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
             console.log('[terrain] physics plugin=', scene.getPhysicsEngine()?.getPhysicsPlugin?.()?.name,
                 ' gravity=', scene.getPhysicsEngine()?.gravity?.asArray?.())
@@ -199,7 +199,15 @@ export async function areaScene(placeDetail){
     }
 
     if(placeDetail.optionalObjects && placeDetail.optionalObjects.length > 0){
-        placeDetail.optionalObjects.forEach(async item => {
+        // awaited (not fire-and-forget forEach) - joinWorld() below tells the
+        // server we've arrived, which triggers a "userJoined" broadcast back
+        // that calls createQuestPlaneMesh() looking for the "guildboard" mesh
+        // by name. Without this await, whether that mesh exists yet came down
+        // to a race between this GLB load and the socket round-trip - one a
+        // warm/already-connected socket (i.e. any in-app scene transition,
+        // as opposed to a fresh page load where the socket has to connect
+        // first) usually won, leaving the board silently blank.
+        await Promise.all(placeDetail.optionalObjects.map(async item => {
             if (item.name.includes("particle_fire")) {
                 createFireParticles(item.position, scene)
                 return
@@ -249,7 +257,7 @@ export async function areaScene(placeDetail){
             } else {
                 console.log(`[${item.name}] material type:`, model.material?.getClassName())
             }
-        })
+        }))
     }
 
     // MINEABLE RESOURCES (ore etc.) - walk up to one, interact button shows up,

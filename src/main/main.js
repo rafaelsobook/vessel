@@ -90,7 +90,8 @@ export async function startScene(willCreateCharacter){
     // whole <html>, not just the canvas - fullscreening only the canvas would
     // hide every sibling HTML overlay (HUD, chat, dialogue, touch buttons)
     // since fullscreen only renders the requested element's own subtree
-    document.documentElement.requestFullscreen?.().catch(() => {})
+    // uncomment this if you have fully implemented mobile or game is 60% completion
+    // document.documentElement.requestFullscreen?.().catch(() => {})
 
     hideShowAllScreenUI()
     await initEngine()

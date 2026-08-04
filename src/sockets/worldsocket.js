@@ -66,6 +66,13 @@ export function resetArray(){
     enemiez = []
     npcz = []
     projectilesOnScene = []
+    // createQuestPlaneMesh dedupes against this by questId - the meshes it
+    // tracks get destroyed along with the rest of the old scene on every
+    // transition (changeScene() disposes the whole scene), but without
+    // clearing this too the stale questId entries survive and make
+    // createQuestPlaneMesh silently skip re-creating them next time you're
+    // back in a quest-board place
+    questsOnScene = []
     containers = {
         hairs: null,
         animeBody: null,
@@ -628,7 +635,7 @@ export function reCreateMeshesInScene() {
     if(characterState.currentPlace.placeId === 9){
         console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)
 
-        // allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest, sceneDet.scene))
+        allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest, sceneDet.scene))
     }
 }
 
