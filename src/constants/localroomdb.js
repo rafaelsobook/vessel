@@ -63,6 +63,26 @@ export const metaDatas = [
                     {name: "potatoe", tex:"potatoe", uScale: 1, lighten: 2},
                 ], 
                 glbPath:"./models/outdors/smallmarket.glb"
+            },
+            {
+                pos: {x: 28, y: 0, z: -43},
+                rot: Math.PI/2,
+                textures: [
+                    {name: "roof", tex:"iron2", uScale: 3, lighten: 1.5},
+                    {name: "housebody", tex:"sement2", uScale: 3, lighten: 1.5}
+                ],
+                glbPath: "./models/outdors/weaponHouse.glb"
+            },
+            {
+                pos: {x: 29, y: 0, z: -42},
+                rot: Math.PI,
+                textures: [
+                    {name: "iron", tex:"rockTex", uScale: 3, lighten: 1.5},
+                    {name: "fabric", tex:"fabric1", uScale: 3, lighten: 1.5},
+                    {name: "metalforge", tex:"iron2", uScale: 3, lighten: 1.5},
+                    {name: "fire", tex:"iron1", emissive: {r:1, g:0,b:0}, uScale: 3, lighten: 1.5},
+                ],
+                glbPath: "./models/outdors/forge.glb"
             }
         ],
         optionalObjects: [

@@ -1,4 +1,5 @@
 import { startQuestionare } from '../components/conversations'
+import { offerStarterQuest } from '../npc/questOffer.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -24,6 +25,23 @@ const wrenFarewell = [
     "Off I go, rounds don't walk themselves.",
 ]
 
+const WREN_STARTER_QUEST = {
+    qName: "wren-courtyard-1",
+    qTtle: "Courtyard Watch",
+    desc: "A few slimes have been slipping past the courtyard edge during my rounds. Deal with them quietly - I'd rather not admit I missed them.",
+    questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 3, completed: false },
+}
+
+const wrenQuestGranted = [
+    "Near the courtyard's far edge, where the light doesn't quite reach. And, ah, discretion appreciated.",
+]
+const wrenQuestActive = [
+    "Still slipping past, are they? My rounds keep missing them somehow.",
+]
+const wrenQuestDone = [
+    "Courtyard's clean. Whatever you did, nobody up the chain needs to know I needed the help. Much obliged.",
+]
+
 export function wrenData(){
     return [
         {
@@ -31,6 +49,15 @@ export function wrenData(){
             conversationWithQuestion: toLines(pick(wrenOpener)),
             answers: [
                 { text: "Got any tips?", cb: () => startQuestionare(91) },
+                {
+                    text: "Need a hand with anything?",
+                    cb: async () => {
+                        const result = await offerStarterQuest(WREN_STARTER_QUEST, "wren-courtyard-2")
+                        if(result === "granted") startQuestionare(520)
+                        else if(result === "already-active") startQuestionare(521)
+                        else startQuestionare(522)
+                    }
+                },
                 { text: "Just saying hi.", cb: () => startQuestionare(92) },
             ],
             cb: () => {}
@@ -47,6 +74,24 @@ export function wrenData(){
         {
             questionId: 92,
             conversationWithQuestion: toLines(wrenFarewell),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 520,
+            conversationWithQuestion: toLines(wrenQuestGranted),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 521,
+            conversationWithQuestion: toLines(wrenQuestActive),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 522,
+            conversationWithQuestion: toLines(wrenQuestDone),
             answers: [],
             cb: () => {}
         },

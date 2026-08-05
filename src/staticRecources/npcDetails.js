@@ -450,8 +450,54 @@ export default [
             {name: "" ,message: "Set your heart ablaze"}
         ],
         forQuests: [
-
-        ]
+            { // storyInfo
+                qName: "armin-trial-1",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Five down. Not bad, most recruits at your stage still can't tell a slime from a puddle."},
+                    {name:"", message: "Come back if you ever want another test. Assuming I think of one worth your time."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Still counting, are you? Five, when you're able."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "armin-trial-2",
+                        qTtle: "Armin's Approval",
+                        desc: "Let Armin know the trial is done.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "armin-trial-2",
+                        qTtle: "Armin's Approval",
+                        desc: "Let Armin know the trial is done.",
+                        questRequirements: { reqType: false, completed: true },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "armin-trial-2",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Still standing, still sharp. Good. This guild needs more of that."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: []
+            },
+        ],
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(400)
+        }
     },
     {
         glbPath: null,
@@ -519,7 +565,53 @@ export default [
             {name: "", message:"..."}
         ],
         forQuests: [
-
+            { // storyInfo
+                qName: "kraun-vein-guard-1",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Vein's clear? Good. Really good."},
+                    {name:"", message: "Miners wouldn't set foot past the second tunnel marker with those things skittering around. Lost two days of work over it."},
+                    {name:"", message: "That's iron ore that isn't getting mined, which means blades that aren't getting forged. Small thing, maybe, but it adds up."},
+                    {name:"", message: "I won't forget this. Come back anytime you want to know more about ore, I'll talk your ear off for free."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Still hearing them skitter around near the tunnel mouth? Miners are still refusing to go in."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "kraun-vein-guard-2",
+                        qTtle: "Kraun's Thanks",
+                        desc: "Let Kraun know the vein is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "kraun-vein-guard-2",
+                        qTtle: "Kraun's Thanks",
+                        desc: "Let Kraun know the vein is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "kraun-vein-guard-2",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Funny thing, some of that iron you cleared the way for is headed out to the new forge going up outside the market."},
+                    {name:"", message: "Whoever's running that place is going to owe you same as I do. Small world, this guild."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: []
+            },
         ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(20)
@@ -576,7 +668,49 @@ export default [
             {name: "", message:"..."}
         ],
         forQuests: [
-
+            { // storyInfo
+                qName: "talin-errand-1",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Word got back to me already - she says thanks, saved her a walk down here herself."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Still haven't caught her at the desk? No rush, she's not going anywhere."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "talin-errand-2",
+                        qTtle: "Talin's Thanks",
+                        desc: "Talin appreciates the help.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "talin-errand-2",
+                        qTtle: "Talin's Thanks",
+                        desc: "Talin appreciates the help.",
+                        questRequirements: { reqType: false, completed: true },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "talin-errand-2",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Owe you one for that. Small favors keep this place running smoother than people think."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: []
+            },
         ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(100)
@@ -1181,7 +1315,52 @@ export default [
             {name: "", message:"..."}
         ],
         forQuests: [
-
+            { // storyInfo
+                qName: "doran-road-1",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Road's clear? You're a lifesaver, honestly."},
+                    {name:"", message: "Horses could smell those things a mile off, wouldn't budge past the last fence post no matter how I coaxed them."},
+                    {name:"", message: "Passengers were starting to ask questions too. Bad for business, worse for my nerves."},
+                    {name:"", message: "I owe you one. Ride's free next time, wherever you're headed."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Road's still not clear. I'm not risking the horses on it yet."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "doran-road-2",
+                        qTtle: "Doran's Thanks",
+                        desc: "Let Doran know the road is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "doran-road-2",
+                        qTtle: "Doran's Thanks",
+                        desc: "Let Doran know the road is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "doran-road-2",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Rode that stretch myself this morning, quiet as anything. Passengers'll thank you, even if they never know your name."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: []
+            },
         ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(80)
@@ -1284,7 +1463,49 @@ export default [
             {name: "", message:"..."}
         ],
         forQuests: [
-
+            { // storyInfo
+                qName: "wren-courtyard-1",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Courtyard's clean. Whatever you did, nobody up the chain needs to know I needed the help. Much obliged."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Still slipping past, are they? My rounds keep missing them somehow."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "wren-courtyard-2",
+                        qTtle: "Wren's Thanks",
+                        desc: "Let Wren know the courtyard is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "wren-courtyard-2",
+                        qTtle: "Wren's Thanks",
+                        desc: "Let Wren know the courtyard is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "wren-courtyard-2",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Still quiet over there. I owe you for that one - discreetly, of course."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: []
+            },
         ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(90)
@@ -1387,7 +1608,50 @@ export default [
             {name: "", message:"..."}
         ],
         forQuests: [
-
+            { // storyInfo
+                qName: "corin-treeline-1",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Made my loop a lot quieter, that did. Strong and Vordz get all the credit for the market - you keep the outer ring safe, and nobody even notices."},
+                    {name:"", message: "Story of a scout's life. Appreciate it either way."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Tree line's still thick with them, from what I can see out here."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "corin-treeline-2",
+                        qTtle: "Corin's Thanks",
+                        desc: "Let Corin know the tree line is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "corin-treeline-2",
+                        qTtle: "Corin's Thanks",
+                        desc: "Let Corin know the tree line is clear.",
+                        questRequirements: { reqType: false, completed: true },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "corin-treeline-2",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Still holding quiet out there. Wider loop's a lot less trouble with you around."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: []
+            },
         ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(95)
@@ -1480,12 +1744,64 @@ export default [
         blessings: ["holyHand"],
         race: "human",
         characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
-        randomSpeech: [            
+        randomSpeech: [
             {name: "", message: "Nothing but a nice meal will start your day hmm ?", cb: ()=> {
                 // openCloseShop(true)
                 // updateShopItem('sellerSylvan123')
             }}
         ],
         forQuests: []
+    },
+    {
+        glbPath: null,
+        currentPlaceId: 1,
+        mode: "idle",
+        _id: "110_bram",
+        name: "Bram",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // standing inside the weaponHouse/forge pair added at {x:28,z:-43} and
+        // {x:29,z:-42} (see localroomdb.js originalGlbs) - between the two,
+        // close enough to the forge to sell what comes out of it
+        x: 28.4,
+        y: 0.01,
+        z: -42.6,
+        _dirTarg: {x:28.4, z:-40},
+        cloth: 'style2',
+        pants: 'style2',
+        hair: 'style1',
+        boots: 'style2',
+        skinColor: SKIN_COLORS.mid,
+        hairColor: ADVENTURER_COLORS.gray,
+        clothColor: ADVENTURER_COLORS.charcoal,
+        pantsColor: ADVENTURER_COLORS.brown,
+        items: [
+        ],
+        titles: ['blacksmith'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['fire'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "..."}
+        ],
+        forQuests: [],
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(300)
+        }
     }
 ]

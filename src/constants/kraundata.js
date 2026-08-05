@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations';
 import { getCharState, rankOrder } from '../charactersystem/characterstate';
+import { offerStarterQuest } from '../npc/questOffer.js';
 
 // tier key is literally the rank label - every rank gets its own flavor of Kraun's ore lore
 function getKraunTier(){
@@ -69,6 +70,17 @@ const kraunFarewell = {
     s: ["Go on, hero. The guild's lucky to have someone like you asking about ore at all."],
 }
 
+const KRAUN_STARTER_QUEST = {
+    qName: "kraun-vein-guard-1",
+    qTtle: "Vein Watch",
+    desc: "Slimes have been creeping into the mine entrance near the vein. Clear them out so the miners can get back to work.",
+    questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 4, completed: false },
+}
+
+const kraunQuestGranted = ["Second tunnel marker, that's where they've been thickest. Miners will owe you for this."]
+const kraunQuestActive = ["Vein's still not clear, last I heard. Miners are still waiting on you."]
+const kraunQuestDone = ["That vein's been quiet ever since you cleared it out. Best thing that's happened to this mine in weeks."]
+
 export function kraunsData(){
     const tier = getKraunTier()
     return [
@@ -80,6 +92,15 @@ export function kraunsData(){
                     text: "Tell me more about ores",
                     cb: () => {
                         startQuestionare(21)
+                    }
+                },
+                {
+                    text: "Any work you need done?",
+                    cb: async () => {
+                        const result = await offerStarterQuest(KRAUN_STARTER_QUEST, "kraun-vein-guard-2")
+                        if(result === "granted") startQuestionare(23)
+                        else if(result === "already-active") startQuestionare(24)
+                        else startQuestionare(25)
                     }
                 },
                 {
@@ -100,6 +121,24 @@ export function kraunsData(){
         {
             questionId: 22,
             conversationWithQuestion: toLines(kraunFarewell[tier]),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 23,
+            conversationWithQuestion: toLines(kraunQuestGranted),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 24,
+            conversationWithQuestion: toLines(kraunQuestActive),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 25,
+            conversationWithQuestion: toLines(kraunQuestDone),
             answers: [],
             cb: () => {}
         },

@@ -4,6 +4,7 @@ import { checkIfTokenSaved } from '../tools/tools.js'
 import { exitScene } from '../sockets/exitsocket.js'
 import { changeScene } from '../main/main.js'
 import { findPlaceMetaData } from '../states/placestates.js'
+import { offerStarterQuest } from '../npc/questOffer.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Doran", isLeft: false, message }))
@@ -32,6 +33,23 @@ const doranAck = [
     "Suit yourself. I'll be right here when you change your mind.",
 ]
 
+const DORAN_STARTER_QUEST = {
+    qName: "doran-road-1",
+    qTtle: "Clear Passage",
+    desc: "Slimes have been crowding the road out toward the wilderness route, spooking the horses. Clear a path so passengers feel safe riding along.",
+    questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 3, completed: false },
+}
+
+const doranQuestGranted = [
+    "Just past the last fence post, that's where they keep bunching up. Horses won't go near it.",
+]
+const doranQuestActive = [
+    "Road's still not clear. I'm not risking the horses on it yet.",
+]
+const doranQuestDone = [
+    "Rode that stretch myself this morning, quiet as anything. Passengers'll thank you, even if they never know your name.",
+]
+
 export function wagonData(){
     return [
         {
@@ -39,6 +57,15 @@ export function wagonData(){
             conversationWithQuestion: doranOpener,
             answers: [
                 { text: "Travel", cb: () => startQuestionare(81) },
+                {
+                    text: "Any trouble on the road?",
+                    cb: async () => {
+                        const result = await offerStarterQuest(DORAN_STARTER_QUEST, "doran-road-2")
+                        if(result === "granted") startQuestionare(83)
+                        else if(result === "already-active") startQuestionare(84)
+                        else startQuestionare(85)
+                    }
+                },
                 { text: "Just passing by.", cb: () => startQuestionare(82) },
             ],
             cb: () => {}
@@ -71,6 +98,24 @@ export function wagonData(){
         {
             questionId: 82,
             conversationWithQuestion: toLines(doranAck),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 83,
+            conversationWithQuestion: toLines(doranQuestGranted),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 84,
+            conversationWithQuestion: toLines(doranQuestActive),
+            answers: [],
+            cb: () => {}
+        },
+        {
+            questionId: 85,
+            conversationWithQuestion: toLines(doranQuestDone),
             answers: [],
             cb: () => {}
         },

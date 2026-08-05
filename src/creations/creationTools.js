@@ -314,8 +314,22 @@ function createDetailedMaterial(scene, wallDet){
 }
 export async function createOriginal(scene, pos, rotationY, textureDets, glbPath, willHide){
     console.log(glbPath)
-    const { meshes } = await SceneLoader.ImportMeshAsync("", glbPath, null, scene)
-    
+    let meshes
+    try {
+        ;({ meshes } = await SceneLoader.ImportMeshAsync("", glbPath, null, scene))
+    } catch (err) {
+        // one bad/missing glb (wrong case on a case-sensitive prod host, a
+        // file that didn't make it into the deploy, etc.) shouldn't take the
+        // rest of the village's originalGlbs down with it - areascene.js's
+        // forEach doesn't await these individually, so without this the
+        // failure would just be an unhandled rejection and a hole in the map
+        console.warn(`[createOriginal] failed to load "${glbPath}"`, err)
+        return null
+    }
+    if(!meshes || !meshes[0]){
+        console.warn(`[createOriginal] "${glbPath}" loaded with no meshes`)
+        return null
+    }
 
     const rootModel = meshes[0]
     rootModel.position = new Vector3(pos.x, pos.y ? pos.y : 0, pos.z)
@@ -326,7 +340,11 @@ export async function createOriginal(scene, pos, rotationY, textureDets, glbPath
 
         const wallDet = textureDets.find(det => det.name === wallmsh.name)
         if(wallDet){
-            wallmsh.material = createDetailedMaterial(scene, wallDet)
+            try {
+                wallmsh.material = createDetailedMaterial(scene, wallDet)
+            } catch (err) {
+                console.warn(`[createOriginal] failed to build material for "${wallmsh.name}" in "${glbPath}"`, err)
+            }
             wallmsh.checkCollisions = true
         }
         freeze(wallmsh)
