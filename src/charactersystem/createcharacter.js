@@ -530,7 +530,11 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             // instantiateModelsToScene() above doesn't clone materials, so every
             // character shares this mesh's original material - mutating it in
             // place would make the last-created character's race win for everyone
-            const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race}eye.jpg`, scene, false, false)
+            // falls back to "human" (the common case, see npcDetails.js) instead
+            // of trying to load "undefinedeye.jpg" - det.race can be missing for
+            // synced players (getCharSocket()'s payload didn't use to include it)
+            // or any NPC entry that forgot to set one
+            const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
             const eyeMat = mes.material.clone(`eye_mat_${det._id}`)
             eyeMat.emissiveTexture = eyeTexture
             mes.material = eyeMat

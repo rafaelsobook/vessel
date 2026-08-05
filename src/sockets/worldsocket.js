@@ -147,14 +147,11 @@ export function activateOnSocketListeners(socket){
         if(currentPlaceId !== characterState.currentPlace.placeId) return
         if (socket === undefined) return console.warn("socket UNDEFINED !")
 
-
-        console.log(quests)
-
-        if (!characterState) return
+        if (!characterState) return console.log("no charState")
 
         if (gameStat === "running") {
             reCreateMeshesInScene()
-        }
+        }else console.log("gameStat is not running, skipping reCreateMeshesInScene()")
     })
     // equiping
     socket.on("equiped-item", data => {
@@ -619,11 +616,14 @@ export function reCreateMeshesInScene() {
         pushPlayer(player, tcpCharDet.owner)
     })
     allEnemiez.length && allEnemiez.forEach(enemTcpInfo => {
-        if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return
+        console.log("my ID ",characterState.currentPlace.placeId)
+        console.log("monster ", enemTcpInfo.name ,enemTcpInfo.currentPlaceId)
+        if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return console.log("not in the same place")
         const isAlreadyHere = enemiez.find(enem => enem._id === enemTcpInfo._id)
-        if (isAlreadyHere) return 
+        if (isAlreadyHere) return console.log("enemy already here, skipping ", enemTcpInfo.name)
+        console.log(enemTcpInfo.currentPlaceId)
         const enemyMesh = sceneDet.scene.getMeshByName(`enemy.${enemTcpInfo._id}`)
-        if(enemyMesh) return 
+        if(enemyMesh) return console.log("mesh is here")
         console.log(enemTcpInfo)
         const enemy = createEnemy(scene, enemTcpInfo)
         // enemy._targetId = characterState._id

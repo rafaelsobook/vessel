@@ -179,6 +179,7 @@ export function getCharSocket(){
         pantsColor: characterState.pantsColor,
         hairColor: characterState.hairColor,
         skinColor: characterState.skinColor,
+        race: characterState.race,
         currentPlace: characterState.currentPlace,
         pos,
         dirTarg,
