@@ -30,6 +30,17 @@ let fallPeakY = null
 // handle returned by attachLightning() - toggled on/off by repeated "e" presses
 let weaponLightning = null
 
+// mirrors renderer.js's player.mode switch - used to tell the fallimpact
+// one-shot (see the landing branch in updateMovement()) which loop state to
+// settle back into once it finishes, instead of the state it interrupted
+const MODE_TO_ANIM_STATE = {
+    idle: ANIM_STATE.IDLE,
+    fighting: ANIM_STATE.COMBAT_IDLE,
+    structed: ANIM_STATE.STRUCTED,
+    casting: ANIM_STATE.CASTING,
+    minning: ANIM_STATE.MINNING,
+}
+
 // reused every physics tick instead of `new Vector3(...)` inline in
 // isGrounded()/updateMovement() below - both run unconditionally every tick
 const _groundCheckOffset = new Vector3()
@@ -40,6 +51,14 @@ const _velocityVec = new Vector3()
 // switch itself now reads player.mode ("inAir" or not) instead
 export function getIsGrounded(){
     return isGroundedFlag
+}
+
+// same myPlayer reference updateMovement() itself flips to "inAir" on
+// takeoff/landing (see attachControllerToThisCharacter()) - lets UI code
+// (e.g. uimanagement.js's walk/run/attack buttons) check that without
+// reaching into getPlayersOnScene() and re-doing the owner lookup itself
+export function getPlayerMode(){
+    return myPlayer?.mode
 }
 
 export function clearLocTimeOut(){
@@ -547,8 +566,15 @@ function setupControls(scene, allsounds) {
                 const FALL_IMPACT_THRESHOLD = 3
                 const fallDistance = fallPeakY !== null ? fallPeakY - aggregate.transformNode.position.y : 0
                 if (fallDistance >= FALL_IMPACT_THRESHOLD && !isMoving) {
-                    stopAnim(myPlayer.anims, "fallimpact")
-                    myPlayer.characterAnimations?.playAction(myPlayer.anims, "fallimpact", 1)
+                    // without an explicit nextState, playAction() falls back to
+                    // whatever state was active *before* fallimpact started - which
+                    // is still ANIM_STATE.FALLING (renderer.js was setting that every
+                    // frame right up to this one), not the mode we just landed into.
+                    // That produced a one-frame flash back to the falling pose the
+                    // instant fallimpact finished, right before renderer.js's next
+                    // tick corrected it to idle/combatIdle - two blends fighting each
+                    // other. Telling it up front where to land skips that detour.
+                    myPlayer.characterAnimations?.playAction(myPlayer.anims, "fallimpact", 1, null, false, MODE_TO_ANIM_STATE[myPlayer.mode] ?? ANIM_STATE.IDLE)
                 }
                 fallPeakY = null
             }

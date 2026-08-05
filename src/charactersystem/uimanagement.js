@@ -10,7 +10,7 @@ import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
 import { openCloseSkills } from "../components/skillsui.js"
-import { getIsGrounded } from "../controllers/inputMovement.js"
+import { getIsGrounded, getPlayerMode } from "../controllers/inputMovement.js"
 import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSliders.js"
 import { openCloseChatContainer, hideShowChatToggleBtn } from "../components/worldChatSystem.js"
 
@@ -23,7 +23,10 @@ const itemSlotList   = document.querySelector(".slots-list")
 const inventoryCont  = document.querySelector(".inventory-container")
 
 let buttonsActivated = false
-
+let canChangeMode = true
+export function setCanChangeMode(_canChangeMode){
+    canChangeMode = _canChangeMode
+}
 
 export function showHideIcons(display = "none", arrayOfIconNames = ['icons-container', 'walk-run-icons-container']){
     // arrayOfIconNames ['.icons-container', '.walk-run-icons-container']
@@ -81,26 +84,31 @@ export function activateBtnOnce(){
             const weapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
             const currentMode = charState.mode
 
-            
+            console.log("currentMode ", currentMode)
+            const plMode = getPlayerMode()
+            if(plMode === "inAir") return console.log("cannot change mode while inAir")
 
             clearTimeout(clickedTimeOut)
             switch(btnName){
                 case "walk":
-
-                    setCharStateMode("idle")
+                    if(canChangeMode){
+                        setCharStateMode("idle")
                     
                     
-                    if(isSocketOn) emitMode("idle", attackInfo.hasWeapon)
-
+                        if(isSocketOn) emitMode("idle", attackInfo.hasWeapon)
+                    }
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)
                     }, 500)
                     // inventoryCont.style.display === "none" ? openUpdateInventory(true) : closeInventory()
                 break
-                case "running":       
-                    setCharStateMode("fighting")
-                    
-                    if(isSocketOn) emitMode("fighting", attackInfo.hasWeapon)
+                case "running":  
+                    if(canChangeMode){
+                        setCharStateMode("fighting")
+                        
+                        if(isSocketOn) emitMode("fighting", attackInfo.hasWeapon)
+                    }
+
                 //    openOrCloseStats()
                     clickedTimeOut = setTimeout(() => {
                         disableEnableAttackButtonsContainer(true)

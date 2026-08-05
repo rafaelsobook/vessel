@@ -1785,6 +1785,27 @@ export default [
         clothColor: ADVENTURER_COLORS.charcoal,
         pantsColor: ADVENTURER_COLORS.brown,
         items: [
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "leatherboots", // is also the image name
+                dn: "Leather Boots",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "boots", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                equipAbilities: {
+                    dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false, // only for weapons
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            }
         ],
         titles: ['blacksmith'],
         skills: [],
