@@ -8,7 +8,7 @@ import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { ANIM_STATE, playAnim } from '../tools/animation';
 import { emitMove, emitStop } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
-import { runSound } from '../components/soundSystem';
+import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
@@ -183,7 +183,7 @@ function setupControls(scene, allsounds) {
             // no footstep/run sound while airborne - moving your input stick mid-jump
             // shouldn't start the sound up; landing/mode-change handles resuming it
             if(value && player.mode !== "inAir"){
-                if(!runsound.isPlaying) runsound.play()
+                if(!runsound.isPlaying) playHalfSound(runsound)
             }
             if(!value) {
                 if(runsound.isPlaying) runsound.stop()
@@ -380,6 +380,9 @@ function setupControls(scene, allsounds) {
                     if(equippedSword) weaponLightning = attachLightning(scene, equippedSword.mesh, "blue", true)
                 }
             break
+            case " ":
+                console.log(getCharState())
+            break
             case "i":
                 giveAllItems()
             break
@@ -521,6 +524,11 @@ function setupControls(scene, allsounds) {
                 // going airborne mid-stride - setPlayerMoving() already started this and
                 // won't be called again until the next press/release, so cut it here
                 if(runsound.isPlaying) runsound.stop()
+                // same idea for a still-mid-playthrough "fallimpact" - jumping again
+                // right after landing leaves it playing at weight 1 with nothing to
+                // stop it (performJump() intentionally doesn't call playAction, see
+                // its comment), so it visually persists into the new jump/fall
+                stopAnim(myPlayer.anims, "fallimpact")
             } else if (!isGroundedFlag && myPlayer.mode === "inAir") {
                 // still airborne - keep tracking the highest point reached this
                 // stretch, since a jump climbs before it falls back down
@@ -532,13 +540,14 @@ function setupControls(scene, allsounds) {
                 if(myPlayer.fshadow) myPlayer.fshadow.isVisible = true
                 // landing while still holding a movement key - resume the sound setPlayerMoving()
                 // was blocked from starting (or was stopped from) while inAir
-                if(isMoving && !runsound.isPlaying) runsound.play()
+                if(isMoving && !runsound.isPlaying) playHalfSound(runsound)
 
                 // hard landing - only react to an actual fall, not every small
                 // hop/step off a curb
                 const FALL_IMPACT_THRESHOLD = 3
                 const fallDistance = fallPeakY !== null ? fallPeakY - aggregate.transformNode.position.y : 0
-                if (fallDistance >= FALL_IMPACT_THRESHOLD) {
+                if (fallDistance >= FALL_IMPACT_THRESHOLD && !isMoving) {
+                    stopAnim(myPlayer.anims, "fallimpact")
                     myPlayer.characterAnimations?.playAction(myPlayer.anims, "fallimpact", 1)
                 }
                 fallPeakY = null

@@ -143,6 +143,18 @@ export function playSound(sound){
     }
 }
 
+// Sound.play(time, offset, length) - time is a start delay, offset/length are
+// where in the clip to start and how long to play, both in seconds. Falls
+// back to a normal full-length play() if the buffer isn't decoded yet (can
+// happen if this fires right as the scene loads, before getAudioBuffer()
+// has anything to report).
+export function playHalfSound(sound){
+    if(!sound) return
+    const duration = sound.getAudioBuffer()?.duration
+    if(duration) sound.play(0, 0, duration / 2)
+    else sound.play()
+}
+
 export function runSound(characterStatSpd){
     if(!allSounds.runningS) return
     if(allSounds.runningS.isPlaying) return log("is playing")
