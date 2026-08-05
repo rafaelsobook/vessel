@@ -30,7 +30,7 @@ export const myownspeeches = [
             if(!charState) return
             setCanPress(false)
             setCharStateMode("idle")
-            getAllSounds().woodCreakS.play()
+            getAllSounds().woodCreakS?.play()
             setTimeout( async () => {
                 const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
                 if(!myChar) return

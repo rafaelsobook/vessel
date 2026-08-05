@@ -131,8 +131,8 @@ export function activateBtnOnce(){
                     // charState.sp -= spToDeduct
                     updateSP_UI()
                     
-                    getAllSounds().voiceAttackS.setPlaybackRate(0.9 + (Math.random()*0.2))
-                    getAllSounds().voiceAttackS.play()
+                    getAllSounds().voiceAttackS?.setPlaybackRate(0.9 + (Math.random()*0.2))
+                    getAllSounds().voiceAttackS?.play()
                     
                     let animName = 'kick1'
                     let equippedWeaponType = null

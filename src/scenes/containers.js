@@ -15,6 +15,20 @@ async function loadMonsterRoot(path, scene){
     }
 }
 
+// equipment/accessory containers (hair, helmets, gauntlets, pauldrons,
+// weapons) - none of these should be able to take the whole game down if
+// one asset is missing/corrupt. Falls back to an empty mesh list instead of
+// throwing, so containers.helmets.find(...) etc. downstream just never
+// matches anything rather than crashing on a null/undefined container.
+async function importMeshSafe(rootUrl, filename, scene){
+    try {
+        return await SceneLoader.ImportMeshAsync("", rootUrl, filename, scene)
+    } catch (error) {
+        console.warn(`[containers] failed to load "${rootUrl}${filename}"`, error)
+        return { meshes: [] }
+    }
+}
+
 export async function setStartingContainers(scene){
     try {
         const animeBodyContainer = await loadAvatarContainer("./models/avatar/avatar.glb", scene)
@@ -23,16 +37,22 @@ export async function setStartingContainers(scene){
         let slimeRoot = await loadMonsterRoot("./models/monsters/slime.glb", scene)
         let lesserDemonRoot = await loadMonsterRoot("./models/monsters/lesserdemon.glb", scene)
 
-        const HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
-        const helmets = await SceneLoader.ImportMeshAsync("", "./models/helmets/", "helmets.glb", scene)
+        const HairModel = await importMeshSafe("./models/avatar/", "hairModels.glb", scene)
+        const helmets = await importMeshSafe("./models/helmets/", "helmets.glb", scene)
         helmets.meshes.forEach(m => m.isVisible = false)
-        const gauntlets = await SceneLoader.ImportMeshAsync("", "./models/gauntlets/", "gauntlets.glb", scene)
+        const gauntlets = await importMeshSafe("./models/gauntlets/", "gauntlets.glb", scene)
         gauntlets.meshes.forEach(m => m.isVisible = false)
-        const pauldrons = await SceneLoader.ImportMeshAsync("", "./models/pauldrons/", "pauldrons.glb", scene)
+        const pauldrons = await importMeshSafe("./models/pauldrons/", "pauldrons.glb", scene)
         pauldrons.meshes.forEach(m => m.isVisible = false)
         // const helmets = await loadModel("./models/helmets/helmets.glb", scene, true)
 
-        const allweaponParts = await loadMeshOnlyParts("./models/swords/allswords.glb", scene)
+        let allweaponParts
+        try {
+            allweaponParts = await loadMeshOnlyParts("./models/swords/allswords.glb", scene)
+        } catch (error) {
+            console.warn(`[containers] failed to load weapon parts`, error)
+            allweaponParts = []
+        }
 
         const containers = setSocketContainers({
             hairs: HairModel.meshes,
@@ -54,5 +74,5 @@ export async function setStartingContainers(scene){
     } catch (error) {
         console.log(error)
         return false
-    }    
+    }
 }

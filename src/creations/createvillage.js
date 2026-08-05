@@ -240,6 +240,7 @@ function spawnNonPhysics(scene, items, mainMesh, yRotOffset = 0) {
  */
 function buildPalisade(scene, palisade, woodenstake, namePrefix) {
     if (!palisade?.stakes?.length) return;
+    if (!woodenstake) return console.warn(`[createVillage] no stake template - skipping palisade "${namePrefix}"`);
 
     const { stakes } = palisade;
     woodenstake.isVisible = false

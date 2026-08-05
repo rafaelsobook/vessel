@@ -583,14 +583,14 @@ export function setCharStateMode(_newMode){
     const weapon = characterState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
     switch(_newMode){
         case "idle":
-            getAllSounds().runningS.setPlaybackRate(0.91)
-            getAllSounds().woodrunS.setPlaybackRate(0.7)
+            getAllSounds().runningS?.setPlaybackRate(0.91)
+            getAllSounds().woodrunS?.setPlaybackRate(0.7)
         break
         case "fighting":
-            
-            getAllSounds().runningS.setPlaybackRate(1.15)
-            getAllSounds().woodrunS.setPlaybackRate(1)
-            if(weapon && prevMode !== "fighting") getAllSounds().drawSword.play()
+
+            getAllSounds().runningS?.setPlaybackRate(1.15)
+            getAllSounds().woodrunS?.setPlaybackRate(1)
+            if(weapon && prevMode !== "fighting") getAllSounds().drawSword?.play()
         break
     }
 

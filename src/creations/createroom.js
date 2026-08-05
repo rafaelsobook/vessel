@@ -151,7 +151,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
                 charState.y = tcpCharPlaceMD.spawn.y
                 charState.z = tcpCharPlaceMD.spawn.z
                 console.log(tcpCharPlaceMD)
-                getAllSounds().normalDoorOC.play()
+                getAllSounds().normalDoorOC?.play()
                 const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
                 console.log(newCharData)
                 exitScene(charState.owner)

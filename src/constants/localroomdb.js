@@ -248,7 +248,7 @@ export const metaDatas = [
                 functionBeforeMerge: null, // this table has a transform node we don't need, so dispose it before merging
                 cbAfterMade: (scene) => {
                     
-                    getAllSounds().bonfireS.play()
+                    getAllSounds().bonfireS?.play()
                 }
             },
             {

@@ -43,6 +43,6 @@ export default async function loadScene(){
         break
     }
 
-    getAllSounds().enteredS.play()
+    getAllSounds().enteredS?.play()
     if(sceneDetail) return sceneDetail
 }

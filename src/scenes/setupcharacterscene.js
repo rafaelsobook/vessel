@@ -118,7 +118,13 @@ export async function setupCharacterScene(engine){
         if(meshPartName.includes("armor")) mesh.dispose()
         if(meshPartName.includes("gear")) mesh.dispose()
     })
-    const HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
+    let HairModel
+    try {
+        HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
+    } catch (error) {
+        console.warn(`[setupCharacterScene] failed to load hairModels.glb`, error)
+        HairModel = { meshes: [] }
+    }
     HairModel.meshes.forEach(hairMsh => {
         if(hairMsh.name.includes("root")) return hairMsh.parent = headBone
         hairMsh.material = hairMat
@@ -129,7 +135,7 @@ export async function setupCharacterScene(engine){
         hairMsh.isVisible = hairMsh.name.split(".")[1] === toSave.hair
         hairs.push(hairMsh)
     })
-    HairModel.meshes[0].dispose()
+    HairModel.meshes[0]?.dispose()
 
     // registered after the hair model is loaded/parented (not right after
     // container.addAllToScene()) so addShadowCaster's recursive includeChildren

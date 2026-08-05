@@ -60,7 +60,7 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
         despawnMagicCircle(disc, scene)
     }, timeOut)
 
-    getAllSounds().magicCircle.play()
+    getAllSounds().magicCircle?.play()
     return disc
 }
 export function createMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000){
@@ -118,7 +118,7 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
 
     createParticlesForMesh(disc, scene, "thin1")
 
-    getAllSounds().magicCircle.play()
+    getAllSounds().magicCircle?.play()
     setTimeout(() => {
         despawnMagicCircle(disc, scene)
     }, timeOut)
