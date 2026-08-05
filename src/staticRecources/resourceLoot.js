@@ -6,25 +6,25 @@ import { randomNum } from "../tools/tools.js"
 const LOOT_TEMPLATES = {
     ore: () => ({
         itemId: randomNum(),
-        name: "ore",
-        dn: "Ore",
+        name: "solarore",
+        dn: "Solar Ore",
         itemCateg: "crafting",
         itemType: "material",
         qnty: 1,
         price: { coinType: "bronze", pieces: 5 },
-        desc: "A raw chunk of ore, useful for crafting and enhancing gear.",
-        rarity: "common"
+        desc: "A raw chunk of solar ore, useful for crafting and enhancing gear.",
+        rarity: "rare"
     }),
     crystal: () => ({
         itemId: randomNum(),
-        name: "crystal",
-        dn: "Crystal",
+        name: "celestineore",
+        dn: "Celestine Ore",
         itemCateg: "crafting",
         itemType: "material",
         qnty: 1,
         price: { coinType: "bronze", pieces: 15 },
-        desc: "A shard of raw crystal, prized by enchanters.",
-        rarity: "uncommon"
+        desc: "A shard of Celestine Ore, prized by enchanters.",
+        rarity: "rare"
     }),
     adamantine: () => ({
         itemId: randomNum(),
@@ -36,6 +36,108 @@ const LOOT_TEMPLATES = {
         price: { coinType: "bronze", pieces: 40 },
         desc: "A rare, near-indestructible metal ore.",
         rarity: "rare"
+    }),
+    // newly added icons (./images/items/crafting) - none of these are wired
+    // into any place's resources[].loots yet (see localroomdb.js), so they
+    // aren't minable in the world until a loot entry references their key
+    bloodstone: () => ({
+        itemId: randomNum(),
+        name: "bloodstone",
+        dn: "Bloodstone",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 25 },
+        desc: "A dark, blood-red mineral said to sharpen the wielder's aggression.",
+        rarity: "rare"
+    }),
+    bronzeore: () => ({
+        itemId: randomNum(),
+        name: "bronzeore",
+        dn: "Bronze Ore",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 8 },
+        desc: "A common coppery ore, the backbone of everyday gear.",
+        rarity: "common"
+    }),
+    manastone: () => ({
+        itemId: randomNum(),
+        name: "manastone",
+        dn: "Manastone",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 22 },
+        desc: "A stone humming faintly with latent magical energy.",
+        rarity: "uncommon"
+    }),
+    orichalcum: () => ({
+        itemId: randomNum(),
+        name: "orichalcum",
+        dn: "Orichalcum",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 60 },
+        desc: "A legendary alloy from a bygone age, said to never tarnish.",
+        rarity: "epic"
+    }),
+    phoenixore: () => ({
+        itemId: randomNum(),
+        name: "phoenixore",
+        dn: "Phoenix Ore",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 35 },
+        desc: "Ore said to have cooled in phoenix-fire - it's still warm to the touch.",
+        rarity: "rare"
+    }),
+    rubyore: () => ({
+        itemId: randomNum(),
+        name: "rubyore",
+        dn: "Ruby Ore",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 28 },
+        desc: "Ore veined with raw ruby, prized for its brilliant red glow.",
+        rarity: "rare"
+    }),
+    silverore: () => ({
+        itemId: randomNum(),
+        name: "silverore",
+        dn: "Silver Ore",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 12 },
+        desc: "A pale, lustrous ore favored by silversmiths.",
+        rarity: "uncommon"
+    }),
+    sunduskore: () => ({
+        itemId: randomNum(),
+        name: "sunduskore",
+        dn: "Sundusk Ore",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 30 },
+        desc: "Ore quarried at the edge of dusk, warm gold shot through with violet.",
+        rarity: "rare"
+    }),
+    unobtanium: () => ({
+        itemId: randomNum(),
+        name: "unobtanium",
+        dn: "Unobtanium",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 100 },
+        desc: "An impossibly rare material. If you're holding this, you got lucky.",
+        rarity: "legendary"
     })
 }
 

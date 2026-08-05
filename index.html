@@ -372,6 +372,75 @@
             <button class="bs-action-btn">Buy</button>
         </div>
     </div>
+    <!-- CRAFTING window -->
+    <div class="craft-container cont">
+        <img src="./images/UI/xshield.png" class="close-parent btn"/>
+        <p class="craft-title">Craft Sword</p>
+        <div class="craft-body">
+            <ul class="craft-categories">
+                <li class="craft-categ-btn active" data-categ="sword">Sword</li>
+                <li class="craft-categ-btn" data-categ="armor">Armor</li>
+                <li class="craft-categ-btn" data-categ="helmet">Helmet</li>
+                <li class="craft-categ-btn" data-categ="pauldron">Pauldron</li>
+            </ul>
+            <div class="craft-parts-stage sword-mode">
+                <!-- sword: 4 parts around a center icon -->
+                <div class="craft-parts-diagram sword-layout">
+                    <div class="part-slot blade-slot" data-part="blade">
+                        <p class="part-slot-label">Blade</p>
+                        <div class="part-slot-box"></div>
+                        <p class="part-slot-material"></p>
+                    </div>
+                    <div class="part-slot guard-slot" data-part="guard">
+                        <p class="part-slot-label">Guard</p>
+                        <div class="part-slot-box"></div>
+                        <p class="part-slot-material"></p>
+                    </div>
+                    <div class="part-slot pommel-slot" data-part="pommel">
+                        <p class="part-slot-label">Pommel</p>
+                        <div class="part-slot-box"></div>
+                        <p class="part-slot-material"></p>
+                    </div>
+                    <div class="part-slot handle-slot" data-part="handle">
+                        <p class="part-slot-label">Handle</p>
+                        <div class="part-slot-box"></div>
+                        <p class="part-slot-material"></p>
+                    </div>
+                    <img src="./images/UI/craftswordicon.webp" alt="" class="craft-center-icon">
+                    <div class="connector-line line-blade"></div>
+                    <div class="connector-line line-guard"></div>
+                    <div class="connector-line line-pommel"></div>
+                    <div class="connector-line line-handle"></div>
+                </div>
+                <!-- armor/helmet/pauldron: single mesh, single box -->
+                <div class="craft-parts-diagram single-layout">
+                    <div class="part-slot single-slot" data-part="item">
+                        <p class="part-slot-label">Armor</p>
+                        <div class="part-slot-box"></div>
+                        <p class="part-slot-material"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="craft-footer">
+            <div class="craft-budget">
+                <div class="craft-budget-row">
+                    <img src="./images/UI/coins.png" alt="" class="craft-budget-icon">
+                    <input type="number" class="craft-budget-input" placeholder="Budget" min="0">
+                </div>
+                <p class="craft-rarity-readout">Rarity: <span class="craft-rarity-value">Common</span></p>
+            </div>
+            <button class="craft-btn">Craft</button>
+        </div>
+    </div>
+    <!-- MATERIAL PICKER popup, opened by clicking a part slot in the crafting window -->
+    <div class="material-picker-container cont">
+        <img src="./images/UI/xshield.png" class="close-parent btn"/>
+        <p class="mp-title">Choose Material</p>
+        <div class="mp-grid">
+            <!-- swatches injected by craftingui.js -->
+        </div>
+    </div>
     <!-- When Obtain an Item will popup on top screen -->
     <div class="acquired-lists">
        

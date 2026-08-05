@@ -41,7 +41,9 @@ function parseRarity(rarity = "common1") {
 // Metals (iron/steel/bronze/silver/gold/mythril/adamantine) come from
 // metalmat.js's METAL_TINTS, so armor and weapons agree on what each metal
 // looks like. These cover the rest: hard mineral/gem parts and organic ones.
-const GEM_TINTS = {
+// exported so the crafting UI's material picker (craftingui.js) can list
+// these as pickable swatches without duplicating the color data
+export const GEM_TINTS = {
     sodalite:     new Color3(0.16, 0.26, 0.55), // deep royal-blue mineral
     bluegranite:  new Color3(0.24, 0.29, 0.36), // speckled blue-grey stone
     firecrystal:  new Color3(0.95, 0.32, 0.05), // glowing ember-orange crystal
@@ -55,7 +57,7 @@ const GEM_ROUGHNESS = {
     frostshard: 0.1,
     stormcrystal: 0.12,
 }
-const ORGANIC_TINTS = {
+export const ORGANIC_TINTS = {
     wood:       new Color3(0.32, 0.21, 0.12),
     bone:       new Color3(0.82, 0.78, 0.66),
     leather:    new Color3(0.30, 0.18, 0.10),

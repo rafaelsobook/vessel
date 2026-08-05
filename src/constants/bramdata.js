@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { buyOrSell } from '../components/buyorsell'
+import { openCloseCraftUI } from '../components/craftingui'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -25,6 +26,7 @@ export function bramData(){
             conversationWithQuestion: toLines(pick(bramGreetings)),
             answers: [
                 { text: "Show me your wares", cb: () => buyOrSell(false) },
+                { text: "I'd like to craft something", cb: () => openCloseCraftUI(true) },
                 { text: "Just looking around.", cb: () => startQuestionare(301) },
             ],
             cb: () => {}

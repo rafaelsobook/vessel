@@ -2796,7 +2796,7 @@ canvas {
 
 .output-sliders-cont{
   @include centerFix($uiz + 1);
-  width: 500px;
+  width: 200px;
   height: 56px;
   display: none;
   flex-direction: column;
@@ -3672,6 +3672,355 @@ canvas {
     .bs-action-btn:disabled {
       opacity: 0.4;
       cursor: not-allowed;
+    }
+  }
+}
+
+// CRAFTING window
+.craft-container {
+  @include centerFix($uiz + 2);
+  display: none;
+  flex-direction: column;
+  // keeps rightbigcont.webp's native 1081x799 aspect ratio (1.353) so the
+  // stretched background-size:100% 100% below doesn't warp its border -
+  // grown from 700x518 to fit the new footer row without cramming the diagram
+  width: 720px;
+  height: 532px;
+  background: url("/images/UI/frames/rightbigcont.webp") no-repeat center center;
+  background-size: 100% 100%;
+  padding: 34px 42px 26px 42px;
+  color: $littlewhite;
+
+  .craft-title {
+    text-align: center;
+    font-family: $choicefont;
+    font-size: 1.3rem;
+    color: #edd59f;
+    letter-spacing: 2px;
+    margin-bottom: 18px;
+  }
+
+  .craft-body {
+    flex: 1;
+    display: flex;
+    gap: 24px;
+    min-height: 0;
+  }
+
+  .craft-categories {
+    list-style: none;
+    width: 150px;
+    flex-shrink: 0;
+    border: 1px solid rgba(202, 165, 1, 0.25);
+    border-radius: 4px;
+    // overflow-y: auto;
+    background: url("/images/UI/frames/leftbox.webp") no-repeat center center;
+    .craft-categ-btn {
+      cursor: pointer;
+      font-family: $tipsFont;
+      font-size: 0.9rem;
+      color: rgba(245, 245, 245, 0.6);
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(202, 165, 1, 0.15);
+      transition: 0.15s;
+    }
+    .craft-categ-btn:last-child {
+      border-bottom: none;
+    }
+    .craft-categ-btn:hover {
+      color: #edd59f;
+      background: rgba(202, 165, 1, 0.06);
+    }
+    .craft-categ-btn.active {
+      color: #edd59f;
+      background: rgba(202, 165, 1, 0.12);
+    }
+  }
+
+  .craft-parts-stage {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+
+    .craft-parts-diagram {
+      display: none;
+    }
+
+    .part-slot-label {
+      font-family: $tipsFont;
+      font-size: 0.85rem;
+      color: #edd59f;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .part-slot-box {
+      width: 90px;
+      height: 90px;
+      cursor: pointer;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      // rewardborder.webp is near-square (1161x1158) so it doesn't warp at
+      // any of the square sizes used here - same layering trick as
+      // .quest-reward-img-bx: border art on top, dark fill showing through
+      // its transparent center. The picked material's own icon (see
+      // .part-slot-icon) sits on top once craftingui.js fills the slot.
+      background: url("/images/UI/frames/rewardborder.webp") no-repeat center / 100% 100%,
+        rgba(0, 0, 0, 0.45);
+      box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6);
+      transition: 0.15s;
+    }
+    .part-slot-box:hover {
+      filter: brightness(1.25);
+    }
+    .part-slot-icon {
+      width: 60%;
+      height: 60%;
+      object-fit: contain;
+      pointer-events: none;
+      filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.7));
+    }
+    .part-slot-material {
+      // fixed height so the box above doesn't shift position once text
+      // appears - it's present (empty) from first render, not toggled in/out
+      height: 14px;
+      line-height: 14px;
+      max-width: 100px;
+      font-family: $tipsFont;
+      font-size: 0.72rem;
+      color: rgba(237, 213, 159, 0.75);
+      text-align: center;
+      text-transform: capitalize;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    // SWORD - four corner slots wired to a center icon
+    .sword-layout {
+      position: relative;
+      width: 360px;
+      height: 360px;
+
+      .part-slot {
+        position: absolute;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        width: 100px;
+      }
+      .blade-slot  { top: 0;    left: 0; }
+      .guard-slot  { top: 0;    right: 0; }
+      .pommel-slot { bottom: 0; left: 0; }
+      .handle-slot { bottom: 0; right: 0; }
+
+      .craft-center-icon {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        height: 230px;
+        z-index: 1;
+        pointer-events: none;
+        filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.6));
+      }
+      // swapped to swordforging.webp for the 3s crafting animation (see
+      // craftingui.js's craft-btn handler)
+      .craft-center-icon.forging {
+        animation: craftForgingGlow 0.6s ease-in-out infinite;
+      }
+
+      .connector-line {
+        position: absolute;
+        height: 1px;
+        z-index: 0;
+        background: linear-gradient(90deg, rgba(237, 213, 159, 0.5), rgba(237, 213, 159, 0));
+        transform-origin: left center;
+      }
+      .line-blade  { top: 73px;  left: 50px;  width: 168px; transform: rotate(40deg); }
+      .line-guard  { top: 73px;  left: 310px; width: 168px; transform: rotate(140deg); }
+      // pommel/handle boxes sit ~22px higher than before (label + gap for
+      // the .part-slot-material row added below the box), so their center
+      // moved from y=315 to y=293 - recomputed length/angle to match
+      .line-pommel { top: 293px; left: 50px;  width: 172px; transform: rotate(-41deg); }
+      .line-handle { top: 293px; left: 310px; width: 172px; transform: rotate(-139deg); }
+    }
+
+    // ARMOR/HELMET/PAULDRON - one mesh, one slot, centered
+    .single-layout {
+      width: 100%;
+      height: 360px;
+      align-items: center;
+      justify-content: center;
+
+      .part-slot {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .part-slot-box {
+        width: 130px;
+        height: 130px;
+      }
+    }
+
+    &.sword-mode .sword-layout { display: block; }
+    &.single-mode .single-layout { display: flex; }
+  }
+
+  .craft-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+
+    .craft-budget {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+
+      .craft-budget-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .craft-budget-icon {
+        width: 26px;
+        height: 26px;
+      }
+      .craft-budget-input {
+        width: 120px;
+        padding: 6px 10px;
+        background: $naturalBlack;
+        border: 1px solid rgba(202, 165, 1, 0.4);
+        border-radius: 4px;
+        outline: none;
+        color: #edd59f;
+        font-family: $numFont;
+        font-size: 0.95rem;
+        // native number-input spin arrows read out of place against the
+        // rest of this hand-styled rpg chrome
+        -moz-appearance: textfield;
+        appearance: textfield;
+      }
+      .craft-budget-input::-webkit-inner-spin-button,
+      .craft-budget-input::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .craft-budget-input::placeholder {
+        color: rgba(237, 213, 159, 0.4);
+      }
+      .craft-rarity-readout {
+        padding-left: 2px;
+        font-family: $tipsFont;
+        font-size: 0.78rem;
+        color: rgba(245, 245, 245, 0.55);
+
+        .craft-rarity-value {
+          color: #edd59f;
+        }
+      }
+    }
+
+    .craft-btn {
+      @include rpgbutton();
+      width: 140px;
+      padding: 8px 0;
+      font-size: 1rem;
+      font-family: $choicefont;
+    }
+    .craft-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+}
+
+@keyframes craftForgingGlow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.6)) brightness(1); }
+  50% { filter: drop-shadow(0 0 22px rgba(255, 140, 40, 0.85)) brightness(1.3); }
+}
+
+// MATERIAL PICKER (opened from a craft-container part slot)
+.material-picker-container {
+  @include centerFix($uiz + 3);
+  display: none;
+  flex-direction: column;
+  width: 380px;
+  max-height: 440px;
+  background: rgb(15, 17, 17);
+  border: 1px solid rgba(202, 165, 1, 0.45);
+  border-radius: 6px;
+  box-shadow: $inset1, 0 0 30px rgba(0, 0, 0, 0.6);
+  padding: 22px 24px;
+  color: $littlewhite;
+
+  .mp-title {
+    text-align: center;
+    font-family: $choicefont;
+    font-size: 1.1rem;
+    color: #edd59f;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+  }
+
+  .mp-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    overflow-y: auto;
+    padding-right: 2px;
+    align-content: flex-start;
+
+    .mp-swatch {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(245, 245, 245, 0.12);
+      border-radius: 6px;
+      padding: 8px 4px;
+      transition: 0.15s;
+
+      .mp-swatch-img {
+        width: 42px;
+        height: 42px;
+        object-fit: contain;
+      }
+      .mp-swatch-name {
+        font-family: $tipsFont;
+        font-size: 0.7rem;
+        color: rgba(245, 245, 245, 0.8);
+        text-align: center;
+      }
+      .mp-swatch-qty {
+        font-family: $numFont;
+        font-size: 0.68rem;
+        color: #edd59f;
+      }
+    }
+    .mp-swatch:hover {
+      border-color: rgba(202, 165, 1, 0.5);
+      background: rgba(202, 165, 1, 0.1);
+    }
+    .mp-empty-msg {
+      grid-column: 1 / -1;
+      text-align: center;
+      font-family: $tipsFont;
+      font-size: 0.85rem;
+      color: rgba(245, 245, 245, 0.4);
+      padding: 30px 0;
     }
   }
 }
