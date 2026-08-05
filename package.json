@@ -20,9 +20,9 @@
     "@babylonjs/havok": "^1.3.13",
     "@babylonjs/loaders": "^9.18.1",
     "@babylonjs/materials": "^9.10.1",
-    "babyloncamtricks": "file:../../../web/module/babyloncamtricks",
-    "babylonstats": "file:../../../web/module/babylonstats",
-    "infterrain": "1.0.0",
+    "babyloncamtricks": "^1.0.0",
+    "babylonstats": "^1.0.0",
+    "infterrain": "^1.0.0",
     "socket.io-client": "^4.8.3"
   }
 }
