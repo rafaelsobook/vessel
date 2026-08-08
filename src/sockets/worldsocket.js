@@ -16,6 +16,8 @@ import { attack, activateSkill } from "../charactersystem/attackingSystem"
 import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitDied, emitEnemyIsHit } from "./emits"
+import { castEnemySkill } from "../creations/skillEffects.js"
+import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
 import { receiveWorldChatMessage } from "../components/worldChatSystem"
@@ -400,6 +402,28 @@ export function activateOnSocketListeners(socket){
                 disposeMesh(rangeMeshClone)
             }, 3000)
         }
+    })
+    // enemy skill-casting (det.skills, see createEnemy.js's own comment on
+    // the decision side, skillEffects.js's castEnemySkill/
+    // fireEnemySkillProjectile on the execution side) - mirrors
+    // "enemy-attacked"'s plain relay pattern: the server does no
+    // validation of its own, it just broadcasts to everyone including the
+    // sender, and every client (this handler) reacts identically -
+    // castEnemySkill's own safety comes from only the intended victim's
+    // client ever applying damage, not from anything gated here.
+    socket.on("enemy-cast-skill", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        const enemy = enemiez.find(enem => enem._id === data._id)
+        if (!enemy) return
+        const targetPlayer = playersOnScene.find(pl => pl.owner === data.targetId)
+        if (!targetPlayer) return
+        const skill = SKILLS_BY_NAME[data.skillName]
+        if (!skill) return
+
+        castEnemySkill(scene, enemy, skill, targetPlayer)
     })
     socket.on('enemy-changedtarget', data => {
         if (!isSocketOn) return

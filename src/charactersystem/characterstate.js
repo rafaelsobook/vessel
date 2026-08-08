@@ -293,8 +293,8 @@ export function activateLifeSystem(){
         })
         if(characterState.hp+addStats.additionalHp <= 0){
             clearIntervals()
-            // emitDied()
-            // gameOver()
+            // emitDied() uncomment if everything is ready
+            // gameOver() uncomment if everything is ready
         }
         if(characterState.survival.sleep <=0)characterState.survival.sleep = 0
         if(characterState.survival.hunger <=0)characterState.survival.hunger = 0
@@ -497,7 +497,6 @@ export function addEffectsOnStat(effect){
 }
 export async function gameOver(){
     hideShowAllScreenUI(false)
-    setGameStatus("gameover")
     setCanPress(false)
     disableEnableAttackButtonsContainer(false, true)
     closeInventory()

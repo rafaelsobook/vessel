@@ -20,7 +20,7 @@
 // ONE generic engine - skillEffects.js's castOffenseSkill/fireElementalProjectile
 // - driven entirely by these fields, so adding another skill later is just
 // adding another object below, not writing a new cast function:
-//   - element: "normal"/"fire"/"light"/"earth"/"water"/"dark" - picks the
+//   - element: "normal"/"fire"/"light"/"earth"/"water"/"dark"/"lightning" - picks the
 //     magic circle texture (ELEMENT_CIRCLES in skillEffects.js) unless
 //     magicCircleImg overrides it directly (radiantjudgment does, for a
 //     "divine1" circle instead of the plain apt_light every other light
@@ -269,6 +269,68 @@ export const quakeboltSkill = {
     magicCircleImg: "apt_earth_second",
     onLevelUp: "growParticleAura",
     desc: "Chunks of rock tumble along in the bolt's wake, slamming down in a rockslide on impact.",
+}
+
+// --- LIGHTNING ---
+// electricslime's own element (tcp/recources/enemyDetails.ts) - added
+// specifically so it has a real elite skill to be assigned, matching the
+// fire/water/earth pairs' exact stat shape. "lightning" not "electric" -
+// see enemyDetails.ts's own comment on that naming.
+export const lightningboltSkill = {
+    slotNumber: 27,
+    equiped: true,
+    isActive: false,
+    name: "lightningbolt",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "lightning",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Lightning Bolt",
+    castDuration: 2,
+    returnModeDura: 900,
+    skillCoolDown: 1500,
+    demand: [{ name: "mp", minCost: 15, cost: 0 }],
+    effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+    skillrank: 1,
+    upgradePlus: 15,
+    explosionColor: "yellow",
+    explosionScale: 1,
+    projectileStyle: "blade",
+    explosionStyle: "lightning",
+    arcCount: 0,
+    onLevelUp: "growArcAura",
+    desc: "A short blade of crackling electricity is hurled forward, arcing into a bright flash on impact.",
+}
+export const stormsurgeSkill = {
+    slotNumber: 28,
+    equiped: true,
+    isActive: false,
+    name: "stormsurge",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "lightning",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Storm Surge",
+    castDuration: 2.8,
+    returnModeDura: 900,
+    skillCoolDown: 2200,
+    demand: [{ name: "mp", minCost: 32, cost: 0 }],
+    effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+    skillrank: 1,
+    upgradePlus: 28,
+    explosionColor: "yellow",
+    explosionScale: 1,
+    projectileStyle: "bolt",
+    particleStyles: [{ name: "oneline", color: "yellow" }],
+    explosionStyle: "lightning",
+    onLevelUp: "growParticleAura",
+    desc: "A storm-charged bolt trails crackling arcs of electricity, discharging into a violent surge on impact.",
 }
 
 // --- LIGHT ---
@@ -877,6 +939,7 @@ export const skillsData = [
     flamebrandSkill, infernorushSkill,
     tidalspikeSkill, maelstromboltSkill,
     stoneshardSkill, quakeboltSkill,
+    lightningboltSkill, stormsurgeSkill,
     lightpierceSkill, radiantjudgmentSkill,
     shadowboltSkill, voidrendSkill,
     pyroclasmSkill, solarcataclysmSkill,
@@ -889,3 +952,11 @@ export const skillsData = [
     burstshotsSkill,
     multicastSkill,
 ]
+
+// name -> skill object, e.g. skillsData.js's own exports plus anything an
+// enemy is assigned (tcp/recources/enemyDetails.ts's det.skills, an array
+// of skill NAMES - the server only ever knows enemies as plain data, it has
+// no notion of the actual skill objects, so createEnemy.js/worldsocket.js
+// resolve the real object through this map). Built once here instead of at
+// each call site.
+export const SKILLS_BY_NAME = Object.fromEntries(skillsData.map(skill => [skill.name, skill]))

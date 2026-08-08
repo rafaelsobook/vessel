@@ -22,6 +22,7 @@ import { createSlimeMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 import { terrainHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
+import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 
 
 
@@ -254,6 +255,50 @@ export default function createEnemy(scene, det) {
         //     initAttack(det)
         // }
     })
+
+    // --- enemy skill casting (det.skills - only fireslime/electricslime
+    // for now, see tcp/recources/enemyDetails.ts) - deliberately its own
+    // plain proximity poll, not the atkDetection/chaseDetector
+    // ActionManager triggers above: those only ever fire from "did MY OWN
+    // character walk into a trigger zone", but a skill needs to know about
+    // EVERY nearby player at once to pick the closest one, which
+    // detectPlayerNearby below computes directly off getPlayersOnScene().
+    //
+    // Multiplayer-safe by construction: every client near this enemy runs
+    // this same interval and computes the same closestPlayer (player
+    // positions are already synced identically to everyone, so there's
+    // nothing client-specific about the answer) - but only the client
+    // whose OWN character actually IS that closest player ever emits.
+    // Exactly one client decides per cast, never zero, never more than
+    // one, no matter how many players happen to be nearby - see
+    // skillEffects.js's castEnemySkill/fireEnemySkillProjectile for how
+    // the actual cast (broadcast to everyone, damage applied only by the
+    // real target) stays safe on top of that single decision.
+    const ENEMY_SKILL_CHECK_INTERVAL_MS = 1500
+    const ENEMY_SKILL_RANGE = 15
+    let enemySkillCooldownUntil = 0
+    if(det.skills?.length){
+        const enemySkillInterval = setInterval(() => {
+            const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
+            if (!thisEnemy) return clearInterval(enemySkillInterval)
+            if (thisEnemy._disabled) return
+            if (Date.now() < enemySkillCooldownUntil) return
+
+            detectPlayerNearby(thisEnemy.body.position, ENEMY_SKILL_RANGE, (playersNearby, closestPlayer) => {
+                if (!closestPlayer) return
+                const charState = getCharState()
+                if (!charState || closestPlayer.owner !== charState.owner) return
+
+                const skillName = det.skills[0]
+                const skill = SKILLS_BY_NAME[skillName]
+                if (!skill) return console.warn(`[enemy skill] unknown skill "${skillName}" on enemy`, det.name)
+
+                enemySkillCooldownUntil = Date.now() + skill.skillCoolDown
+                const enPos = thisEnemy.body.position
+                emitEnemyCastSkill(thisEnemy._id, skillName, closestPlayer.owner, { x: enPos.x, y: enPos.y, z: enPos.z }, det.currentPlaceId)
+            })
+        }, ENEMY_SKILL_CHECK_INTERVAL_MS)
+    }
     // let intervalAtk
     // let intervalDistanceChecker
 
@@ -435,6 +480,31 @@ function emitRegisterAsEnemy(enemId, heroId, dirTarg) {
         _id: enemId,
         targetId: heroId,
         dirTarg
+    })
+}
+// nearby/closest player lookup for enemy skill-casting (see the setInterval
+// above) - plain distance check over getPlayersOnScene(), not an
+// ActionManager trigger, since this needs every nearby player at once, not
+// just "did my own character enter a zone"
+function detectPlayerNearby(enemyPos, distance, callback) {
+    let closest = null
+    let closestDist = Infinity
+    const nearby = getPlayersOnScene().filter(pl => {
+        if (!pl.body || pl.isDead) return false
+        const d = Vector3.Distance(enemyPos, pl.body.position)
+        if (d > distance) return false
+        if (d < closestDist) { closestDist = d; closest = pl }
+        return true
+    })
+    callback(nearby, closest)
+}
+function emitEnemyCastSkill(enemId, skillName, targetId, pos, placeId) {
+    getSocket().emit("enemyWillCastSkill", {
+        currentPlaceId: placeId,
+        _id: enemId,
+        skillName,
+        targetId,
+        pos,
     })
 }
 

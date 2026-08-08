@@ -30,10 +30,12 @@ import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, pushProjectile, removeProjectile } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
-import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities } from "../charactersystem/characterstate.js"
+import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied } from "../sockets/emits.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp } from "../charactersystem/characterstate.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
+import { getSceneDet } from "../main/main.js"
+import { camShake } from "../tools/camera.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
 // override this directly via magicCircleImg (radiantjudgment uses "divine1"
@@ -46,6 +48,7 @@ const ELEMENT_CIRCLES = {
     earth: "apt_earth",
     light: "apt_light",
     dark: "apt_darkness",
+    lightning: "apt_lightning",
 }
 
 // skill.name -> { skill, timeoutIds: [] } - one pending cast slot PER SKILL,
@@ -650,6 +653,12 @@ const EXPLOSION_STYLES = {
     dark(scene, pos, powerScale, color, skill){
         createImplosionBurst(scene, pos, powerScale, color)
     },
+    lightning(scene, pos, powerScale, color, skill){
+        // clean and sharp like "light"'s burst, but its own texture
+        // (flare3, otherwise unused) so a bright lightning discharge reads
+        // as a distinct flash rather than a recolored light skill
+        createExplosionBurst(scene, pos, powerScale, 0.85, 0.6, 20, color, { burstTexture: "flare3", gravitySign: 1, includeSmoke: false })
+    },
 }
 
 // launch/impact sound per projectile style - falls back to the generic
@@ -662,18 +671,35 @@ const EXPLOSION_STYLES = {
 const LAUNCH_SOUND_BY_STYLE = { blade: "spearS1", bladecross: "swordS1", spearlance: "spearS1" }
 const IMPACT_SOUND_BY_STYLE = { blade: "struckS", bladecross: "struckS", spearlance: "struckS" }
 
+// lightningboltSkill only (skillsData.js) - "blade" style already gets its
+// own struckS impact like every other blade skill, but a bolt of
+// electricity landing should ALSO carry its own elemental hit sound on top
+// of the generic weapon-strike one, not just the blade sound alone the way
+// flamebrand/tidalspike/stoneshard (the other "blade" skills) do. Called
+// from both player-cast and enemy-cast hit handlers below so lightningbolt
+// sounds the same either way it's cast.
+function playImpactSound(skill){
+    const impactSoundName = IMPACT_SOUND_BY_STYLE[skill.projectileStyle] || "fireHitS"
+    getAllSounds()[impactSoundName]?.play()
+    if(skill.name === "lightningbolt") getAllSounds().fireHitS?.play()
+}
+
 const PROJECTILE_SPEED = 12
 const PROJECTILE_RANGE_TIMEOUT = 3000 // ms of flight before despawning on a miss
 
-// skill.swordRain markers (astralrainSkill) don't vanish the instant they
-// land - per spec they stick to whatever they hit (enemy OR environment:
-// ground/wall/tree/anything solid) via a real .setParent() (recomputes
-// local transform to stay exactly where it hit, not a raw .parent
-// assignment - same pattern PROJECTILE_STYLES.darkorb's onHit already
-// established) and stay attached for MARKER_STICK_DURATION_MS before
-// actually disposing. Also flips the shared projectile.stuck flag so
-// renderer.js's own per-projectile movement loop stops translating it
-// forward once it's attached somewhere.
+// shared "stick instead of vanish" behavior - a hit projectile doesn't
+// always just explode and despawn immediately. Attaches via a real
+// .setParent() (recomputes local transform to stay exactly where it hit,
+// not a raw .parent assignment) and stays attached for
+// MARKER_STICK_DURATION_MS before actually disposing. Also flips the
+// shared projectile.stuck flag so renderer.js's own per-projectile
+// movement loop stops translating it forward once it's attached somewhere.
+// Used by: skill.swordRain markers (astralrainSkill - sticks to whatever
+// environment/enemy it hit), PROJECTILE_STYLES.darkorb's own onHit (grows
+// instead of just sticking, doesn't use this helper directly), and every
+// "blade" style skill (fireElementalProjectile/fireEnemySkillProjectile -
+// sticks into the target like a thrown blade, on top of its normal
+// explosion/damage, not instead of it).
 const MARKER_STICK_DURATION_MS = 10000
 function stickMarkerToMesh(projectile, box, hitMesh, cleanupProjectile){
     projectile.stuck = true
@@ -769,8 +795,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 return
             }
 
-            const impactSoundName = IMPACT_SOUND_BY_STYLE[skill.projectileStyle] || "fireHitS"
-            getAllSounds()[impactSoundName]?.play()
+            playImpactSound(skill)
 
             // onHitStyle (darkorb) owns its own impact visual (stick + grow)
             // instead of the usual burst - skip EXPLOSION_STYLES entirely
@@ -841,10 +866,16 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             }
 
             // darkorb's onHit owns when cleanupProjectile actually runs from
-            // here (after its stick-and-grow sequence finishes) - every
-            // other style cleans up immediately, right when it lands
+            // here (after its stick-and-grow sequence finishes); "blade"
+            // style skills stick into the enemy they hit for
+            // MARKER_STICK_DURATION_MS instead of vanishing on impact
+            // (enemies have no bodytarget/spine mount like players do, so
+            // this attaches to the enemy's own whole body) - every other
+            // style cleans up immediately, right when it lands
             if(onHitStyle){
                 onHitStyle(enemy, cleanupProjectile)
+            } else if(skill.projectileStyle === "blade"){
+                stickMarkerToMesh(projectile, box, enemy.body, cleanupProjectile)
             } else {
                 cleanupProjectile()
             }
@@ -1015,4 +1046,171 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
             }
         })
     }, travelMs)
+}
+
+// --- ENEMY-CAST SKILLS (det.skills, see tcp/recources/enemyDetails.ts -
+// fireslime/electricslime) - the reverse direction of everything above: an
+// ENEMY casting a player skill AT a player instead of a player casting one
+// at an enemy. Reuses the same magic circle + PROJECTILE_STYLES/
+// EXPLOSION_STYLES building blocks, but is its own pair of functions rather
+// than a flag on fireElementalProjectile - the damage math is different
+// (an enemy has no "magic" stat, no mana slider/powerScale to read), and
+// most importantly the hit-detection direction is flipped (testing against
+// the LOCAL player's own body, not iterating getEnemiesOnScene()).
+//
+// Multiplayer model (see createEnemy.js's own comment on the decision side
+// of this): the DECISION of "should this enemy cast, at whom" is made by
+// exactly one client (whichever player is currently closest) and relayed
+// through the server as a plain broadcast (enemyWillCastSkill ->
+// enemy-cast-skill, mirroring enemyWillAttack/enemy-attacked) - every
+// connected client, including the one that made the decision, receives
+// that broadcast and calls castEnemySkill below identically. The safety
+// comes entirely from what happens NEXT, inside fireEnemySkillProjectile:
+// every client renders the same circle/projectile (so it looks consistent
+// to everyone watching), but only the client whose OWN character is the
+// intended target ever registers a hit-test or calls deductHp - so no
+// matter how many clients are watching this same broadcast, exactly one of
+// them (the victim) can ever actually apply damage from it.
+function computeEnemyCastOrigin(enemy, targetPos){
+    const enemyPos = enemy.body.absolutePosition.clone()
+    const spawnPos = enemyPos.add(new Vector3(0, (enemy.det?.bodyHeight ?? 1) * 0.6, 0))
+    const forward = targetPos.subtract(spawnPos).normalize()
+    return { spawnPos, forward }
+}
+
+// called by worldsocket.js's "enemy-cast-skill" listener, once per client,
+// for every client watching - see the header comment above for why this is
+// safe despite running identically everywhere.
+export function castEnemySkill(scene, enemy, skill, targetPlayer){
+    if(!enemy?.body || !targetPlayer?.body || !scene) return
+    const targetOwner = targetPlayer.owner
+    // aim toward bodytarget (createcharacter.js - a box parented to the
+    // spine bone, roughly chest height) rather than the raw capsule body's
+    // own position (its center, which sits much lower - closer to the
+    // pelvis). This used to aim at body while fireEnemySkillProjectile's
+    // hit-test checked against bodytarget instead - two different points -
+    // so the blade would keep flying past chest height and only actually
+    // register/stick once it dipped low enough to clip the target's lower
+    // half. Aiming at the exact mesh being hit-tested fixes both at once.
+    const aimPos = targetPlayer.bodytarget?.getAbsolutePosition() ?? targetPlayer.body.absolutePosition
+    const { spawnPos, forward } = computeEnemyCastOrigin(enemy, aimPos)
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+
+    createMagicCircle(spawnPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, forward, CIRCLE_SIZE_SCALE)
+
+    setTimeout(() => {
+        // re-resolve the target at FIRE time, not cast-start time - same
+        // "recomputed at impact, not activation" principle every other hit
+        // calc in this file already follows, so a player who moved during
+        // the cast window is aimed at from where they are NOW, not where
+        // they stood when the circle first bloomed
+        const liveTarget = getPlayersOnScene().find(pl => pl.owner === targetOwner)
+        if(!liveTarget?.body) return
+        const liveAimPos = liveTarget.bodytarget?.getAbsolutePosition() ?? liveTarget.body.absolutePosition
+        const freshForward = liveAimPos.subtract(spawnPos).normalize()
+        fireEnemySkillProjectile(scene, enemy, skill, spawnPos, freshForward, targetOwner)
+    }, skill.castDuration * 1000)
+}
+
+const ENEMY_SKILL_PROJECTILE_TIMEOUT = 3000
+
+function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, targetOwner){
+    const itemId = `enemyskill_${skill.name}_${randNum(1000, 9999)}`
+    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 0.25 }, scene)
+    box.position.copyFrom(spawnPos)
+    box.isPickable = false
+    box.isVisible = false
+
+    const styleFn = PROJECTILE_STYLES[skill.projectileStyle] || PROJECTILE_STYLES.bolt
+    const styleResult = styleFn(scene, box, skill)
+    const cleanupStyle = typeof styleResult === "function" ? styleResult : styleResult.cleanup
+
+    const launchSoundName = LAUNCH_SOUND_BY_STYLE[skill.projectileStyle] || "fireBallS"
+    getAllSounds()[launchSoundName]?.play()
+
+    const targetPoint = spawnPos.add(forward.scale(10))
+    const dx = targetPoint.x - box.position.x
+    const dy = targetPoint.y - box.position.y
+    const dz = targetPoint.z - box.position.z
+    box.rotation.y = Math.atan2(dx, dz)
+    box.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
+
+    const projectile = {
+        itemId, body: box,
+        targetDirection: { x: dx, y: dy, z: dz },
+        spd: PROJECTILE_SPEED,
+        placeId: enemy.det.currentPlaceId,
+        stuck: false,
+    }
+    pushProjectile(projectile)
+
+    function cleanupProjectile(){
+        cleanupStyle()
+        removeProjectile(itemId)
+    }
+
+    let hasHit = false
+    const missTimeout = setTimeout(() => {
+        if(hasHit) return
+        cleanupProjectile()
+    }, ENEMY_SKILL_PROJECTILE_TIMEOUT)
+
+    // only ever registered on the intended victim's own client - see this
+    // section's header comment. Every other client just watches the same
+    // projectile fly past and time out above, with no hit-test at all.
+    const charState = getCharState()
+    if(!charState || targetOwner !== charState.owner) return
+    const myCharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+    // bodytarget (createcharacter.js) - a small mesh parented to the
+    // player's own spine bone, not the whole capsule body - same hit
+    // volume creations/skills.js's spawnProjectile ("throw weapon") already
+    // tests against for its own stick-in-target behavior, reused here so a
+    // "blade" style skill can setParent() into it below for an identical
+    // "stuck in your chest" look
+    if(!myCharacter?.bodytarget) return
+
+    const enterAction = onIntersecEnterTrig(box, myCharacter.bodytarget, scene, async () => {
+        if(hasHit) return
+        hasHit = true
+        clearTimeout(missTimeout)
+        removeIntersecTrig(box, enterAction)
+
+        // "blade" style skills - play the actual "got struck" reaction
+        // (animation + a struckS play spatially re-attached to bodytarget,
+        // so it audibly comes from the player's own body rather than
+        // wherever struckS last played from) before the generic impact
+        // sound/explosion/damage below. attachToMesh right before
+        // playImpactSound's own struckS.play() call (IMPACT_SOUND_BY_STYLE
+        // maps "blade" to struckS already) rather than playing it twice.
+        if(skill.projectileStyle === "blade"){
+            myCharacter.characterAnimations?.playAction(myCharacter.anims, "hit_struct1", 1)
+            getAllSounds().struckS?.attachToMesh(myCharacter.bodytarget)
+        }
+
+        playImpactSound(skill)
+        const explosionFn = EXPLOSION_STYLES[skill.explosionStyle] || EXPLOSION_STYLES.fire
+        explosionFn(scene, box.position.clone(), 1, skill.explosionColor || "red", skill)
+
+        const sceneDet = getSceneDet()
+        if(sceneDet?.scene?.activeCamera) camShake(sceneDet.scene, sceneDet.scene.activeCamera, .01, true)
+
+        // no "magic stat" to scale off for an enemy caster (unlike the
+        // player-cast version above) - just the skill's own plusDmg plus a
+        // small bump from the enemy's own magDmg stat, matching how
+        // emitAttack's melee damage reads straight off detail.stats.dmg
+        // with no separate scaling layer either
+        const totalDmg = Math.round((skill.effects?.plusDmg || 0) + (enemy.det.stats?.magDmg || 0) * 20)
+        const isDead = await deductHp(totalDmg, enemy.det.effects || [])
+        if(isDead) emitDied()
+
+        // "blade" style skills (flamebrand/lightningbolt, the only two
+        // enemy-castable ones so far) stick into the player's bodytarget
+        // for MARKER_STICK_DURATION_MS instead of vanishing on impact,
+        // same as the player-cast direction above
+        if(skill.projectileStyle === "blade"){
+            stickMarkerToMesh(projectile, box, myCharacter.bodytarget, cleanupProjectile)
+        } else {
+            cleanupProjectile()
+        }
+    })
 }
