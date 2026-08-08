@@ -588,6 +588,16 @@ export const abyssalcurrentSkill = {
     desc: "The crushing weight of the deepest trench rides a bolt of god-lightning, erupting into a drowning maelstrom.",
 }
 
+// continentalrend used to be a crystalshard-style projectile identical to
+// seismicjudgment right below it (same shard shape, same green, same earth
+// burst - only the damage numbers differed). Rebuilt into its own genuinely
+// different mechanic: no projectile at all - groundSpikes = { count,
+// spacing, staggerMs } marches a line of jagged rock spikes straight out
+// from the caster, each one erupting a beat after the last (see
+// triggerGroundSpikeLine/spawnGroundSpike in skillEffects.js). plusDmg is
+// PER SPIKE, not a one-shot total - same reasoning astralrainSkill's own
+// per-sword plusDmg already follows, since a target standing in the line
+// can take more than one hit as spikes march past it.
 export const continentalrendSkill = {
     slotNumber: 18,
     equiped: true,
@@ -601,21 +611,20 @@ export const continentalrendSkill = {
     skillElementType: "na",
     animationLoop: false,
     displayName: "Continental Rend",
-    castDuration: 3.5,
+    castDuration: 1.4,
     returnModeDura: 900,
     skillCoolDown: 3500,
     demand: [{ name: "mp", minCost: 58, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 225, chance: 1, bashPower: 0.6 },
+    effects: { effectType: "offense", dmgPm: 0, plusDmg: 110, chance: 1, bashPower: 0.6 },
     skillrank: 2,
-    upgradePlus: 45,
+    upgradePlus: 22,
     explosionColor: "green",
     explosionScale: 1,
-    projectileStyle: "crystalshard",
     explosionStyle: "earth",
     magicCircleImg: "apt_earth_second",
-    arcCount: 2,
-    onLevelUp: "growArcAura",
-    desc: "A fault line given form lances forward crackling with lightning, splitting the earth open on impact.",
+    groundSpikes: { count: 5, spacing: 2.2, staggerMs: 160 },
+    onLevelUp: "growGroundSpikes",
+    desc: "A line of jagged stone spikes tears forward from the ground, each one erupting a beat after the last.",
 }
 export const seismicjudgmentSkill = {
     slotNumber: 19,

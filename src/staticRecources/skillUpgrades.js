@@ -75,6 +75,18 @@ export function growSwordRain(skillDetail){
     skillDetail.swordRain.min = Math.min(7, 2 + (lvl - 1))
 }
 
+// continentalrend only - one more spike per level, capped so the line
+// doesn't grow absurdly long. _baseGroundSpikeCount remembers the
+// ORIGINAL count (same "remembered once" pattern every other grow* template
+// here uses) so repeated levels compute from that, not a compounding
+// previous value.
+export function growGroundSpikes(skillDetail){
+    if(!skillDetail.groundSpikes) return
+    const base = skillDetail._baseGroundSpikeCount ?? skillDetail.groundSpikes.count
+    skillDetail._baseGroundSpikeCount = base
+    skillDetail.groundSpikes.count = Math.min(12, base + (skillDetail.lvl - 1))
+}
+
 // darkorb only - skillEffects.js's darkorb onHit reads darkorbGrowScale/
 // darkorbGrowIntensity (falling back to its own defaults, 10x/1x, if
 // absent) - so the stick-and-swell sequence itself becomes more extreme at
@@ -125,6 +137,7 @@ export const UPGRADE_TEMPLATES = {
     growArcAura,
     growArcAuraAndBind,
     growSwordRain,
+    growGroundSpikes,
     growDarkOrb,
     growMulticastEfficiency,
 }

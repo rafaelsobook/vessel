@@ -36,6 +36,7 @@ import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
 import { camShake } from "../tools/camera.js"
+import { capsuleHeight } from "../charactersystem/createcharacter.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
 // override this directly via magicCircleImg (radiantjudgment uses "divine1"
@@ -139,7 +140,14 @@ export function castOffenseSkill(scene, player, skill, charState){
 
     const timeoutId = setTimeout(() => {
         pendingCasts.delete(skill.name)
-        fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale)
+        // skill.groundSpikes (continentalrendSkill) - no projectile at all,
+        // just a marching line of ground spikes straight out from the
+        // caster - see triggerGroundSpikeLine's own header comment
+        if(skill.groundSpikes){
+            triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forward, powerScale)
+        } else {
+            fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale)
+        }
     }, skill.castDuration * 1000)
 
     pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
@@ -1046,6 +1054,123 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
             }
         })
     }, travelMs)
+}
+
+// --- continentalrendSkill's ground spike line (skill.groundSpikes, see
+// skillsData.js and the branch in castOffenseSkill above) ---
+// No projectile, no marker, no hit-detection step at all - unlike
+// swordRain, this doesn't need to find a target first. skill.groundSpikes
+// = { count, spacing, staggerMs } marches a straight line of jagged rock
+// spikes forward from the caster along their own facing direction, each
+// one erupting staggerMs after the last (a rippling "ground splitting
+// open" read, not all 5 at once) - each spike deals its own AoE damage
+// independently the instant it erupts, so a target standing in the line's
+// path can take more than one hit as it marches past them.
+const GROUND_SPIKE_STAGGER_MS = 160
+const GROUND_SPIKE_SPACING = 2.2
+const GROUND_SPIKE_HEIGHT = 1.8
+const GROUND_SPIKE_ERUPT_MS = 280
+const GROUND_SPIKE_LIFETIME_MS = 4000
+const GROUND_SPIKE_IMPACT_RADIUS = 1.6
+
+function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forward, powerScale){
+    const groundSpikes = skill.groundSpikes
+    const count = groundSpikes.count ?? 5
+    const spacing = groundSpikes.spacing ?? GROUND_SPIKE_SPACING
+    const staggerMs = groundSpikes.staggerMs ?? GROUND_SPIKE_STAGGER_MS
+
+    // horizontal-only direction - spikes erupt straight up out of the
+    // ground, shouldn't drift because the caster's hand happened to be
+    // aimed slightly up or down at cast time
+    const flatForward = new Vector3(forward.x, 0, forward.z)
+    if(flatForward.lengthSquared() < 0.0001) flatForward.set(0, 0, 1)
+    flatForward.normalize()
+
+    // player.body's own position is the capsule's CENTER, not its base -
+    // same capsuleHeight/2 correction inputMovement.js's own isGrounded()
+    // ground check already relies on. Good enough for a short marching
+    // line, doesn't raycast each spike's own footing individually the way
+    // astralrainSkill's environment hits do (that skill needs precision
+    // for an arbitrary hit point; this one just needs "about where the
+    // caster is standing").
+    const groundY = player.body.position.y - capsuleHeight / 2
+
+    for(let i = 0; i < count; i++){
+        const dist = spacing * (i + 1)
+        const groundPos = new Vector3(spawnPos.x + flatForward.x * dist, groundY, spawnPos.z + flatForward.z * dist)
+        setTimeout(() => spawnGroundSpike(scene, charState, skill, groundPos, powerScale), i * staggerMs)
+    }
+}
+
+function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
+    const scaleMult = skill.projectileScale ?? 1
+    const height = GROUND_SPIKE_HEIGHT * scaleMult
+    // a cone (diameterTop 0) for the sharp point, low tessellation for a
+    // faceted/jagged rock read instead of a smooth spike
+    const spike = MeshBuilder.CreateCylinder(`groundspike.${randNum(1000, 9999)}`, {
+        diameterTop: 0, diameterBottom: 0.55 * scaleMult, height, tessellation: 6,
+    }, scene)
+    spike.isPickable = false
+    spike.rotation.y = randNum(0, Math.PI * 2) // random yaw - a row of identical spikes reads as stamped copies otherwise
+
+    const mat = new StandardMaterial(`groundspikeMat.${spike.name}`, scene)
+    mat.diffuseColor = new Color3(0.16, 0.13, 0.08) // dark rock
+    mat.specularColor = new Color3(0.05, 0.05, 0.05)
+    mat.emissiveColor = new Color3(0.15, 0.55, 0.2) // faint earthy-green glow along the facets, ties it to skill.explosionColor without a full Fresnel setup
+    spike.material = mat
+
+    // buried -> erupted: mesh origin is centered, so buried means the
+    // WHOLE cone sits below ground (only its tip grazing ground level),
+    // erupted means the wide base has risen to ground level with the tip
+    // sticking up `height` - eased over GROUND_SPIKE_ERUPT_MS instead of
+    // popping instantly, same manual onBeforeRenderObservable lerp
+    // PROJECTILE_STYLES.darkorb's own onHit grow sequence already uses
+    const buriedY = groundPos.y - height / 2
+    const eruptedY = groundPos.y + height / 2 - 0.15 // sits slightly sunk in rather than floating exactly at ground level
+    spike.position.set(groundPos.x, buriedY, groundPos.z)
+
+    const startTime = performance.now()
+    const eruptObserver = scene.onBeforeRenderObservable.add(() => {
+        if(spike.isDisposed()){
+            scene.onBeforeRenderObservable.remove(eruptObserver)
+            return
+        }
+        const t = Math.min(1, (performance.now() - startTime) / GROUND_SPIKE_ERUPT_MS)
+        const eased = 1 - Math.pow(1 - t, 3) // ease-out cubic
+        spike.position.y = buriedY + (eruptedY - buriedY) * eased
+        if(t >= 1) scene.onBeforeRenderObservable.remove(eruptObserver)
+    })
+
+    getAllSounds().rockSmashS?.play()
+    EXPLOSION_STYLES.earth(scene, new Vector3(groundPos.x, groundPos.y, groundPos.z), powerScale, skill.explosionColor || "green", skill)
+
+    // magic damage recomputed at each spike's own eruption, same formula
+    // fireElementalProjectile's own hit handler uses
+    getEnemiesOnScene().forEach(enemy => {
+        if(!enemy.body) return
+        const dx = enemy.body.position.x - groundPos.x
+        const dz = enemy.body.position.z - groundPos.z
+        if((dx * dx + dz * dz) > GROUND_SPIKE_IMPACT_RADIUS * GROUND_SPIKE_IMPACT_RADIUS) return
+
+        const abilityAdditions = getAdditionalsFromAbilities()
+        let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + charState.stats.magic * 16
+        if(abilityAdditions.additionalMagicDmg.percent){
+            magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+        }
+        const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+
+        emitEnemyIsHit({
+            playerId: charState.owner,
+            dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+            targetId: enemy._id,
+            currentPlaceId: charState.currentPlace.placeId,
+        })
+    })
+
+    setTimeout(() => {
+        spike.dispose()
+        mat.dispose()
+    }, GROUND_SPIKE_LIFETIME_MS)
 }
 
 // --- ENEMY-CAST SKILLS (det.skills, see tcp/recources/enemyDetails.ts -
