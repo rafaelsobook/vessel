@@ -63,10 +63,25 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
     getAllSounds().magicCircle?.play()
     return disc
 }
-export function createMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000){
+// facingDirection (optional Vector3): when omitted, the circle lies flat
+// facing straight up - the original ground-rune look every existing caller
+// (localroomdb.js, questions.js) already relies on, untouched. When given,
+// the circle stands upright and yaws to face that direction instead (e.g.
+// "in front of a hand, facing whatever's being aimed at" - skillEffects.js's
+// singlecast) - CreatePlane's front face points -Z by default, so aiming it
+// at facingDirection is a yaw of atan2(dir.x, dir.z) + PI, not the ground
+// rune's rotation.x flatten. The endless "spin" animation below owns
+// rotation.y in the ground-rune case (spinning flat in place reads fine),
+// but rotation.y is exactly the yaw that's now doing the aiming, so spin
+// moves to rotation.z instead - same clock-face spin, staying face-on.
+export function createMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000, facingDirection = null, sizeScale = 1){
     const disc = MeshBuilder.CreatePlane("magic_circle", { width: 2.5, height: 2.5 }, scene)
-    disc.rotation.x = Math.PI / 2
-    
+    if(facingDirection){
+        disc.rotation.y = Math.atan2(facingDirection.x, facingDirection.z) + Math.PI
+    } else {
+        disc.rotation.x = Math.PI / 2
+    }
+
     disc.scaling = new Vector3(0.01, 0.01, 0.01)
     disc.isPickable = false
     disc.renderingGroupId = 1
@@ -93,7 +108,7 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
     const scaleUp = new Animation("scaleUp", "scaling", fps, Animation.ANIMATIONTYPE_VECTOR3, Animation.ANIMATIONLOOPMODE_CONSTANT)
     scaleUp.setKeys([
         { frame: 0,  value: new Vector3(0.01, 0.01, 0.01) },
-        { frame: fps*2, value: new Vector3(1, 1, 1) },
+        { frame: fps*2, value: new Vector3(sizeScale, sizeScale, sizeScale) },
     ])
     scaleUp.setEasingFunction(ease)
 
@@ -103,7 +118,7 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
         { frame: 20, value: 1 },
     ])
 
-    const spin = new Animation("spin", "rotation.y", fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CYCLE)
+    const spin = new Animation("spin", facingDirection ? "rotation.z" : "rotation.y", fps, Animation.ANIMATIONTYPE_FLOAT, Animation.ANIMATIONLOOPMODE_CYCLE)
     spin.setKeys([
         { frame: 0,   value: 0 },
         { frame: 120, value: Math.PI * 2 },

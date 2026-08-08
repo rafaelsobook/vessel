@@ -171,6 +171,29 @@ export function emitEnemyIsHit(data){
     if(!socket) return
     socket.emit("enemyIsHit", data)
 }
+// skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
+// hit handler) - bindChance is rolled client-side before this is ever called,
+// same as every other hit-resolution decision in this game (server is only
+// authoritative for hp/removal, never for "did this even land"). tcp's
+// enemyBind handler is the actual _disabled timer authority; see its comment.
+export function emitEnemyBind(data){
+    if(!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("enemyBind", data)
+}
+// any dark-element skill's hit (see skillsData.js's header comment on this,
+// skillEffects.js's hit handler) - unconditional, no chance roll (dark magic
+// always curses on a landed hit, unlike enemyBind's bindChance). tcp's
+// enemyCurse handler is what actually flips the enemy's persistent _cursed
+// flag; see worldsocket.js's "enemy-attacked" handler for where a cursed
+// enemy's own attack damage gets redirected back onto itself.
+export function emitEnemyCurse(data){
+    if(!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("enemyCurse", data)
+}
 export function emitEnemyYCorrection(enemyId, y, x, z){
     if (!getIsSocketOn()) return
     const socket = getSocket()

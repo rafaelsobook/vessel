@@ -44,6 +44,11 @@ export async function setStartingContainers(scene){
         gauntlets.meshes.forEach(m => m.isVisible = false)
         const pauldrons = await importMeshSafe("./models/pauldrons/", "pauldrons.glb", scene)
         pauldrons.meshes.forEach(m => m.isVisible = false)
+        // single-mesh, non-sword weapons (spear etc) - see createweapon.js's
+        // createSingleMeshWeapon. Doesn't exist yet; importMeshSafe just
+        // falls back to an empty list until this glb is actually added
+        // const weapons = await importMeshSafe("./models/weapons/", "weapons.glb", scene)
+        // weapons.meshes.forEach(m => m.isVisible = false)
         // const helmets = await loadModel("./models/helmets/helmets.glb", scene, true)
 
         let allweaponParts
@@ -58,6 +63,7 @@ export async function setStartingContainers(scene){
             hairs: HairModel.meshes,
             animeBody: animeBodyContainer,
             allweapons: allweaponParts,
+            weapons:null,
             helmets: helmets.meshes,
             gauntlets: gauntlets.meshes,
             pauldrons: pauldrons.meshes,

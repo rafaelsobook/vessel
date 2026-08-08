@@ -1,17 +1,12 @@
 import { createElement, setLoadingInAList } from "../tools/GUITools.js"
 import { getCharState, updateMyDetailsOL } from "./characterstate.js"
-import { checkIfTokenSaved, randomNum } from "../tools/tools.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 import { equipItem, showItemInfo, unEquip } from "./itemInfoSystem.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
-import { swordsData } from "../staticRecources/swordsdata.js"
-import toSellCatalog from "../staticRecources/toSell.js"
 import { createLootItem, lootNames } from "../staticRecources/resourceLoot.js"
-import {
-    farmhatItem, laurietsHatItem, armorItem, lightArmorItem, pauldronItem,
-    gauntletItem, helmetItem, orionHelmItem, ironmaskItem, bootsItem, swordItem,
-} from "../constants/questions.js"
-import { METAL_COLOR } from "../tools/metalmat.js"
+import { activateSkill } from "./attackingSystem.js"
+import { updateSkillListUI } from "../components/skillsui.js"
 
 
 const inventoryCont  = document.querySelector(".inventory-container")
@@ -123,47 +118,41 @@ export function obtainAll(itemsArray){
 
     updateMyDetailsOL(charState, checkIfTokenSaved())
 }
-// DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Pulls
-// one of every item definition currently in the game (swords catalog, shop
-// catalog minus a couple duplicate-feeling axes, craftable loot materials,
-// and the armor set handed out by questions.js) and drops them straight into
-// the inventory. Each item needs a fresh itemId - these are all shared static
-// objects/arrays, so reusing their itemId as-is would give every pickup the
-// same id instead of a distinct inventory entry.
-const EXCLUDED_SHOP_ITEMS = ["silverwood", "daedalus", "knightaxe"]
-const singleQuestItems = [
-    farmhatItem, laurietsHatItem, lightArmorItem, ironmaskItem, bootsItem, swordItem,
-]
-// these four get one copy per METAL_COLOR (see below) instead of a single
-// copy - createcharacter.js's equip*() functions cache the created mesh by
-// name+metalColor, so reusing the same base name/modelName across colors is
-// safe and needs no new icon assets (the inventory icon is keyed off name,
-// which metalColor doesn't affect)
-const METAL_TINTABLE_ITEMS = [armorItem, pauldronItem, gauntletItem, helmetItem, orionHelmItem]
-
-function capitalize(str){
-    return str.charAt(0) + str.slice(1).toLowerCase()
-}
-function withEveryMetalColor(baseItem){
-    return Object.entries(METAL_COLOR).map(([colorKey, metalColor]) => ({
-        ...baseItem,
-        itemId: randomNum(),
-        dn: `${baseItem.dn} (${capitalize(colorKey)})`,
-        metalColor,
-    }))
-}
-
+// DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Drops
+// one of every craftable material (resourceLoot.js's lootNames - ores, gems,
+// wood/leather/stone) straight into the inventory, for testing the crafting
+// UI without actually mining. createLootItem() already mints a fresh itemId
+// per call, so no extra work needed here to keep pickups distinct.
 export function giveAllItems(){
-    const allItems = [
-        ...swordsData.map(itm => ({ ...itm, itemId: randomNum() })),
-        ...toSellCatalog
-            .filter(({ name }) => !EXCLUDED_SHOP_ITEMS.includes(name))
-            .map(({ sellerId, ...itm }) => ({ ...itm, itemId: randomNum() })),
-        ...lootNames.map(name => createLootItem(name)),
-        ...singleQuestItems.map(itm => ({ ...itm, itemId: randomNum() })),
-        ...METAL_TINTABLE_ITEMS.flatMap(withEveryMetalColor),
-    ]
-    obtainAll(allItems)
+    obtainAll(lootNames.map(name => createLootItem(name)))
+}
+// DEBUG CHEAT - bound to the "p" key in controllers/inputMovement.js. Clears
+// the inventory AND every learned skill. Unequips items first (both the
+// UI-side equiped flag/armory slot via unEquip() and the actual 3D mesh
+// visibility via myChar.unEquip()) so nothing's left floating on the
+// character with no backing item - deactivates any active skill the same
+// way (activateSkill's isActive:false branch, e.g. flexaura.auraz.stop() /
+// singlecast's cancelPendingCast()) so nothing's left running with no
+// backing skill either.
+export function wipeAllItems(){
+    const charState = getCharState()
+    if(!charState) return
+
+    const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+    const equippedTypes = new Set(charState.items.filter(itm => itm.equiped).map(itm => itm.itemType))
+    equippedTypes.forEach(itemType => {
+        unEquip(itemType)
+        if(myChar) myChar.unEquip(itemType)
+    })
+    charState.items = []
+
+    charState.skills.filter(skl => skl.isActive).forEach(skl => {
+        activateSkill(charState.owner, { ...skl, isActive: false })
+    })
+    charState.skills = []
+    updateSkillListUI()
+
+    updateMyDetailsOL(charState, checkIfTokenSaved())
 }
 export function showItemAcquiredPopUp(displayName, acquiredQnty, cb){
     //itemToAdd.itemCateg // consumable // equipable // crafting

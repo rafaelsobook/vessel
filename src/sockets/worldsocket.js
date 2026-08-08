@@ -13,9 +13,9 @@ import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
-import createEnemy, { enemyIsHit } from "../enemies/createEnemy"
+import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
-import { emitDied } from "./emits"
+import { emitDied, emitEnemyIsHit } from "./emits"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
 import { receiveWorldChatMessage } from "../components/worldChatSystem"
@@ -37,6 +37,9 @@ let containers = {
     hairs: null,
     animeBody: null,
     allweapons: null,
+    // single-mesh, non-sword weapons (spear, etc) - see createweapon.js's
+    // createSingleMeshWeapon, same "<weaponType>.<name>" lookup as helmets
+    weapons: null,
     helmets: null,
     gauntlets: null,
     pauldrons: null,
@@ -77,6 +80,7 @@ export function resetArray(){
         hairs: null,
         animeBody: null,
         allweapons: null,
+        weapons: null,
         helmets: null,
         gauntlets: null,
         pauldrons: null,
@@ -168,7 +172,7 @@ export function activateOnSocketListeners(socket){
         if(itemType === "armor") theEquipingPlayer.equipArmor(itemName, metalColor)
         if(itemType === "weapon") {
 
-            theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts, weaponType)
+            theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts, weaponType, metalColor)
         }
         if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemModelName, metalColor, itemName)
         if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)
@@ -329,14 +333,33 @@ export function activateOnSocketListeners(socket){
         if (victimPlayer.owner === charState.owner) {
             setTimeout( async () => {
                 // const vPos = victimPlayer.body.position;
-                // const enemPos = theEnemyToAttack.body.position;               
+                // const enemPos = theEnemyToAttack.body.position;
                 // const enemyAccuracy = theEnemyToAttack.det.stats.accuracy
                 // if (charState.stats.accuracy >= Math.random() * enemyAccuracy * 15) return popStatusEffect('missed', "#f5f5f5")
                 camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
                 // victimPlayer.punchedS.play()
+
+                // dark magic's curse (see skillsData.js's header comment,
+                // skillEffects.js's hit handler) - a cursed enemy's own
+                // attack damage returns to its own hp instead of hurting
+                // the victim, every single time it attacks, for the rest of
+                // its life. Gated the same way deductHp below already is
+                // (only the victim's own client acts on it) so this doesn't
+                // fire once per client watching the fight and multi-apply
+                // the self-damage.
+                if(theEnemyToAttack._cursed){
+                    emitEnemyIsHit({
+                        playerId: charState.owner,
+                        dmgDetails: { physicalDmg: data.dmg, weaponDmg: 0 },
+                        targetId: theEnemyToAttack._id,
+                        currentPlaceId: charState.currentPlace.placeId,
+                    })
+                    return
+                }
+
                 const isDead = await deductHp(data.dmg, data.effects)
                 if (isDead) emitDied()
-                
+
             }, data.atkSpd / 5)
         }
     })
@@ -441,6 +464,31 @@ export function activateOnSocketListeners(socket){
             enemyToChase._isMoving = isFar
             enemyToChase._attacking = false
         }
+    })
+    // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
+    // hit handler, tcp/index.ts's enemyBind handler) - server is the actual
+    // _disabled timer authority, this just reacts to its two broadcasts
+    socket.on("enemy-bound", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        applyEnemyBind(scene, data.targetId, data.shape, data.bindDuration)
+    })
+    socket.on("enemy-unbound", data => {
+        if (!isSocketOn) return
+        removeEnemyBind(data.targetId)
+    })
+    // dark magic's curse (see skillsData.js's header comment, skillEffects.js's
+    // hit handler, tcp/index.ts's enemyCurse handler) - permanent, no
+    // matching "enemy-uncursed" broadcast. The actual damage-reflection
+    // this causes is in the "enemy-attacked" handler further below, not here.
+    socket.on("enemy-cursed", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        applyEnemyCurse(scene, data.targetId)
     })
     socket.on("enemy-removed", enemyId => {
         if (!isSocketOn) return

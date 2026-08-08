@@ -1,6 +1,9 @@
-import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, Quaternion, Sound } from "@babylonjs/core"
+import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, MeshBuilder, Quaternion, Sound } from "@babylonjs/core"
 import { checkDistance, createMesh, createMonsterMaterial } from "../creations/creationTools.js"
 import { lookAt } from "../tools/tools"
+import { createGlowingMat } from "../tools/materials.js"
+import { addGlow } from "../tools/glow.js"
+import { attachLightning } from "../effects/lightning.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
@@ -116,8 +119,11 @@ export default function createEnemy(scene, det) {
         enemyasset.name = enemyasset.name.split(" ")[2].toLowerCase()
         enemyasset.isPickable = false
         if (enemyasset.name === 'slime') {
-            // console.warn("set material for body")
-            const mat = createSlimeMat(scene, enemyasset)
+            // det.elementType (water/fire/electric - see SLIME_ELEMENT_COLORS
+            // in skins.js) was never actually passed through here before,
+            // so every slime silently rendered with the same green "water"
+            // default regardless of its own elementType
+            const mat = createSlimeMat(scene, enemyasset, det.elementType)
             enemyasset.material = mat
             return
         }
@@ -157,6 +163,11 @@ export default function createEnemy(scene, det) {
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
         if (getGameStatus() === "loading") return console.log("game status loading")
         if (!thisEnemy) return clearInterval(intervalWillAttack)
+        // bound (see applyEnemyBind below) - "cannot move, cannot attack,
+        // cannot do anything" - the interval itself is only actually
+        // stopped at bind-time (see applyEnemyBind), this is the safety net
+        // for whatever's still in flight the instant the bind lands
+        if (thisEnemy._disabled) return
         if (thisEnemy._targetId) {
             console.log("attacking targetID: ", thisEnemy._targetId)
             const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
@@ -191,8 +202,12 @@ export default function createEnemy(scene, det) {
         const enemyTargetBody = scene.getMeshByName(`player.${myCharId}`)
 
         const plPos = enemyTargetBody.position
+        // still register as its target even while bound (see applyEnemyBind/
+        // removeEnemyBind below) - so unbinding can resume straight into
+        // attacking - just don't actually start the attack loop yet
         emitRegisterAsEnemy(thisEnemy._id, myCharId, {x: plPos.x, y: yPos, z: plPos.z})
         // emitChase(thisEnemy._id, myCharId, det.currentPlace, det.actionType)
+        if (thisEnemy._disabled) return
         clearInterval(intervalWillAttack)
         clearTimeout(timeOutWillChase)
         initAttack()
@@ -312,6 +327,21 @@ export default function createEnemy(scene, det) {
         _isMoving: det._isMoving ? det._isMoving : false,
         _dirTarg: det._dirTarg ? det._dirTarg : { x: 0, y: yPos, z: 0 },
         _targetId: det._targetId,
+        // bind effect (see applyEnemyBind below, skillEffects.js's
+        // enemyBind) - "cannot move, cannot attack, cannot do anything"
+        // while true. renderer.js's per-frame movement loop and attack()
+        // above both check this.
+        _disabled: det._disabled ? det._disabled : false,
+        // exposed so removeEnemyBind can resume attacking immediately on
+        // unbind (if this enemy still has a target) instead of waiting on
+        // the next atkDetection enter/exit trigger, which won't refire if
+        // the player never actually left attack range during the bind
+        resumeAttack: initAttack,
+        // dark magic curse (see applyEnemyCurse below, skillEffects.js's
+        // hit handler) - permanent for this enemy's life, no duration.
+        // worldsocket.js's "enemy-attacked" handler checks this to redirect
+        // a cursed enemy's own attack damage back onto itself.
+        _cursed: det._cursed ? det._cursed : false,
 
         runSound,
         deathSound,
@@ -485,6 +515,8 @@ export function defeatedAmonster(data){
 }
 // ENEMY WHEN HIT RELATED
 export function enemyDispose(enemy) {
+    removeEnemyBind(enemy._id) // stop the spin observer/pending timeout - body.dispose() below takes the mesh itself with it either way
+    curseAppliedIds.delete(enemy._id) // the arcs themselves clean up on their own (see applyEnemyCurse), this just stops tracking a dead id
     enemy.hpbar.width = `0px`
     enemy.hpmesh.dispose()
     enemy.anims.forEach(anim => anim.name === "death" ? anim.play() : anim.stop())
@@ -499,4 +531,119 @@ export function enemyDispose(enemy) {
         enemy.hpmesh.dispose()
         enemy.hpbar.dispose()
     }, 2000)
+}
+
+// ENEMY BIND (skill.enemyBind, see skillsData.js's radiantjudgmentSkill and
+// skillEffects.js's hit handler) - "disable the enemy: cannot move, cannot
+// attack, cannot do anything" for bindDuration seconds. tcp/index.ts's
+// enemyBind handler is the actual timer/state authority (flips _disabled
+// back off server-side and broadcasts "enemy-unbound" to every client, see
+// worldsocket.js) - this file only reacts to that broadcast: toggling the
+// local _disabled flag (which attack()/renderer.js's movement loop both
+// check) and showing/hiding the bind mesh itself.
+//
+// targetId -> { mesh, observer, timeoutId } - timeoutId here is only a
+// client-side safety net in case the server's "enemy-unbound" broadcast is
+// ever missed (dropped message, this client reconnecting mid-bind, etc.),
+// not the source of truth for how long the bind lasts.
+const enemyBindEntries = new Map()
+
+// mesh/observer/timeout teardown only - deliberately does NOT touch
+// enemy._disabled/resumeAttack (removeEnemyBind, below, does both). Needed
+// as its own function so applyEnemyBind can clear a stale leftover visual
+// without also immediately undoing the bind it's in the middle of applying -
+// calling the full removeEnemyBind for that would flip _disabled back off
+// (and even resume attacking) a few lines after just turning it on.
+function disposeBindVisual(targetId){
+    const entry = enemyBindEntries.get(targetId)
+    if(!entry) return
+    clearTimeout(entry.timeoutId)
+    if(entry.mesh){
+        if(entry.observer) entry.mesh.getScene()?.onBeforeRenderObservable.remove(entry.observer)
+        entry.mesh.dispose()
+    }
+    enemyBindEntries.delete(targetId)
+}
+
+export function applyEnemyBind(scene, targetId, shape, bindDuration){
+    const enemy = getEnemiesOnScene().find(ene => ene._id === targetId)
+    if(!enemy) return
+
+    disposeBindVisual(targetId) // clear a stale bind visual/timer first, just in case (shouldn't normally overlap)
+
+    enemy._disabled = true
+    enemy._isMoving = false
+    clearInterval(enemy.intervalWillAttack)
+
+    let mesh = null
+    if(shape === "torus"){
+        // encircles the whole body, roughly torso height - a "seal" holding
+        // it in place, not just a ring at its feet. CreateTorus's default
+        // orientation already lies flat (ring in the XZ-plane, hole along Y -
+        // confirmed straight from torusBuilder.pure.js's vertex generation,
+        // which sweeps the main ring with RotationY), so no extra rotation
+        // is needed to get a ring encircling a Y-up body - an earlier
+        // rotation.x = Math.PI/2 here stood it up on its edge instead
+        // (visibly wrong - see the bug report this fixed). And since the
+        // hole IS the Y axis, spinning around Y would be invisible anyway
+        // (rotationally symmetric about its own axis) - not animating it at
+        // all, rather than spinning it uselessly every frame for nothing.
+        const diameter = Math.max(enemy.det.bodyWidenes * 1.8, 1)
+        mesh = MeshBuilder.CreateTorus(`bind.${targetId}`, { diameter, thickness: diameter * 0.045, tessellation: 28 }, scene)
+        mesh.parent = enemy.body
+        mesh.position = new Vector3(0, 0, 0)
+        mesh.isPickable = false
+        mesh.material = createGlowingMat(scene, "white")
+        addGlow(scene, mesh, 0.5)
+    }
+
+    const timeoutId = setTimeout(() => removeEnemyBind(targetId), bindDuration * 1000 + 300)
+    enemyBindEntries.set(targetId, { mesh, observer: null, timeoutId })
+}
+
+export function removeEnemyBind(targetId){
+    const enemy = getEnemiesOnScene().find(ene => ene._id === targetId)
+    if(enemy){
+        const wasDisabled = enemy._disabled
+        enemy._disabled = false
+        // resume straight into attacking if it still has a target instead of
+        // waiting on the next atkDetection enter/exit trigger, which won't
+        // refire if the player never actually left attack range during the bind
+        if(wasDisabled && enemy._targetId) enemy.resumeAttack?.()
+    }
+
+    disposeBindVisual(targetId)
+}
+
+// ENEMY CURSE (dark magic's element-level hit rule, see skillsData.js's
+// header comment and skillEffects.js's hit handler) - permanent for the
+// rest of this enemy's life, no timer/duration like the bind above. tcp/
+// index.ts's enemyCurse handler is the _cursed authority; the actual
+// damage-reflection this causes lives in worldsocket.js's "enemy-attacked"
+// handler, not here - this file only owns the flag + the visual.
+//
+// targetId Set, not a Map - unlike the bind there's nothing to ever tear
+// down early (no un-curse), so all this tracks is "don't attach a second
+// set of arcs if a second dark hit lands on an already-cursed enemy".
+const curseAppliedIds = new Set()
+
+export function applyEnemyCurse(scene, targetId){
+    const enemy = getEnemiesOnScene().find(ene => ene._id === targetId)
+    if(!enemy) return
+
+    enemy._cursed = true
+    if(curseAppliedIds.has(targetId)) return // arcs already crackling around it
+    curseAppliedIds.add(targetId)
+
+    // weaponGlow: false - only spawns the crackling arc tubes, doesn't touch
+    // the enemy's own body material. weaponGlow: true would flatten every
+    // child mesh's material to a plain glow color, wiping out the actual
+    // monster skin/texture underneath - fine for a small weapon mesh
+    // (see PROJECTILE_STYLES.lightning in skillEffects.js), not for a whole
+    // character body with its own material already set up. No light
+    // (withLight: false) - one extra PointLight per cursed enemy adds up.
+    // Disposes itself automatically when enemy.body is disposed (on death) -
+    // see attachLightning's own onDisposeObservable wiring, same as
+    // PROJECTILE_STYLES.lightning already relies on.
+    attachLightning(scene, enemy.body, "purple", false, { arcCount: 2, width: 0.015, updateInterval: 140, withLight: false })
 }

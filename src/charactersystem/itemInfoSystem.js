@@ -27,10 +27,14 @@ const itemStatsCont = document.querySelector(".item-stats")
 const defRow = document.querySelector(".def-row")
 const resistanceRow = document.querySelector(".resistance-row")
 const dmgRow = document.querySelector(".dmg-row")
+const magicDmgRow = document.querySelector(".magic-dmg-row")
+const magicResistanceRow = document.querySelector(".magic-resistance-row")
 const durabilityRow = document.querySelector(".durability-row")
 const itemDefValue = document.querySelector(".itemDefValue")
 const itemResistanceValue = document.querySelector(".itemResistanceValue")
 const itemDmgValue = document.querySelector(".itemDmgValue")
+const itemMagicDmgValue = document.querySelector(".itemMagicDmgValue")
+const itemMagicResistanceValue = document.querySelector(".itemMagicResistanceValue")
 const itemDurabilityBar = document.querySelector(".itemDurabilityBar")
 
 // weapon parts material breakdown (blade/guard/handle/pommel) - only
@@ -77,7 +81,7 @@ let equipItemFunc = () => {
         if(!myChar) return
         
         if (itemType === "boots") myChar.equipBoots(name)
-        if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts, weaponType)
+        if(itemType === "weapon") myChar.equipSword(name, myChar.mode === "fighting", parts, weaponType, metalColor)
         if(itemType === "helmet") myChar.equipHelmet(itemDetail.modelName, itemDetail.metalColor, name)
         if(itemType === "gauntlet") myChar.equipGauntlet(name, itemDetail.metalColor)
         if(itemType === "pauldron") myChar.equipPauldron(name, itemDetail.metalColor)
@@ -288,6 +292,16 @@ export function showItemInfo(_itemDet){
         defRow.style.display = isArmorType ? "flex" : "none"
         resistanceRow.style.display = isArmorType ? "flex" : "none"
         dmgRow.style.display = itemType === "weapon" ? "flex" : "none"
+        // hidden when falsy/0 rather than always shown - most hand-authored
+        // swordsdata.js weapons have magicDmg fixed at 0 (never had a magic
+        // stat before crafting existed) and there's no magicResistance key
+        // on them at all, so showing "0" on every static sword would just
+        // be noise. Crafted swords (see craftingui.js's computeCraftedWeaponStats)
+        // are the ones that actually populate these.
+        const hasMagicDmg = itemType === "weapon" && !!_itemDet.equipAbilities.magicDmg
+        const hasMagicResistance = itemType === "weapon" && !!_itemDet.equipAbilities.magicResistance
+        magicDmgRow.style.display = hasMagicDmg ? "flex" : "none"
+        magicResistanceRow.style.display = hasMagicResistance ? "flex" : "none"
 
         if(isArmorType){
             itemDefValue.innerHTML = _itemDet.equipAbilities.def
@@ -295,6 +309,8 @@ export function showItemInfo(_itemDet){
         }
         if(itemType === "weapon"){
             itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg
+            if(hasMagicDmg) itemMagicDmgValue.innerHTML = _itemDet.equipAbilities.magicDmg
+            if(hasMagicResistance) itemMagicResistanceValue.innerHTML = _itemDet.equipAbilities.magicResistance
             itemImg.src = `./images/items/${itemCateg}/${weaponType}.webp`
         }
         if(itemType === "helmet"){

@@ -1,6 +1,9 @@
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
 import { getAdditionalsFromAbilities, getCharState, getTotalAtkSpd } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
+import { getSceneDet } from "../main/main"
+import { castOffenseSkill, castMulticast, cancelPendingCast } from "../creations/skillEffects"
+import { UPGRADE_TEMPLATES } from "../staticRecources/skillUpgrades"
 
 export function attack(_attackInfo, attackAnimName){  
     const {
@@ -44,7 +47,96 @@ export function activateSkill(ownerId, skillDetail){
                 player.auraz.stop()
             }
         break
+        case "burstshots":
+            // formerly named "multicast" - renamed to free that name up for
+            // the new pure-trigger skill below, the actual multi-circle
+            // mechanic (castMulticast) is unchanged
+            if(skillDetail.isActive){
+                castMulticast(getSceneDet().scene, player, skillDetail, getCharState())
+            } else {
+                // toggled off mid-sequence - drop whichever circle/timeout
+                // is still pending, don't queue up the rest
+                cancelPendingCast(skillDetail.name)
+            }
+        break
+        case "multicast":
+            // a pure TRIGGER, not a caster - deals no damage and spawns no
+            // projectile/circle of its own (effects.effectType is "trigger",
+            // not "offense", so the default branch below wouldn't touch it
+            // even without this explicit no-op case). Its entire real
+            // behavior - programmatically clicking every OTHER assigned
+            // skill-slot-button - lives in skillsui.js's slotbuttons click
+            // handler, not here, since mana-charging for those other skills
+            // only happens in that UI layer. Nothing to do on this end.
+        break
+        default:
+            // any offense-type skill (singlecast + the 10 elemental skills,
+            // see skillsData.js) rides the same generic cast engine - a new
+            // skill needs a skillsData.js entry, not a new case here
+            if(skillDetail.effects?.effectType === "offense"){
+                if(skillDetail.isActive){
+                    castOffenseSkill(getSceneDet().scene, player, skillDetail, getCharState())
+                } else {
+                    // toggled off before the cast window elapsed - drop it,
+                    // don't fire late
+                    cancelPendingCast(skillDetail.name)
+                }
+            }
+        break
     }
+}
+// Increases a skill's lvl and scales its power to match - same idea as
+// abilitySystem.js's upgradeAbility (the equivalent for blessings), just
+// for the skills array. Pure mutator - bound to the "h" key via
+// skillsui.js's upgradeOwnedSkill (see that function's own comment on why
+// it looks up the OWNED copy instead of calling this directly on a
+// skillsData.js import). upgradePlus exists on skill data specifically for
+// this (see singlecastSkill in skillsData.js), so it's the amount plusDmg/
+// dmgPm bump per level. chance/bashPower are left alone - they read as
+// 0-1/percent-capped values (chance:1 is already 100%), not open-ended
+// magnitudes like plusDmg, so blindly adding to them risks pushing them
+// past whatever their actual cap is meant to be.
+//
+// Three layers of "leveling up feels stronger", not just a damage number:
+//   1. explosionScale - the impact burst/particle system scales up (generic,
+//      every skill)
+//   2. projectileScale - the flying projectile MESH itself scales up too,
+//      not just its explosion (generic, every skill with a real mesh -
+//      skillEffects.js's PROJECTILE_STYLES read this, "marker" ignores it
+//      since it's invisible regardless)
+//   3. onLevelUp - a per-skill/family "additional aura" flavor instead of
+//      pure scaling (see staticRecources/skillUpgrades.js for the full set
+//      of templates and which skill uses which) - optional, skills with none
+//      (singlecastSkill) just get the two generic scales above
+export function upgradeSkill(skillDetail){
+    skillDetail.lvl += 1
+
+    if(skillDetail.effects){
+        const bump = skillDetail.upgradePlus || 0
+        if(skillDetail.effects.plusDmg) skillDetail.effects.plusDmg += bump
+        if(skillDetail.effects.dmgPm)   skillDetail.effects.dmgPm   += bump
+    }
+
+    // createExplosionBurst's powerScale/fireScale/smokeScale/emberEmitRate
+    // (particlesystem.js) all get multiplied by this at cast time (see
+    // skillEffects.js) - the whole particle system scales up 10% per level,
+    // so a higher-level cast visibly looks stronger, not just hits harder
+    skillDetail.explosionScale = 1 + (skillDetail.lvl - 1) * 0.1
+
+    // the projectile mesh itself, not just what happens when it lands -
+    // capped at lvl 10's worth of growth so it doesn't become a comically
+    // oversized prop at very high levels
+    const PROJECTILE_SCALE_STEP = 0.08
+    const PROJECTILE_SCALE_CAP = 1 + PROJECTILE_SCALE_STEP * 9
+    skillDetail.projectileScale = Math.min(PROJECTILE_SCALE_CAP, 1 + (skillDetail.lvl - 1) * PROJECTILE_SCALE_STEP)
+
+    // onLevelUp is a STRING KEY (e.g. "growArcAura"), not a function
+    // reference - see skillUpgrades.js's UPGRADE_TEMPLATES for why (skill
+    // objects get JSON.stringify'd on save/socket relay, which would
+    // silently drop an actual function property but not a string)
+    if(skillDetail.onLevelUp) UPGRADE_TEMPLATES[skillDetail.onLevelUp]?.(skillDetail)
+
+    return skillDetail
 }
 // tools
 
@@ -103,7 +195,14 @@ export function calcDmg(charState){
     let accuracy = abilityAdditions.additionalAccuracy + charState.stats.accuracy
 
     let weaponDmg = 0
-    let magicDmg = abilityAdditions.additionalMagicDmg + charState.stats.magic*16
+    // additionalMagicDmg is {toAdd, percent}, not a plain number - same
+    // shape/bug additionalMeeleeDmg has above, just never noticed here
+    // since magicDmg was never actually consumed by anything (until
+    // skillEffects.js's singlecast started reading it)
+    let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + charState.stats.magic*16
+    if(abilityAdditions.additionalMagicDmg.percent){
+        magicDmg += magicDmg*abilityAdditions.additionalMagicDmg.percent
+    }
     if(weaponDet){
         weaponDmg = physicalDmg + weaponDet.equipAbilities.dmg + (charState.stats.weapon*10)
     }

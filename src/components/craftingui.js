@@ -5,16 +5,19 @@
 // createPauldron/equipArmor), so it only ever needs one slot.
 //
 // Clicking a part box opens a material picker listing the player's OWNED
-// crafting materials (resourceLoot.js's ore/crystal/adamantine, mined out in
-// the world) - not a free palette. Each material maps to one visual tint via
-// MATERIAL_TINTS below. Rarity TIER (common/rare) is NOT picked per part:
-// it's derived once from the budget and applied to every part of the sword
-// uniformly - there's no such thing as a common blade on a rare guard. But
-// within a tier, allswords.glb has more than one mesh for some parts (blade
-// rare1 AND rare2, guard common1 AND common2, etc, see the Blender outliner
+// crafting materials (resourceLoot.js's solarore/adamantine/wood/etc, mined
+// out in the world) - not a free palette. Each material's visual tint and
+// crafting stat weights live in itemDictionary.js (ITEM_DICTIONARY), the
+// single source of truth both this file and the stat formula read from.
+// Rarity TIER (common/rare) is NOT picked per part: it's derived once from
+// the budget and applied to every part of the sword uniformly - there's no
+// such thing as a common blade on a rare guard. But within a tier,
+// allswords.glb has more than one mesh for some parts (blade rare1 AND
+// rare2, guard common1 AND common2, etc, see the Blender outliner
 // screenshot) - which exact one gets used per part IS randomized per craft
 // (getAvailableRarityVariants/pickRarityVariant below), so two rare swords
-// don't come out looking identical.
+// don't come out looking identical. Which MATERIALS get picked, separately,
+// drives the actual stats - see buildSwordItem()/computeCraftedWeaponStats.
 
 import { createElement } from "../tools/GUITools"
 import { openClosePopup } from "../tools/popupUI"
@@ -22,6 +25,7 @@ import { getCharState } from "../charactersystem/characterstate"
 import { getSocketContainers } from "../sockets/worldsocket"
 import { obtain } from "../charactersystem/inventory"
 import { randomNum } from "../tools/tools"
+import { ITEM_DICTIONARY, computeCraftedWeaponStats } from "../staticRecources/itemDictionary"
 
 const craftCont     = document.querySelector(".craft-container")
 const craftTitle    = document.querySelector(".craft-title")
@@ -53,31 +57,6 @@ const FORGING_DURATION_MS = 3000
 // The exact numbered variant within that tier (common1 vs common2, rare1 vs
 // rare2) is chosen per part by pickRarityVariant() below.
 const RARITY_BUDGET_THRESHOLD = 100
-
-// maps each resourceLoot.js material (keyed by its item.name, NOT its
-// LOOT_TEMPLATES key - "ore"'s factory hands out an item named "solarore",
-// for instance) to one of the tints weaponmat.js/metalmat.js know how to
-// paint the part mesh with (bladeColor/guardColor/etc need one of THOSE
-// keys, not the raw material name). A few materials share a tint where
-// there's no unclaimed color left that fits (solarore/sunduskore -> gold,
-// bloodstone/rubyore both read red but off two different tints so they're
-// not identical) - iron/steel/bluegranite/wood/leather are still unclaimed
-// if a new material wants its own distinct look. Add an entry here (and a
-// matching loot template in resourceLoot.js) for any new icon dropped in.
-const MATERIAL_TINTS = {
-    solarore: "gold",
-    celestineore: "frostshard",
-    adamantine: "adamantine",
-    bloodstone: "beastheart",
-    bronzeore: "bronze",
-    manastone: "sodalite",
-    orichalcum: "mythril",
-    phoenixore: "firecrystal",
-    rubyore: "ruby",
-    silverore: "silver",
-    sunduskore: "gold",
-    unobtanium: "stormcrystal",
-}
 
 let activeCategory = "sword"
 // { blade: { materialName, materialLabel, tintKey }, guard: {...}, ... } - reset whenever category changes
@@ -121,17 +100,18 @@ function closeMaterialPicker(){
     mpCont.style.display = "none"
 }
 
-// materials the player actually has - itemCateg "crafting"/itemType
-// "material" is the same shape createLootItem() in resourceLoot.js hands
-// out. Only ones with a known tint (MATERIAL_TINTS above) are pickable.
+// materials the player actually has - itemCateg "crafting" with itemType
+// "material" or "stone" is the same shape createLootItem() in
+// resourceLoot.js hands out (manastone/stone are itemType "stone", the rest
+// are "material"). Only ones with a dictionary entry are pickable.
 function getOwnedMaterials(){
     const charState = getCharState()
     if(!charState) return []
     return charState.items.filter(itm =>
         itm.itemCateg === "crafting" &&
-        itm.itemType === "material" &&
+        (itm.itemType === "material" || itm.itemType === "stone") &&
         itm.qnty > 0 &&
-        MATERIAL_TINTS[itm.name]
+        ITEM_DICTIONARY[itm.name]
     )
 }
 
@@ -146,7 +126,7 @@ function openMaterialPicker(part, onSelect){
     }
 
     owned.forEach(itm => {
-        const tintKey = MATERIAL_TINTS[itm.name]
+        const tintKey = ITEM_DICTIONARY[itm.name].tintKey
         const swatch = createElement("button", "mp-swatch")
         const img = createElement("img", "mp-swatch-img")
         img.src = `./images/items/crafting/${itm.name}.webp`
@@ -248,6 +228,12 @@ function buildSwordParts(){
 // shop/loot sword. NOT deducting the budget or the picked materials yet -
 // that's still coming once the pricing rule is settled (see the file-level
 // TODO on the craft-btn handler below).
+//
+// dmg/magicDmg/durability/magicResistance all come from computeCraftedWeaponStats
+// (itemDictionary.js) - purely a function of which 4 materials got picked,
+// independent of the common/rare tier above (which only picks the mesh
+// variant, see buildSwordParts). Two swords built from identical materials
+// always come out with identical stats regardless of budget/rarity tier.
 function buildSwordItem(){
     const rarity = currentRarityBase
     const bladeLabel  = selectedMaterials.blade.materialLabel
@@ -255,6 +241,8 @@ function buildSwordItem(){
     const handleLabel = selectedMaterials.handle.materialLabel
     const pommelLabel = selectedMaterials.pommel.materialLabel
     const dn = `${bladeLabel} Blade`
+
+    const { dmg, magicDmg, durabilityMax, magicResistance } = computeCraftedWeaponStats(selectedMaterials)
 
     return {
         itemId: randomNum(),
@@ -269,7 +257,7 @@ function buildSwordItem(){
         itemType: "weapon",
         weaponType: "sword",
         equipAbilities: {
-            dmg: rarity === "rare" ? 23 : 14, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+            dmg, magicDmg, magicResistance, def: 0, plusStr: 0, plusDex: 0, plusInt: 0,
         },
         consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: rarity === "rare" ? 1 : 0 },
         equiped: false,
@@ -277,7 +265,7 @@ function buildSwordItem(){
         isEnhanceAble: true,
         enhancedLevel: 0,
         slots: [],
-        durability: { current: 100, max: 100 },
+        durability: { current: durabilityMax, max: durabilityMax },
         price: { coinType: "bronze", pieces: Math.max(1, Number(budgetInput.value) || 0) },
         qnty: 1,
         desc: `${dn}, a ${rarity} blade forged with a ${guardLabel.toLowerCase()} guard, a ${handleLabel.toLowerCase()} grip, and a ${pommelLabel.toLowerCase()} pommel.`,

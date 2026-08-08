@@ -419,7 +419,7 @@ export const swordsData = [
         }
     },
     // Spear parts only exist at one tier (rare1 blade/guard/handle/pommel,
-    // nothing else in allswords.glb) - unlike the sword parts above, there's
+    // that's it in allswords.glb) - unlike the sword parts above, there's
     // no combination to vary, so this is the only spear item that can exist.
     {
         itemId: randomNum(), // should be string also in client
@@ -440,7 +440,7 @@ export const swordsData = [
         durability: { current: 100, max: 100},
         price: { coinType: "bronze", pieces: 19 },
         qnty: 1,
-        desc: "Stormpiercer, a rare spear forged with a silver guard, a wood shaft, and a stormcrystal butt-cap.",
+        desc: "Stormpiercer, a rare spear forged with a silver guard, a wood shaft, and a silver butt-cap.",
         rarity: "rare",
 
         parts: {
@@ -452,7 +452,7 @@ export const swordsData = [
             bladeColor: "mythril",
             guardColor: "silver",
             handleColor: "wood",
-            pommelColor: "stormcrystal",
+            pommelColor: "silver",
         }
     }
 ]

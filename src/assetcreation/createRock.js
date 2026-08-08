@@ -62,7 +62,9 @@ export function createRock(scene, worldPos){
 // displacement stays proportional - a fixed amplitude tuned for createRock's
 // radius-1.2 boulder becomes wildly oversized on a radius-0.4 peak and shoves
 // individual vertices out into thin blade-like spikes instead of gentle bumps
-function displaceWithNoise(mesh, noiseFn, seedOffset, radius){
+// Exported - also reused by skillEffects.js's "darkorb" projectile style for
+// the jagged white core inside the sphere (same technique, tiny radius).
+export function displaceWithNoise(mesh, noiseFn, seedOffset, radius){
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     const normals = mesh.getVerticesData(VertexBuffer.NormalKind);
 

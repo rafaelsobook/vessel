@@ -67,7 +67,7 @@ const LOOT_TEMPLATES = {
         name: "manastone",
         dn: "Manastone",
         itemCateg: "crafting",
-        itemType: "material",
+        itemType: "stone",
         qnty: 1,
         price: { coinType: "bronze", pieces: 22 },
         desc: "A stone humming faintly with latent magical energy.",
@@ -138,6 +138,44 @@ const LOOT_TEMPLATES = {
         price: { coinType: "bronze", pieces: 100 },
         desc: "An impossibly rare material. If you're holding this, you got lucky.",
         rarity: "legendary"
+    }),
+    // baseline organic/stone materials - see itemDictionary.js for their
+    // crafting stat weights (these three are the low end on purpose: cheap,
+    // common, and the only options a brand new character can craft with)
+    wood: () => ({
+        itemId: randomNum(),
+        name: "wood",
+        dn: "Wood",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 4 },
+        desc: "A sturdy length of timber, good for grips and shafts.",
+        rarity: "common"
+    }),
+    leather: () => ({
+        itemId: randomNum(),
+        name: "leather",
+        dn: "Leather",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 6 },
+        desc: "Tanned hide, supple enough to wrap a grip without slipping.",
+        rarity: "common"
+    }),
+    // itemType "stone" (not "material") to match manastone's category -
+    // see craftingui.js's getOwnedMaterials, which accepts both
+    stone: () => ({
+        itemId: randomNum(),
+        name: "stone",
+        dn: "Stone",
+        itemCateg: "crafting",
+        itemType: "stone",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 3 },
+        desc: "A plain chunk of quarried stone. Common, but dependable.",
+        rarity: "common"
     })
 }
 

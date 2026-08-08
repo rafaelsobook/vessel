@@ -174,6 +174,13 @@ canvas{
     height: 70px;
     display: none;
   }
+  // top-left of the attack button, mirroring how walk/running sit in the
+  // bottom two corners
+  .cast{
+    left: 0;
+    top: 0;
+    z-index: 2;
+  }
   .icon-btn:active{
     opacity: 0.9;
   }
@@ -2971,14 +2978,25 @@ canvas {
             color: rgba(177, 177, 177, 0.6);
           }
         }
-        .skill-status{
+        .skill-status-col{
           margin-left: auto;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 3px;
+        }
+        .skill-status{
           font-family: $tipsFont;
           font-size: 12px;
           color: rgba(177, 177, 177, 0.6);
           &.active{
             color: #edd59f;
           }
+        }
+        .skill-slot-label{
+          font-family: $tipsFont;
+          font-size: 10px;
+          color: rgba(177, 177, 177, 0.4);
         }
       }
       .skill-bx:hover{
@@ -3073,6 +3091,33 @@ canvas {
           font-size: 13px;
           line-height: 1.5;
           color: #d8d5d5;
+        }
+        .skill-assign-btn{
+          margin-top: 16px;
+          width: 100%;
+          padding: 9px 0;
+          border: 1px solid rgba(237, 213, 159, 0.5);
+          background: rgba(142, 81, 32, 0.35);
+          border-radius: 4px;
+          font-family: $tipsFont;
+          font-size: 13px;
+          color: #edd59f;
+          cursor: pointer;
+          transition: 0.15s;
+        }
+        .skill-assign-btn:hover{
+          background: rgba(142, 81, 32, 0.55);
+        }
+        .skill-assign-btn:active{
+          filter: brightness(0.85);
+        }
+        .skill-assign-btn.equipped{
+          border-color: rgba(200, 90, 90, 0.5);
+          color: #e8b0b0;
+          background: rgba(120, 30, 30, 0.25);
+        }
+        .skill-assign-btn.equipped:hover{
+          background: rgba(120, 30, 30, 0.4);
         }
       }
     }

@@ -57,6 +57,12 @@ export function initSounds(scene){
     const magicCircle = createSoundSafe("magicCircle", "./sounds/magic/magiccircle.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    const fireBallS = createSoundSafe("fireBallS", "./sounds/magic/fireBall.mp3", scene,
+    {volume: 0.8, autoplay: false, loop: false})
+
+    const fireHitS = createSoundSafe("fireHitS", "./sounds/magic/firehit.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const enteredS = createSoundSafe("enteredS", "./sounds/enteredS.mp3", scene,
     {volume: 0.8, autoplay: false, loop: false})
 
@@ -115,6 +121,8 @@ export function initSounds(scene){
     allSounds = {
         bonfireS,
         magicCircle,
+        fireBallS,
+        fireHitS,
         enteredS,
         giantencounterS,
         struckS,

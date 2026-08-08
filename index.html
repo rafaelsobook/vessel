@@ -143,6 +143,10 @@
                             <span class="stat-value skillInfoType"></span>
                         </div>
                         <div class="skill-stat-row">
+                            <span class="stat-label">Rank</span>
+                            <span class="stat-value skillInfoRank"></span>
+                        </div>
+                        <div class="skill-stat-row">
                             <span class="stat-label">Mana Cost</span>
                             <span class="stat-value skillInfoCost"></span>
                         </div>
@@ -152,6 +156,7 @@
                         </div>
                     </div>
                     <p class="skill-info-desc skillInfoDesc"></p>
+                    <button class="skill-assign-btn skillAssignBtn"></button>
                 </div>
             </div>
         </div>
@@ -194,6 +199,9 @@
     <div class="walk-run-icons-container">
         <button class="icon-btn throw walkrun-btns">
             <img src="./images/UI/throw.png" alt="" class="icon-img">
+        </button>
+        <button class="icon-btn cast walkrun-btns">
+            <img src="./images/UI/cast.webp" alt="" class="icon-img">
         </button>
         <button class="icon-btn attack walkrun-btns">
             <img src="./images/UI/attack.png" alt="" class="icon-img">
@@ -308,6 +316,14 @@
             <div class="item-stat-row dmg-row">
                 <span class="stat-label">Damage</span>
                 <span class="stat-value itemDmgValue"></span>
+            </div>
+            <div class="item-stat-row magic-dmg-row">
+                <span class="stat-label">Magic Damage</span>
+                <span class="stat-value itemMagicDmgValue"></span>
+            </div>
+            <div class="item-stat-row magic-resistance-row">
+                <span class="stat-label">Magic Resistance</span>
+                <span class="stat-value itemMagicResistanceValue"></span>
             </div>
             <div class="item-stat-row blade-material-row">
                 <span class="stat-label">Blade</span>
@@ -486,7 +502,7 @@
     <div class="loading-screen screenFadeOff">
         <img src="./images/loadingscreens/ls1.webp" alt="" class="wallpaper">
         <div class="loading-bx">
-            <img src="./images/items/crafting/diamantinecore.png" alt="" class="lc-img">
+            <img src="./images/items/crafting/bronzecore.webp" alt="" class="lc-img">
             <p class="lc-cap">Loading ... <span class="ls-percent">0%</span> </p>
             <!-- <p class="ls-percent">0%</p> -->
             <p class="ls-tips">Always bring pickaxe for dungeons</p>

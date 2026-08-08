@@ -9,7 +9,8 @@ import { getHeroDetail } from "../serverApiFun/getHeroDetail.js";
 import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
-import { getPlayersOnScene, setPlayerMode } from "../sockets/worldsocket.js";
+import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worldsocket.js";
+import { emitMode } from "../sockets/emits.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
@@ -40,6 +41,7 @@ let outsideRoomPosition = null
 let hpRegenInterval
 let mpRegenInterval
 let spRegenInterval
+let castingDrainInterval
 
 let hungerInterval
 let restInterval
@@ -221,12 +223,30 @@ export function activateLifeSystem(){
     // MANA
     mpRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
+        // regen and the casting drain below would otherwise just fight each
+        // other every tick instead of actually draining anything
+        if(characterState.mode === "casting") return
         const totalCurrMp = getTotal().mp
         const totalMaxMp = getTotal().maxMp
         if(totalCurrMp < characterState.maxMp) characterState.mp += getTotal().mpRegen
         if(characterState.mp > characterState.maxMp) characterState.mp = characterState.maxMp
         updateMP_UI()
     }, 700)
+    // CASTING - mana drains continuously while mode is "casting" (see the
+    // cast button in uimanagement.js's walkRunBtns handler). Separate
+    // interval/cadence from mpRegenInterval above by design (-1 flat per
+    // 500ms, not scaled by regen rate).
+    castingDrainInterval = setInterval( () => {
+        if(characterState.mode !== "casting") return
+        characterState.mp -= 1
+        if(characterState.mp <= 0){
+            characterState.mp = 0
+            setCharStateMode("idle")
+            if(getIsSocketOn()) emitMode("idle")
+            popStatusEffect("out of mana", "yellow")
+        }
+        updateMP_UI()
+    }, 500)
     // STAMINA
     spRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
@@ -363,8 +383,28 @@ export function clearIntervals(){
     clearInterval(hpRegenInterval)
     clearInterval(mpRegenInterval)
     clearInterval(spRegenInterval)
+    clearInterval(castingDrainInterval)
     clearInterval(hungerInterval)
     clearInterval(restInterval)
+}
+// DEBUG CHEAT - bound to the "f" key in controllers/inputMovement.js. Tops
+// off hp/mp/sp and both survival stats (hunger, sleep - the "moral"/rest
+// meter shown as restStat in the UI - see updateSurvival_UI). hp/mp/sp cap
+// at characterState.max*, not getTotal()'s ability-boosted total, matching
+// exactly how hpRegenInterval/mpRegenInterval/spRegenInterval above already
+// clamp overflow (ability bonuses are added back in at read-time via
+// getTotal(), not something that needs "filling" here).
+export function restoreAll(){
+    if(!characterState) return
+    characterState.hp = characterState.maxHp
+    characterState.mp = characterState.maxMp
+    characterState.sp = characterState.maxSp
+    characterState.survival.hunger = 100
+    characterState.survival.sleep = 100
+
+    updateHpMpSp_UI()
+    updateSurvival_UI()
+    updateMyDetailsOL(characterState, checkIfTokenSaved())
 }
 export function updateHunger(){
     if(characterState.survival.hunger > 0) characterState.survival.hunger-=1

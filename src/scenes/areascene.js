@@ -161,7 +161,7 @@ export async function areaScene(placeDetail){
      
             }, 1000)
 
-            showGamePerformanceUI(scene.getEngine(), scene, chunks)
+            // showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
             console.log('[terrain] physics plugin=', scene.getPhysicsEngine()?.getPhysicsPlugin?.()?.name,
                 ' gravity=', scene.getPhysicsEngine()?.gravity?.asArray?.())
@@ -342,7 +342,7 @@ export async function areaScene(placeDetail){
                 faceForward(res.position)
                 setCharStateMode("minning")
                 currentMiningResource = res
-                myCharacter.equipSword(hasWeaponEquipped.name, true, hasWeaponEquipped.parts, hasWeaponEquipped.weaponType)
+                myCharacter.equipSword(hasWeaponEquipped.name, true, hasWeaponEquipped.parts, hasWeaponEquipped.weaponType, hasWeaponEquipped.metalColor)
                 emitMyLoc("minning", hasWeaponEquipped.name)
             }
 

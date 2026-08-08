@@ -35,7 +35,14 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     instance.isVisible = false
     // const dir = new Vector3(targetDirection.x, targetDirection.y, targetDirection.z)
     // instance.lookAt(new Vector3(-1, 1, -0.2), 0, 0, 0, Space.LOCAL)
-    const weaponsRoot = createWeapon(scene, "sword", {x:0, y:0, z:0}, instance,weaponPartDetails, glowingColor)
+    // createWeapon's real signature is (scene, weaponType, pos, parent,
+    // itemName, options, glowingColor) - itemName only matters for single-
+    // mesh weapon types (sword has part meshes, so it's unused here), but
+    // omitting it used to silently shift weaponPartDetails into the
+    // itemName slot and glowingColor into the options slot, leaving the
+    // real glowingColor param empty - no sword spawned via this function
+    // ever actually glowed. null keeps the arg count correct.
+    const weaponsRoot = createWeapon(scene, "sword", {x:0, y:0, z:0}, instance, null, weaponPartDetails, glowingColor)
     weaponsRoot.addRotation(Math.PI,0,Math.random())
     weaponsRoot.scaling = new Vector3(0.1,0.1,0.1)
     // weaponsRoot.bakeCurrentTransformIntoVertices()

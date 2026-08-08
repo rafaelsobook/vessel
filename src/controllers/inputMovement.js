@@ -2,7 +2,7 @@ import { Quaternion, MeshBuilder, Vector3, FreeCamera } from '@babylonjs/core';
 import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
-import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank } from '../charactersystem/characterstate';
+import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { ANIM_STATE, playAnim } from '../tools/animation';
@@ -12,7 +12,9 @@ import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
-import { giveAllItems } from '../charactersystem/inventory';
+import { giveAllItems, wipeAllItems } from '../charactersystem/inventory';
+import { giveSkill, giveAllSkills, upgradeAllOwnedSkills } from '../components/skillsui';
+import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
 
@@ -405,6 +407,21 @@ function setupControls(scene, allsounds) {
             case "i":
                 giveAllItems()
             break
+            case "p":
+                wipeAllItems()
+            break
+            case "n":
+                giveSkill(singlecastSkill)                
+            break
+            case "l":
+                giveAllSkills()
+            break
+            case "h":
+                upgradeAllOwnedSkills()
+            break
+            case "f":
+                restoreAll()
+            break
             case "1":
                 hideShowAllScreenUI(false)
                 myPlayer?.characterAnimations?.setMoveSpeedRatio(0.65)
@@ -583,7 +600,16 @@ function setupControls(scene, allsounds) {
         if(!getCanPress()) return
         aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
 
-        if (isMoving) {
+        if (isMoving && myPlayer?.mode === "casting") {
+            // rooted while casting - a movement key held down (or a
+            // still-active joystick drag) shouldn't slide the character
+            // around mid-cast. Only zeroes horizontal velocity, not vertical -
+            // still falls normally if airborne when a cast starts.
+            const vel = aggregate.body.getLinearVelocity();
+            if (vel.x !== 0 || vel.z !== 0) {
+                aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
+            }
+        } else if (isMoving) {
             const fwd = rotationHelper.getDirection(Vector3.Forward());
             fwd.y = 0;
             fwd.normalize();

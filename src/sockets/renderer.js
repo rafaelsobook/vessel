@@ -89,6 +89,10 @@ let renderCallback = function () {
     })
     getEnemiesOnScene().forEach(en => {
         if(!en) return
+        // bound (see createEnemy.js's applyEnemyBind/skillEffects.js's
+        // enemyBind) - "cannot move" while true, regardless of
+        // _isMoving/_targetId state
+        if(en._disabled) return
         if (en._isMoving && en._targetId) {
             // was scene.getMeshByName() - an O(n) linear scan over every mesh in
             // the scene (thousands, counting village foliage instances), done

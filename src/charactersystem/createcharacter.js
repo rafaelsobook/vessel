@@ -109,8 +109,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
 
 
-    function createSword(swordName, parts, parentMesh, weaponType = "sword") {
-        const sword = createWeapon(scene, weaponType, {x: 0.1, y: 0.5, z: 0}, parentMesh, parts)
+    function createSword(swordName, parts, parentMesh, weaponType = "sword", metalColor) {
+        // parts drives sword's blade/guard/handle/pommel rebuild, metalColor
+        // drives every other weaponType's single mesh (see createweapon.js) -
+        // an item only ever has one or the other, never both
+        const sword = createWeapon(scene, weaponType, {x: 0.1, y: 0.5, z: 0}, parentMesh, swordName, {...parts, metalColor})
         const toPush = {name: swordName, mesh: sword}
         // attachLightning(scene, sword, "violet", true)
         swordMeshes.push(toPush)
@@ -283,11 +286,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         toEquip.meshes.forEach(mesh => showHideEquip(mesh, true))
     }
 
-    function equipSword(swordToEquipName, onHand, parts, weaponType) {
+    function equipSword(swordToEquipName, onHand, parts, weaponType, metalColor) {
 
         let toEquip = false
         if(!swordMeshes.length) {
-            toEquip = createSword(swordToEquipName, parts, rHand, weaponType)
+            toEquip = createSword(swordToEquipName, parts, rHand, weaponType, metalColor)
         }
         swordMeshes.forEach(swrd => {
             showHideSword(swrd.mesh, false)
@@ -301,7 +304,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         })
 
         if(!toEquip) {
-            toEquip = createSword(swordToEquipName, parts, rHand, weaponType)
+            toEquip = createSword(swordToEquipName, parts, rHand, weaponType, metalColor)
         }
         if(!toEquip) return
         showHideSword(toEquip.mesh, true)
@@ -345,7 +348,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                     let swordParent = rHand
                     if(mode === "idle") swordParent = weaponSocket;
                     // createSword(itm.name, itm.parts, rHand)
-                    equipSword(itm.name, mode === "fighting", itm.parts, itm.weaponType)
+                    equipSword(itm.name, mode === "fighting", itm.parts, itm.weaponType, itm.metalColor)
                 }
             }
         })

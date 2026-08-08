@@ -220,7 +220,6 @@ export const questions = [
             const scene = getSceneDet().scene
             spawnProjectile({x:0,y:-2,z:3}, {x:charPos.x, y:charPos.y+0.5, z:charPos.z}, "yellow", scene, "default", () => {
                 
-                console.log("played")
                 const disc = spawnMagicCircle(new Vector3(charPos.x, 0.05, charPos.z), scene, "divine1", 0.8)
                 character.characterAnimations.playAction(character.anims, "hit_struct1", 1)
 

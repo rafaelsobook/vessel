@@ -76,7 +76,7 @@ export function activateBtnOnce(){
             const btnName = e.target.className.split(" ")[1]
             const isSocketOn = getIsSocketOn()
             
-            disableEnableAttackButtonsContainer(false)
+            disableEnableWalkRunButtons(false)
 
             const charState = getCharState()
             if(!charState) return
@@ -86,8 +86,12 @@ export function activateBtnOnce(){
 
             console.log("currentMode ", currentMode)
             const plMode = getPlayerMode()
+            clickedTimeOut = setTimeout(() => {
+                disableEnableWalkRunButtons(true)
+            }, 500)
             if(plMode === "inAir") return console.log("cannot change mode while inAir")
 
+            
             clearTimeout(clickedTimeOut)
             switch(btnName){
                 case "walk":
@@ -98,7 +102,7 @@ export function activateBtnOnce(){
                         if(isSocketOn) emitMode("idle", attackInfo.hasWeapon)
                     }
                     clickedTimeOut = setTimeout(() => {
-                        disableEnableAttackButtonsContainer(true)
+                        disableEnableWalkRunButtons(true)
                     }, 500)
                     // inventoryCont.style.display === "none" ? openUpdateInventory(true) : closeInventory()
                 break
@@ -111,14 +115,14 @@ export function activateBtnOnce(){
 
                 //    openOrCloseStats()
                     clickedTimeOut = setTimeout(() => {
-                        disableEnableAttackButtonsContainer(true)
+                        disableEnableWalkRunButtons(true)
                     }, 100)
                 break
                 case "attack":
                     if(currentMode === "idle"){
                         setCharStateMode("fighting")
                         clickedTimeOut = setTimeout(() => {
-                            disableEnableAttackButtonsContainer(true)
+                            disableEnableWalkRunButtons(true)
                         }, 500)
                         return
                     }
@@ -126,7 +130,7 @@ export function activateBtnOnce(){
 
                     const spToDeduct = (dmgDetails.physicalDmg/2) + (dmgDetails.weaponDmg/4)
                     clickedTimeOut = setTimeout(() => {
-                        disableEnableAttackButtonsContainer(true)
+                        disableEnableWalkRunButtons(true)
                     },swordAnimNum === 1 ? 400: 800)
                     if(getTotal().sp < spToDeduct) {
                         // openClosePopup("no stamina", true, 1000)
@@ -170,6 +174,28 @@ export function activateBtnOnce(){
                         attack(attackInfo, animName)
                     } 
                     positionAtkCollider({ reach: 1})
+
+                break
+                case "cast":
+                    clickedTimeOut = setTimeout(() => {
+                        disableEnableWalkRunButtons(true)
+                    }, 100)
+                    if(!canChangeMode) break
+                    if(currentMode === "casting"){
+                        setCharStateMode("idle")
+                        if(isSocketOn) emitMode("idle", attackInfo.hasWeapon)
+                    } else {
+                        // mana drain itself lives in characterstate.js's
+                        // castingDrainInterval (-1/500ms while mode is
+                        // "casting") - this is just the entry gate so you
+                        // can't start a cast already sitting at 0
+                        if(getTotal().mp <= 0){
+                            popStatusEffect("no mana", "yellow")
+                            break
+                        }
+                        setCharStateMode("casting")
+                        if(isSocketOn) emitMode("casting", attackInfo.hasWeapon)
+                    }
 
                 break
                 case "throw":
@@ -249,6 +275,24 @@ export function activateBtnOnce(){
     buttonsActivated = true
 }
 
+
+// Spam-click debounce for the walk/run/attack/cast icon buttons themselves
+// (briefly disabled right after a press while their own action/animation is
+// still playing) - deliberately only touches .walk-run-icons-container, not
+// .skill-slots. disableEnableAttackButtonsContainer below toggles BOTH,
+// which meant pressing "cast" then immediately clicking a skill-slot-button
+// within that same ~100ms debounce window did nothing at all - the
+// container's own .disabled class sets pointer-events: none, silently
+// swallowing the click - and the skill only activated on a SECOND press once
+// the debounce had cleared. Used only for the walkRunBtns click handler's
+// own internal debounce, further down in this file; every other caller of
+// disableEnableAttackButtonsContainer (npc dialogue, scene setup, respawn,
+// etc.) genuinely wants skill-slots hidden/disabled too and is unaffected.
+function disableEnableWalkRunButtons(enable){
+    const container = document.querySelector(".walk-run-icons-container")
+    if(!container) return
+    container.classList.toggle("disabled", !enable)
+}
 
 export function disableEnableAttackButtonsContainer(enable, hide = false){
     const container = document.querySelector(".walk-run-icons-container")
