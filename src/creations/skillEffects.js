@@ -1068,6 +1068,10 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
 // path can take more than one hit as it marches past them.
 const GROUND_SPIKE_STAGGER_MS = 160
 const GROUND_SPIKE_SPACING = 2.2
+// small scatter so the line doesn't read as a perfectly straight, evenly-
+// spaced row - see triggerGroundSpikeLine
+const GROUND_SPIKE_LATERAL_JITTER = 0.8
+const GROUND_SPIKE_DIST_JITTER = 0.4
 const GROUND_SPIKE_HEIGHT = 1.8
 const GROUND_SPIKE_ERUPT_MS = 280
 const GROUND_SPIKE_LIFETIME_MS = 4000
@@ -1086,6 +1090,11 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
     if(flatForward.lengthSquared() < 0.0001) flatForward.set(0, 0, 1)
     flatForward.normalize()
 
+    // perpendicular to flatForward (90° rotation in the XZ plane) - used to
+    // scatter each spike a little side-to-side so the line doesn't read as
+    // a perfectly ruler-straight row of identical copies
+    const perp = new Vector3(-flatForward.z, 0, flatForward.x)
+
     // player.body's own position is the capsule's CENTER, not its base -
     // same capsuleHeight/2 correction inputMovement.js's own isGrounded()
     // ground check already relies on. Good enough for a short marching
@@ -1096,8 +1105,16 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
     const groundY = player.body.position.y - capsuleHeight / 2
 
     for(let i = 0; i < count; i++){
-        const dist = spacing * (i + 1)
-        const groundPos = new Vector3(spawnPos.x + flatForward.x * dist, groundY, spawnPos.z + flatForward.z * dist)
+        // forward distance and sideways offset both jittered - keeps the
+        // overall "marching away from the caster" read while no two spikes
+        // land in a perfectly straight line or evenly spaced apart
+        const dist = spacing * (i + 1) + randNum(-GROUND_SPIKE_DIST_JITTER, GROUND_SPIKE_DIST_JITTER)
+        const lateral = randNum(-GROUND_SPIKE_LATERAL_JITTER, GROUND_SPIKE_LATERAL_JITTER)
+        const groundPos = new Vector3(
+            spawnPos.x + flatForward.x * dist + perp.x * lateral,
+            groundY,
+            spawnPos.z + flatForward.z * dist + perp.z * lateral,
+        )
         setTimeout(() => spawnGroundSpike(scene, charState, skill, groundPos, powerScale), i * staggerMs)
     }
 }
