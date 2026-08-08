@@ -189,7 +189,7 @@ export function updateSkillListUI(){
         // which physical skill-slot-button (1..SKILL_SLOT_COUNT) this skill
         // is currently occupying, if any - "Unassigned" for a known-but-
         // benched skill (see the Assign/Remove button in the info panel)
-        const slotLabel = createElement("span", "skill-slot-label", isSkillEquipped(skill) ? `Slot ${skill.slotNumber}` : "Unassigned")
+        const slotLabel = createElement("span", `skill-slot-label ${isSkillEquipped(skill) ? "assigned" : ""}`, isSkillEquipped(skill) ? `Slot ${skill.slotNumber}` : "Unassigned")
         statusCol.append(status, slotLabel)
 
         bx.append(background, skillImg, textBx, statusCol)

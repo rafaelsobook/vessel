@@ -711,7 +711,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     const targetPoint = spawnPos.add(forward.scale(10)) // far enough out that direction is stable regardless of distance to anything
 
     const itemId = `${skill.name}_${randNum(1000, 9999)}`
-    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 0.25 }, scene)
+    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 1.25 }, scene)
     box.position.copyFrom(spawnPos)
     box.isPickable = false
     box.isVisible = false // PROJECTILE_STYLES.lightning flips this back on for its own look

@@ -2996,7 +2996,10 @@ canvas {
         .skill-slot-label{
           font-family: $tipsFont;
           font-size: 10px;
-          color: rgba(177, 177, 177, 0.4);
+          color: rgb(173, 173, 166);
+          &.assigned{
+            color: #f8d584;
+          }
         }
       }
       .skill-bx:hover{
