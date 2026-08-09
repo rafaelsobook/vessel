@@ -1729,8 +1729,8 @@ canvas {
   z-index: 7;
   width: 380px;
   padding: 25px 15px;
-  background: linear-gradient(to left, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.9), rgb(0, 0, 0), rgb(0, 0, 0), rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.8));
-  border: 1px solid rgba(156, 153, 153, 0.719);
+  background: url("/images/UI/frames/questcont.webp") no-repeat center center;
+  background-size: 100% 100%;
   display: none;
   opacity: 1;
   transition: 1.5s;
@@ -1773,9 +1773,6 @@ canvas {
   left: -18px;
   width: 36px;
   height: 36px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.3);
 }
 .skill-wheel-container .skill-wheel-arrow {
   position: absolute;

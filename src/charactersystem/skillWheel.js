@@ -1,17 +1,21 @@
 // Level-up reward wheel - triggered by characterstate.js's gainExp once a
-// level-up actually happens. 8 icons, each a randomly-picked skill from
-// skillsData.js (preferring skills the player doesn't already know, so
-// every possible outcome is a genuine reward instead of a "you already
-// know this" dud), fixed in place around the wheel (icon i sits at
-// i*45deg, clockwise from straight up). The wheel itself never moves -
-// GO spins a clock-hand style arrow from the center instead, which lands
-// pointing at the result. Reward is granted via skillsui.js's own
-// giveSkill (already handles the dedup/slot-assignment/save/popup for us).
-import { getCharState } from "./characterstate.js"
-import { giveSkill } from "../components/skillsui.js"
+// level-up actually happens. 8 FIXED reward slots (see WHEEL_COMPOSITION -
+// 5 HP/MP/SP top-ups, 1 blessing, 2 skills), reshuffled into a random order
+// every time the wheel is shown so the layout isn't predictable run to run.
+// The blessing/skill icons are deliberately generic (blessingplus.webp/
+// skillplus.webp, ./images/rewards/) rather than showing which specific
+// blessing/skill is on offer - that's only decided (and revealed via its
+// own popup) once the arrow actually lands, same "surprise" a real prize
+// wheel has. The wheel itself never moves - GO spins a clock-hand style
+// arrow from the center instead, which lands pointing at the result.
+import { getCharState, updateHpMpSp_UI, updateMyDetailsOL } from "./characterstate.js"
+import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
+import { receiveAbilities } from "./abilitySystem.js"
 import { skillsData } from "../staticRecources/skillsData.js"
+import abilitiesData from "../staticRecources/abilities.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { openClosePopup } from "../tools/popupUI.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 
 const wheelContainer = document.querySelector(".skill-wheel-container")
 const wheelEl = document.querySelector(".skill-wheel")
@@ -23,29 +27,40 @@ const SLICE_DEGREES = 360 / SLICE_COUNT
 const SPIN_ROTATIONS = 6 // full spins before landing, just for visual flourish
 const SPIN_DURATION_MS = 4200
 
-let currentReward = null // the 8 skills currently shown, index-aligned to their fixed wheel positions
-let spinning = false
+// fixed composition (5 heart / 1 blessing / 2 skill = SLICE_COUNT) -
+// shuffled into a random order each time the wheel opens, see
+// shuffledComposition/triggerSkillWheel. WHEEL_COMPOSITION itself is never
+// mutated - each spin gets its own shuffled copy.
+const WHEEL_COMPOSITION = [
+    { type: "heart" }, { type: "heart" }, { type: "heart" }, { type: "heart" }, { type: "heart" },
+    { type: "blessing" },
+    { type: "skill" }, { type: "skill" },
+]
 
-// prefers skills the player doesn't already know - if they've somehow
-// already learned everything in skillsData, falls back to the full list
-// rather than showing an empty wheel (giveSkill already no-ops gracefully
-// with an "Already know X" popup in that edge case)
-function pickWheelSkills(){
-    const charState = getCharState()
-    const owned = new Set((charState?.skills || []).map(sk => sk.name))
-    const unowned = skillsData.filter(sk => !owned.has(sk.name))
-    const pool = unowned.length ? unowned : skillsData
-
-    const picks = []
-    for(let i = 0; i < SLICE_COUNT; i++){
-        picks.push(pool[Math.floor(Math.random() * pool.length)])
-    }
-    return picks
+const REWARD_ICONS = {
+    heart: "./images/rewards/heartplus.webp",
+    blessing: "./images/rewards/blessingplus.webp",
+    skill: "./images/rewards/skillplus.webp",
 }
 
-function renderWheelIcons(skills){
+const HEART_BONUS = 50 // flat +hp/+mp/+sp
+
+let currentReward = null // this spin's own shuffled WHEEL_COMPOSITION, index-aligned to the fixed wheel positions
+let spinning = false
+
+// Fisher-Yates on a copy - WHEEL_COMPOSITION's own array/order never changes
+function shuffledComposition(){
+    const arr = [...WHEEL_COMPOSITION]
+    for(let i = arr.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return arr
+}
+
+function renderWheelIcons(rewards){
     wheelEl.innerHTML = ""
-    skills.forEach((skill, i) => {
+    rewards.forEach((reward, i) => {
         // "clock hand" placement: a zero-size anchor at the wheel's own
         // center, rotated to this icon's angle - its child (the icon,
         // offset upward from that anchor) sweeps around to the right
@@ -58,7 +73,7 @@ function renderWheelIcons(skills){
         slice.style.transform = `rotate(${angle}deg)`
 
         const img = document.createElement("img")
-        img.src = `./images/skills/${skill.name}.webp`
+        img.src = REWARD_ICONS[reward.type]
         img.className = "skill-wheel-slice-img"
         // counter-rotated so the icon itself stays upright instead of
         // tilting with its own placement angle
@@ -73,7 +88,7 @@ export function triggerSkillWheel(){
     if(!wheelContainer || !wheelEl || !arrowEl || !goBtn) return
     if(spinning) return
 
-    currentReward = pickWheelSkills()
+    currentReward = shuffledComposition()
     renderWheelIcons(currentReward)
 
     // reset the ARROW back to its resting (straight up) position every
@@ -95,7 +110,7 @@ function spinWheel(){
 
     const resultIndex = Math.floor(Math.random() * currentReward.length)
     // the arrow's own resting angle (0deg) points straight up, exactly
-    // where icon index 0 sits (renderWheelIcons places icon i at
+    // where slot index 0 sits (renderWheelIcons places slot i at
     // i*SLICE_DEGREES) - so spinning the arrow TO that same angle points
     // it directly at the result. No inversion needed here, unlike the
     // earlier "spin the wheel under a fixed pointer" version did.
@@ -106,33 +121,93 @@ function spinWheel(){
     getAllSounds().notif1S?.play()
 
     setTimeout(() => {
-        grantReward(currentReward[resultIndex])
         spinning = false
-        setTimeout(closeWheel, 1800)
+        // captured before closeWheel() runs - it nulls currentReward out
+        const reward = currentReward[resultIndex]
+        closeWheel()
+        // wait for the wheel to actually finish closing (closeWheel's own
+        // setTimeout hides it 1000ms after this) before granting/revealing
+        // the reward. .skill-wheel-container sits at a HIGHER z-index
+        // ($uiz+3) than every reward popup (openClosePopup's own toast is
+        // $popupz+1, .abilities-notif-container is $uiz+2 - both land
+        // BELOW the wheel) - granting immediately here rendered the
+        // confirmation completely hidden behind the still-open wheel for
+        // its whole visible lifetime.
+        setTimeout(() => {
+            grantReward(reward)
+        }, 1100)
     }, SPIN_DURATION_MS + 100)
 }
 
-// grants whatever landed and makes sure the player is TOLD what they got,
-// no matter the reward's own shape. pickWheelSkills only ever draws from
-// skillsData.js today, so only the skill branch can actually fire right
-// now - the fallback exists so a future non-skill reward (a blessing, an
-// item, currency...) landing in this same pool still gets a clear "you
-// received X" popup instead of silently granting nothing/showing nothing.
 function grantReward(reward){
     if(!reward) return
-    if(isSkillReward(reward)){
-        giveSkill(reward) // already shows its own "Learned {displayName}" popup - see skillsui.js
-        return
+    switch(reward.type){
+        case "heart": return grantHeartReward()
+        case "blessing": return grantBlessingReward()
+        case "skill": return grantSkillReward()
     }
-    openClosePopup(`You received: ${reward.dn || reward.displayName || reward.name || "a reward"}!`, true, 2000)
 }
 
-// a skill object always has BOTH a name and an effects bag (every entry in
-// skillsData.js does) - good enough of a shape check to tell a real skill
-// reward apart from some other reward type without needing an explicit
-// "type" tag on every wheel entry
-function isSkillReward(reward){
-    return !!(reward && reward.name && reward.effects)
+// a permanent stat boost, not a one-off top-up - +50 to hp/mp/sp AND their
+// max counterparts together, same "current and max both move by the same
+// amount" pattern statsSystem.js's own strength upgrade button already
+// uses. Current isn't capped against the OLD max here since max is rising
+// right alongside it.
+function grantHeartReward(){
+    const charState = getCharState()
+    if(!charState) return
+    charState.hp += HEART_BONUS
+    charState.maxHp += HEART_BONUS
+    charState.mp += HEART_BONUS
+    charState.maxMp += HEART_BONUS
+    charState.sp += HEART_BONUS
+    charState.maxSp += HEART_BONUS
+    updateHpMpSp_UI()
+    updateMyDetailsOL(charState, checkIfTokenSaved())
+    openClosePopup("Status Up!", true, 2000)
+}
+
+// a random blessing, guaranteed granted - receiveAbilities' own
+// specificAbility argument bypasses its normal random-roll gate entirely
+// (see abilitySystem.js), the same pattern questions.js's own quest-reward
+// abilities already use (receiveAbilities(false, false, abilities[N])).
+// Passing false/false means only THIS ability is even considered - nothing
+// else in the full abilities list gets an incidental chance to roll in
+// alongside it. receiveAbilities already shows its own "Abilities Obtained"
+// card (displayEarnedAbility) and handles "already own it -> upgrade
+// instead", so nothing else needs to happen here.
+function grantBlessingReward(){
+    const randomAbility = abilitiesData[Math.floor(Math.random() * abilitiesData.length)]
+    if(!randomAbility) return
+    receiveAbilities(false, false, randomAbility)
+}
+
+// a random skill the player doesn't already know - giveSkill already shows
+// its own "Learned {displayName}" popup and handles slot-assignment/
+// saving. Same "already have it -> level it up instead" fallback
+// grantBlessingReward gets for free from receiveAbilities, just done
+// explicitly here since giveSkill's own version of that (skillsui.js) is a
+// no-op "Already know X" message, not an upgrade - once every skill in
+// skillsData is learned, upgradeOwnedSkill (also skillsui.js, same
+// function the "h" debug key and the manual upgrade-in-info-panel button
+// already use) picks a random OWNED skill to level up instead, so landing
+// on "skill" always does SOMETHING once you own everything, the same way
+// blessing/heart never dead-end either.
+function grantSkillReward(){
+    const charState = getCharState()
+    if(!charState) return
+    const owned = new Set((charState.skills || []).map(sk => sk.name))
+    const unowned = skillsData.filter(sk => !owned.has(sk.name))
+
+    if(unowned.length){
+        const skill = unowned[Math.floor(Math.random() * unowned.length)]
+        giveSkill(skill)
+        return
+    }
+    if(charState.skills.length){
+        const ownedSkill = charState.skills[Math.floor(Math.random() * charState.skills.length)]
+        upgradeOwnedSkill(ownedSkill)
+    }
 }
 
 function closeWheel(){

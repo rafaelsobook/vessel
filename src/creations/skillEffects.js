@@ -436,9 +436,12 @@ const PROJECTILE_STYLES = {
         }
     },
 
-    // light - a plain radiant glowing sphere, celestialverdictSkill's own
-    // distinct look (used to share "twinhalo" with seraphicascension -
-    // pulled out into its own style so the two no longer look identical)
+    // a plain radiant glowing sphere with a Fresnel "hollow shell" material -
+    // celestialverdictSkill's own distinct look (used to share "twinhalo"
+    // with seraphicascension - pulled out into its own style so the two no
+    // longer look identical), also reused by stormsurgeSkill (lightning,
+    // yellow) - the shape/material aren't light-element-specific, just
+    // driven by skill.explosionColor like every other style here
     lightorb(scene, box, skill){
         box.isVisible = false
         const sphere = MeshBuilder.CreateSphere(`lightorb_${skill.name}_${Date.now()}`, { diameter: 0.4, segments: 16 }, scene)
@@ -448,7 +451,8 @@ const PROJECTILE_STYLES = {
         // fresnelMat (tools/materials.js) instead of a flat createGlowingMat -
         // a hollow-looking glowing shell (transparent center, brighter/more
         // opaque rim) rather than a solid glowing ball
-        sphere.material = fresnelMat(scene, skill.explosionColor || "white")
+        const sphereMat = fresnelMat(scene, skill.explosionColor || "white")
+        sphere.material = sphereMat
         addGlow(scene, sphere, 0.6)
 
         const spinObserver = scene.onBeforeRenderObservable.add(() => {
@@ -456,10 +460,62 @@ const PROJECTILE_STYLES = {
             sphere.rotation.x += 0.03
         })
         attachLightning(scene, sphere, skill.explosionColor || "white", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-        return () => {
+
+        function cleanup(){
             scene.onBeforeRenderObservable.remove(spinObserver)
             sphere.dispose(false, true) // also frees sphere's own material (createGlowingMat)
         }
+
+        // skill.stickAndGrow (stormsurgeSkill) - instead of the usual
+        // EXPLOSION_STYLES burst, the sphere itself sticks to whatever it
+        // hit (box.setParent, same "ride along with the enemy" trick
+        // darkorb's own onHit uses), swells to skill.stickGrowScale (default
+        // 5x) over STICK_GROW_DURATION_MS, then fades out (material alpha ->
+        // 0, not just an abrupt disappear) over STICK_FADE_DURATION_MS before
+        // finishCleanup runs. celestialverdict never sets this flag, so its
+        // own lightorb cast falls through to the plain cleanup-only return
+        // below and keeps its usual EXPLOSION_STYLES.light burst untouched.
+        if(!skill.stickAndGrow) return cleanup
+
+        const STICK_GROW_DURATION_MS = 500
+        const STICK_FADE_DURATION_MS = 700
+        const STICK_GROW_SCALE = skill.stickGrowScale ?? 5
+        const baseAlpha = sphereMat.alpha
+        function onHit(hitTarget, finishCleanup){
+            if(hitTarget?.body) box.setParent(hitTarget.body)
+
+            const startScale = box.scaling.clone()
+            const targetScale = startScale.scale(STICK_GROW_SCALE)
+            const growStart = performance.now()
+            const growObserver = scene.onBeforeRenderObservable.add(() => {
+                // hit target died / projectile got disposed mid-grow - bail
+                // rather than animating properties on a disposed mesh
+                if(box.isDisposed()){
+                    scene.onBeforeRenderObservable.remove(growObserver)
+                    return
+                }
+                const t = Math.min((performance.now() - growStart) / STICK_GROW_DURATION_MS, 1)
+                const eased = 1 - Math.pow(1 - t, 3) // ease-out cubic, fast swell up front
+                box.scaling = Vector3.Lerp(startScale, targetScale, eased)
+                if(t >= 1){
+                    scene.onBeforeRenderObservable.remove(growObserver)
+                    const fadeStart = performance.now()
+                    const fadeObserver = scene.onBeforeRenderObservable.add(() => {
+                        if(box.isDisposed()){
+                            scene.onBeforeRenderObservable.remove(fadeObserver)
+                            return
+                        }
+                        const ft = Math.min((performance.now() - fadeStart) / STICK_FADE_DURATION_MS, 1)
+                        sphereMat.alpha = baseAlpha * (1 - ft)
+                        if(ft >= 1){
+                            scene.onBeforeRenderObservable.remove(fadeObserver)
+                            finishCleanup()
+                        }
+                    })
+                }
+            })
+        }
+        return { cleanup, onHit }
     },
 
     // dark - two thin glowing bars crossed into an X (exactly two boxes,

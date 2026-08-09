@@ -1738,16 +1738,8 @@ canvas {
   @include centerFix($uiz + 3);
   width: 380px;
   padding: 25px 15px;
-  background: linear-gradient(
-    to left,
-    rgba(0, 0, 0, 0.8),
-    rgba(0, 0, 0, 0.9),
-    rgba(0, 0, 0, 1),
-    rgba(0, 0, 0, 1),
-    rgba(0, 0, 0, 0.9),
-    rgba(0, 0, 0, 0.8)
-  );
-  border: 1px solid rgba(156, 153, 153, 0.719);
+  background: url("/images/UI/frames/questcont.webp") no-repeat center center;
+  background-size: 100% 100%;
   display: none;
   opacity: 1;
   transition: 1.5s;
@@ -1804,9 +1796,7 @@ canvas {
     left: -18px;
     width: 36px;
     height: 36px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(0, 0, 0, 0.3);
+
     // transform: rotate(-angle) - set inline, cancels the parent slice's
     // own rotation so the icon stays upright in every wedge. Radius
     // (top: -113px, icon center ~131px from the wheel's own 150px radius)

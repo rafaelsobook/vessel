@@ -329,10 +329,21 @@ export const stormsurgeSkill = {
     upgradePlus: 28,
     explosionColor: "yellow",
     explosionScale: 1,
-    projectileStyle: "bolt",
-    particleStyles: [{ name: "oneline", color: "yellow" }],
-    explosionStyle: "lightning",
-    onLevelUp: "growParticleAura",
+    projectileStyle: "lightorb",
+    explosionStyle: "lightning", // unused when player-cast (stickAndGrow below) - see comment
+    arcCount: 2,
+    // stickAndGrow (see PROJECTILE_STYLES.lightorb's own onHit) - skips the
+    // usual EXPLOSION_STYLES burst entirely: on hit the sphere itself
+    // setParent()s to whatever it struck, swells to stickGrowScale (5x)
+    // over half a second, then fades out over the next ~0.7s instead of
+    // just disappearing, same "stick and swell" precedent darkorbSkill's
+    // own onHit set (that one grows 10x with no fade, this one is smaller/
+    // faster and actually fades). explosionStyle above only still matters
+    // if this skill is ever enemy-cast (fireEnemySkillProjectile has no
+    // onHit support, same known gap darkorbSkill already has).
+    stickAndGrow: true,
+    stickGrowScale: 5,
+    onLevelUp: "growArcAura",
     desc: "A storm-charged bolt trails crackling arcs of electricity, discharging into a violent surge on impact.",
 }
 
