@@ -5,6 +5,7 @@ import { hideAbilityDesc, receiveAbilities, showAbilityDesc } from "./abilitySys
 import { getAdditionalsFromAbilities, getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSocket } from "../sockets/joinsocket.js"
+import { openClosePopup } from "../tools/popupUI.js"
 
 // STATS
 const statsContainer = document.querySelector(".stats-container")
@@ -15,6 +16,7 @@ const heartStatusDef = document.querySelector(".heart-status-def")
 const upgradeDivs = document.querySelectorAll(".upgrade-bx")
 const upgradeBtns = document.querySelectorAll(".upgrade-btn")
 const uniquesList = document.querySelector('.uniques-list')
+const statPointsAvailable = document.querySelector(".stat-points-available")
 
 const log =console.log
 let statUpgradeBtnInitiated = false
@@ -26,6 +28,15 @@ export function initOnceStatsSystem(){
         elem.addEventListener("click", async e =>{
             const statName = e.target.className.split(" ")[1]
             const state = getCharState()
+            // statPoints (characterstate.js's gainExp, +1 per level) -
+            // upgrading used to be unlimited/free on every click, no pool
+            // to draw from at all. Gated here instead of hiding/disabling
+            // the buttons outright when empty, so the existing UI stays
+            // exactly as it looks today for a character with points to
+            // spend - it just now actually costs one.
+            if(!state.statPoints){
+                return openClosePopup("No stat points available", true, 1500)
+            }
             const additionalAbility = getAdditionalsFromAbilities()
             switch(statName){
                 case "strength":
@@ -49,9 +60,10 @@ export function initOnceStatsSystem(){
                     state.stats.critical+=.25
                 break
                 case "magic":
-                    state.stats.magic++     
+                    state.stats.magic++
                 break
             }
+            state.statPoints -= 1
             setBtnsPointerAndVisibility(upgradeBtns, false)
 
             await updateMyDetailsOL(state, checkIfTokenSaved())
@@ -100,6 +112,10 @@ export function updateStatUI(){
     const state = getCharState()
 
     statName.innerHTML = state.name
+    if(statPointsAvailable){
+        const points = state.statPoints || 0
+        statPointsAvailable.innerHTML = `${points} point${points === 1 ? "" : "s"} available`
+    }
     upgradeDivs.forEach(elem => {
         const statName = elem.className.split(" ")[1]
         elem.childNodes.forEach(chldelem=>{

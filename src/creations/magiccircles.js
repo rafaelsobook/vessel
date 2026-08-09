@@ -157,7 +157,25 @@ function despawnMagicCircle(disc, scene) {
     scene.beginDirectAnimation(disc, [fadeOut], 0, 15, false, 1, () => {
         if (disc.isDisposed()) return
         if (disc._glowLayer) disc._glowLayer.removeIncludedOnlyMesh(disc)
+        // captured before disposing the mesh - disc.material itself is
+        // never read again after this point, so order doesn't matter for
+        // correctness, just kept mesh-then-material for safety (nothing
+        // still mid-render-pass tries to rebind an already-disposed
+        // material this way)
+        const mat = disc.material
         disc.dispose()
+        // disc.dispose() alone only frees the MESH - Mesh.dispose()'s own
+        // disposeMaterialAndTextures parameter defaults to false, so the
+        // StandardMaterial + its Texture (diffuseTexture/emissiveTexture,
+        // spawnMagicCircle; emissiveTexture/opacityTexture, createMagicCircle -
+        // same texture object in both texture slots either way) were never
+        // actually freed before this fix. Every single skill cast in the
+        // game runs through one of these two functions, so this leaked a
+        // material+texture pair per cast. forceDisposeTextures=true here
+        // makes the material's own dispose() take its textures with it -
+        // nothing else in the scene references this circle's own texture,
+        // so there's nothing else that needs it to survive.
+        mat?.dispose(false, true)
     })
 }
 

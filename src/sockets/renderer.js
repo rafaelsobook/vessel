@@ -93,6 +93,55 @@ let renderCallback = function () {
         // enemyBind) - "cannot move" while true, regardless of
         // _isMoving/_targetId state
         if(en._disabled) return
+
+        // wander/dodge - moving toward a plain waypoint (tcp/index.ts's
+        // own wander interval, or a locally-detected projectile dodge -
+        // see worldsocket.js's "enemy-wander"/"enemy-dodge" handlers),
+        // not a player. Takes priority over chasing below: a dodge
+        // mid-fight should interrupt the chase for its short burst rather
+        // than get silently skipped because _targetId is also still set -
+        // _wanderTarget never touches _targetId itself, so the chase
+        // simply resumes on its own once the waypoint is reached and this
+        // branch stops claiming the frame.
+        if(en._isMoving && en._wanderTarget){
+            if(en.det.currentPlaceId === OPENWORLD_PLACE_ID){
+                en.body.position.y = terrainHeight(en.body.position.x, en.body.position.z) + en.det.bodyHeight / 2 + 0.05
+            }
+
+            const dx = en.body.position.x - en._wanderTarget.x
+            const dz = en.body.position.z - en._wanderTarget.z
+            const dist = Math.sqrt(dx * dx + dz * dz)
+
+            const WANDER_ARRIVAL_THRESHOLD = 0.6
+            if(dist < WANDER_ARRIVAL_THRESHOLD){
+                en._wanderTarget = null
+                en._isDodging = false
+                // _isMoving is shared with the chase branch below - only
+                // clear it for a pure wander (no _targetId). If this was a
+                // dodge mid-fight, _targetId is still set and _isMoving
+                // must stay true so the chase branch picks back up next
+                // frame instead of the enemy freezing in place post-dodge.
+                if(!en._targetId) en._isMoving = false
+            } else {
+                _lookTarget.set(en._wanderTarget.x, en.body.position.y, en._wanderTarget.z)
+                en.body.lookAt(_lookTarget)
+                // dodging moves at 3x normal speed for its short burst -
+                // see createEnemy.js's own dodge-detection interval
+                const speedMult = en._isDodging ? 3 : 1
+                _moveVec.set(0, 0, en.spd * speedMult * dt)
+                en.body.locallyTranslate(_moveVec)
+
+                findAnimVariants(en.anims, "running").forEach(anim => {
+                    if (!anim.isPlaying) {
+                        anim.speedRatio = .9 + en.spd * speedMult * .05
+                        anim.play()
+                    }
+                })
+                if(en.runSound && !en.runSound.isPlaying) en.runSound.play()
+            }
+            return
+        }
+
         if (en._isMoving && en._targetId) {
             // was scene.getMeshByName() - an O(n) linear scan over every mesh in
             // the scene (thousands, counting village foliage instances), done

@@ -300,7 +300,8 @@ export function createExplosionBurst(scene, position, powerScale = 1, fireScale 
 
     let spherSmoke = null
     if(includeSmoke){
-        spherSmoke = createCustomizedSmoke(scene, new Vector3(position.x, position.y, position.z), "smoke", false, { min: 2, max: 3 }, { min: 1.5, max: 2 }, 5, false, {r: 0, g: 0, b: 0}, {r: 0.37, g: 0.2, b: 0.2}, false, false, 1, true)
+        // qnty (7th arg) is this layer's own emitRate - halved from 5 to 3
+        spherSmoke = createCustomizedSmoke(scene, new Vector3(position.x, position.y, position.z), "smoke", false, { min: 2, max: 3 }, { min: 1.5, max: 2 }, 3, false, {r: 0, g: 0, b: 0}, {r: 0.37, g: 0.2, b: 0.2}, false, false, 1, true)
         spherSmoke.targetStopDuration = 1
         spherSmoke.updateSpeed = 0.04
         spherSmoke.createPointEmitter(new Vector3(.5, .2, .5), new Vector3(-.5, -.2, .5))
@@ -340,7 +341,7 @@ export function createImplosionBurst(scene, position, powerScale = 1, color = "v
     draw.maxLifeTime = 0.9
     draw.minSize = 0.3 * powerScale
     draw.maxSize = 0.7 * powerScale
-    draw.emitRate = 140
+    draw.emitRate = 70 // halved from 140
     draw.updateSpeed = 0.02
     draw.color1 = new Color4(palette.diffuse.r, palette.diffuse.g, palette.diffuse.b, 0.8)
     draw.color2 = new Color4(0.02, 0.0, 0.04, 0.6)
@@ -365,7 +366,7 @@ export function createImplosionBurst(scene, position, powerScale = 1, color = "v
         flash.isLocal = true
         flash.minEmitPower = 2
         flash.maxEmitPower = 4
-        flash.emitRate = 400
+        flash.emitRate = 200 // halved from 400
         flash.manualEmitCount = 60
         flash.targetStopDuration = 0.15
         flash.start()

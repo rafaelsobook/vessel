@@ -17,6 +17,7 @@ import { getAllSounds } from "../components/soundSystem.js";
 import { getGameStatus, setGameStatus } from "../main/main.js";
 import { updateSkillListUI } from "../components/skillsui.js";
 import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
+import { triggerSkillWheel } from "./skillWheel.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -116,6 +117,58 @@ export function evaluateRank(addedPoints, assignedRank){
     }
 
     if(isMaxRank()) rank.curr = 0
+}
+
+// EXP -> LEVEL - a separate track from Rank above (that system is
+// untouched by any of this). Geometric growth, same curve SHAPE
+// evaluateRank's own pointsToRank already uses for Rank, just its own
+// independent base/growth numbers. Not stored anywhere - computed fresh
+// from the current lvl every time, so it can never drift out of sync with
+// whatever lvl actually is.
+const LEVEL_BASE_EXP = 100
+const LEVEL_EXP_GROWTH = 1.25
+function expToNextLevel(lvl){
+    return Math.floor(LEVEL_BASE_EXP * Math.pow(LEVEL_EXP_GROWTH, lvl - 1))
+}
+
+// grants EXP - called from createEnemy.js's defeatedAmonster, right
+// alongside the existing monsSoul grant. Rolls over into as many level-ups
+// as the amount earned covers in one pass (a big single kill or a future
+// EXP-boosting effect shouldn't need to be re-triggered separately per
+// level). Each level-up: +1 statPoints (the pool statsSystem.js's
+// upgrade-btn UI now spends from), a "Level Up!" popup, then the skill
+// wheel reveal (skillWheel.js - kept in its own file rather than bloating
+// this one with wheel DOM/animation code).
+export function gainExp(amount){
+    if(!characterState || !amount) return
+    characterState.exp = (characterState.exp || 0) + amount
+
+    let leveledUp = false
+    while(characterState.exp >= expToNextLevel(characterState.lvl)){
+        characterState.exp -= expToNextLevel(characterState.lvl)
+        characterState.lvl += 1
+        characterState.statPoints = (characterState.statPoints || 0) + 1
+        leveledUp = true
+    }
+
+    if(!leveledUp) return
+    lvlAndName.innerHTML = `Lvl ${characterState.lvl} ${characterState.name}`
+    openClosePopup(`Level Up! You are now Lvl ${characterState.lvl}`, true, 2000)
+    getAllSounds().notif2S?.play()
+    updateStatUI()
+    updateMyDetailsOL(characterState, checkIfTokenSaved())
+    setTimeout(() => {
+        triggerSkillWheel()
+    }, 1200)
+}
+// DEBUG CHEAT - bound to the "x" key in controllers/inputMovement.js.
+// Grants exactly enough EXP to cross the next threshold, reusing gainExp's
+// own real level-up path (popup/sound/statPoints/skill wheel) rather than
+// bumping characterState.lvl directly - so this exercises the same code a
+// real level-up would, just triggered on demand instead of by a kill.
+export function debugLevelUp(){
+    if(!characterState) return
+    gainExp(expToNextLevel(characterState.lvl))
 }
 export function getTotal(){
     summarizeStats()

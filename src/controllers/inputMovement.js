@@ -2,7 +2,7 @@ import { Quaternion, MeshBuilder, Vector3, FreeCamera } from '@babylonjs/core';
 import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
-import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll } from '../charactersystem/characterstate';
+import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { ANIM_STATE, playAnim } from '../tools/animation';
@@ -421,6 +421,9 @@ function setupControls(scene, allsounds) {
             break
             case "f":
                 restoreAll()
+            break
+            case "x":
+                debugLevelUp()
             break
             case "1":
                 hideShowAllScreenUI(false)

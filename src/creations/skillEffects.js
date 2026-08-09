@@ -23,7 +23,7 @@ import { createMagicCircle } from "./magiccircles.js"
 import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle } from "../tools/particlesystem.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
 import { spawnProjectile } from "./skills.js"
-import { createGlowingMat } from "../tools/materials.js"
+import { createGlowingMat, fresnelMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
 import { attachLightning } from "../effects/lightning.js"
 import { createSimplex } from "../tools/noise.js"
@@ -272,7 +272,13 @@ const PROJECTILE_STYLES = {
         if((skill.arcCount ?? 0) > 0){
             attachLightning(scene, bladeRoot, skill.explosionColor || "blue", false, { arcCount: skill.arcCount, width: 0.015, updateInterval: 90, withLight: false })
         }
-        return () => bladeRoot.dispose() // recurses into the 4 part meshes (and the arcs, if any - attachLightning's own onDisposeObservable wiring) by default
+        // (false, true) = recurse into the 4 part meshes (and the arcs, if
+        // any) AND dispose each one's own material/texture along with it -
+        // Mesh/Node.dispose()'s disposeMaterialAndTextures param defaults
+        // to false, so a plain bladeRoot.dispose() was leaving every part's
+        // material (createGlowingMat, a fresh instance per cast, never
+        // shared - safe to free) behind every single time this skill fired.
+        return () => bladeRoot.dispose(false, true)
     },
     // a small glowing core wrapped in crackling arcs - attachLightning
     // already handles both the arcs AND making the mesh itself glow
@@ -309,7 +315,12 @@ const PROJECTILE_STYLES = {
         const spinObserver = scene.onBeforeRenderObservable.add(() => { halo.rotation.z += 0.12 })
         return () => {
             scene.onBeforeRenderObservable.remove(spinObserver)
-            halo.dispose() // attachLightning's own arcs/light/mat teardown is wired to halo.onDisposeObservable, fires from this
+            // attachLightning's own arcs/light/mat teardown is wired to
+            // halo.onDisposeObservable, fires from this either way - (false,
+            // true) additionally frees halo's OWN material (createGlowingMat,
+            // set inline by attachLightning's weaponGlow:true), which a plain
+            // .dispose() would otherwise leave behind every cast
+            halo.dispose(false, true)
         }
     },
 
@@ -346,7 +357,9 @@ const PROJECTILE_STYLES = {
         attachLightning(scene, root, skill.explosionColor || "red", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
         return () => {
             scene.onBeforeRenderObservable.remove(spinObserver)
-            root.dispose() // recurses into both blades' part meshes and the arcs
+            // recurses into both blades' part meshes and the arcs; (false,
+            // true) also frees each part's own material along with them
+            root.dispose(false, true)
         }
     },
 
@@ -362,7 +375,7 @@ const PROJECTILE_STYLES = {
         // (no live render pass was possible), may need adjusting once seen
         spearRoot.addRotation(Math.PI, 0, Math.PI / 2)
         attachLightning(scene, spearRoot, skill.explosionColor || "blue", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-        return () => spearRoot.dispose()
+        return () => spearRoot.dispose(false, true)
     },
 
     // earth - a jagged glowing crystal shard (MeshBuilder.CreatePolyhedron,
@@ -386,7 +399,7 @@ const PROJECTILE_STYLES = {
         attachLightning(scene, shard, skill.explosionColor || "green", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 100, withLight: false })
         return () => {
             scene.onBeforeRenderObservable.remove(spinObserver)
-            shard.dispose()
+            shard.dispose(false, true) // also frees shard.material (createGlowingMat)
         }
     },
 
@@ -419,7 +432,33 @@ const PROJECTILE_STYLES = {
         attachLightning(scene, root, skill.explosionColor || "white", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
         return () => {
             scene.onBeforeRenderObservable.remove(spinObserver)
-            root.dispose()
+            root.dispose(false, true) // also frees ringA/ringB's own separate materials (createGlowingMat, two of them)
+        }
+    },
+
+    // light - a plain radiant glowing sphere, celestialverdictSkill's own
+    // distinct look (used to share "twinhalo" with seraphicascension -
+    // pulled out into its own style so the two no longer look identical)
+    lightorb(scene, box, skill){
+        box.isVisible = false
+        const sphere = MeshBuilder.CreateSphere(`lightorb_${skill.name}_${Date.now()}`, { diameter: 0.4, segments: 16 }, scene)
+        sphere.parent = box
+        sphere.isPickable = false
+        sphere.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
+        // fresnelMat (tools/materials.js) instead of a flat createGlowingMat -
+        // a hollow-looking glowing shell (transparent center, brighter/more
+        // opaque rim) rather than a solid glowing ball
+        sphere.material = fresnelMat(scene, skill.explosionColor || "white")
+        addGlow(scene, sphere, 0.6)
+
+        const spinObserver = scene.onBeforeRenderObservable.add(() => {
+            sphere.rotation.y += 0.05
+            sphere.rotation.x += 0.03
+        })
+        attachLightning(scene, sphere, skill.explosionColor || "white", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
+        return () => {
+            scene.onBeforeRenderObservable.remove(spinObserver)
+            sphere.dispose(false, true) // also frees sphere's own material (createGlowingMat)
         }
     },
 
@@ -450,7 +489,7 @@ const PROJECTILE_STYLES = {
         attachLightning(scene, root, skill.explosionColor || "violet", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
         return () => {
             scene.onBeforeRenderObservable.remove(spinObserver)
-            root.dispose()
+            root.dispose(false, true) // also frees barA/barB's own separate materials (createGlowingMat, two of them)
         }
     },
 
@@ -561,7 +600,12 @@ const PROJECTILE_STYLES = {
             veinNoise.dispose()
             orbMat.dispose()
             orb.dispose()
-            core.dispose()
+            // core's own material (createGlowingMat, a SEPARATE instance
+            // from orbMat above) was never disposed here before - core.dispose()
+            // alone only freed the mesh, leaving that material behind every
+            // single darkorb cast. (false, true) fixes it the same way every
+            // other style's cleanup above does.
+            core.dispose(false, true)
         }
 
         // on hit: instead of the usual explode-and-vanish every other style
@@ -641,22 +685,26 @@ const PROJECTILE_STYLES = {
 // "blade" style did - see EXPLOSION_STYLES.fire/water/earth below
 const WEAPON_LIKE_STYLES = new Set(["blade", "bladecross", "spearlance"])
 
+// emberEmitRate (the 6th positional arg to createExplosionBurst) halved
+// across every element below - fire 30->15, water 22->11, earth 25->13,
+// light 15->8, lightning 20->10 - fewer embers per explosion, cut for
+// performance (see createImplosionBurst's own emitRate cuts too, same pass).
 const EXPLOSION_STYLES = {
     fire(scene, pos, powerScale, color, skill){
-        createExplosionBurst(scene, pos, powerScale, 1, 1, 30, color, { burstTexture: "explodeTex", gravitySign: 1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
+        createExplosionBurst(scene, pos, powerScale, 1, 1, 15, color, { burstTexture: "explodeTex", gravitySign: 1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
     },
     water(scene, pos, powerScale, color, skill){
         // bubbles drifting up instead of embers - drunkBubble.png is
         // literally a bubble sprite, sitting unused until now
-        createExplosionBurst(scene, pos, powerScale, 0.9, 0.7, 22, color, { burstTexture: "drunkBubble", gravitySign: 1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
+        createExplosionBurst(scene, pos, powerScale, 0.9, 0.7, 11, color, { burstTexture: "drunkBubble", gravitySign: 1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
     },
     earth(scene, pos, powerScale, color, skill){
         // debris FALLS (gravitySign -1) instead of rising like fire/embers do
-        createExplosionBurst(scene, pos, powerScale, 1.2, 1.3, 25, color, { burstTexture: "rockTex", gravitySign: -1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
+        createExplosionBurst(scene, pos, powerScale, 1.2, 1.3, 13, color, { burstTexture: "rockTex", gravitySign: -1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
     },
     light(scene, pos, powerScale, color, skill){
         // clean and bright - no smoke residue, cooler/faster burst
-        createExplosionBurst(scene, pos, powerScale, 0.8, 0.5, 15, color, { burstTexture: "flare2", gravitySign: 1, includeSmoke: false })
+        createExplosionBurst(scene, pos, powerScale, 0.8, 0.5, 8, color, { burstTexture: "flare2", gravitySign: 1, includeSmoke: false })
     },
     dark(scene, pos, powerScale, color, skill){
         createImplosionBurst(scene, pos, powerScale, color)
@@ -665,7 +713,7 @@ const EXPLOSION_STYLES = {
         // clean and sharp like "light"'s burst, but its own texture
         // (flare3, otherwise unused) so a bright lightning discharge reads
         // as a distinct flash rather than a recolored light skill
-        createExplosionBurst(scene, pos, powerScale, 0.85, 0.6, 20, color, { burstTexture: "flare3", gravitySign: 1, includeSmoke: false })
+        createExplosionBurst(scene, pos, powerScale, 0.85, 0.6, 10, color, { burstTexture: "flare3", gravitySign: 1, includeSmoke: false })
     },
 }
 
@@ -910,10 +958,22 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     // this at all (a physics raycast against the physics world would catch
     // those too, but was deliberately traded away for a pure ActionManager
     // approach here).
-    const ENV_HIT_KEYWORDS = ["wall", "floor", "ground", "tree"]
+    // "wall"/"floor"/"_ground"/"tree" - "_ground" not bare "ground": Babylon's
+    // own createDefaultEnvironment() root mesh is literally named
+    // "BackgroundHelper", which matches the bare substring "ground" (back-
+    // GROUND-Helper) despite being nowhere near terrain (same false
+    // positive already caught and fixed in creations/skills.js's own
+    // spawnProjectile). Real ground meshes are always ${namePrefix}_ground
+    // (createvillage.js), so the underscore excludes it without excluding
+    // anything real.
+    const ENV_HIT_KEYWORDS = ["wall", "floor", "_ground", "tree"]
     if(skill.swordRain){
         scene.meshes.forEach(mesh => {
             if(mesh === box || !mesh.name) return
+            // real "Mesh" instances only - excludes InstancedMesh and
+            // anything else that isn't the kind of solid, uniquely-named
+            // environment geometry this is looking for
+            if(mesh.getClassName() !== "Mesh") return
             const lowerName = mesh.name.toLowerCase()
             if(!ENV_HIT_KEYWORDS.some(keyword => lowerName.includes(keyword))) return
 
@@ -923,7 +983,14 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 clearTimeout(missTimeout)
                 envTriggerCleanups.forEach(fn => fn())
 
-                const hitPos = mesh.getAbsolutePosition ? mesh.getAbsolutePosition().clone() : box.position.clone()
+                // the MARKER's own position at the moment it registered the
+                // hit, not the hit mesh's own transform origin - a ground
+                // plane's pivot can sit anywhere (village center, world
+                // origin, wherever it was authored), completely unrelated
+                // to where the marker actually was when it touched it. This
+                // was the actual cause of swords raining down right next to
+                // the caster instead of out where the marker really landed.
+                const hitPos = box.position.clone()
                 triggerSwordRain(scene, charState, skill, hitPos, powerScale)
                 stickMarkerToMesh(projectile, box, mesh, cleanupProjectile)
             })
@@ -996,15 +1063,24 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
 
     // reuses creations/skills.js's spawnProjectile for the falling sword
     // itself (same small glowing-sword mesh/movement the "throw weapon"
-    // mechanic uses) - but NOT its built-in hit detection, which only ever
-    // triggers against players (see that file's own header comment), never
-    // enemies. The travel time below is computed analytically instead
+    // mechanic uses) - but NOT its built-in player/enemy/ground hit
+    // detection, since this skill needs its own damage/curse logic either
+    // way. The travel time below is computed analytically instead
     // (straight-line distance over spawnProjectile's own hardcoded spd: 10 -
     // see its source - this drifts out of sync if that ever changes) and
     // drives this file's own enemy-hit/damage/explosion logic once the
     // sword should have landed, same shape as fireElementalProjectile's own
     // hit handling just timer-driven instead of trigger-driven.
-    spawnProjectile(startPos, landingPos, skill.explosionColor || "white", scene, "default")
+    //
+    // willDisposeCountDown (6s) - once a sword sticks into whatever it hit
+    // (player/enemy/ground - spawnProjectile's own trigger/raycast
+    // branches all still run and stick it independently of this file's own
+    // damage logic above), it stayed there forever with nothing to ever
+    // clean it up - a real leak over a long play session with this skill
+    // used repeatedly. 6s is long enough to read as "the sword lands and
+    // lingers a moment" without piling up indefinitely.
+    const SWORD_DISPOSE_MS = 6000
+    const swordItemId = spawnProjectile(startPos, landingPos, skill.explosionColor || "white", scene, "default", null, SWORD_DISPOSE_MS)
 
     // now a diagonal path (origin near the player, not straight above the
     // landing spot) - real distance instead of assuming a fixed drop height
@@ -1053,6 +1129,18 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
                 emitEnemyCurse({ targetId: enemy._id, currentPlaceId: charState.currentPlace.placeId })
             }
         })
+
+        // fallback cleanup - spawnProjectile's own willDisposeCountDown
+        // (SWORD_DISPOSE_MS above) only ever starts counting down if ITS
+        // OWN player/enemy/ground hit detection actually registers a hit;
+        // a sword that misses everything entirely (e.g. flying over open-
+        // world terrain, which spawnProjectile's ground raycast doesn't
+        // reliably catch on every surface) would never trigger that timer
+        // at all and just sit there forever. This fires on the exact same
+        // schedule a genuine stick-and-linger would (impact time +
+        // SWORD_DISPOSE_MS), and safely no-ops via removeProjectile's own
+        // "already gone" guard if the real hit path already disposed it.
+        setTimeout(() => removeProjectile(swordItemId), SWORD_DISPOSE_MS)
     }, travelMs)
 }
 

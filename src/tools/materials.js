@@ -1,4 +1,4 @@
-import { PBRMaterial, StandardMaterial, Color3, Texture, Engine } from "@babylonjs/core";
+import { PBRMaterial, StandardMaterial, Color3, Texture, Engine, FresnelParameters } from "@babylonjs/core";
 
 let MatUsed = StandardMaterial
 
@@ -19,6 +19,42 @@ export function createGlowingMat(scene, colorType = "yellow"){
     mat.diffuseColor = palette.diffuse;
     mat.emissiveColor = palette.emissive;
     mat.specularColor = new Color3(0, 0, 0);
+    return mat;
+}
+
+// translucent "hollow glowing orb" look - same Fresnel technique
+// enemies/skins.js's own createSlimeMat first established (a base color
+// tint + Fresnel-driven emissive/opacity + backFaceCulling:false so the
+// mesh's own back faces show through), pulled out here as its own reusable
+// function instead of staying duplicated inline wherever this look is
+// wanted next. Deliberately the OPPOSITE opacity direction from slimeMat
+// though, not identical values: slimeMat's own opacityFresnelParameters
+// (leftColor White, rightColor Black) reads opaque face-on/center and
+// more see-through at the rim; this one swaps them (leftColor Black,
+// rightColor White) for a transparent CENTER and a bright, more opaque
+// glowing shell/rim instead - a hollow energy-orb read rather than a gel
+// blob. Swap them back to match slimeMat exactly if a future caller wants
+// that direction instead.
+export function fresnelMat(scene, color = "white"){
+    const palette = GLOW_COLORS[color] ?? GLOW_COLORS.white;
+    const mat = new StandardMaterial(`fresnelMat_${color}`, scene);
+
+    mat.diffuseColor = palette.diffuse;
+    mat.specularColor = new Color3(0, 0, 0);
+    mat.alpha = 0.5;
+
+    mat.emissiveColor = palette.emissive;
+    mat.emissiveFresnelParameters = new FresnelParameters();
+    mat.emissiveFresnelParameters.power = 3;
+    mat.emissiveFresnelParameters.bias = 0.1;
+
+    mat.opacityFresnelParameters = new FresnelParameters();
+    mat.opacityFresnelParameters.leftColor = Color3.Black();
+    mat.opacityFresnelParameters.rightColor = Color3.White();
+    mat.opacityFresnelParameters.power = 2;
+    mat.opacityFresnelParameters.bias = 0.1;
+
+    mat.backFaceCulling = false;
     return mat;
 }
 

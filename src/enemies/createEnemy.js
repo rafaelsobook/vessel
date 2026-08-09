@@ -4,11 +4,11 @@ import { lookAt } from "../tools/tools"
 import { createGlowingMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
 import { attachLightning } from "../effects/lightning.js"
-import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
+import { getEnemiesOnScene, getPlayersOnScene, getProjectilesOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
-import { getCharState } from "../charactersystem/characterstate.js"
+import { getCharState, gainExp } from "../charactersystem/characterstate.js"
 import { getGameStatus, getSceneDet } from "../main/main.js"
 import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
@@ -170,23 +170,30 @@ export default function createEnemy(scene, det) {
         // for whatever's still in flight the instant the bind lands
         if (thisEnemy._disabled) return
         if (thisEnemy._targetId) {
-            console.log("attacking targetID: ", thisEnemy._targetId)
             const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
-            if (!targetHero) return console.log("hero not found")
-            if (targetHero.isDead) return console.log("hero dead")
-            const targBody = scene.getMeshByName(`player.${thisEnemy._targetId}`)
-            if (!targBody) return console.warn("targbody cannot found")
+            if (!targetHero) return
+            if (targetHero.isDead) return
+            // was scene.getMeshByName(`player.${...}`) - an O(n) linear scan
+            // over every mesh in the scene (thousands, counting village
+            // foliage instances), done on every single attack tick, for
+            // every enemy currently engaged. targetHero.body is the exact
+            // same mesh, already in hand from the tiny getPlayersOnScene()
+            // array above - same fix already applied to renderer.js's own
+            // movement loop, just missed here. This runs per-enemy on a
+            // roughly 1-4s interval (not every frame), but several enemies
+            // clashing with the player at once (e.g. the three slimes
+            // sitting only 3 units apart near the village) each pay this
+            // cost independently, on top of whatever's already lagging
+            // during a real fight.
+            const targBody = targetHero.body
+            if (!targBody) return
 
             const enPos = thisEnemy.body.position.clone()
             const targPos = targBody.position
             const dist = checkDistance(new Vector3(enPos.x, targPos.y, enPos.z), targPos)
-            // console.log("targDistance  " + targDist)
-            // console.log("maxDistance  " + thisEnemy.det.maxDistance)
-            console.log(dist)
-            console.log(thisEnemy.det.maxDistance)
             if (dist <= thisEnemy.det.maxDistance + 1.3) {  // PLUS 1
                 emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: enPos.x, z: enPos.z }, thisEnemy.anims)
-            }else console.log("did not reach distance")
+            }
         }
     }
     const charState = getCharState()
@@ -200,7 +207,9 @@ export default function createEnemy(scene, det) {
 
         if (!thisEnemy) return
         thisEnemy._isMoving = false
-        const enemyTargetBody = scene.getMeshByName(`player.${myCharId}`)
+        // myChar.body IS this exact mesh already, no scan needed (myCharId
+        // is just myChar's own owner id split back out of its mesh name)
+        const enemyTargetBody = myChar.body
 
         const plPos = enemyTargetBody.position
         // still register as its target even while bound (see applyEnemyBind/
@@ -299,6 +308,75 @@ export default function createEnemy(scene, det) {
             })
         }, ENEMY_SKILL_CHECK_INTERVAL_MS)
     }
+
+    // --- projectile dodge (det.canDodge - fireslime/electricslime/
+    // orangelith for now, see tcp/recources/enemyDetails.ts and
+    // tcp/generate-datas/genenemy.ts) - every DODGE_CHECK_INTERVAL_MS,
+    // checks every projectile currently on scene for whether its
+    // straight-line path is about to pass close enough to this enemy to
+    // hit it, and sidesteps if so.
+    //
+    // Multiplayer model: unlike the skill-cast interval above (which
+    // restricts the actual decision to the closest player's own client,
+    // since only ONE client should ever pick who an enemy targets), a
+    // projectile isn't a shared network entity at all - every client
+    // renders its OWN local copy the instant a skill is cast, so there's
+    // no single "authoritative" client to defer to here. Any client
+    // watching this enemy can independently decide it's under threat and
+    // emit a dodge request; since they're all watching roughly the same
+    // cast (same travel-time math, same target), they'll tend to agree
+    // within a moment of each other. tcp/index.ts's own per-enemy
+    // _dodgeCooldownUntil collapses those near-simultaneous duplicates
+    // into one broadcast instead of relaying every single one.
+    const DODGE_CHECK_INTERVAL_MS = 2000
+    const DODGE_THREAT_RADIUS = 2.2
+    const DODGE_MAX_LOOKAHEAD = 12
+    const DODGE_DISTANCE = 2
+    if(det.canDodge){
+        const dodgeInterval = setInterval(() => {
+            const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
+            if (!thisEnemy) return clearInterval(dodgeInterval)
+            if (thisEnemy._disabled) return
+            // already mid-wander/mid-dodge - don't stack a second one on
+            // top before the first even finishes
+            if (thisEnemy._wanderTarget) return
+
+            const enemyPos = thisEnemy.body.position
+            const threat = getProjectilesOnScene().find(proj => {
+                if (!proj.body || proj.stuck) return false
+                if (proj.placeId !== det.currentPlaceId) return false
+
+                // point-to-ray distance: project (enemy - projectile) onto
+                // the projectile's own travel direction to find how far
+                // ahead its closest approach to the enemy is, then measure
+                // the perpendicular miss distance at that point
+                const dir = proj.body.getDirection(Vector3.Forward()).normalize()
+                const toEnemy = enemyPos.subtract(proj.body.position)
+                const t = Vector3.Dot(toEnemy, dir)
+                if (t <= 0 || t > DODGE_MAX_LOOKAHEAD) return false // already past this enemy, or still too far out to matter yet
+
+                const closest = proj.body.position.add(dir.scale(t))
+                const missDist = Vector3.Distance(enemyPos, closest)
+                return missDist <= DODGE_THREAT_RADIUS
+            })
+            if (!threat) return
+
+            // sidestep AWAY from the threat's flight path specifically
+            // (not just an arbitrary perpendicular direction) - the exact
+            // direction from the closest point on that path to the
+            // enemy's own current position, so the dodge always increases
+            // distance from the incoming projectile rather than
+            // potentially stepping back into its way
+            const dir = threat.body.getDirection(Vector3.Forward()).normalize()
+            const t = Vector3.Dot(enemyPos.subtract(threat.body.position), dir)
+            const closestOnLine = threat.body.position.add(dir.scale(t))
+            const awayVec = enemyPos.subtract(closestOnLine)
+            const awayFromLine = awayVec.lengthSquared() > 0.0001 ? awayVec.normalize() : new Vector3(-dir.z, 0, dir.x)
+            const dodgeTo = enemyPos.add(awayFromLine.scale(DODGE_DISTANCE))
+
+            emitEnemyDodge(thisEnemy._id, { x: dodgeTo.x, z: dodgeTo.z }, det.currentPlaceId)
+        }, DODGE_CHECK_INTERVAL_MS)
+    }
     // let intervalAtk
     // let intervalDistanceChecker
 
@@ -387,6 +465,14 @@ export default function createEnemy(scene, det) {
         // worldsocket.js's "enemy-attacked" handler checks this to redirect
         // a cursed enemy's own attack damage back onto itself.
         _cursed: det._cursed ? det._cursed : false,
+        // wander/dodge waypoint (tcp/index.ts's wander interval, or this
+        // file's own dodge-detection interval below) - a plain {x,z}
+        // point, not a player. renderer.js's movement loop moves toward
+        // this INSTEAD of chasing _targetId whenever it's set, then clears
+        // it back to null on arrival. _isDodging just flags the 3x speed
+        // burst while _wanderTarget is a dodge rather than a lazy wander.
+        _wanderTarget: null,
+        _isDodging: false,
 
         runSound,
         deathSound,
@@ -507,6 +593,14 @@ function emitEnemyCastSkill(enemId, skillName, targetId, pos, placeId) {
         pos,
     })
 }
+function emitEnemyDodge(enemId, dest, placeId) {
+    getSocket().emit("enemyWillDodge", {
+        currentPlaceId: placeId,
+        _id: enemId,
+        x: dest.x,
+        z: dest.z,
+    })
+}
 
 export function enemyIsHit(data){
     const charState = getCharState()
@@ -555,10 +649,11 @@ export function enemyIsHit(data){
     }
 }
 export function defeatedAmonster(data){
-    const {name,dn, monsSoul,skills,effects,effectsWhenHit, loots} = data
+    const {name,dn, monsSoul,skills,effects,effectsWhenHit, loots, expToGain} = data
 
     const characterState = getCharState()
     characterState.monsSoul += monsSoul
+    if(expToGain) gainExp(expToGain)
     const defeatedMonster = characterState.defeatedMonsters.find(monsName => monsName === name)
 
     checkStoryQuestIfCompleted('enemy', name)

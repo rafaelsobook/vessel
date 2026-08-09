@@ -573,6 +573,7 @@
                 </div>
             </div>
             <div class="left statbx">
+                <p class="stat-points-available">0 points available</p>
                 <div class="upgrade-bx strength">
                     <img src="./images/UI/stricon.png" alt="" class="upgradeimg">
                     <p class="stat-upgrade-name">1 strength</p>
@@ -604,12 +605,23 @@
     <div class="abilities-notif-container screenFadeOff cont">
         <p class="ablty-cap">Abilities Earned</p>
         <ul class="abilities-notif-list">
-      
+
         </ul>
         <div class="btn-bx">
             <button class="ablty-notif-btn">accept</button>
         </div>
-        
+
+    </div>
+    <!-- LEVEL UP SKILL WHEEL - see charactersystem/skillWheel.js. Wheel
+    itself is stationary (8 fixed icon positions); skill-wheel-arrow is the
+    clock-hand needle that spins from the center and points at the result. -->
+    <div class="skill-wheel-container screenFadeOff cont">
+        <p class="skill-wheel-cap">Choose Your Reward</p>
+        <div class="skill-wheel-outer">
+            <div class="skill-wheel"></div>
+            <div class="skill-wheel-arrow"></div>
+            <button class="skill-wheel-go-btn">GO</button>
+        </div>
     </div>
     <!-- GUILD ICON (only visible inside the Guild House, placeId 9) -->
     <button class="guild-icon-btn">

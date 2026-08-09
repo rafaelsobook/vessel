@@ -36,9 +36,12 @@
 //     into an X, from allweapons - fire), "spearlance" (a single createWeapon
 //     spear, point-first - water), "crystalshard" (a tumbling
 //     MeshBuilder.CreatePolyhedron shard - earth), "twinhalo" (two tori
-//     crossed perpendicular, each spinning its own axis - light), "boxcross"
-//     (two thin glowing boxes crossed into an X, a sigil rather than a
-//     shaped weapon - dark)
+//     crossed perpendicular, each spinning its own axis - light,
+//     seraphicascension only), "boxcross" (two thin glowing boxes crossed
+//     into an X, a sigil rather than a shaped weapon - dark). "lightorb"
+//     (a plain glowing sphere wrapped in the same arcs - light,
+//     celestialverdict only - it used to share "twinhalo" with
+//     seraphicascension, split out so the two read as genuinely different)
 //   - explosionStyle: "fire"/"water"/"earth"/"light" (all four are the same
 //     createExplosionBurst, just retextured/retinted/regravitied per style -
 //     see EXPLOSION_STYLES) or "dark" (createImplosionBurst - particles get
@@ -678,7 +681,7 @@ export const celestialverdictSkill = {
     upgradePlus: 45,
     explosionColor: "white",
     explosionScale: 1,
-    projectileStyle: "twinhalo",
+    projectileStyle: "lightorb",
     explosionStyle: "light",
     magicCircleImg: "divine1",
     arcCount: 2,

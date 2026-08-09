@@ -125,7 +125,18 @@ export function pushProjectile(newProjectile){
 export function removeProjectile(itemId){
     const theProjectile = projectilesOnScene.find(proj => proj.itemId === itemId)
     if(!theProjectile) return
-    theProjectile.body.dispose()
+    // (false, true) - also disposes any material/texture still attached
+    // recursively through this body's own children (Mesh/Node.dispose()'s
+    // disposeMaterialAndTextures param defaults to false otherwise). This
+    // is THE shared cleanup point for every projectile in the game -
+    // skillEffects.js's fireElementalProjectile/fireEnemySkillProjectile
+    // AND creations/skills.js's own spawnProjectile (astralrainSkill's
+    // falling swords, the "throw weapon" mechanic) all funnel through here -
+    // so this one flag change is what actually makes each style's own
+    // per-cast material (createGlowingMat, never shared/cached across
+    // instances - see tools/materials.js) get freed instead of leaking
+    // every single cast.
+    theProjectile.body.dispose(false, true)
     projectilesOnScene = projectilesOnScene.filter(proj => proj.itemId !== itemId)
 }
 export function getProjectilesOnScene(){
@@ -488,6 +499,35 @@ export function activateOnSocketListeners(socket){
             enemyToChase._isMoving = isFar
             enemyToChase._attacking = false
         }
+    })
+    // enemy wander (tcp/index.ts's own module-level interval - "scouting",
+    // idle enemies walking to a nearby open spot on their own) and enemy
+    // dodge (createEnemy.js's projectile-threat check, det.canDodge -
+    // fireslime/electricslime/orangelith for now) both just set the same
+    // renderer.js-read fields - the only difference is dodge also sets
+    // _isDodging (renderer.js's own movement loop reads that for the 3x
+    // speed burst) and doesn't touch _targetId, so it can interrupt a
+    // chase mid-fight without losing track of who the enemy was fighting.
+    socket.on("enemy-wander", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        const enemy = enemiez.find(enem => enem._id === data._id)
+        if (!enemy) return
+        enemy._wanderTarget = { x: data.x, z: data.z }
+        enemy._isMoving = true
+    })
+    socket.on("enemy-dodge", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        const enemy = enemiez.find(enem => enem._id === data._id)
+        if (!enemy) return
+        enemy._wanderTarget = { x: data.x, z: data.z }
+        enemy._isMoving = true
+        enemy._isDodging = true
     })
     // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
     // hit handler, tcp/index.ts's enemyBind handler) - server is the actual

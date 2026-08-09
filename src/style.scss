@@ -1729,6 +1729,145 @@ canvas {
     }
   }
 }
+// LEVEL UP SKILL WHEEL - see charactersystem/skillWheel.js. Same dark-
+// gradient bordered panel language as .abilities-notif-container above,
+// just built around a spinning wheel instead of a list. The wheel's own
+// rotation/transition is set inline by skillWheel.js (the spin animation
+// needs a JS-computed target angle, not something CSS alone can drive).
+.skill-wheel-container {
+  @include centerFix($uiz + 3);
+  width: 380px;
+  padding: 25px 15px;
+  background: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 0.8),
+    rgba(0, 0, 0, 0.9),
+    rgba(0, 0, 0, 1),
+    rgba(0, 0, 0, 1),
+    rgba(0, 0, 0, 0.9),
+    rgba(0, 0, 0, 0.8)
+  );
+  border: 1px solid rgba(156, 153, 153, 0.719);
+  display: none;
+  opacity: 1;
+  transition: 1.5s;
+
+  .skill-wheel-cap {
+    font-family: $tipsFont;
+    color: rgba(190, 74, 28, 0.877);
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 20px;
+    letter-spacing: 1px;
+    font-size: 1.2rem;
+  }
+
+  .skill-wheel-outer {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 0 auto;
+  }
+
+  .skill-wheel {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    // wheel.webp's own bronze-spoke/spiked-rim art divides the circle into
+    // 8 wedges at the exact same 45deg boundaries skillWheel.js's icon
+    // placement already uses, and supplies its own frame/rim - no CSS
+    // border or gradient needed on top of it. Its transparent corners (the
+    // spikes poke out past the main disc into empty space) are why
+    // background-size:contain rather than cover - cover would crop the
+    // spike tips. The wheel itself never rotates - see .skill-wheel-arrow
+    // below for the part that actually spins.
+    background-image: url("/images/UI/wheel.webp");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+  }
+
+  .skill-wheel-slice {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1px;
+    height: 1px;
+    // transform: rotate(angle) - set inline, pivots this icon's placement
+    // around the wheel's own center. Fixed once at render time - the icon
+    // positions never change, only the arrow below spins.
+  }
+  .skill-wheel-slice-img {
+    position: absolute;
+    top: -113px;
+    left: -18px;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.3);
+    // transform: rotate(-angle) - set inline, cancels the parent slice's
+    // own rotation so the icon stays upright in every wedge. Radius
+    // (top: -113px, icon center ~131px from the wheel's own 150px radius)
+    // sits inside the artwork's leather-textured wedge area, close to the
+    // rim without crowding the bronze spokes.
+  }
+
+  // the actual spinning pointer - a clock-hand needle pivoting from the
+  // wheel's dead center, resting angle (0deg) pointing straight up. Spins
+  // via transform/transition set inline by skillWheel.js and lands
+  // pointing at whichever icon won, since icon i sits at the same
+  // i*45deg angle the arrow rotates to.
+  .skill-wheel-arrow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 122px;
+    margin-left: -5px;
+    margin-top: -122px;
+    transform-origin: 50% 100%;
+    z-index: 3;
+    background: linear-gradient(to bottom, #f0645a, #b52424 60%, #6b0f0f);
+    clip-path: polygon(50% 0%, 100% 24%, 62% 24%, 62% 100%, 38% 100%, 38% 24%, 0% 24%);
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+  }
+
+  .skill-wheel-go-btn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid #d12626;
+    background: linear-gradient(
+      to bottom,
+      rgb(209, 38, 38),
+      rgb(88, 22, 22),
+      rgba(82, 11, 11, 0.8),
+      rgba(153, 5, 5, 0.6)
+    );
+    color: rgba(219, 210, 206, 0.877);
+    font-family: $gamefont;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    z-index: 4;
+    box-shadow: 0 0 12px rgba(209, 38, 38, 0.6);
+  }
+  .skill-wheel-go-btn:active {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  .skill-wheel-go-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    box-shadow: none;
+  }
+}
 @keyframes beating {
   0% {
     transform: translate(-50%, -50%) scale(1);
