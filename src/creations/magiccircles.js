@@ -1,11 +1,76 @@
-import { Animation, MeshBuilder, StandardMaterial, Texture, Color3, Vector3, 
+import { Animation, MeshBuilder, StandardMaterial, Texture, Color3, Vector3,
     BackEase, EasingFunction, GlowLayer } from "@babylonjs/core"
 import { createParticlesForMesh } from "../tools/particlesystem.js";
 import { addGlow } from "../tools/glow.js";
 import { getAllSounds } from "../components/soundSystem.js";
 
+// persistent texture cache (at most ~9 imgName values, see ./images/circles,
+// x2 for the two alpha modes below - small, fixed, bounded, not a leak) -
+// avoids re-decoding/re-uploading the same circle .webp on every single
+// cast. Babylon's own Texture constructor already dedupes by URL internally
+// (Texture._getFromCache, @babylonjs/core/Materials/Textures/texture.pure.js) -
+// the GPU pixel data itself was never truly duplicated across casts of the
+// SAME style even before this - but despawnMagicCircle used to call
+// mat.dispose(false, true) (forceDisposeTextures), which evicted that
+// cached GPU texture the instant the LAST currently-active circle of a
+// given style despawned. The next cast of that same style then paid the
+// full decode+upload cost all over again, every time. Holding one Texture
+// object per (imgName, alphaMode) here, forever, keeps it permanently in
+// Babylon's own cache so that reload never happens (see despawnMagicCircle's
+// own updated comment on why materials still get disposed WITHOUT their
+// texture now).
+//
+// keyed by alphaMode too, not just imgName: spawnMagicCircle and
+// createMagicCircle get their alpha two genuinely different ways
+// (diffuseTexture.hasAlpha - the image's own real alpha channel - vs
+// emissiveTexture/opacityTexture.getAlphaFromRGB - alpha DERIVED from RGB
+// luminance instead), both of which are properties ON THE TEXTURE OBJECT
+// ITSELF, not the material. The same imgName genuinely gets used through
+// BOTH functions in practice ("divine1" - spawnMagicCircle in questions.js,
+// createMagicCircle via radiantjudgmentSkill's own magicCircleImg) - a
+// single shared texture per imgName would mean whichever function's mode
+// got set last quietly overrides the other's rendering the next time either
+// one reuses that same "divine1" texture object.
+const circleTextureCache = new Map()
+function getCircleTexture(scene, imgName, alphaMode){
+    const key = `${imgName}::${alphaMode}`
+    let tex = circleTextureCache.get(key)
+    if(!tex){
+        tex = new Texture(`./images/circles/${imgName}.webp`, scene, false, false)
+        if(alphaMode === "rgb") tex.getAlphaFromRGB = true
+        else tex.hasAlpha = true
+        circleTextureCache.set(key, tex)
+    }
+    return tex
+}
+
+// cached template plane, CLONED (not instanced) per cast - skips
+// MeshBuilder.CreatePlane's own geometry/UV/normal build every single cast.
+// Deliberately .clone(), not .createInstance(): every circle still needs
+// its OWN independent material, since the fade-in/fade-out animation below
+// targets "material.alpha" per-cast and multiple circles of the SAME style
+// can genuinely be on screen at once (a shrine's permanent apt_fire circle
+// in localroomdb.js alongside a player casting flamebrand nearby, say) -
+// InstancedMesh always mirrors its source mesh's own material (confirmed
+// via @babylonjs/core/Meshes/instancedMesh.pure.js - same fact
+// skillEffects.js's fireEnemySkillProjectile already leaned on), so a true
+// instance would make every simultaneously-active circle of that style
+// fade in/out together instead of independently.
+let circleTemplate = null
+function getCircleTemplate(scene){
+    if(!circleTemplate || circleTemplate.isDisposed()){
+        circleTemplate = MeshBuilder.CreatePlane("magic_circle_template", { width: 2.5, height: 2.5 }, scene)
+        circleTemplate.isVisible = false
+        circleTemplate.isPickable = false
+        circleTemplate.setEnabled(false)
+    }
+    return circleTemplate
+}
+
 export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000) {
-    const disc = MeshBuilder.CreatePlane("magic_circle", { width: 2.5, height: 2.5 }, scene)
+    const disc = getCircleTemplate(scene).clone("magic_circle")
+    disc.isVisible = true
+    disc.setEnabled(true)
     disc.rotation.x = Math.PI / 2
     disc.position = new Vector3(position.x, 0, position.z)
     disc.scaling = new Vector3(0.01, 0.01, 0.01)
@@ -14,9 +79,8 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
     scene.setRenderingAutoClearDepthStencil(1, false)
 
     const mat = new StandardMaterial("magic_circle_mat", scene)
-    const circleTexture = new Texture(`./images/circles/${imgName}.webp`, scene, false, false)
+    const circleTexture = getCircleTexture(scene, imgName, "hasAlpha")
     mat.diffuseTexture = circleTexture
-    mat.diffuseTexture.hasAlpha = true
     mat.useAlphaFromDiffuseTexture = true
     mat.emissiveTexture = circleTexture
     mat.emissiveColor = new Color3(intensity, intensity, intensity)
@@ -75,7 +139,9 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
 // but rotation.y is exactly the yaw that's now doing the aiming, so spin
 // moves to rotation.z instead - same clock-face spin, staying face-on.
 export function createMagicCircle(position, scene, imgName, intensity = 0.5, timeOut = 5000, facingDirection = null, sizeScale = 1){
-    const disc = MeshBuilder.CreatePlane("magic_circle", { width: 2.5, height: 2.5 }, scene)
+    const disc = getCircleTemplate(scene).clone("magic_circle")
+    disc.isVisible = true
+    disc.setEnabled(true)
     if(facingDirection){
         disc.rotation.y = Math.atan2(facingDirection.x, facingDirection.z) + Math.PI
     } else {
@@ -88,10 +154,8 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
     scene.setRenderingAutoClearDepthStencil(1, false)
 
     const mat = new StandardMaterial("magic_circle_mat", scene)
-    const circleTexture = new Texture(`./images/circles/${imgName}.webp`, scene, false, false)
-    
-    circleTexture.getAlphaFromRGB = true
-    
+    const circleTexture = getCircleTexture(scene, imgName, "rgb")
+
     mat.emissiveTexture = circleTexture
     mat.opacityTexture  = circleTexture
     mat.emissiveColor = new Color3(intensity, intensity, intensity)
@@ -166,16 +230,18 @@ function despawnMagicCircle(disc, scene) {
         disc.dispose()
         // disc.dispose() alone only frees the MESH - Mesh.dispose()'s own
         // disposeMaterialAndTextures parameter defaults to false, so the
-        // StandardMaterial + its Texture (diffuseTexture/emissiveTexture,
-        // spawnMagicCircle; emissiveTexture/opacityTexture, createMagicCircle -
-        // same texture object in both texture slots either way) were never
-        // actually freed before this fix. Every single skill cast in the
-        // game runs through one of these two functions, so this leaked a
-        // material+texture pair per cast. forceDisposeTextures=true here
-        // makes the material's own dispose() take its textures with it -
-        // nothing else in the scene references this circle's own texture,
-        // so there's nothing else that needs it to survive.
-        mat?.dispose(false, true)
+        // StandardMaterial itself was never actually freed before the
+        // original fix here (a material leaked per cast - every single
+        // skill cast in the game runs through one of these two functions).
+        // Deliberately NOT forceDisposeTextures anymore though (was
+        // mat.dispose(false, true)) - the material's own diffuseTexture/
+        // emissiveTexture/opacityTexture is now circleTextureCache's
+        // persistent, shared Texture object (see top of file), reused by
+        // every other circle of the same (imgName, alphaMode) including
+        // ones still actively on screen right now. Disposing it here would
+        // pull the GPU texture out from under every other currently-active
+        // circle sharing it, not just this one.
+        mat?.dispose(false, false)
     })
 }
 

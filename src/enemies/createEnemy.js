@@ -4,7 +4,7 @@ import { lookAt } from "../tools/tools"
 import { createGlowingMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
 import { attachLightning } from "../effects/lightning.js"
-import { getEnemiesOnScene, getPlayersOnScene, getProjectilesOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
+import { getEnemiesOnScene, getIsSocketOn, getPlayersOnScene, getProjectilesOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
@@ -20,18 +20,34 @@ import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { createSlimeMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
-import { terrainHeight } from 'infterrain'
-import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
+import { sampleTerrainSurfaceHeight } from 'infterrain'
+import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
+import { castEnemySkill } from "../creations/skillEffects.js"
 
 
 
 export default function createEnemy(scene, det) {
+    // guards the actual mesh-creation choke point itself, not just whatever
+    // check the caller happens to do first (worldsocket.js's own
+    // reCreateMeshesInScene already checks enemiez/getMeshByName before
+    // calling this, but that's a courtesy, not a guarantee every path/every
+    // future caller respects - MeshBuilder.CreateBox below doesn't care if
+    // a mesh named `enemy.${det._id}` already exists, it'll happily build a
+    // second overlapping one on top of the first if this is ever called
+    // twice for the same _id) - returning null here early is the one place
+    // that can't be bypassed no matter what called this or why
+    if(scene.getMeshByName(`enemy.${det._id}`)) return null
     console.log(det)
     const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
-    // on openworld's uneven terrain, so look up the real ground height instead
-    const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? terrainHeight(det.x, det.z) : det.y
+    // on openworld's uneven terrain, so look up the real ground height instead.
+    // sampleTerrainSurfaceHeight (not terrainHeight) - matches the coarse,
+    // interpolated grid the actual rendered chunk mesh was built from
+    // (OPENWORLD_TERRAIN_VERTS), rather than the exact analytical noise
+    // curve, which the mesh only approximates between samples - see that
+    // constant's own comment.
+    const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? sampleTerrainSurfaceHeight(det.x, det.z, OPENWORLD_TERRAIN_VERTS) : det.y
     let yPos = groundY+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
         { x: det.x, y:yPos , z: det.z }, 1, false, true)
@@ -45,7 +61,7 @@ export default function createEnemy(scene, det) {
     if(det.currentPlaceId === OPENWORLD_PLACE_ID){
         const Y_CORRECTION_THRESHOLD = 1 // ignore tiny float noise, only correct real desync
         const yCheckInterval = setInterval(() => {
-            const correctY = terrainHeight(body.position.x, body.position.z) + det.bodyHeight / 2 + 0.05
+            const correctY = sampleTerrainSurfaceHeight(body.position.x, body.position.z, OPENWORLD_TERRAIN_VERTS) + det.bodyHeight / 2 + 0.05
             if(Math.abs(body.position.y - correctY) > Y_CORRECTION_THRESHOLD){
                 body.position.y = correctY
                 emitEnemyYCorrection(det._id, correctY, body.position.x, body.position.z)
@@ -110,9 +126,23 @@ export default function createEnemy(scene, det) {
 
         
     // const fshadow = putFakeShadow(body, fakeShadowRoot, det.bodyHeight * .7, -yPos + .01)
-    const nameMesh = createTextMesh(scene, body, det.dn, "white", { x: 0, y: yPos + 0.5, z: 0 }, 35)
+    // nameMesh/hpmesh are both parented to body (see createTextMesh/createHpBar),
+    // so their own .position.y is a LOCAL offset relative to body's own
+    // origin, not an absolute world height - body itself already sits at
+    // yPos (an absolute height, groundY + bodyHeight/2 + 0.05). Was yPos +
+    // 0.5/yPos + 0.1 here before, which - being a LOCAL offset - stacked
+    // yPos on top of body's own already-yPos position a second time,
+    // roughly doubling the actual height. Invisible in the village (yPos
+    // stays near 0 on flat ground, so the error was ~1 unit, unnoticeable)
+    // but blew up badly in openworld, where yPos includes real hillside
+    // elevation (tens of units) - the health bar/name tag ended up floating
+    // roughly twice as high as the terrain the enemy is actually standing
+    // on. bodyHeight/2 (same "reach the top of the body" offset
+    // mainBodyMeshes.position.y above already uses, just in the opposite
+    // direction) is the correct local offset instead.
+    const nameMesh = createTextMesh(scene, body, det.dn, "white", { x: 0, y: det.bodyHeight / 2 + 0.5, z: 0 }, 35)
     nameMesh.isVisible = true
-    const { hpbar, hpmesh } = createHpBar(yPos + .1, det._id, body, det.hp, det.maxHp)
+    const { hpbar, hpmesh } = createHpBar(det.bodyHeight / 2 + .1, det._id, body, det.hp, det.maxHp)
     // const theCharacterRoot = monsRoots.find(rootInfo => rootInfo.name === det.modelStyle)
     // if (!theCharacterRoot) return
 
@@ -283,8 +313,8 @@ export default function createEnemy(scene, det) {
     // skillEffects.js's castEnemySkill/fireEnemySkillProjectile for how
     // the actual cast (broadcast to everyone, damage applied only by the
     // real target) stays safe on top of that single decision.
-    const ENEMY_SKILL_CHECK_INTERVAL_MS = 1500
-    const ENEMY_SKILL_RANGE = 15
+    const ENEMY_SKILL_CHECK_INTERVAL_MS = 10000
+    const ENEMY_SKILL_RANGE = 20
     let enemySkillCooldownUntil = 0
     if(det.skills?.length){
         const enemySkillInterval = setInterval(() => {
@@ -304,7 +334,12 @@ export default function createEnemy(scene, det) {
 
                 enemySkillCooldownUntil = Date.now() + skill.skillCoolDown
                 const enPos = thisEnemy.body.position
-                emitEnemyCastSkill(thisEnemy._id, skillName, closestPlayer.owner, { x: enPos.x, y: enPos.y, z: enPos.z }, det.currentPlaceId)
+                if(getIsSocketOn()){
+
+                    emitEnemyCastSkill(thisEnemy._id, skillName, closestPlayer.owner, { x: enPos.x, y: enPos.y, z: enPos.z }, det.currentPlaceId)
+                }else{
+                    castEnemySkill(scene, thisEnemy, skill, closestPlayer)
+                }
             })
         }, ENEMY_SKILL_CHECK_INTERVAL_MS)
     }
@@ -577,7 +612,9 @@ function detectPlayerNearby(enemyPos, distance, callback) {
     let closestDist = Infinity
     const nearby = getPlayersOnScene().filter(pl => {
         if (!pl.body || pl.isDead) return false
-        const d = Vector3.Distance(enemyPos, pl.body.position)
+        const plPos = pl.body.position.clone()
+        plPos.y = enemyPos.y // ignore vertical distance, only care about horizontal proximity
+        const d = Vector3.Distance(enemyPos, plPos)
         if (d > distance) return false
         if (d < closestDist) { closestDist = d; closest = pl }
         return true

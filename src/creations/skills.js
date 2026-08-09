@@ -63,7 +63,16 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
         targetDirection: {x:dx, y:dy, z:dz},
         spd: 10,
         placeId: getCharState().currentPlace.placeId,
-        stuck: false
+        stuck: false,
+        // this file's own env branch below already does real ground/wall/
+        // tree hit detection via physicsEngine.raycast() every frame - opts
+        // out of renderer.js's generic openworld ground-following nudge
+        // (PROJECTILE_GROUND_*), which was fighting this projectile's own
+        // intentional fall/flight path (most visibly astralrainSkill's
+        // falling swords: nudging them back up out of PROJECTILE_GROUND_LOW
+        // right as they were trying to embed into the ground kept them from
+        // ever actually reaching it, so they never registered a hit)
+        willDetectSurface: false,
     }
 
     let hasHit = false

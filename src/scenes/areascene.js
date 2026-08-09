@@ -146,11 +146,11 @@ export async function areaScene(placeDetail){
                 }
             })
 
-            // await createOpenWorldGrass(scene, [
-            //     { texturePath: "./images/textures/grass/flower1.jpg", qnty: 100, size: "small" },
-            //     { texturePath: "./images/textures/grass/grass2_black.jpg", qnty: 200, size: "medium" },
-            //     { texturePath: "./images/textures/grass/bush1.jpg", qnty: 100, size: "large" },
-            // ], { viewRadius: 1, verts: 12 })
+            await createOpenWorldGrass(scene, [
+                { texturePath: "./images/textures/grass/flower1.jpg", qnty: 10, size: "small" },
+                { texturePath: "./images/textures/grass/grass2_black.jpg", qnty: 10, size: "medium" },
+                { texturePath: "./images/textures/grass/bush1.jpg", qnty: 10, size: "large" },
+            ], { viewRadius: 1, verts: 12 })
 
             setInterval(() => {
                 // const box = MeshBuilder.CreateBox("asd", {}, scene)

@@ -21,6 +21,7 @@ import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
 import { receiveWorldChatMessage } from "../components/worldChatSystem"
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -32,6 +33,39 @@ let enemiez = []
 let npcz = []
 let projectilesOnScene = []
 let questsOnScene = []
+
+// how close (planar, x/z only) the LOCAL player needs to be before an
+// openworld enemy's mesh actually gets created - openworld can have ~500
+// enemies alive at once (tcp/recources/enemyDetails.ts) spread across a
+// 300-1000 unit radius; creating every single one of them (model
+// instantiation, hp bar/name tag GUI textures, atkDetection/chaseDetector
+// colliders, plus its own Y-correction/dodge/skill-cast intervals - see
+// createEnemy.js) the instant you join, most of which you may never get
+// near, is a huge unnecessary hit. A bit larger than renderer.js's own
+// OPENWORLD_ENEMY_HIDE_DIST (200) on purpose - by the time you're actually
+// close enough to need to SEE an enemy, its mesh has already finished
+// building instead of both costs (create + reveal) landing on the same
+// frame. Not scoped to any other place - village/dungeon enemy counts were
+// never a problem, and gating them too just adds risk for no benefit.
+const OPENWORLD_ENEMY_CREATE_DIST = 300
+const OPENWORLD_ENEMY_CREATE_DIST_SQ = OPENWORLD_ENEMY_CREATE_DIST * OPENWORLD_ENEMY_CREATE_DIST
+// reCreateMeshesInScene only ever runs off "userJoined"/"enemy-respawned"
+// broadcasts (see this file's own socket.on calls) - neither fires just
+// because YOUR OWN character walked closer to a not-yet-created enemy, so
+// without something re-checking on a timer, most of the openworld would
+// stay permanently empty for you (only ever picking up newly-in-range
+// enemies as an incidental side effect of someone else joining or some
+// unrelated enemy elsewhere on the map happening to respawn). This interval
+// is what actually makes approaching an enemy work - reCreateMeshesInScene
+// itself is already safe to call repeatedly (isAlreadyHere/getMeshByName
+// skip everything already tracked), so this just re-runs it on a timer.
+const OPENWORLD_ENEMY_RECHECK_INTERVAL_MS = 3000
+setInterval(() => {
+    const charState = getCharState()
+    if(!charState || charState.currentPlace.placeId !== OPENWORLD_PLACE_ID) return
+    if(getGameStatus() !== "running") return
+    reCreateMeshesInScene()
+}, OPENWORLD_ENEMY_RECHECK_INTERVAL_MS)
 
 
 let scene;
@@ -568,6 +602,19 @@ export function activateOnSocketListeners(socket){
 
         reCreateMeshesInScene()
     })
+    // tcp/index.ts's own dynamic slime-spawning interval (openworld,
+    // placeId 888) - tops territory back up near whichever players wander
+    // into an empty pocket of it. Same shape/handling as enemy-respawned
+    // above (full tcpEnemies snapshot -> reCreateMeshesInScene picks up
+    // whatever's newly in range, per OPENWORLD_ENEMY_CREATE_DIST), just its
+    // own event name since this isn't a specific enemy respawning after
+    // death - a semantically distinct case even though the client-side
+    // reaction is identical.
+    socket.on('enemy-spawned', tcpEnemies => {
+        allEnemiez = tcpEnemies
+
+        reCreateMeshesInScene()
+    })
     // Movement
     socket.on("emitted-moving", data => {
         const { ownerId, pos, dirTarg, mode} = data
@@ -727,21 +774,34 @@ export function reCreateMeshesInScene() {
         if(!player) return
         pushPlayer(player, tcpCharDet.owner)
     })
+    // openworld only - see OPENWORLD_ENEMY_CREATE_DIST's own comment. null
+    // everywhere else (village/dungeon never needed this, and skipping the
+    // lookup there avoids paying for it on every single recreate pass).
+    const myOwnBody = characterState.currentPlace.placeId === OPENWORLD_PLACE_ID
+        ? playersOnScene.find(pl => pl.owner === characterState.owner)?.body
+        : null
     allEnemiez.length && allEnemiez.forEach(enemTcpInfo => {
-        console.log("my ID ",characterState.currentPlace.placeId)
-        console.log("monster ", enemTcpInfo.name ,enemTcpInfo.currentPlaceId)
-        if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return console.log("not in the same place")
+        if (characterState.currentPlace.placeId !== enemTcpInfo.currentPlaceId) return
+
+        // distance check FIRST, before either of the (more expensive)
+        // isAlreadyHere/getMeshByName lookups below - most of allEnemiez is
+        // both already-created AND already excluded by this on any given
+        // pass once the world settles, so this ordering means most entries
+        // bail out on the cheapest possible check.
+        if(myOwnBody){
+            const dx = enemTcpInfo.x - myOwnBody.position.x
+            const dz = enemTcpInfo.z - myOwnBody.position.z
+            if((dx * dx + dz * dz) > OPENWORLD_ENEMY_CREATE_DIST_SQ) return
+        }
+
         const isAlreadyHere = enemiez.find(enem => enem._id === enemTcpInfo._id)
-        if (isAlreadyHere) return console.log("enemy already here, skipping ", enemTcpInfo.name)
-        console.log(enemTcpInfo.currentPlaceId)
+        if (isAlreadyHere) return
+
         const enemyMesh = sceneDet.scene.getMeshByName(`enemy.${enemTcpInfo._id}`)
-        if(enemyMesh) return console.log("mesh is here")
-        console.log(enemTcpInfo)
+        if(enemyMesh) return
+
         const enemy = createEnemy(scene, enemTcpInfo)
-        // enemy._targetId = characterState._id
-        // enemy._isMoving = true
-        console.log(`${enemy.name}, pos: `, enemy.body.position)
-        if(enemy) enemiez.push(enemy)
+        if(enemy) pushEnemyOnScene(enemy)
     })
     console.log("currentPlace.placeId: ", characterState.currentPlace.placeId)
     if(characterState.currentPlace.placeId === 9){
@@ -783,6 +843,18 @@ export function pushPlayer(newPlayer) {
     const isAlreadyHere = playersOnScene.find(plyer => plyer.owner === newPlayer.owner)
     if (isAlreadyHere) return
     playersOnScene.push(newPlayer)
+}
+// same dedup-on-push guard pushPlayer above already has - reCreateMeshesInScene
+// already checks enemiez/getMeshByName before ever calling createEnemy, and
+// createEnemy itself now refuses to build a second mesh for an _id that
+// already exists in the scene (see its own comment), but this is the third
+// and cheapest layer: even if a future caller somehow got a real (non-null)
+// enemy object back for an _id already sitting in enemiez, this stops it
+// from ending up in the array twice.
+export function pushEnemyOnScene(newEnemy){
+    const isAlreadyHere = enemiez.find(enem => enem._id === newEnemy._id)
+    if(isAlreadyHere) return
+    enemiez.push(newEnemy)
 }
 export function removePlayer({ ownerId, playerName, placeId }){
     const characterState = getCharState()

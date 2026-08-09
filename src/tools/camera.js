@@ -22,7 +22,28 @@ export function createArcCam(scene, placeDetail, head){
     camera.lowerBetaLimit = Tools.ToRadians(20);
     camera.upperBetaLimit = Tools.ToRadians(85);
     camera.wheelPrecision = 50;
-    camera.minZ = 0.01
+    // was 0.01 - with maxZ left at Babylon's own default (10000, never set
+    // anywhere in this codebase - confirmed by grep), that's a 1,000,000:1
+    // far/near ratio for a STANDARD (non-logarithmic) depth buffer, which
+    // concentrates almost all of its precision within the first ~1 unit
+    // from the camera and leaves very little left over by the time you
+    // reach the 2-10 unit range this camera actually operates in
+    // (lowerRadiusLimit/upperRadiusLimit above) - exactly the kind of setup
+    // that causes z-fighting/flickering between near-coincident surfaces
+    // (an equipped armor/clothing mesh sitting a couple mm off the skin
+    // mesh underneath it). 0.5 keeps a comfortable margin under
+    // lowerRadiusLimit (1.7, so the camera can never actually zoom past
+    // this near plane) while cutting the ratio to 20,000:1 - a ~50x
+    // precision improvement across the whole visible range. Was
+    // apparently thin enough everywhere to go unnoticed in the village
+    // (small, near-origin coordinates - see enemyDetails.ts's own village
+    // entries, all under ~150 units from world origin) but visibly flicker
+    // in openworld, where the character's own world-position magnitude can
+    // reach into the hundreds/low-thousands (SPAWN_Z 500, slimes now out to
+    // 1000 - see enemyDetails.ts) - larger world coordinates compound
+    // floating-point rounding error through the same already-thin depth
+    // precision budget, on top of whatever the ratio alone already cost.
+    camera.minZ = 0.5
     camera.checkCollisions = true;
     camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
 

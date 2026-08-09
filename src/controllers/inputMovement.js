@@ -17,6 +17,7 @@ import { giveSkill, giveAllSkills, upgradeAllOwnedSkills } from '../components/s
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
+import { checkDistance } from '../creations/creationTools';
 
 let aggregate = null
 let myPlayer = null
@@ -151,7 +152,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = 10;
+    let sprintSpeed = 50;
     let currentSpeed = walkSpeed;
     let isMoving = false;
     let jumpSpeed = 15;
@@ -403,6 +404,9 @@ function setupControls(scene, allsounds) {
             break
             case " ":
                 console.log(getCharState())
+                console.log(checkDistance( {x: 0, y: 0, z: 500}, myPlayer?.body.position))
+                
+                    
             break
             case "i":
                 giveAllItems()

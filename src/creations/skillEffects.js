@@ -37,6 +37,8 @@ import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
 import { camShake } from "../tools/camera.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
+import { sampleTerrainSurfaceHeight } from 'infterrain'
+import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
 // override this directly via magicCircleImg (radiantjudgment uses "divine1"
@@ -823,7 +825,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     const targetPoint = spawnPos.add(forward.scale(10)) // far enough out that direction is stable regardless of distance to anything
 
     const itemId = `${skill.name}_${randNum(1000, 9999)}`
-    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 1.25 }, scene)
+    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 1 }, scene)
     box.position.copyFrom(spawnPos)
     box.isPickable = false
     box.isVisible = false // PROJECTILE_STYLES.lightning flips this back on for its own look
@@ -1241,12 +1243,21 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
 
     // player.body's own position is the capsule's CENTER, not its base -
     // same capsuleHeight/2 correction inputMovement.js's own isGrounded()
-    // ground check already relies on. Good enough for a short marching
-    // line, doesn't raycast each spike's own footing individually the way
-    // astralrainSkill's environment hits do (that skill needs precision
-    // for an arbitrary hit point; this one just needs "about where the
-    // caster is standing").
-    const groundY = player.body.position.y - capsuleHeight / 2
+    // ground check already relies on. Fine as a FLAT-ground fallback (every
+    // non-openworld place), but on openworld's uneven terrain a single
+    // height sampled once at the caster's own feet and reused for the
+    // whole marching line drifts further from the real ground the farther
+    // forward a spike lands (a line can march ~11+ units out, plenty for a
+    // slope to noticeably rise/fall along its path) - spikes erupted
+    // floating in mid-air or half-swallowed by a hillside instead of
+    // planting into the actual surface. sampleTerrainSurfaceHeight (not
+    // terrainHeight - matches the coarse, interpolated grid the rendered
+    // chunk mesh was actually built from, see OPENWORLD_TERRAIN_VERTS's own
+    // comment) is now sampled per spike, at THAT spike's own (x,z), same
+    // fix already applied to enemy Y-positioning and projectile ground-
+    // following.
+    const isOpenworld = charState.currentPlace.placeId === OPENWORLD_PLACE_ID
+    const flatGroundY = player.body.position.y - capsuleHeight / 2
 
     for(let i = 0; i < count; i++){
         // forward distance and sideways offset both jittered - keeps the
@@ -1254,11 +1265,10 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
         // land in a perfectly straight line or evenly spaced apart
         const dist = spacing * (i + 1) + randNum(-GROUND_SPIKE_DIST_JITTER, GROUND_SPIKE_DIST_JITTER)
         const lateral = randNum(-GROUND_SPIKE_LATERAL_JITTER, GROUND_SPIKE_LATERAL_JITTER)
-        const groundPos = new Vector3(
-            spawnPos.x + flatForward.x * dist + perp.x * lateral,
-            groundY,
-            spawnPos.z + flatForward.z * dist + perp.z * lateral,
-        )
+        const groundX = spawnPos.x + flatForward.x * dist + perp.x * lateral
+        const groundZ = spawnPos.z + flatForward.z * dist + perp.z * lateral
+        const groundY = isOpenworld ? sampleTerrainSurfaceHeight(groundX, groundZ, OPENWORLD_TERRAIN_VERTS) : flatGroundY
+        const groundPos = new Vector3(groundX, groundY, groundZ)
         setTimeout(() => spawnGroundSpike(scene, charState, skill, groundPos, powerScale), i * staggerMs)
     }
 }
@@ -1402,10 +1412,38 @@ const ENEMY_SKILL_PROJECTILE_TIMEOUT = 3000
 
 function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, targetOwner){
     const itemId = `enemyskill_${skill.name}_${randNum(1000, 9999)}`
-    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 0.25 }, scene)
+    // cached template + clone per cast, instead of a fresh MeshBuilder.CreateBox
+    // every single time - same pattern creations/skills.js's own spawnProjectile
+    // already uses for its "projectile" template, worth doing here too now
+    // that enemies cast skills far more often (many more fireslime/
+    // electricslime alive at once - see enemyDetails.ts)
+    let mainBox = scene.getMeshByName("enemy_projectile")
+    if(!mainBox){
+        mainBox = MeshBuilder.CreateBox("enemy_projectile", { size: 0.7, depth: 0.5 }, scene)
+        mainBox.isPickable = false
+        mainBox.isVisible = false
+        mainBox.position.y = -1000
+    }
+    // createInstance (shares mainBox's geometry buffer) instead of clone
+    // (a full independent copy) - cheaper, and confirmed safe for
+    // everything this box actually needs: position/rotation/isVisible/
+    // setParent are all genuinely per-instance on InstancedMesh (verified
+    // against @babylonjs/core/Meshes/instancedMesh.pure.js), and
+    // onIntersecEnterTrig (this function's own hit-test) already works
+    // fine against an instance elsewhere in this game (creations/skills.js's
+    // spawnProjectile does the exact same box-instance-vs-bodytarget check).
+    // One real trap for later though: InstancedMesh.material is a NO-OP
+    // setter (silently warns instead of applying, same source file) - fine
+    // today since flamebrand/lightningbolt (the only two skills any enemy
+    // currently casts) both use projectileStyle "blade", which only ever
+    // sets box.isVisible, never box.material (its own visual comes from a
+    // separate child mesh). If an enemy is ever given a skill using
+    // "lightning" or "halo" (the two styles that DO assign box.material
+    // directly), that material would silently fail to apply here - swap
+    // this back to .clone() first if that ever happens.
+    const box = mainBox.createInstance(`enemy_projectile.${itemId}`, scene)
     box.position.copyFrom(spawnPos)
     box.isPickable = false
-    box.isVisible = false
 
     const styleFn = PROJECTILE_STYLES[skill.projectileStyle] || PROJECTILE_STYLES.bolt
     const styleResult = styleFn(scene, box, skill)
@@ -1423,10 +1461,11 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
 
     const projectile = {
         itemId, body: box,
-        targetDirection: { x: dx, y: dy, z: dz },
+        targetDirection: { x: dx, y: dy+0.5, z: dz },
         spd: PROJECTILE_SPEED,
         placeId: enemy.det.currentPlaceId,
         stuck: false,
+        willDetectSurface: false
     }
     pushProjectile(projectile)
 
