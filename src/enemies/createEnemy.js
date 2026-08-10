@@ -14,7 +14,8 @@ import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
-import { emitEnemyIsHit, emitEnemyYCorrection } from "../sockets/emits.js"
+import { emitEnemyIsHit, emitEnemyYCorrection, emitSpawnCircle } from "../sockets/emits.js"
+import { createMagicCircle } from "../creations/magiccircles.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
@@ -320,6 +321,11 @@ export default function createEnemy(scene, det) {
         const enemySkillInterval = setInterval(() => {
             const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
             if (!thisEnemy) return clearInterval(enemySkillInterval)
+            const theEnemyBodyMesh = getSceneDet().scene.getMeshByName(`enemy.${det._id}`)
+            if(!theEnemyBodyMesh) {
+                console.log(`enemy.${det._id} body mesh not found, and is still casting skill remove this body`)
+                return clearInterval(enemySkillInterval)
+            }
             if (thisEnemy._disabled) return
             if (Date.now() < enemySkillCooldownUntil) return
 
@@ -342,6 +348,73 @@ export default function createEnemy(scene, det) {
                 }
             })
         }, ENEMY_SKILL_CHECK_INTERVAL_MS)
+    }
+
+    // --- lesserdemon-only: teleport-to-melee instead of chasing (det.
+    // actionType "teleporting", see tcp/generate-datas/genenemy.ts's
+    // lesserDemonBase, and renderer.js's own chase-translation guard,
+    // which only actually walks an enemy forward when actionType is
+    // "chasing") - stands its ground rather than covering distance on
+    // foot: periodically checks for a nearby player, telegraphs with a
+    // magic circle near them, then teleports there a beat later, close
+    // enough to melee (atkDetection's own trigger picks up the overlap the
+    // instant it lands, same as it would from walking in - Babylon's
+    // intersection checks don't care how two meshes ended up touching).
+    // Same "closest player's own client decides, everyone else just
+    // watches" arbitration the skill-cast interval above already uses -
+    // exactly one client ever emits the teleport request.
+    const LESSERDEMON_TELEPORT_CHECK_INTERVAL_MS = 4000
+    const LESSERDEMON_TELEPORT_RANGE = 20 // "notices" a player this far out - matches ENEMY_SKILL_RANGE
+    const LESSERDEMON_TELEPORT_SKIP_DIST = 2.5 // already close enough (about to melee/mid-melee) - don't bother
+    const LESSERDEMON_TELEPORT_LAND_OFFSET = 1.4 // lands this far from the player - inside melee reach (maxDistance 1.0) with a little slack, not literally on top of them
+    const LESSERDEMON_TELEPORT_WINDUP_MS = 1000 // telegraph-to-teleport delay - how long the magic circle warns before it fires
+    let lesserdemonTeleportCooldownUntil = 0
+    if(det.name === "lesserdemon"){
+        const teleportInterval = setInterval(() => {
+            const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
+            if (!thisEnemy) return clearInterval(teleportInterval)
+            if (thisEnemy._disabled) return
+            if (Date.now() < lesserdemonTeleportCooldownUntil) return
+
+            detectPlayerNearby(thisEnemy.body.position, LESSERDEMON_TELEPORT_RANGE, (playersNearby, closestPlayer) => {
+                if (!closestPlayer?.body) return
+                const charState = getCharState()
+                if (!charState || closestPlayer.owner !== charState.owner) return
+
+                const enPos = thisEnemy.body.position
+                const plPos = closestPlayer.body.position
+                const dx = plPos.x - enPos.x, dz = plPos.z - enPos.z
+                if (Math.sqrt(dx * dx + dz * dz) < LESSERDEMON_TELEPORT_SKIP_DIST) return // already close enough
+
+                // windup (telegraph->teleport) plus a beat before it's
+                // willing to do this again - stops it from immediately
+                // re-teleporting right after landing/attacking once
+                lesserdemonTeleportCooldownUntil = Date.now() + LESSERDEMON_TELEPORT_WINDUP_MS + 3000
+
+                // random angle around the player's own CURRENT position -
+                // not literally on top of them
+                const angle = Math.random() * Math.PI * 2
+                const landX = plPos.x + Math.cos(angle) * LESSERDEMON_TELEPORT_LAND_OFFSET
+                const landZ = plPos.z + Math.sin(angle) * LESSERDEMON_TELEPORT_LAND_OFFSET
+
+                // telegraph - spawned locally right away (so the deciding
+                // client sees it with zero round-trip delay), and relayed
+                // for everyone else watching (see worldsocket.js's own
+                // "circle-spawned" listener, and tcp/index.ts's spawncirc
+                // handler for why this doesn't ALSO echo back and double up
+                // on this same client). createMagicCircle (not
+                // spawnMagicCircle) - respects the actual y passed in,
+                // needed on openworld's uneven terrain.
+                createMagicCircle(new Vector3(landX, plPos.y, landZ), scene, "apt_darkness", 0.8, LESSERDEMON_TELEPORT_WINDUP_MS + 300)
+                emitSpawnCircle({ x: landX, y: plPos.y, z: landZ }, "darkness")
+
+                setTimeout(() => {
+                    const stillThere = getEnemiesOnScene().find(ene => ene._id === det._id)
+                    if (!stillThere || stillThere._disabled) return
+                    emitEnemyTeleport(det._id, { x: landX, z: landZ }, det.currentPlaceId)
+                }, LESSERDEMON_TELEPORT_WINDUP_MS)
+            })
+        }, LESSERDEMON_TELEPORT_CHECK_INTERVAL_MS)
     }
 
     // --- projectile dodge (det.canDodge - fireslime/electricslime/
@@ -638,6 +711,14 @@ function emitEnemyDodge(enemId, dest, placeId) {
         z: dest.z,
     })
 }
+function emitEnemyTeleport(enemId, dest, placeId) {
+    getSocket().emit("enemyWillTeleport", {
+        currentPlaceId: placeId,
+        _id: enemId,
+        x: dest.x,
+        z: dest.z,
+    })
+}
 
 export function enemyIsHit(data){
     const charState = getCharState()
@@ -648,17 +729,29 @@ export function enemyIsHit(data){
     // for weapon when hit something sound
     // playSound(soundToPlay, .9, .3)
     const enemPos = enemy.body.position
-
  
     poppingTextMesh(`-${dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`
+    // keep the underlying data live-synced too, not just the visual bar -
+    // enemy.det is the enemy's original spawn-data object and previously
+    // never got touched here, so det.hp stayed frozen at spawn value
+    // forever while only the bar width tracked the server's broadcast hp.
+    // Needed so anything that wants "this enemy's current hp" (e.g.
+    // abyssaldamnationSkill's absorb effect in skillEffects.js) reads a
+    // real, live number instead of a stale spawn-time one.
+    enemy.det.hp = data.hp
     playRandomAnim(enemy.anims, "hit")
     enemy.hitSound?.play()
 
     const player = getPlayersOnScene().find(pl => pl.owner === playerId)
     if(!player) return
     lookAt(enemy.body, player.body.position)
+
+    console.log(`killer ID: ${playerId}`)
+    console.log(`${player.name}`)
+    console.log(`my own ID: ${getCharState().owner}`)
+
 
     if (playerId === getCharState().owner){
         const { hasWeapon } = getAttackInfo()
@@ -677,12 +770,23 @@ export function enemyIsHit(data){
         //     enemy.deathSound.attachToMesh(enemy.body)
         //     enemy.deathSound.play()
         // }
+        // TEMP DIAGNOSTIC - remove once the "other player also gets exp"
+        // report is confirmed/resolved. Every code path granting exp
+        // (gainExp, only ever called from defeatedAmonster) is already
+        // gated on this exact comparison - if it's STILL happening, this
+        // will show on the NEXT repro whether the gate itself is failing
+        // (playerId genuinely !== my own owner but defeatedAmonster still
+        // ran - a real bug) or whether it's passing correctly (both
+        // "players" actually share the same owner id, e.g. two windows
+        // logged into the same account/character for a local multiplayer
+        // test - not a bug, just the same identity on both screens).
+        // console.log(`[exp-gate] killerPlayerId=${playerId} myOwnOwner=${getCharState().owner} willGrantExpToMe=${playerId === getCharState().owner}`)
         if (playerId === getCharState().owner) {
+            
             defeatedAmonster(enemy.det)
             // getSocket().emit('enemyChangeTarget', { _id: targetId, newTargetId: null })
         }
-        return getSocket().emit("removeEnemy", {enemyId: targetId})
-        
+        return getSocket().emit("removeEnemy", {enemyId: targetId})        
     }
 }
 export function defeatedAmonster(data){
@@ -713,7 +817,7 @@ export function defeatedAmonster(data){
     }
     // log("killed a monster ", data)
     console.log(characterState.quests)
-    getSocket().emit('respawnEnemy', data)
+    // getSocket().emit('respawnEnemy', data)
 }
 // ENEMY WHEN HIT RELATED
 export function enemyDispose(enemy) {
@@ -726,11 +830,13 @@ export function enemyDispose(enemy) {
 
     setTimeout(() => {
         enemy.anims.forEach(anim => anim?.dispose())
-        enemy.meshes.forEach(chld => chld.dispose()),
+        enemy.meshes.forEach(chld => chld.dispose())
         enemy.body.dispose()
         enemy.chaseDetector.dispose()
         enemy.nameMesh.dispose()
-        enemy.hpmesh.dispose()
+        enemy._cursedLabel?.dispose() // only exists if this enemy was ever cursed (applyEnemyCurse)
+        // hpmesh already disposed synchronously above, right when this
+        // function first ran (not re-disposed here - was a stray leftover)
         enemy.hpbar.dispose()
     }, 2000)
 }
@@ -836,6 +942,13 @@ export function applyEnemyCurse(scene, targetId){
     enemy._cursed = true
     if(curseAppliedIds.has(targetId)) return // arcs already crackling around it
     curseAppliedIds.add(targetId)
+
+    // "cursed" label - same createTextMesh nameMesh itself uses (see its own
+    // creation above), parented to enemy.body so it billboards/follows
+    // along for free, stacked just above the name tag rather than
+    // overlapping it. Stored on the enemy so enemyDispose can clean it up
+    // like every other per-enemy mesh (nameMesh/hpmesh/etc).
+    enemy._cursedLabel = createTextMesh(scene, enemy.body, "cursed", "purple", { x: 0, y: enemy.det.bodyHeight / 2 + 0.85, z: 0 }, 30)
 
     // weaponGlow: false - only spawns the crackling arc tubes, doesn't touch
     // the enemy's own body material. weaponGlow: true would flatten every

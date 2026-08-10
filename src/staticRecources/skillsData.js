@@ -430,12 +430,12 @@ export const shadowboltSkill = {
     upgradePlus: 15,
     explosionColor: "violet",
     explosionScale: 1,
-    projectileStyle: "bolt",
-    particleStyles: [{ name: "tentacles", color: "violet" }],
+    projectileStyle: "shadowblade",
     explosionStyle: "dark",
     magicCircleImg: "apt_darkness",
-    onLevelUp: "growParticleAura",
-    desc: "Writhing shadow tendrils trail the bolt, collapsing inward on impact before snapping shut.",
+    arcCount: 0, // no arcs at lvl 1 - growArcAura unlocks them partway through leveling, same pattern flamebrand's own "blade" style uses
+    onLevelUp: "growArcAura",
+    desc: "A spectral blade wreathed in shadow tears through the air, collapsing inward on impact before snapping shut.",
 }
 export const voidrendSkill = {
     slotNumber: 12,
@@ -778,6 +778,7 @@ export const abyssaldamnationSkill = {
     skillCoolDown: 4200,
     demand: [{ name: "mp", minCost: 68, cost: 0 }],
     effects: { effectType: "offense", dmgPm: 0, plusDmg: 270, chance: 1, bashPower: 0.68 },
+    additionalEffects:[{ effectType: "absorb", effectiveOnDeath: true, absorbStats: ["hp", "mp", "sp", "skill"] ,absorbPercent: 1, chance: 1}],
     skillrank: 2,
     upgradePlus: 52,
     explosionColor: "violet",

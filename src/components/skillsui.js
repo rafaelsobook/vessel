@@ -376,9 +376,15 @@ slotbuttons.forEach(btn => {
         if(charState.mode === "minning") setCharStateMode("idle")
 
         if(getIsSocketOn()){
-            socket.emit("activate-skill", {ownerId: charState.owner, skill, currentPlaceId: charState.currentPlace.placeId})
+            socket.emit("activate-skill", 
+                {
+                    ownerId: charState.owner, 
+                    skill, 
+                    currentPlaceId: charState.currentPlace.placeId,
+                    casterStats: charState.stats
+                })
         } else{
-            activateSkill(charState.owner, skill)
+            activateSkill(charState.owner, skill, charState.stats)
         }
 
         // skill.effects.effectType === "trigger" (multicast - see its own

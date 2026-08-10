@@ -31,8 +31,21 @@ import { getAllSounds } from "../components/soundSystem.js";
 // single shared texture per imgName would mean whichever function's mode
 // got set last quietly overrides the other's rendering the next time either
 // one reuses that same "divine1" texture object.
+//
+// scene-scoped: main.js's changeScene() fully disposes the old Scene object
+// and creates a brand new one on every place transition - Texture has no
+// isDisposed() to self-detect that (unlike Mesh below), so without this the
+// cache would silently keep handing back a Texture belonging to a scene
+// that no longer exists after the very next place change. Same
+// scene-tracking guard assetcreation/createweapon.js's own partMatCache
+// already established.
 const circleTextureCache = new Map()
+let circleCacheScene = null
 function getCircleTexture(scene, imgName, alphaMode){
+    if(circleCacheScene !== scene){
+        circleTextureCache.clear()
+        circleCacheScene = scene
+    }
     const key = `${imgName}::${alphaMode}`
     let tex = circleTextureCache.get(key)
     if(!tex){
@@ -55,7 +68,10 @@ function getCircleTexture(scene, imgName, alphaMode){
 // via @babylonjs/core/Meshes/instancedMesh.pure.js - same fact
 // skillEffects.js's fireEnemySkillProjectile already leaned on), so a true
 // instance would make every simultaneously-active circle of that style
-// fade in/out together instead of independently.
+// fade in/out together instead of independently. Mesh DOES have
+// isDisposed() (unlike Texture above), which already self-heals across a
+// scene change on its own - kept as the guard here rather than duplicating
+// the scene-tracking var for a case that doesn't strictly need it.
 let circleTemplate = null
 function getCircleTemplate(scene){
     if(!circleTemplate || circleTemplate.isDisposed()){
@@ -118,7 +134,13 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
 
     addGlow(scene, disc, 2)
 
-    createParticlesForMesh(disc, scene, "thin1")
+    // stashed on the disc itself (same pattern addGlow already uses for
+    // disc._glowLayer) so despawnMagicCircle can find and dispose it - the
+    // return value used to be discarded entirely here, meaning every single
+    // magic circle spawned in the game (every skill cast, player or enemy)
+    // left this sparkle trail running forever, orphaned, after the circle
+    // itself was long gone
+    disc._sparkles = createParticlesForMesh(disc, scene, "thin1")
 
     setTimeout(() => {
         despawnMagicCircle(disc, scene)
@@ -195,7 +217,13 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
 
     addGlow(scene, disc, 2)
 
-    createParticlesForMesh(disc, scene, "thin1")
+    // stashed on the disc itself (same pattern addGlow already uses for
+    // disc._glowLayer) so despawnMagicCircle can find and dispose it - the
+    // return value used to be discarded entirely here, meaning every single
+    // magic circle spawned in the game (every skill cast, player or enemy)
+    // left this sparkle trail running forever, orphaned, after the circle
+    // itself was long gone
+    disc._sparkles = createParticlesForMesh(disc, scene, "thin1")
 
     getAllSounds().magicCircle?.play()
     setTimeout(() => {
@@ -221,6 +249,16 @@ function despawnMagicCircle(disc, scene) {
     scene.beginDirectAnimation(disc, [fadeOut], 0, 15, false, 1, () => {
         if (disc.isDisposed()) return
         if (disc._glowLayer) disc._glowLayer.removeIncludedOnlyMesh(disc)
+        // createParticlesForMesh's own sparkle trail (see spawnMagicCircle/
+        // createMagicCircle above) - its emitter is the disc itself, but
+        // Babylon doesn't auto-dispose a particle system just because its
+        // emitter mesh gets disposed, so this was left running forever
+        // otherwise. dispose(false) - particleTexture is particlesystem.js's
+        // own shared/persistent cache, not owned by this one system.
+        if(disc._sparkles){
+            disc._sparkles.stop()
+            disc._sparkles.dispose(false)
+        }
         // captured before disposing the mesh - disc.material itself is
         // never read again after this point, so order doesn't matter for
         // correctness, just kept mesh-then-material for safety (nothing

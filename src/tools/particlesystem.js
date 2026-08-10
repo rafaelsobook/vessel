@@ -2,6 +2,50 @@ import { ParticleSystem, MeshParticleEmitter, Texture, Vector3, Color4, Color3, 
 import { GLOW_COLORS } from "./materials.js"
 import { randNum } from "./random.js"
 
+// persistent per-path texture cache - every function in this file is
+// called on basically every skill cast/hit/explosion/aura in the game, and
+// every one of them used to load `new Texture(path, scene)` completely
+// fresh, every single time. Babylon's own Texture constructor already
+// dedupes the underlying GPU resource by URL (Texture._getFromCache,
+// @babylonjs/core/Materials/Textures/texture.pure.js - same fact
+// magiccircles.js's own texture cache already leans on), but every
+// particle system created here also gets .dispose()'d with disposeTexture
+// defaulting to true (ParticleSystem.dispose's own default, opposite of
+// Mesh.dispose's), which evicts that cached GPU texture the instant the
+// LAST currently-active particle system using it stops - the next burst/
+// trail/aura using the same sprite then pays the full decode+upload cost
+// all over again. Holding one Texture object per path here, forever, keeps
+// it permanently cached - a small, fixed, bounded set (the handful of
+// sprites in ./images/particles), not a leak. Every caller below must now
+// dispose ITS OWN particle system with disposeTexture explicitly false
+// (see each .dispose(false) call site, here and in skillEffects.js/
+// magiccircles.js) - the texture is shared/persistent now, not owned by
+// any single particle system anymore.
+// scene-scoped: main.js's changeScene() fully disposes the old Scene object
+// and creates a brand new one on every place transition (village <->
+// openworld <-> dungeon, a routine, frequent event) - Texture has no
+// isDisposed() to self-detect that the way Mesh does, so a cache keyed only
+// by path would silently keep handing back a Texture belonging to a scene
+// that no longer exists after the very next place change. Same
+// scene-tracking guard assetcreation/createweapon.js's own partMatCache
+// already established (partMatCacheScene) - clear the whole cache the
+// moment the scene we're being asked for differs from the one we last
+// cached against.
+const particleTextureCache = new Map()
+let particleTextureCacheScene = null
+function getParticleTexture(scene, path){
+    if(particleTextureCacheScene !== scene){
+        particleTextureCache.clear()
+        particleTextureCacheScene = scene
+    }
+    let tex = particleTextureCache.get(path)
+    if(!tex){
+        tex = new Texture(path, scene)
+        particleTextureCache.set(path, tex)
+    }
+    return tex
+}
+
 export function createFireParticles(position, scene) {
     const light = new PointLight("fire_light", new Vector3(position.x, position.y + 0.6, position.z), scene)
     light.diffuse  = new Color3(1.0, 0.4, 0.1)
@@ -16,7 +60,7 @@ export function createFireParticles(position, scene) {
     })
 
     const particles = new ParticleSystem("fire", 250, scene)
-    particles.particleTexture = new Texture("./images/particles/fireTex.png", scene)
+    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.png")
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
     particles.emitter = new Vector3(position.x, position.y + 0.25, position.z)
@@ -65,7 +109,7 @@ export function createParticlesForMesh(mesh, scene, textureName = "flare", optio
     } = options
 
     const particles = new ParticleSystem("mesh_particles", capacity, scene)
-    particles.particleTexture = new Texture(`./images/particles/${textureName}.png`, scene)
+    particles.particleTexture = getParticleTexture(scene, `./images/particles/${textureName}.png`)
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
     particles.emitter = mesh
@@ -135,7 +179,7 @@ export function createParticleSystem(scene, emitter, particleStyles = [{ name: "
         const { color1, color2, colorDead } = resolveParticleColor(color)
 
         const particles = new ParticleSystem(`skillfx_${name}_${Date.now()}`, 300, scene)
-        particles.particleTexture = new Texture(`./images/particles/${preset.texture}.png`, scene)
+        particles.particleTexture = getParticleTexture(scene, `./images/particles/${preset.texture}.png`)
         particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
         const meshEmitter = new MeshParticleEmitter(emitter)
@@ -185,7 +229,7 @@ export function createParticle(scene, imgTex, capac, pos, spd, lifetime, minSize
             myParticleSystem.createConeEmitter(radius, angle)
         break
     }
-    myParticleSystem.particleTexture = new Texture(`./images/particles/${imgTex}.png`, scene)
+    myParticleSystem.particleTexture = getParticleTexture(scene, `./images/particles/${imgTex}.png`)
     if(pos) myParticleSystem.emitter = new Vector3(pos.x, pos.y, pos.z)
     if(emitterMesh) myParticleSystem.emitter = emitterMesh
     willStart ? myParticleSystem.start() : myParticleSystem.stop()
@@ -314,8 +358,14 @@ export function createExplosionBurst(scene, position, powerScale = 1, fireScale 
     const systems = [fireExp1, emberFire, spherSmoke].filter(Boolean)
     // longest-lived layer is emberFire: stops emitting at 2s, its own
     // particles (from EMBER_JSON) live up to 3s more - dispose everything
-    // together once that's had time to fully play out
-    setTimeout(() => systems.forEach(ps => { ps.stop(); ps.dispose() }), 5200)
+    // together once that's had time to fully play out. dispose(false) -
+    // particleTexture is the shared/persistent cache above now (emberFire's
+    // own texture comes from ParticleSystem.Parse(EMBER_JSON,...) instead,
+    // a separate Texture object, but pointing at the same cached URL - not
+    // disposing it either is harmless, nothing else needs that instance
+    // freed specifically), disposing true here would evict it out from
+    // under every other explosion currently using the same sprite.
+    setTimeout(() => systems.forEach(ps => { ps.stop(); ps.dispose(false) }), 5200)
     return systems
 }
 
@@ -331,7 +381,7 @@ export function createImplosionBurst(scene, position, powerScale = 1, color = "v
     const pos = new Vector3(position.x, position.y, position.z)
 
     const draw = new ParticleSystem(`implode_${randNum(1000, 99999)}`, 200, scene)
-    draw.particleTexture = new Texture("./images/particles/smoke2.png", scene)
+    draw.particleTexture = getParticleTexture(scene, "./images/particles/smoke2.png")
     draw.blendMode = ParticleSystem.BLENDMODE_STANDARD
     draw.createSphereEmitter(2.2 * powerScale, 1)
     draw.emitter = pos.clone()
@@ -375,8 +425,8 @@ export function createImplosionBurst(scene, position, powerScale = 1, color = "v
     setTimeout(() => {
         clearTimeout(flashTimeout)
         draw.stop()
-        draw.dispose()
-        if(flash){ flash.stop(); flash.dispose() }
+        draw.dispose(false) // particleTexture is the shared/persistent cache above now
+        if(flash){ flash.stop(); flash.dispose(false) }
     }, 1700)
 
     return [draw]
@@ -386,7 +436,7 @@ export function createBloodParticle(scene,  monsFos, particleType = "sphere", ta
     const ps = new ParticleSystem("bloodParticle", 30)
     
     if(particleType === "sphere") ps.createSphereEmitter(2,1);
-    ps.particleTexture = new Texture("./images/particles/blood.jpg", scene);
+    ps.particleTexture = getParticleTexture(scene, "./images/particles/blood.jpg");
     if(monsFos) ps.emitter = new Vector3(monsFos.x,monsFos.y+Math.random()*.4,monsFos.z)
     // if(emitterMesh) ps.emitter = emitterMesh
     // if(willStart) ps.start()
@@ -439,7 +489,7 @@ export function createBloodSplatter(scene, pos,burst){
 export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSize, minMaxLifeTime, minMaxEmitPower, qnty, gravityVector3, rgb1, rgb2, isDefaultSizeGrad, particleType, particleTypeRadius, activateRotations){
     const particleSystem = new ParticleSystem("particles", 8000, scene);
     //Texture of each particle
-    particleSystem.particleTexture = new Texture(`./images/particles/${particleImgName}.png`, scene);
+    particleSystem.particleTexture = getParticleTexture(scene, `./images/particles/${particleImgName}.png`);
     // lifetime
     if(minMaxLifeTime){
         const {min,max} = minMaxLifeTime
@@ -518,18 +568,7 @@ export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSiz
 }
 function buildBloodSystem(scene, name, capacity, position, opts = {}){
     const ps = new ParticleSystem(name, capacity, scene);
-    const bloodTex = new Texture(
-        "./images/particles/blood.jpg",
-        scene,
-        // false,  // noMipmap
-        // true,   // invertY
-        // Texture.BILINEAR_SAMPLINGMODE,
-        // () => {
-        //     // Texture is ready — safe to start the auto-demo now
-        //     spawnSplatter(new Vector3(0, 0.02, 0));
-        // }
-    );
-    ps.particleTexture = bloodTex;
+    ps.particleTexture = getParticleTexture(scene, "./images/particles/blood.jpg");
     ps.emitter = position.clone();
 
     ps.createSphereEmitter(2, 1);

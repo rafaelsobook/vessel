@@ -13,15 +13,17 @@ import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
-import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse } from "../enemies/createEnemy"
+import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitDied, emitEnemyIsHit } from "./emits"
 import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
-import { receiveWorldChatMessage } from "../components/worldChatSystem"
-import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
+import { receiveWorldChatMessage, appendChatMessage } from "../components/worldChatSystem"
+import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
+import { sampleTerrainSurfaceHeight } from 'infterrain'
+import { createMagicCircle } from "../creations/magiccircles.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -59,7 +61,7 @@ const OPENWORLD_ENEMY_CREATE_DIST_SQ = OPENWORLD_ENEMY_CREATE_DIST * OPENWORLD_E
 // is what actually makes approaching an enemy work - reCreateMeshesInScene
 // itself is already safe to call repeatedly (isAlreadyHere/getMeshByName
 // skip everything already tracked), so this just re-runs it on a timer.
-const OPENWORLD_ENEMY_RECHECK_INTERVAL_MS = 3000
+const OPENWORLD_ENEMY_RECHECK_INTERVAL_MS = 1000
 setInterval(() => {
     const charState = getCharState()
     if(!charState || charState.currentPlace.placeId !== OPENWORLD_PLACE_ID) return
@@ -296,12 +298,17 @@ export function activateOnSocketListeners(socket){
     // PLAYER ATTACK RELATED
     socket.on("skillactivated", data => {
         if (!isSocketOn) return
-        const { ownerId, skill, currentPlaceId } = data
+        // casterStats (skillsui.js's own activate-skill emit) rides along
+        // here too - this handler fires identically on EVERY connected
+        // client, caster included, so activateSkill needs to know the
+        // actual caster's stats rather than assuming "me". See
+        // activateSkill's own comment for why this matters.
+        const { ownerId, skill, currentPlaceId, casterStats } = data
         const charState = getCharState()
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
-        activateSkill(ownerId, skill)
-    
+        activateSkill(ownerId, skill, casterStats)
+
     })
     socket.on("player-attacked", data => {
         if (!isSocketOn) return
@@ -563,6 +570,48 @@ export function activateOnSocketListeners(socket){
         enemy._isMoving = true
         enemy._isDodging = true
     })
+    // lesserdemon's own "teleport in near you instead of chasing" (see
+    // genenemy.ts's lesserDemonBase, actionType "teleporting", and
+    // createEnemy.js's own teleport interval) - just snaps x/z straight to
+    // the landing spot tcp/index.ts already stamped onto this enemy's own
+    // record. Y is recomputed here too (openworld only) for a clean instant
+    // landing instead of waiting on createEnemy.js's own 500ms yCheckInterval
+    // to catch up - that interval still exists as the fallback/ongoing
+    // corrector, this is just the one-frame head start.
+    socket.on("enemy-teleported", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        const enemy = enemiez.find(enem => enem._id === data._id)
+        if (!enemy || !enemy.body) return
+
+        enemy.body.position.x = data.x
+        enemy.body.position.z = data.z
+        if(enemy.det.currentPlaceId === OPENWORLD_PLACE_ID){
+            enemy.body.position.y = sampleTerrainSurfaceHeight(data.x, data.z, OPENWORLD_TERRAIN_VERTS) + enemy.det.bodyHeight / 2 + 0.05
+        }
+    })
+    // MAGIC CIRCLES (see emits.js's emitSpawnCircle) - purely visual sync,
+    // no server state to touch (tcp/index.ts's own comment on the
+    // "spawncirc" relay). Was never actually listened for client-side
+    // before this - every existing caller (localroomdb.js's shrine
+    // circles, createEnemy.js's own lesserdemon teleport telegraph) only
+    // ever showed up on the CASTER's own screen. socket.broadcast.emit on
+    // the server side (not io.emit) means this never fires for the client
+    // that emitted it in the first place - they already spawned their own
+    // local copy, same "I already applied it locally" pattern
+    // correctEnemyY's own listener uses. createMagicCircle (not
+    // spawnMagicCircle) - that one hardcodes y:0, fine for a flat village/
+    // room floor but wrong on openworld's uneven terrain; createMagicCircle
+    // actually respects data.pos.y.
+    socket.on("circle-spawned", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.placeId !== charState.currentPlace.placeId) return
+        createMagicCircle(new Vector3(data.pos.x, data.pos.y, data.pos.z), scene, `apt_${data.element}`, 0.8, 4000)
+    })
     // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
     // hit handler, tcp/index.ts's enemyBind handler) - server is the actual
     // _disabled timer authority, this just reacts to its two broadcasts
@@ -590,11 +639,27 @@ export function activateOnSocketListeners(socket){
     })
     socket.on("enemy-removed", enemyId => {
         if (!isSocketOn) return
+  
         const enemyDiedHere = enemiez.find(enmy => enmy._id === enemyId)
         if (enemyDiedHere) {
+            // console.log("enemyDiedHere ", enemyDiedHere._id)
             enemyDiedHere.targetId = false
             enemiez = enemiez.filter(enmy => enmy._id !== enemyId)
-            enemyRemove(enemyDiedHere)
+         
+            // disposal after a 2s delay.
+            enemyDispose(enemyDiedHere)
+        }
+
+        // separate catch from the enemiez check above - a mesh can exist
+        // in the SCENE without a matching enemiez entry (e.g. it was
+        // already filtered out of enemiez by an earlier pass but the mesh
+        // itself never got disposed for some other reason) - (false, true)
+        // also frees its material/texture, same convention every other
+        // dispose call in this codebase follows now, not just the mesh
+        const enemyBodyHere = getSceneDet().scene.getMeshByName(`enemy.${enemyId}`)
+        if (enemyBodyHere) {
+            // console.log("enemyBodyHere ", enemyBodyHere.name)
+            enemyBodyHere.dispose(false, true)
         }
     })
     socket.on('enemy-respawned', tcpEnemies => {
@@ -602,19 +667,7 @@ export function activateOnSocketListeners(socket){
 
         reCreateMeshesInScene()
     })
-    // tcp/index.ts's own dynamic slime-spawning interval (openworld,
-    // placeId 888) - tops territory back up near whichever players wander
-    // into an empty pocket of it. Same shape/handling as enemy-respawned
-    // above (full tcpEnemies snapshot -> reCreateMeshesInScene picks up
-    // whatever's newly in range, per OPENWORLD_ENEMY_CREATE_DIST), just its
-    // own event name since this isn't a specific enemy respawning after
-    // death - a semantically distinct case even though the client-side
-    // reaction is identical.
-    socket.on('enemy-spawned', tcpEnemies => {
-        allEnemiez = tcpEnemies
 
-        reCreateMeshesInScene()
-    })
     // Movement
     socket.on("emitted-moving", data => {
         const { ownerId, pos, dirTarg, mode} = data
@@ -693,7 +746,14 @@ export function activateOnSocketListeners(socket){
     socket.on("player-death", data => {
         const {ownerId, currentPlaceId} = data
         if (!isSocketOn) return
-      
+
+        // worldChat is global (see its own "no rooms/parties" comment), so
+        // this announces regardless of place - but the player's name is
+        // only known locally if they're actually in MY currently-loaded
+        // scene (playersOnScene), so a death in a place I've never shared
+        // with them silently has no name to announce and is skipped
+        const diedPlayer = playersOnScene.find(pl => pl.owner === ownerId)
+        if(diedPlayer) appendChatMessage({ name: diedPlayer.name, message: "died" })
 
         playerDied(ownerId, currentPlaceId)
     })
@@ -803,7 +863,6 @@ export function reCreateMeshesInScene() {
         const enemy = createEnemy(scene, enemTcpInfo)
         if(enemy) pushEnemyOnScene(enemy)
     })
-    console.log("currentPlace.placeId: ", characterState.currentPlace.placeId)
     if(characterState.currentPlace.placeId === 9){
         console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)
 

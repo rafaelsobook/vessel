@@ -28,10 +28,10 @@ import { addGlow } from "../tools/glow.js"
 import { attachLightning } from "../effects/lightning.js"
 import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
-import { getEnemiesOnScene, getPlayersOnScene, pushProjectile, removeProjectile } from "../sockets/worldsocket.js"
+import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp } from "../charactersystem/characterstate.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
@@ -39,6 +39,9 @@ import { camShake } from "../tools/camera.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
+import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
+import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
 // override this directly via magicCircleImg (radiantjudgment uses "divine1"
@@ -235,6 +238,65 @@ export function castMulticast(scene, player, skill, charState){
     timeoutIds.push(doneId)
 }
 
+// cached template mesh per shape, CLONED (not instanced) per cast - every
+// shape below needs its OWN independent material every single time
+// (skill.explosionColor varies per skill/per cast, and createGlowingMat/
+// fresnelMat/attachLightning's own weaponGlow all assign a fresh material
+// directly onto it), so a true InstancedMesh - which always mirrors its
+// SOURCE mesh's own material, confirmed via @babylonjs/core/Meshes/
+// instancedMesh.pure.js, same fact fireEnemySkillProjectile's own cached
+// box already leans on - would silently break every one of them (a
+// material "set" on an instance is a no-op). .clone() still skips
+// MeshBuilder's own geometry/UV/normal build every single cast, which is
+// the actual win here - the material was never the expensive part.
+// Templates are built once (isVisible/isEnabled false, parked off-screen -
+// same convention creations/skills.js's own "projectile" template and
+// magiccircles.js's own circleTemplate already use) and kept forever - a
+// small, fixed set (one per distinct shape/size used below), not a leak.
+// scene-scoped like every other cache in this pass (see particlesystem.js's
+// own getParticleTexture for the full "why" - main.js's changeScene() fully
+// disposes and replaces the Scene object on every place change) - Mesh DOES
+// have isDisposed() (unlike Texture), which already self-heals this on its
+// own, but tracked explicitly anyway for the same uniform, obviously-correct
+// pattern every cache in this pass now follows, rather than leaning on that
+// as the only guard.
+const shapeTemplateCache = new Map()
+let shapeTemplateCacheScene = null
+function getShapeClone(scene, key, build){
+    if(shapeTemplateCacheScene !== scene){
+        shapeTemplateCache.clear()
+        shapeTemplateCacheScene = scene
+    }
+    let template = shapeTemplateCache.get(key)
+    if(!template || template.isDisposed()){
+        template = build()
+        template.isVisible = false
+        template.isPickable = false
+        template.setEnabled(false)
+        template.position.y = -1000
+        shapeTemplateCache.set(key, template)
+    }
+    const clone = template.clone(`${key}_${Date.now()}`)
+    clone.isVisible = true
+    clone.setEnabled(true)
+    // .clone() copies the template's own transform too, including the
+    // position.y = -1000 it's deliberately parked at above (so it never
+    // flashes visible before the first clone) - every caller then parents
+    // this clone under its own projectile box via a plain `.parent = box`
+    // assignment (not .setParent(), which would recompute local position
+    // to compensate), so that -1000 was carrying straight through as a
+    // LOCAL offset relative to the new parent instead of resetting to
+    // local origin the way a fresh MeshBuilder.CreateXXX() call always
+    // starts. Real, visible bug: every style below that doesn't ALSO
+    // explicitly zero its own position after parenting (crystalshard,
+    // twinhalo's rings, boxcross's bars, lightorb's sphere, darkorb's orb)
+    // was rendering 1000 units below the actual projectile - effectively
+    // invisible. Only "halo" survived, purely because it already reset
+    // its own position for an unrelated reason.
+    clone.position.set(0, 0, 0)
+    return clone
+}
+
 // --- projectile visuals ---
 // fn(scene, box, skill) => cleanup() - called once the projectile despawns
 // (hit or miss) to stop/dispose whatever this style attached to it.
@@ -256,7 +318,11 @@ const PROJECTILE_STYLES = {
     bolt(scene, box, skill){
         const styles = skill.particleStyles ?? [{ name: "oneline", color: skill.explosionColor || "blue" }]
         const systems = createParticleSystem(scene, box, styles)
-        return () => systems.forEach(ps => { ps.stop(); ps.dispose() })
+        // dispose(false) - particleTexture is particlesystem.js's own
+        // shared/persistent texture cache now, not owned by this one
+        // system; disposing it here would evict it for every OTHER trail/
+        // burst currently using the same sprite
+        return () => systems.forEach(ps => { ps.stop(); ps.dispose(false) })
     },
     // a tiny glowing sword flies out instead of a bolt - reuses createWeapon's
     // own glow support (the same one equipped weapons/thrown projectiles use)
@@ -282,6 +348,50 @@ const PROJECTILE_STYLES = {
         // shared - safe to free) behind every single time this skill fired.
         return () => bladeRoot.dispose(false, true)
     },
+    // dark - shadowboltSkill's own distinct look: the FULL assembled spear
+    // (blade+guard+handle+pommel via createWeapon, same "spearlance" above
+    // already uses successfully) instead of just the bare blade piece alone -
+    // a single part with no guard/handle/pommel read as an unrecognizable
+    // abstract chevron shape rather than an actual weapon silhouette.
+    // fresnelMat (translucent hollow-shell look, tools/materials.js)
+    // applied over all 4 parts uniformly, one shared material instance,
+    // instead of createWeapon's own glowingColor path (a flat
+    // createGlowingMat) - see that function's own comment.
+    shadowblade(scene, box, skill){
+        box.isVisible = false
+        const spearOptions = { bladeRarity: "rare1", guardRarity: "rare1", handleRarity: "rare1", pommelRarity: "rare1" }
+        // no glowingColor (7th arg) - createWeapon would assign a flat
+        // createGlowingMat per part otherwise; material gets overridden
+        // with fresnelMat uniformly below instead
+        const spearRoot = createWeapon(scene, "spear", { x: 0, y: 0, z: 0 }, box, null, spearOptions)
+        // 0.16 - same scale spearlance already uses for this exact asset.
+        // The bare-blade attempt this replaced used 1 (no scale-down at
+        // all) - full weapon-asset size, which is what actually made it
+        // look "not properly positioned": not a location bug, just so much
+        // bigger than every other projectile style's own 0.1-0.5 range
+        // that it read as a huge shape floating apart from the caster
+        // rather than a small thing flying from them.
+        spearRoot.scaling = new Vector3(0.16, 0.16, 0.16).scale(skill.projectileScale ?? 1)
+        // same tip-forward formula "blade"/"spearlance" both use for their
+        // own weapon-derived projectiles
+        spearRoot.addRotation(Math.PI, 0, Math.PI / 2)
+        const spearMat = fresnelMat(scene, "purple")
+        spearRoot.getChildMeshes().forEach(part => {
+            part.material = spearMat
+            addGlow(scene, part, 0.6)
+        })
+        if((skill.arcCount ?? 0) > 0){
+            attachLightning(scene, spearRoot, "purple", false, { arcCount: skill.arcCount, width: 0.015, updateInterval: 90, withLight: false })
+        }
+        // (false, true) recurses into all 4 part meshes (and the arcs, if
+        // any) and disposes their material along with them - all 4 parts
+        // share the SAME spearMat instance, so this only actually frees it
+        // once (Material.dispose() is safely idempotent against being
+        // called more than once, same reasoning already established for
+        // "bladecross"/"twinhalo"/"boxcross" above, each of which also
+        // disposes more than one mesh sharing/holding its own material)
+        return () => spearRoot.dispose(false, true)
+    },
     // a small glowing core wrapped in crackling arcs - attachLightning
     // already handles both the arcs AND making the mesh itself glow
     // (weaponGlow: true), see effects/lightning.js
@@ -306,7 +416,7 @@ const PROJECTILE_STYLES = {
     // torus instead of a box.
     halo(scene, box, skill){
         box.isVisible = false
-        const halo = MeshBuilder.CreateTorus(`halo_${skill.name}_${Date.now()}`, { diameter: 0.55, thickness: 0.09, tessellation: 24 }, scene)
+        const halo = getShapeClone(scene, "torus_halo", () => MeshBuilder.CreateTorus("torus_halo_template", { diameter: 0.55, thickness: 0.09, tessellation: 24 }, scene))
         halo.parent = box
         halo.position = Vector3.Zero()
         halo.isPickable = false
@@ -386,7 +496,7 @@ const PROJECTILE_STYLES = {
     // than spinning cleanly like everything else here
     crystalshard(scene, box, skill){
         box.isVisible = false
-        const shard = MeshBuilder.CreatePolyhedron(`shard_${skill.name}_${Date.now()}`, { type: 3, size: 0.22 }, scene)
+        const shard = getShapeClone(scene, "polyhedron_shard", () => MeshBuilder.CreatePolyhedron("polyhedron_shard_template", { type: 3, size: 0.22 }, scene))
         shard.parent = box
         shard.isPickable = false
         shard.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
@@ -414,13 +524,13 @@ const PROJECTILE_STYLES = {
         root.parent = box
         root.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1) // scales both rings together
 
-        const ringA = MeshBuilder.CreateTorus(`twinhaloA_${skill.name}_${Date.now()}`, { diameter: 0.45, thickness: 0.05, tessellation: 24 }, scene)
+        const ringA = getShapeClone(scene, "torus_twinhalo", () => MeshBuilder.CreateTorus("torus_twinhalo_template", { diameter: 0.45, thickness: 0.05, tessellation: 24 }, scene))
         ringA.parent = root
         ringA.isPickable = false
         ringA.material = createGlowingMat(scene, skill.explosionColor || "white")
         addGlow(scene, ringA, 0.5)
 
-        const ringB = MeshBuilder.CreateTorus(`twinhaloB_${skill.name}_${Date.now()}`, { diameter: 0.45, thickness: 0.05, tessellation: 24 }, scene)
+        const ringB = getShapeClone(scene, "torus_twinhalo", () => MeshBuilder.CreateTorus("torus_twinhalo_template", { diameter: 0.45, thickness: 0.05, tessellation: 24 }, scene))
         ringB.parent = root
         ringB.isPickable = false
         ringB.rotation.y = Math.PI / 2 // perpendicular to ringA
@@ -446,7 +556,7 @@ const PROJECTILE_STYLES = {
     // driven by skill.explosionColor like every other style here
     lightorb(scene, box, skill){
         box.isVisible = false
-        const sphere = MeshBuilder.CreateSphere(`lightorb_${skill.name}_${Date.now()}`, { diameter: 0.4, segments: 16 }, scene)
+        const sphere = getShapeClone(scene, "sphere_lightorb", () => MeshBuilder.CreateSphere("sphere_lightorb_template", { diameter: 0.4, segments: 16 }, scene))
         sphere.parent = box
         sphere.isPickable = false
         sphere.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
@@ -529,14 +639,14 @@ const PROJECTILE_STYLES = {
         root.parent = box
         root.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
 
-        const barA = MeshBuilder.CreateBox(`boxcrossA_${skill.name}_${Date.now()}`, { width: 0.06, height: 0.06, depth: 0.5 }, scene)
+        const barA = getShapeClone(scene, "box_boxcross", () => MeshBuilder.CreateBox("box_boxcross_template", { width: 0.06, height: 0.06, depth: 0.5 }, scene))
         barA.parent = root
         barA.isPickable = false
         barA.rotation.z = Math.PI / 4
         barA.material = createGlowingMat(scene, skill.explosionColor || "violet")
         addGlow(scene, barA, 0.5)
 
-        const barB = MeshBuilder.CreateBox(`boxcrossB_${skill.name}_${Date.now()}`, { width: 0.06, height: 0.06, depth: 0.5 }, scene)
+        const barB = getShapeClone(scene, "box_boxcross", () => MeshBuilder.CreateBox("box_boxcross_template", { width: 0.06, height: 0.06, depth: 0.5 }, scene))
         barB.parent = root
         barB.isPickable = false
         barB.rotation.z = -Math.PI / 4
@@ -576,7 +686,7 @@ const PROJECTILE_STYLES = {
         // bigger starting size and its onHit swell compound automatically
         box.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
 
-        const orb = MeshBuilder.CreateSphere(`darkorb_${skill.name}_${Date.now()}`, { diameter: 0.5, segments: 20 }, scene)
+        const orb = getShapeClone(scene, "sphere_darkorb", () => MeshBuilder.CreateSphere("sphere_darkorb_template", { diameter: 0.5, segments: 20 }, scene))
         orb.parent = box
         orb.isPickable = false
 
@@ -653,8 +763,11 @@ const PROJECTILE_STYLES = {
 
         function cleanup(){
             scene.onBeforeRenderObservable.remove(spinObserver)
-            blackAura.stop(); blackAura.dispose()
-            purpleSpark.stop(); purpleSpark.dispose()
+            // dispose(false) - both particleTextures are particlesystem.js's
+            // own shared/persistent cache now (smoke2/flare), not owned by
+            // these two systems specifically
+            blackAura.stop(); blackAura.dispose(false)
+            purpleSpark.stop(); purpleSpark.dispose(false)
             veinNoise.dispose()
             orbMat.dispose()
             orb.dispose()
@@ -821,11 +934,91 @@ function stickMarkerToMesh(projectile, box, hitMesh, cleanupProjectile){
     setTimeout(cleanupProjectile, MARKER_STICK_DURATION_MS)
 }
 
+// skill.additionalEffects (abyssaldamnationSkill's own "absorb" entry, e.g.
+// { effectType: "absorb", absorbStats: ["hp","mp","sp","skill"],
+// absorbPercent: 1, chance: 1 }) - drains the enemy just hit and heals the
+// caster by the same amount, plus optionally steals a skill the enemy
+// knows. Standalone/reusable so any future hit handler (spawnFallingSword,
+// spawnGroundSpike) can wire it in later without duplicating this logic -
+// only fireElementalProjectile actually calls it for now, since
+// abyssaldamnationSkill uses the default projectile/explosion flow.
+//
+// - "hp"/"mp"/"sp": reads enemy.det.<stat> (createEnemy.js's enemyIsHit now
+//   keeps det.hp live-synced from the server's own broadcast hp instead of
+//   the frozen spawn-time value - see its own comment; enemies have no
+//   mp/sp fields anywhere in this game's data model today, so those two
+//   branches are pure future-proofing and currently just no-op, matching
+//   the "if it has" framing this was requested with). freshCharState is the
+//   real characterState object (getCharState() returns the live reference,
+//   not a clone - see grantHeartReward's identical direct-mutation pattern
+//   in skillWheel.js), so writing freshCharState.hp here mutates real state
+//   directly; current AND max both rise together by the absorbed amount,
+//   same "current and max move together" pattern grantHeartReward
+//   (skillWheel.js) already uses for its own permanent stat boost - a
+//   plain current-only top-up would be invisible/silently capped away
+//   whenever the caster is already near full, which isn't the intent here.
+// - "skill": resolves every entry in enemy.det.skills (name strings) through
+//   SKILLS_BY_NAME and hands each real skill object to giveSkill - already
+//   a no-op with its own "Already know X" popup if the caster owns it.
+// - chance is rolled on the same 0-1 scale skill.enemyBind.bindChance
+//   already uses right in this same hit handler (not deductHp's own
+//   separate 0-100 scale) - the more directly analogous mechanic living
+//   right next to this one.
+function applyAbsorbEffects(skill, enemy, freshCharState){
+    skill.additionalEffects.forEach(effect => {
+        if(effect.effectType !== "absorb") return
+        if(Math.random() >= (effect.chance ?? 1)) return
+        const absorbStats = effect.absorbStats || []
+        const absorbPercent = effect.absorbPercent ?? 1
+        let healedAnything = false
+        if(absorbStats.includes("hp") && enemy.det?.hp){
+            const drained = enemy.det.hp * absorbPercent
+            freshCharState.maxHp += drained
+            freshCharState.hp += drained
+            healedAnything = true
+        }
+        if(absorbStats.includes("mp") && enemy.det?.mp){
+            const drained = enemy.det.mp * absorbPercent
+            freshCharState.maxMp += drained
+            freshCharState.mp += drained
+            healedAnything = true
+        }
+        if(absorbStats.includes("sp") && enemy.det?.sp){
+            const drained = enemy.det.sp * absorbPercent
+            freshCharState.maxSp += drained
+            freshCharState.sp += drained
+            healedAnything = true
+        }
+        if(healedAnything){
+            updateHpMpSp_UI()
+            updateMyDetailsOL(freshCharState, checkIfTokenSaved())
+        }
+        if(absorbStats.includes("skill") && enemy.det?.skills?.length){
+            enemy.det.skills.forEach(skillName => {
+                const enemySkill = SKILLS_BY_NAME[skillName]
+                if(!enemySkill) return
+                // giveSkill itself isn't upgrade-aware - it no-ops with an
+                // "Already know X" popup if the caster already owns it (see
+                // its own comment in skillsui.js). Same "already have it ->
+                // upgrade instead" fallback grantSkillReward already uses in
+                // skillWheel.js, so absorbing a skill you already know still
+                // DOES something instead of being a wasted proc.
+                const alreadyKnown = freshCharState.skills.some(sk => sk.name === enemySkill.name)
+                if(alreadyKnown) upgradeOwnedSkill(enemySkill)
+                else giveSkill(enemySkill)
+            })
+        }
+    })
+}
+
 function fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale){
     const targetPoint = spawnPos.add(forward.scale(10)) // far enough out that direction is stable regardless of distance to anything
 
     const itemId = `${skill.name}_${randNum(1000, 9999)}`
-    const box = MeshBuilder.CreateBox(`projectile.${itemId}`, { size: 1 }, scene)
+    // getShapeClone (not .createInstance()) - "lightning" style below sets
+    // box.material directly, which is a silent no-op on an InstancedMesh
+    // (same trap already documented on fireEnemySkillProjectile's own box)
+    const box = getShapeClone(scene, "box_projectile", () => MeshBuilder.CreateBox("box_projectile_template", { size: 1 }, scene))
     box.position.copyFrom(spawnPos)
     box.isPickable = false
     box.isVisible = false // PROJECTILE_STYLES.lightning flips this back on for its own look
@@ -891,6 +1084,23 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
         if(!enemy.body) return
         const enterAction = onIntersecEnterTrig(box, enemy.body, scene, () => {
             if(hasHit) return
+            // this trigger is bound to ONE SPECIFIC enemy, captured in this
+            // closure back at cast time - if THIS enemy died from
+            // something else entirely while this projectile was still in
+            // flight, nothing tears its own trigger down just because it
+            // died elsewhere, and its body isn't actually disposed until
+            // enemyDispose's own 2s-later cleanup (deliberately delayed so
+            // the death animation can play) - a stale trigger like this
+            // can still fire during that window, sending a hit/bind/curse
+            // for an _id the server has already forgotten about ("not
+            // found enemy to be damaged/curse/bind" - always the exact
+            // same _id, since it's always this one stale closure). Same
+            // fresh re-check createEnemy.js's own atkCollider melee
+            // trigger already does - if it's not still actually tracked,
+            // just ignore this stale trigger entirely (not even counted
+            // as this projectile's one hit) and let it keep flying toward
+            // whatever it might genuinely still reach.
+            if(!getEnemiesOnScene().some(e => e._id === enemy._id)) return
             hasHit = true
             clearTimeout(missTimeout)
             removeIntersecTrig(box, enterAction)
@@ -925,58 +1135,97 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 explosionFn(scene, box.position.clone(), powerScale, skill.explosionColor || "red", skill)
             }
 
-            // magic damage recomputed at impact (not at activation) - same
-            // formula attackingSystem.js's calcDmg uses for magicDmg,
-            // duplicated here instead of importing calcDmg to avoid a
-            // 2-file import cycle with attackingSystem.js (which is what
-            // calls castOffenseSkill in the first place). additionalMagicDmg
-            // is {toAdd, percent}, not a plain number - see calcDmg's own
-            // comment on this same formula.
-            const abilityAdditions = getAdditionalsFromAbilities()
-            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + charState.stats.magic * 16
-            if(abilityAdditions.additionalMagicDmg.percent){
-                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-            }
-            // scaled by how much mana was actually committed at cast time,
-            // same ratio the mp cost itself was charged at (see castOffenseSkill)
-            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+            // this callback fires whenever the projectile actually CONNECTS,
+            // which can be several seconds after the skill was activated
+            // (castDuration + travel time) - AND it fires identically on
+            // EVERY client watching this cast (fireElementalProjectile runs
+            // once per connected client via the "skillactivated" relay, see
+            // attackingSystem.js's activateSkill), caster included. The
+            // charState parameter here is the CASTER's own info - for
+            // anyone who isn't the caster, it's a lightweight descriptor
+            // built from the relay (owner/currentPlace/stats only, see
+            // activateSkill's own comment), NOT that watcher's own local
+            // state. Emitting a hit/damage/absorb unconditionally from every
+            // watching client would credit every single one of them for the
+            // same one hit - this was the actual root cause of "other
+            // players get exp too" - so only the real caster's own client
+            // (the one where my own local getCharState().owner actually
+            // matches this charState.owner) is allowed to emit anything
+            // real below. Everyone else just watched the same explosion/
+            // stick/sound above and stops there.
+            if(charState.owner === getCharState()?.owner){
+                // fresh getCharState() here (not the charState parameter) -
+                // safe now that the isCaster check above guarantees this
+                // really is MY OWN live state and not a stand-in for
+                // someone else. Still re-fetched fresh rather than reusing
+                // the parameter, matching createEnemy.js's own melee
+                // atkCollider trigger, which re-fetches getCharState() at
+                // the moment of the actual hit rather than trusting
+                // whatever was captured back at cast/activation time.
+                const freshCharState = getCharState()
 
-            // server's enemyIsHit handler only ever reads weaponDmg (if
-            // truthy) or physicalDmg - there's no separate magic-damage
-            // field anywhere in the existing damage pipeline, so this rides
-            // through physicalDmg rather than needing a server change
-            emitEnemyIsHit({
-                playerId: charState.owner,
-                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
-                targetId: enemy._id,
-                currentPlaceId: charState.currentPlace.placeId,
-            })
+                // magic damage recomputed at impact (not at activation) -
+                // same formula attackingSystem.js's calcDmg uses for
+                // magicDmg, duplicated here instead of importing calcDmg to
+                // avoid a 2-file import cycle with attackingSystem.js
+                // (which is what calls castOffenseSkill in the first
+                // place). additionalMagicDmg is {toAdd, percent}, not a
+                // plain number - see calcDmg's own comment on this same
+                // formula.
+                const abilityAdditions = getAdditionalsFromAbilities()
+                let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+                if(abilityAdditions.additionalMagicDmg.percent){
+                    magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+                }
+                // scaled by how much mana was actually committed at cast time,
+                // same ratio the mp cost itself was charged at (see castOffenseSkill)
+                const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
 
-            // skill.enemyBind (see skillsData.js's radiantjudgmentSkill) -
-            // bindChance rolled here, client-side, same as every other hit-
-            // resolution decision in this game (server is only authoritative
-            // for hp/removal, never for "did this even land" - see
-            // emitEnemyIsHit's own comment). tcp/index.ts's enemyBind
-            // handler is the actual _disabled timer authority.
-            if(skill.enemyBind && Math.random() < (skill.enemyBind.bindChance ?? 1)){
-                emitEnemyBind({
+                // server's enemyIsHit handler only ever reads weaponDmg (if
+                // truthy) or physicalDmg - there's no separate magic-damage
+                // field anywhere in the existing damage pipeline, so this rides
+                // through physicalDmg rather than needing a server change
+                emitEnemyIsHit({
+                    playerId: freshCharState.owner,
+                    dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
                     targetId: enemy._id,
-                    shape: skill.enemyBind.shape,
-                    bindDuration: skill.enemyBind.bindDuration,
-                    currentPlaceId: charState.currentPlace.placeId,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
                 })
-            }
 
-            // dark magic curses on hit - an ELEMENT rule (every dark skill,
-            // not a per-skill flag), unconditional/no chance roll unlike
-            // enemyBind above. See skillsData.js's header comment and
-            // worldsocket.js's "enemy-attacked" handler for the actual
-            // damage-reflection this curse causes.
-            if(skill.element === "dark"){
-                emitEnemyCurse({
-                    targetId: enemy._id,
-                    currentPlaceId: charState.currentPlace.placeId,
-                })
+                // skill.enemyBind (see skillsData.js's radiantjudgmentSkill) -
+                // bindChance rolled here, client-side, same as every other hit-
+                // resolution decision in this game (server is only authoritative
+                // for hp/removal, never for "did this even land" - see
+                // emitEnemyIsHit's own comment). tcp/index.ts's enemyBind
+                // handler is the actual _disabled timer authority.
+                // if(skill.enemyBind && Math.random() < (skill.enemyBind.bindChance ?? 1)){
+                if(skill.enemyBind){
+                    emitEnemyBind({
+                        targetId: enemy._id,
+                        shape: skill.enemyBind.shape,
+                        bindDuration: skill.enemyBind.bindDuration,
+                        currentPlaceId: freshCharState.currentPlace.placeId,
+                    })
+                }
+
+                // dark magic curses on hit - an ELEMENT rule (every dark skill,
+                // not a per-skill flag), unconditional/no chance roll unlike
+                // enemyBind above. See skillsData.js's header comment and
+                // worldsocket.js's "enemy-attacked" handler for the actual
+                // damage-reflection this curse causes.
+                if(skill.element === "dark"){
+                    emitEnemyCurse({
+                        targetId: enemy._id,
+                        currentPlaceId: freshCharState.currentPlace.placeId,
+                    })
+                }
+
+                // skill.additionalEffects (abyssaldamnationSkill's own "absorb"
+                // entry) - see applyAbsorbEffects's own comment for the full
+                // breakdown
+                if(skill.additionalEffects){
+                    applyAbsorbEffects(skill, enemy, freshCharState)
+                }
             }
 
             // darkorb's onHit owns when cleanupProjectile actually runs from
@@ -1162,31 +1411,41 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
         // moved off. Same magic-damage formula as fireElementalProjectile's
         // own hit handler, at this sword's own (usually lower per-sword)
         // skill.effects.plusDmg.
-        const IMPACT_RADIUS = 1.8
-        getEnemiesOnScene().forEach(enemy => {
-            if(!enemy.body) return
-            const dx = enemy.body.position.x - landingPos.x
-            const dz = enemy.body.position.z - landingPos.z
-            if((dx * dx + dz * dz) > IMPACT_RADIUS * IMPACT_RADIUS) return
+        //
+        // this whole setTimeout, like the falling sword's flight itself,
+        // runs identically on every client watching the cast - see
+        // fireElementalProjectile's own isCaster comment for the full
+        // reasoning. charState here is the CASTER's info (a relayed stand-in
+        // for anyone who isn't the real caster), so the actual hit-emitting
+        // work below only runs on the real caster's own client.
+        if(charState.owner === getCharState()?.owner){
+            const freshCharState = getCharState()
+            const IMPACT_RADIUS = 1.8
+            getEnemiesOnScene().forEach(enemy => {
+                if(!enemy.body) return
+                const dx = enemy.body.position.x - landingPos.x
+                const dz = enemy.body.position.z - landingPos.z
+                if((dx * dx + dz * dz) > IMPACT_RADIUS * IMPACT_RADIUS) return
 
-            const abilityAdditions = getAdditionalsFromAbilities()
-            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + charState.stats.magic * 16
-            if(abilityAdditions.additionalMagicDmg.percent){
-                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-            }
-            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+                const abilityAdditions = getAdditionalsFromAbilities()
+                let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+                if(abilityAdditions.additionalMagicDmg.percent){
+                    magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+                }
+                const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
 
-            emitEnemyIsHit({
-                playerId: charState.owner,
-                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
-                targetId: enemy._id,
-                currentPlaceId: charState.currentPlace.placeId,
+                emitEnemyIsHit({
+                    playerId: freshCharState.owner,
+                    dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                    targetId: enemy._id,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
+                })
+
+                if(skill.element === "dark"){
+                    emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
+                }
             })
-
-            if(skill.element === "dark"){
-                emitEnemyCurse({ targetId: enemy._id, currentPlaceId: charState.currentPlace.placeId })
-            }
-        })
+        }
 
         // fallback cleanup - spawnProjectile's own willDisposeCountDown
         // (SWORD_DISPOSE_MS above) only ever starts counting down if ITS
@@ -1222,6 +1481,28 @@ const GROUND_SPIKE_HEIGHT = 1.8
 const GROUND_SPIKE_ERUPT_MS = 280
 const GROUND_SPIKE_LIFETIME_MS = 4000
 const GROUND_SPIKE_IMPACT_RADIUS = 1.6
+
+// shared/cached material, not per-spike - unlike every other style in this
+// file, a ground spike's own look never actually varies with
+// skill.explosionColor (always the same fixed dark-rock-with-a-green-glow
+// read regardless of element - see spawnGroundSpike's own comment), so
+// there's nothing per-cast to give it an independent material for. One
+// StandardMaterial, created once, reused by every spike forever. Scene-
+// scoped (Material has no isDisposed() to self-detect a stale reference
+// the way Mesh does - see particlesystem.js's own getParticleTexture for
+// the full "why" this matters at all) - tracked explicitly instead.
+let groundSpikeMat = null
+let groundSpikeMatScene = null
+function getGroundSpikeMat(scene){
+    if(!groundSpikeMat || groundSpikeMatScene !== scene){
+        groundSpikeMat = new StandardMaterial("groundspikeMat", scene)
+        groundSpikeMat.diffuseColor = new Color3(0.16, 0.13, 0.08) // dark rock
+        groundSpikeMat.specularColor = new Color3(0.05, 0.05, 0.05)
+        groundSpikeMat.emissiveColor = new Color3(0.15, 0.55, 0.2) // faint earthy-green glow along the facets
+        groundSpikeMatScene = scene
+    }
+    return groundSpikeMat
+}
 
 function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forward, powerScale){
     const groundSpikes = skill.groundSpikes
@@ -1277,18 +1558,17 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
     const scaleMult = skill.projectileScale ?? 1
     const height = GROUND_SPIKE_HEIGHT * scaleMult
     // a cone (diameterTop 0) for the sharp point, low tessellation for a
-    // faceted/jagged rock read instead of a smooth spike
-    const spike = MeshBuilder.CreateCylinder(`groundspike.${randNum(1000, 9999)}`, {
-        diameterTop: 0, diameterBottom: 0.55 * scaleMult, height, tessellation: 6,
-    }, scene)
+    // faceted/jagged rock read instead of a smooth spike - geometry is
+    // built once at its BASE (1x) size and scaled per-cast via .scaling
+    // instead of baking scaleMult into the dimensions themselves, so every
+    // level/every cast of this skill clones the exact same cached template
+    const spike = getShapeClone(scene, "cylinder_groundspike", () => MeshBuilder.CreateCylinder("cylinder_groundspike_template", {
+        diameterTop: 0, diameterBottom: 0.55, height: GROUND_SPIKE_HEIGHT, tessellation: 6,
+    }, scene))
+    spike.scaling.set(scaleMult, scaleMult, scaleMult)
     spike.isPickable = false
     spike.rotation.y = randNum(0, Math.PI * 2) // random yaw - a row of identical spikes reads as stamped copies otherwise
-
-    const mat = new StandardMaterial(`groundspikeMat.${spike.name}`, scene)
-    mat.diffuseColor = new Color3(0.16, 0.13, 0.08) // dark rock
-    mat.specularColor = new Color3(0.05, 0.05, 0.05)
-    mat.emissiveColor = new Color3(0.15, 0.55, 0.2) // faint earthy-green glow along the facets, ties it to skill.explosionColor without a full Fresnel setup
-    spike.material = mat
+    spike.material = getGroundSpikeMat(scene)
 
     // buried -> erupted: mesh origin is centered, so buried means the
     // WHOLE cone sits below ground (only its tip grazing ground level),
@@ -1316,31 +1596,40 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
     EXPLOSION_STYLES.earth(scene, new Vector3(groundPos.x, groundPos.y, groundPos.z), powerScale, skill.explosionColor || "green", skill)
 
     // magic damage recomputed at each spike's own eruption, same formula
-    // fireElementalProjectile's own hit handler uses
-    getEnemiesOnScene().forEach(enemy => {
-        if(!enemy.body) return
-        const dx = enemy.body.position.x - groundPos.x
-        const dz = enemy.body.position.z - groundPos.z
-        if((dx * dx + dz * dz) > GROUND_SPIKE_IMPACT_RADIUS * GROUND_SPIKE_IMPACT_RADIUS) return
+    // fireElementalProjectile's own hit handler uses. Same isCaster gate as
+    // fireElementalProjectile too - this function (like every other skill
+    // visual) runs identically on every client watching the cast, and
+    // charState here is the CASTER's info, not necessarily my own local
+    // state, so only the real caster's own client emits the actual hit.
+    if(charState.owner === getCharState()?.owner){
+        const freshCharState = getCharState()
+        getEnemiesOnScene().forEach(enemy => {
+            if(!enemy.body) return
+            const dx = enemy.body.position.x - groundPos.x
+            const dz = enemy.body.position.z - groundPos.z
+            if((dx * dx + dz * dz) > GROUND_SPIKE_IMPACT_RADIUS * GROUND_SPIKE_IMPACT_RADIUS) return
 
-        const abilityAdditions = getAdditionalsFromAbilities()
-        let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + charState.stats.magic * 16
-        if(abilityAdditions.additionalMagicDmg.percent){
-            magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-        }
-        const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+            const abilityAdditions = getAdditionalsFromAbilities()
+            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+            if(abilityAdditions.additionalMagicDmg.percent){
+                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+            }
+            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
 
-        emitEnemyIsHit({
-            playerId: charState.owner,
-            dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
-            targetId: enemy._id,
-            currentPlaceId: charState.currentPlace.placeId,
+            emitEnemyIsHit({
+                playerId: freshCharState.owner,
+                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                targetId: enemy._id,
+                currentPlaceId: freshCharState.currentPlace.placeId,
+            })
         })
-    })
+    }
 
+    // material is NOT disposed here - getGroundSpikeMat's own instance is
+    // shared/persistent, reused by every spike (this cast's remaining
+    // ones and every future cast's), not owned by this one spike
     setTimeout(() => {
         spike.dispose()
-        mat.dispose()
     }, GROUND_SPIKE_LIFETIME_MS)
 }
 
@@ -1480,21 +1769,32 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         cleanupProjectile()
     }, ENEMY_SKILL_PROJECTILE_TIMEOUT)
 
-    // only ever registered on the intended victim's own client - see this
-    // section's header comment. Every other client just watches the same
-    // projectile fly past and time out above, with no hit-test at all.
-    const charState = getCharState()
-    if(!charState || targetOwner !== charState.owner) return
-    const myCharacter = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+    // registered on EVERY client watching now, not just the intended
+    // victim - was gated to `targetOwner === charState.owner` before
+    // anything here even ran, so every OTHER client watching the same
+    // broadcast never registered a hit-test at all: the projectile just
+    // flew past and silently timed out on their own screen, never visually
+    // landing/sticking into the target - only the actual victim's own
+    // client ever saw the "blade" style's stick-in-chest effect. The
+    // visual impact (explosion, impact sound, hit reaction, stick-to-body)
+    // needs to be consistent for everyone in the scene; only the actual
+    // DAMAGE APPLICATION stays restricted to the victim's own client
+    // further down - deductHp reads/writes THIS client's own local
+    // characterState, so running it for anyone other than the real target
+    // would incorrectly hurt THEIR OWN character instead.
+    const targetPlayer = getPlayersOnScene().find(pl => pl.owner === targetOwner)
     // bodytarget (createcharacter.js) - a small mesh parented to the
     // player's own spine bone, not the whole capsule body - same hit
     // volume creations/skills.js's spawnProjectile ("throw weapon") already
     // tests against for its own stick-in-target behavior, reused here so a
     // "blade" style skill can setParent() into it below for an identical
-    // "stuck in your chest" look
-    if(!myCharacter?.bodytarget) return
+    // "stuck in your chest" look. If the target isn't on THIS client's own
+    // scene at all (different place, not loaded yet), there's nothing to
+    // visually stick to here - the projectile just times out normally via
+    // missTimeout above.
+    if(!targetPlayer?.bodytarget) return
 
-    const enterAction = onIntersecEnterTrig(box, myCharacter.bodytarget, scene, async () => {
+    const enterAction = onIntersecEnterTrig(box, targetPlayer.bodytarget, scene, async () => {
         if(hasHit) return
         hasHit = true
         clearTimeout(missTimeout)
@@ -1502,19 +1802,45 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
 
         // "blade" style skills - play the actual "got struck" reaction
         // (animation + a struckS play spatially re-attached to bodytarget,
-        // so it audibly comes from the player's own body rather than
+        // so it audibly comes from the target's own body rather than
         // wherever struckS last played from) before the generic impact
         // sound/explosion/damage below. attachToMesh right before
         // playImpactSound's own struckS.play() call (IMPACT_SOUND_BY_STYLE
         // maps "blade" to struckS already) rather than playing it twice.
+        // targetPlayer's own characterAnimations (not necessarily "my own
+        // character" anymore) - this now plays the right person's own
+        // reaction animation whether targetPlayer is this client's own
+        // character or someone else's being watched.
         if(skill.projectileStyle === "blade"){
-            myCharacter.characterAnimations?.playAction(myCharacter.anims, "hit_struct1", 1)
-            getAllSounds().struckS?.attachToMesh(myCharacter.bodytarget)
+            targetPlayer.characterAnimations?.playAction(targetPlayer.anims, "hit_struct1", 1)
+            getAllSounds().struckS?.attachToMesh(targetPlayer.bodytarget)
         }
 
         playImpactSound(skill)
         const explosionFn = EXPLOSION_STYLES[skill.explosionStyle] || EXPLOSION_STYLES.fire
         explosionFn(scene, box.position.clone(), 1, skill.explosionColor || "red", skill)
+
+        // "blade" style skills stick into the target's bodytarget for
+        // MARKER_STICK_DURATION_MS instead of vanishing on impact - purely
+        // visual, so this runs identically for everyone watching now, not
+        // just the victim. Every client independently owns/cleans up its
+        // own local projectile mesh either way, whether "blade" (stick,
+        // then cleanupProjectile after the stick duration) or any other
+        // style (clean up immediately on impact).
+        if(skill.projectileStyle === "blade"){
+            stickMarkerToMesh(projectile, box, targetPlayer.bodytarget, cleanupProjectile)
+        } else {
+            cleanupProjectile()
+        }
+
+        // damage/death and camera shake are local-feedback-only from here
+        // on - only the actual victim's own client should ever apply
+        // damage to their own characterState, or feel their own screen
+        // shake from getting hit. Every other client watching stops here,
+        // having already done everything they needed to (the visual hit
+        // above).
+        const charState = getCharState()
+        if(!charState || targetOwner !== charState.owner) return
 
         const sceneDet = getSceneDet()
         if(sceneDet?.scene?.activeCamera) camShake(sceneDet.scene, sceneDet.scene.activeCamera, .01, true)
@@ -1527,15 +1853,5 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         const totalDmg = Math.round((skill.effects?.plusDmg || 0) + (enemy.det.stats?.magDmg || 0) * 20)
         const isDead = await deductHp(totalDmg, enemy.det.effects || [])
         if(isDead) emitDied()
-
-        // "blade" style skills (flamebrand/lightningbolt, the only two
-        // enemy-castable ones so far) stick into the player's bodytarget
-        // for MARKER_STICK_DURATION_MS instead of vanishing on impact,
-        // same as the player-cast direction above
-        if(skill.projectileStyle === "blade"){
-            stickMarkerToMesh(projectile, box, myCharacter.bodytarget, cleanupProjectile)
-        } else {
-            cleanupProjectile()
-        }
     })
 }

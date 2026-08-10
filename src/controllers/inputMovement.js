@@ -404,9 +404,12 @@ function setupControls(scene, allsounds) {
             break
             case " ":
                 console.log(getCharState())
-                console.log(checkDistance( {x: 0, y: 0, z: 500}, myPlayer?.body.position))
+                console.log(checkDistance( new Vector3(0,0,500), myPlayer?.body.position))
                 
                     
+            break
+            case "r":
+                reCreateMeshesInScene()
             break
             case "i":
                 giveAllItems()

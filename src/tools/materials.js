@@ -11,6 +11,12 @@ export const GLOW_COLORS = {
     blue:   { diffuse: new Color3(0.0, 0.2, 0.8), emissive: new Color3(0.0, 0.4, 1.0) },
     red:    { diffuse: new Color3(0.8, 0.0, 0.0), emissive: new Color3(1.0, 0.1, 0.1) },
     violet: { diffuse: new Color3(0.5, 0.0, 0.8), emissive: new Color3(0.7, 0.0, 1.0) },
+    // same values as violet - effects/lightning.js's own LIGHTNING_COLORS
+    // already carries this exact "purple" == "violet" synonym, mirrored
+    // here so fresnelMat(scene, "purple") doesn't silently fall back to
+    // white (GLOW_COLORS[color] ?? GLOW_COLORS.white) just because "purple"
+    // wasn't a recognized key
+    purple: { diffuse: new Color3(0.5, 0.0, 0.8), emissive: new Color3(0.7, 0.0, 1.0) },
 };
 
 export function createGlowingMat(scene, colorType = "yellow"){

@@ -480,14 +480,21 @@ export function updateHunger(){
 // only for checking if dmg has effect
 // then will add to your sickness status
 export async function deductHp(dmg, effects, enemyStats){
-    console.warn(dmg)
-    console.warn(effects)
+
     let totalDmg = dmg
     totalDmg -= getTotalDefense()
     if(totalDmg <= 0) totalDmg = Math.floor(Math.random()*5)
     let timeOutCount = 0
     if(effects.length){
         effects.forEach(effect=>{
+            // effect.chance (0-100, e.g. spdrain/poisoned's own 10 = 10%) was
+            // defined on every effect entry but never actually rolled here -
+            // this whole block ran unconditionally, so every hit carrying an
+            // effect applied it 100% of the time instead of at its intended
+            // chance. Rolled once per effect (not once for the whole hit),
+            // matching effects being a per-effect array in the first place.
+            if(Math.random() * 100 > (effect.chance ?? 100)) return
+
             // characterState.hp -= // wag muna to sa dulo na to
             characterState.hp -= effect.hpcost
             characterState.mp -= effect.mpcost
@@ -658,11 +665,25 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
     if(!hasBeenHere && !doNotSavePlace) toSave.places.push(toSave.currentPlace)
     try {
         const data = await useFetch(`${APIURL}/characters/updateall/${toSave._id}`, "PATCH", accountDet.token, toSave)
+        // TEMP DIAGNOSTIC - remove once the "other player gets exp too,
+        // eventually" report is confirmed/resolved. This is the ONLY place
+        // characterState can be wholesale REPLACED (not just mutated) -
+        // with the server's own PATCH response, whatever it returns. If
+        // the server ever hands back a document belonging to a DIFFERENT
+        // owner than what was actually saved (a real server-side bug,
+        // e.g. under concurrent load from multiple players saving around
+        // the same time), this is where it would first show up - and
+        // characterState would silently become someone else's data from
+        // this point on for the rest of the session, explaining why it's
+        // fine for the first few kills and then "eventually" breaks.
+        if(willUpdateCharState && data?.owner !== toSave.owner){
+            console.warn(`[charstate-swap] SAVED as owner=${toSave.owner} (_id=${toSave._id}) but server returned owner=${data?.owner} (_id=${data?._id}) - about to replace my own characterState with this`)
+        }
         if(willUpdateCharState) characterState = data
         return data
     } catch (error) {
         return error.message
-    }    
+    }
 }
 
 

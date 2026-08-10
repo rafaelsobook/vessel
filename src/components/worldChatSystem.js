@@ -14,7 +14,13 @@ const chatToggleBtn = document.querySelector(".chat-toggle-btn")
 let chatSystemInitiated = false
 let isChatOpen = false
 
-function appendChatMessage({ name, message }){
+// exported for worldsocket.js's "player-death" handler - a synthesized
+// local system line ("PlayerName: died"), not a real chat message, so it
+// deliberately bypasses sendChatMessage entirely (no worldChatMessage
+// socket emit, no /worldmessage/save POST) - every client already receives
+// "player-death" independently and would otherwise each try to persist/
+// re-broadcast the same announcement
+export function appendChatMessage({ name, message }){
     const bx = createElement("div", "chat-bx")
     bx.append(
         createElement("span", "chat-name", `${name}: `),

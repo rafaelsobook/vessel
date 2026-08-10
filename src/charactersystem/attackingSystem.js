@@ -36,9 +36,35 @@ export function attack(_attackInfo, attackAnimName){
         playerAttacked._attacking = false
     }
 }
-export function activateSkill(ownerId, skillDetail){
+export function activateSkill(ownerId, skillDetail, casterStats){
     const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
     if(!player) return
+
+    // this whole function runs identically on EVERY connected client
+    // (skillsui.js relays "activate-skill" -> server -> "skillactivated" ->
+    // every client, caster included, calls this) - getCharState() is always
+    // MY OWN local state, which is only the actual caster's state when
+    // ownerId happens to be me. For anyone just watching someone else cast,
+    // substitute a lightweight caster descriptor built from what the relay
+    // actually sent (ownerId + casterStats) instead - just enough for the
+    // damage-calc/visual code in skillEffects.js to work off the REAL
+    // caster's stats, not the local viewer's own. currentPlace is safe to
+    // borrow from local charState regardless of who cast this - the
+    // "skillactivated" handler above already bailed out unless we're in the
+    // same place. skillEffects.js's own hit handlers gate any actual state
+    // mutation (emitEnemyIsHit/bind/curse/absorb) to charState.owner ===
+    // getCharState().owner, so a non-caster ever touching real state here
+    // isn't a risk even though this descriptor is otherwise a stand-in, not
+    // a real charState (no live hp/mp/inventory for a player who isn't me).
+    const charState = getCharState()
+    if(!charState) return
+    const isMe = ownerId === charState.owner
+    const casterState = isMe ? charState : {
+        owner: ownerId,
+        currentPlace: charState.currentPlace,
+        stats: casterStats || {},
+    }
+
     switch(skillDetail.name){
         case "flexaura":
             if(skillDetail.isActive){
@@ -52,7 +78,7 @@ export function activateSkill(ownerId, skillDetail){
             // the new pure-trigger skill below, the actual multi-circle
             // mechanic (castMulticast) is unchanged
             if(skillDetail.isActive){
-                castMulticast(getSceneDet().scene, player, skillDetail, getCharState())
+                castMulticast(getSceneDet().scene, player, skillDetail, casterState)
             } else {
                 // toggled off mid-sequence - drop whichever circle/timeout
                 // is still pending, don't queue up the rest
@@ -75,7 +101,7 @@ export function activateSkill(ownerId, skillDetail){
             // skill needs a skillsData.js entry, not a new case here
             if(skillDetail.effects?.effectType === "offense"){
                 if(skillDetail.isActive){
-                    castOffenseSkill(getSceneDet().scene, player, skillDetail, getCharState())
+                    castOffenseSkill(getSceneDet().scene, player, skillDetail, casterState)
                 } else {
                     // toggled off before the cast window elapsed - drop it,
                     // don't fire late

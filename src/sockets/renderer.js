@@ -239,7 +239,17 @@ let renderCallback = function () {
             return
         }
 
-        if (en._isMoving && en._targetId) {
+        // actionType === "chasing" gate is new - lesserdemon's own
+        // actionType is "teleporting" (genenemy.ts's lesserDemonBase): it
+        // can still end up with _isMoving/_targetId set true via the exact
+        // same generic atkDetection-exit-trigger/emitChase path every other
+        // enemy uses (left untouched - harmless, just inert for it now),
+        // but should never actually WALK toward its target - it teleports
+        // in near the player instead (createEnemy.js's own teleport
+        // interval) rather than covering the distance on foot. Every
+        // existing enemy's own actionType is already "chasing", so this is
+        // a no-op change for all of them.
+        if (en._isMoving && en._targetId && en.det.actionType === "chasing") {
             // was scene.getMeshByName() - an O(n) linear scan over every mesh in
             // the scene (thousands, counting village foliage instances), done
             // every frame per chasing enemy. getPlayersOnScene() is a tiny array.
