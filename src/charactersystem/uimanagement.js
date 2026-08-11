@@ -89,7 +89,13 @@ export function activateBtnOnce(){
             clickedTimeOut = setTimeout(() => {
                 disableEnableWalkRunButtons(true)
             }, 500)
-            if(plMode === "inAir") return console.log("cannot change mode while inAir")
+            // attack is allowed through even while airborne - everything
+            // else (walk/running/cast) still can't change mode mid-jump.
+            // case "attack" below already has its own dedicated air-attack
+            // clip (equippedWeaponType + "attackair") wired up for exactly
+            // this - it was just unreachable before, since this early
+            // return happens before the switch ever runs.
+            if(plMode === "inAir" && btnName !== "attack") return console.log("cannot change mode while inAir")
 
             
             clearTimeout(clickedTimeOut)
@@ -157,9 +163,12 @@ export function activateBtnOnce(){
 
                     // airborne + weapon equipped uses the dedicated air-attack
                     // clip instead of the normal grounded combo (no alternating
-                    // swordAnimNum for this one - there's only one air-attack anim)
+                    // swordAnimNum for this one - there's only one air-attack
+                    // anim). "swordattackair" for weaponType "sword" - no
+                    // underscore/number, unlike the grounded combo's own
+                    // "swordattack1"/"swordattack2" naming.
                     if(equippedWeaponType && !getIsGrounded()){
-                        animName = `${equippedWeaponType}attack_1_air`
+                        animName = `${equippedWeaponType}attackair`
                     }
 
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1

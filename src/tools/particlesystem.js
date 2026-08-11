@@ -93,6 +93,65 @@ export function createFireParticles(position, scene) {
 
     return { particles, light }
 }
+// "wreathed in flame" look for a whole body, not a single torch flame -
+// skillEffects.js's disintegrationSkill (a fire ground-trap that binds
+// whoever walks into it) wanted the bound enemy to actually look like it's
+// burning. Tried createParticlesForMesh(enemy.body, ...) for this first,
+// but that emits from the MESH SURFACE via MeshParticleEmitter - enemy.body
+// is the invisible collision capsule (createEnemy.js), not the visible
+// monster model, and it's small/simply-shaped, so particles only ever
+// showed up as one small poof near the top instead of covering the
+// creature. This instead uses createFireParticles' own proven "rising
+// flame" recipe (direction1/2 drifting upward, warm color gradient) but
+// with minEmitBox/maxEmitBox sized to the mesh's own real bodyHeight/
+// bodyRadius, spawning particles anywhere from feet to head instead of one
+// fixed point - and emitter is the MESH itself (not a static position), so
+// it tracks automatically frame to frame like createParticlesForMesh does.
+export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadius = 0.6) {
+    const particles = new ParticleSystem("body_fire", 300, scene)
+    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.png")
+    particles.blendMode = ParticleSystem.BLENDMODE_ADD
+
+    // enemy.body's own position is VERTICALLY CENTERED on the capsule, not
+    // based at the feet (createEnemy.js: yPos = groundY + bodyHeight/2 +
+    // 0.05) - a first version spanned local Y 0 (assumed feet) to
+    // bodyHeight (assumed head), which actually put the whole emission
+    // volume from mid-body up to a full bodyHeight ABOVE that, floating
+    // well over the creature's actual head. Centered on 0 instead
+    // (-bodyHeight/2 to +bodyHeight/2) correctly spans feet to head
+    // relative to where the mesh's own origin really sits.
+    particles.emitter = mesh
+    particles.minEmitBox = new Vector3(-bodyRadius * 0.5, -bodyHeight * 0.5, -bodyRadius * 0.5)
+    particles.maxEmitBox = new Vector3( bodyRadius * 0.5,  bodyHeight * 0.5,  bodyRadius * 0.5)
+
+    particles.color1    = new Color4(1.0, 0.7, 0.1, 1.0)
+    particles.color2    = new Color4(1.0, 0.2, 0.0, 1.0)
+    particles.colorDead = new Color4(0.15, 0.0, 0.0, 0.0)
+
+    particles.minSize = 0.14
+    particles.maxSize = 0.4
+
+    particles.minLifeTime = 0.3
+    particles.maxLifeTime = 0.7
+
+    // scaled up from createFireParticles' own 120 - covering a whole body
+    // instead of one torch-sized point needs more particles in flight at
+    // once to read as continuous flame instead of sparse individual puffs
+    particles.emitRate = 220
+
+    particles.direction1 = new Vector3(-0.15, 1.0, -0.15)
+    particles.direction2 = new Vector3( 0.15, 2.0,  0.15)
+
+    particles.minEmitPower = 0.4
+    particles.maxEmitPower = 0.9
+    particles.updateSpeed  = 0.02
+
+    particles.minAngularSpeed = -Math.PI / 6
+    particles.maxAngularSpeed =  Math.PI / 6
+
+    particles.start()
+    return particles
+}
 export function createParticlesForMesh(mesh, scene, textureName = "flare", options = {}) {
     const {
         color1    = new Color4(1.0, 1.0, 1.0, 1.0),
@@ -454,11 +513,11 @@ export function createBloodParticle(scene,  monsFos, particleType = "sphere", ta
     return ps
 }
 export function createBloodSplatter(scene, pos,burst){
-    const capacity = 30
+    const capacity = 15
     const ps = buildBloodSystem(scene,
         `blood_${Date.now()}`, capacity, pos ? pos : Vector3.Zero(),
         {
-            emitRate: 30,
+            emitRate: capacity,
             maxPower: burst ? 0.55 : 0.32,
             minLife:  0.5,
             maxLife:  burst ? 2.0 : 1.3,

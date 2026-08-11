@@ -46,8 +46,8 @@ const OPENWORLD_ENEMY_SHOW_DIST_SQ = OPENWORLD_ENEMY_SHOW_DIST * OPENWORLD_ENEMY
 // intentional fall path - pushing a sword back up out of PROJECTILE_GROUND_LOW
 // right as it was trying to embed into the ground kept it from ever actually
 // reaching it, so it never registered a hit at all.
-const PROJECTILE_GROUND_LOW = 0.2
-const PROJECTILE_GROUND_HIGH = 0.75
+const PROJECTILE_GROUND_LOW = 0.4
+const PROJECTILE_GROUND_HIGH = 0.95
 const PROJECTILE_GROUND_FAR = 3
 const PROJECTILE_GROUND_ADJUST_SPEED = 8 // units/sec of vertical nudge
 

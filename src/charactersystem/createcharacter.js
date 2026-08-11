@@ -151,7 +151,14 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         return toPush
     }
 
-    function equipHelmet(helmetToEquipName, metalColor, itemName) {
+    // hairVisible (item data, e.g. ironmaskItem in constants/questions.js) -
+    // defaults to false (hidden) when omitted, matching every existing
+    // helmet's prior hardcoded behavior exactly (they never passed this at
+    // all, so `?? false` reproduces "always hide" for all of them
+    // unchanged) - only a helmet whose own data explicitly sets
+    // hairVisible: true (a mask/half-helm with a gap the hair should still
+    // poke through) leaves it showing.
+    function equipHelmet(helmetToEquipName, metalColor, itemName, hairVisible) {
         if(!helmetToEquipName) return
         let toEquip = false
         if(!helmetMeshes.length) {
@@ -170,7 +177,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         }
         if(!toEquip) return
         showHideEquip(toEquip.mesh, true)
-        if(characterHair) characterHair.isVisible = false
+        if(characterHair) characterHair.isVisible = hairVisible ?? false
     }
 
     function createGauntlet(gauntletName, metalColor) {
@@ -341,7 +348,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             if(itm.itemCateg === "equipable"){
                 if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
                 if(itm.itemType === "armor" && itm.equiped) equipArmor(itm.name, itm.metalColor)
-                if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.modelName, itm.metalColor, itm.name)
+                if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.modelName, itm.metalColor, itm.name, itm.hairVisible)
                 if(itm.itemType === "gauntlet" && itm.equiped) equipGauntlet(itm.name, itm.metalColor)
                 if(itm.itemType === "pauldron" && itm.equiped) equipPauldron(itm.name, itm.metalColor)
                 if(itm.itemType === "weapon" && itm.equiped) {

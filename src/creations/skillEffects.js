@@ -18,9 +18,9 @@
 // not a new function here - skill.swordRain (astralrainSkill) is the one
 // exception, an opt-in branch inside fireElementalProjectile's hit handler
 // (its marker doesn't deal damage/explode itself, see that section).
-import { MeshBuilder, TransformNode, Vector3, StandardMaterial, Color3, FresnelParameters, NoiseProceduralTexture, ParticleSystem } from "@babylonjs/core"
+import { MeshBuilder, TransformNode, Vector3, Quaternion, StandardMaterial, Color3, Color4, Texture, FresnelParameters, NoiseProceduralTexture, ParticleSystem } from "@babylonjs/core"
 import { createMagicCircle } from "./magiccircles.js"
-import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle } from "../tools/particlesystem.js"
+import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle, createBodyFireParticles } from "../tools/particlesystem.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
 import { spawnProjectile } from "./skills.js"
 import { createGlowingMat, fresnelMat } from "../tools/materials.js"
@@ -139,9 +139,21 @@ export function castOffenseSkill(scene, player, skill, charState){
     const { spawnPos, forward } = computeCastOrigin(player, skill)
     const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
 
-    // circle stays up roughly through the cast window plus a beat after the
-    // projectile launches, instead of despawning the instant it fires
-    createMagicCircle(spawnPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, forward, CIRCLE_SIZE_SCALE)
+    // skill.groundTrap (disintegrationSkill) - this skill has no target to
+    // aim at, so its OWN pre-cast circle lies flat on the ground where the
+    // trap will actually deploy (facingDirection omitted - see
+    // createMagicCircle's own comment) instead of standing upright in front
+    // of the caster's hand like every other offense skill's does.
+    // computeGroundTrapPos resolved once here so this circle and the trap
+    // itself (spawnGroundTrap below) land on the exact same spot.
+    const groundTrapPos = skill.groundTrap ? computeGroundTrapPos(charState, player, skill, forward) : null
+    if(groundTrapPos){
+        createMagicCircle(groundTrapPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(getGroundTrapRadius(skill)))
+    } else {
+        // circle stays up roughly through the cast window plus a beat after
+        // the projectile launches, instead of despawning the instant it fires
+        createMagicCircle(spawnPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, forward, CIRCLE_SIZE_SCALE)
+    }
 
     const timeoutId = setTimeout(() => {
         pendingCasts.delete(skill.name)
@@ -150,6 +162,14 @@ export function castOffenseSkill(scene, player, skill, charState){
         // caster - see triggerGroundSpikeLine's own header comment
         if(skill.groundSpikes){
             triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forward, powerScale)
+        } else if(skill.groundTrap?.aoe){
+            // skill.groundTrap.aoe (massivedisintegrationSkill) - the mass
+            // version, see spawnMassGroundTrap's own header comment
+            spawnMassGroundTrap(scene, charState, skill, groundTrapPos, powerScale)
+        } else if(skill.groundTrap){
+            // skill.groundTrap (disintegrationSkill) - also no projectile,
+            // see spawnGroundTrap's own header comment
+            spawnGroundTrap(scene, charState, skill, groundTrapPos, powerScale)
         } else {
             fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale)
         }
@@ -297,10 +317,260 @@ function getShapeClone(scene, key, build){
     return clone
 }
 
+// PROJECTILE_STYLES.icon's own material - one shared instance PER SKILL
+// NAME, cached persistently, not per-cast like halo/crystalshard/etc's own
+// materials. Those each need an INDEPENDENT material because they animate
+// their own per-cast state (halo's spin, magic circles' fade) - a plain
+// static texture has no such state to protect, so every cast of the same
+// skill can safely reuse one material/texture pair forever instead of
+// decoding ./images/projectiles/${skill.name}projectile.webp again each
+// time. Same "shared, fixed look never varies per cast" reasoning
+// getGroundSpikeMat already uses, just keyed per skill instead of a single
+// fixed material.
+const iconMatCache = new Map()
+let iconMatCacheScene = null
+function getIconMat(scene, skill){
+    if(iconMatCacheScene !== scene){
+        iconMatCache.clear()
+        iconMatCacheScene = scene
+    }
+    let mat = iconMatCache.get(skill.name)
+    if(!mat){
+        mat = new StandardMaterial(`icon_mat_${skill.name}`, scene)
+        const tex = new Texture(`./images/projectiles/${skill.name}projectile.webp`, scene)
+        // same technique magiccircles.js's own createMagicCircle uses
+        // (getCircleTexture's "rgb" alpha mode) - alpha DERIVED FROM RGB
+        // LUMINANCE, not the image's own embedded alpha channel. A first
+        // version used tex.hasAlpha (trusts the file's real alpha channel)
+        // + useAlphaFromDiffuseTexture, which rendered the icon's black
+        // background as solid black instead of transparent - these skill
+        // icons apparently don't carry a real alpha channel the same way
+        // circle textures don't either, which is exactly why every magic
+        // circle already routes around this the same way.
+        tex.getAlphaFromRGB = true
+        // emissive + opacityTexture only (no diffuseTexture) - same pairing
+        // createMagicCircle uses, reads as a glowing/self-lit icon
+        // regardless of scene lighting instead of a flatly shaded image
+        mat.emissiveTexture = tex
+        mat.opacityTexture = tex
+        mat.emissiveColor = new Color3(1, 1, 1)
+        mat.backFaceCulling = false
+        mat.specularColor = new Color3(0, 0, 0)
+        
+        iconMatCache.set(skill.name, mat)
+    }
+    return mat
+}
+
+// PROJECTILE_STYLES.beam's own material (tidalspikeSkill) - one shared
+// instance, cached persistently, same "shared, fixed look never varies per
+// cast" reasoning getIconMat above already uses. Safe to share even though
+// beam length varies per cast: the texture itself isn't tiled/scaled per
+// instance (it just stretches to fit whatever width the plane mesh itself
+// is given), so nothing about this material actually differs cast to cast.
+let beamMat = null
+let beamMatScene = null
+// units of texture-length scrolled per second - tuned so the current
+// pattern reads as flowing steadily along the beam's length, not a slow
+// crawl or a blur
+const BEAM_SCROLL_SPEED = 0.6
+function getBeamMat(scene){
+    if(!beamMat || beamMatScene !== scene){
+        beamMat = new StandardMaterial("beam_mat_watercurrent", scene)
+        const tex = new Texture("./images/projectiles/watercurrent.webp", scene)
+        // same getAlphaFromRGB technique getIconMat/createMagicCircle both
+        // already use - alpha derived from RGB luminance, not a real alpha
+        // channel in the file
+        tex.getAlphaFromRGB = true
+        // tiled (not clamped) along U so scrolling it wraps seamlessly
+        // instead of dragging the same single copy off the edge into
+        // nothing - U, not V, since CreatePlane's own width axis (the
+        // beam's actual length) maps to U (V wraps the plane's short/
+        // thickness axis instead)
+        tex.wrapU = Texture.WRAP_ADDRESSMODE
+        tex.uScale = 4
+        beamMat.diffuseTexture = tex
+        beamMat.emissiveTexture = tex
+        beamMat.opacityTexture = tex
+        beamMat.emissiveColor = new Color3(1, 1, 1)
+        beamMat.backFaceCulling = false
+        beamMat.specularColor = new Color3(0, 0, 0)
+        beamMatScene = scene
+
+        // continuously scrolls the water-current pattern along the beam's
+        // own length so it reads as flowing water instead of a static
+        // decal - registered ONCE here (not per-cast), tied to this shared
+        // material/texture's own lifetime, same as createFireParticles' own
+        // persistent flicker loop (particlesystem.js) - cleaned up
+        // implicitly whenever the scene itself is disposed (main.js's
+        // changeScene()), no separate teardown needed since every active
+        // beam mesh shares this exact same texture object anyway.
+        // U=0 sits at startPos (the caster) and U=1 at endPos (the target) -
+        // see CreatePlaneVertexData's own corner/UV layout and the beam's
+        // own alignment (local +X, i.e. increasing U, rotated to point
+        // along dir, which points caster->target). Decrementing uOffset
+        // (not incrementing) is what makes the pattern read as flowing
+        // onward toward the target instead of back toward the caster.
+        scene.onBeforeRenderObservable.add(() => {
+            tex.uOffset -= (scene.getEngine().getDeltaTime() / 1000) * BEAM_SCROLL_SPEED
+        })
+    }
+    return beamMat
+}
+
+// PROJECTILE_STYLES.beam's own impact splash (tidalspikeSkill) - a burst of
+// particles (not a single mesh - see spawnSplashBurst's own header comment
+// for why) at the enemy's own hit position, using splash.png as every
+// particle's own sprite. Cached persistently, same reasoning every other
+// texture cache in this file already uses - a small, fixed asset, no
+// reason to decode it fresh every single cast.
+let splashParticleTex = null
+let splashParticleTexScene = null
+function getSplashParticleTex(scene){
+    if(!splashParticleTex || splashParticleTexScene !== scene){
+        splashParticleTex = new Texture("./images/projectiles/splash.png", scene)
+        splashParticleTexScene = scene
+    }
+    return splashParticleTex
+}
+
+// two earlier versions of this used a single mesh (a billboarded plane,
+// then a vertex-displaced "wiggling" plane) - a real burst of many small
+// particles flying outward reads as an actual water splash far more
+// directly than trying to fake it on one flat surface. BLENDMODE_ADD
+// (same as every other particle effect in this file, e.g.
+// createBodyFireParticles) is what makes splash.png's own black background
+// disappear for free - additive blending adds black to the scene behind it
+// unchanged, no real alpha channel needed the way a StandardMaterial's
+// opacityTexture would.
+//
+// "just scaling" per its own request - size is the ONLY thing animated
+// over each particle's own lifetime (addSizeGradient: starts tiny, grows
+// as it flies outward) - no color gradient dance, no rotation, nothing else.
+function spawnSplashBurst(scene, position){
+    const SPLASH_PARTICLE_COUNT = 40
+    const particles = new ParticleSystem(`tidalspike_splash_${Date.now()}`, SPLASH_PARTICLE_COUNT, scene)
+    particles.particleTexture = getSplashParticleTex(scene)
+    particles.blendMode = ParticleSystem.BLENDMODE_ADD
+
+    particles.emitter = position.clone()
+    particles.minEmitBox = Vector3.Zero()
+    particles.maxEmitBox = Vector3.Zero()
+    particles.createSphereEmitter(0.4, 0.7)
+
+    particles.color1 = new Color4(1, 1, 1, 1)
+    particles.color2 = new Color4(1, 1, 1, 1)
+    particles.colorDead = new Color4(0, 0, 1, 0.2)
+
+    particles.addSizeGradient(0.05, 0.1)
+    particles.addSizeGradient(1.1, 1.9)
+
+    particles.minLifeTime = 0.55
+    particles.maxLifeTime = 0.9
+    particles.minEmitPower = 1
+    particles.maxEmitPower = 2.2
+    particles.gravity = new Vector3(0, -3, 0)
+
+    particles.emitRate = 100
+    particles.targetStopDuration = 0.52 // a quick burst, not a continuous spray
+    particles.disposeOnStop = false // the caller (beam style's onHit) owns disposal on its own timer, not the particle system itself
+
+    particles.start()
+    return particles
+}
+
+// tidalspikeSkill's beam origin (startPos, where beamMesh actually starts) -
+// a plain rotating spin/impact burst was wrong here, same as it was wrong
+// for the impact end earlier - this isn't a splash landing, it's water
+// welling up at the source. Particles stay put (zero emit box, zero emit
+// power, no gravity) instead of flying outward like spawnSplashBurst's own
+// impact version does, and emit sparsely (emitRate: 5, not a burst) for as
+// long as the caller keeps this system alive.
+function spawnSplashHover(scene, position){
+    const particles = new ParticleSystem(`tidalspike_splash_origin_${Date.now()}`, 30, scene)
+    particles.particleTexture = getSplashParticleTex(scene)
+    particles.blendMode = ParticleSystem.BLENDMODE_ADD
+
+    particles.emitter = position.clone()
+    // zero emit box AND zero emit power/direction - every particle spawns
+    // and stays at this exact single spot for its own lifetime instead of
+    // drifting or flying outward
+    particles.minEmitBox = Vector3.Zero()
+    particles.maxEmitBox = Vector3.Zero()
+    particles.direction1 = Vector3.Zero()
+    particles.direction2 = Vector3.Zero()
+    particles.minEmitPower = 0
+    particles.maxEmitPower = 0
+    particles.gravity = Vector3.Zero()
+
+    particles.color1 = new Color4(1, 1, 1, 1)
+    particles.color2 = new Color4(1, 1, 1, 1)
+    particles.colorDead = new Color4(1, 1, 1, 0)
+
+    particles.addSizeGradient(0, 0.05)
+    particles.addSizeGradient(1, 1.0)
+
+    particles.minLifeTime = 0.5
+    particles.maxLifeTime = 0.9
+    particles.emitRate = 5
+    particles.disposeOnStop = false // the caller owns disposal on its own timer, not the particle system itself
+
+    particles.start()
+    return particles
+}
+
 // --- projectile visuals ---
 // fn(scene, box, skill) => cleanup() - called once the projectile despawns
 // (hit or miss) to stop/dispose whatever this style attached to it.
 const PROJECTILE_STYLES = {
+    // the skill's own dedicated projectile texture
+    // (./images/projectiles/${skill.name}projectile.webp), flying as a flat
+    // glowing plane instead of a shaped/colored projectile -
+    // maelstromboltSkill is the first to use this (projectileStyle: "icon"),
+    // but any skill can opt in the same way, since the texture path is
+    // derived from the skill's own name rather than hardcoded. Not
+    // billboarded - an earlier version billboarded it (always facing
+    // camera) with a continuous rotation.z spin on top, which read as a
+    // flat disc spinning face-on to the camera the whole time ("a flying
+    // pizza") rather than something flying forward - static/no spin now,
+    // just carried by box's own aim rotation like every other projectile
+    // shape in this file.
+    icon(scene, box, skill){
+        box.isVisible = false
+        // width:height matches maelstromboltprojectile.webp's own real
+        // pixel dimensions (705x1254, confirmed via its VP8 header) so the
+        // splash texture doesn't stretch/squash to fit a square plane -
+        // a future skill adopting this same "icon" style with a
+        // differently-shaped texture would need its own geometry key here
+        // instead of reusing this one, since getShapeClone's cache is keyed
+        // by shape, not by skill
+        const plane = getShapeClone(scene, "icon_plane", () => MeshBuilder.CreatePlane("icon_plane_template", { width: 1, height: 1254 / 705 }, scene))
+        plane.parent = box
+        plane.position = Vector3.Zero()
+        plane.isPickable = false
+        // CreatePlane's own front face points -Z by default (see
+        // createMagicCircle's identical comment) - box's own aim rotation
+        // points its forward at +Z, so without this the icon's readable
+        // face would point back toward the caster instead of the direction
+        // it's actually flying
+        // plane.rotation.y = Math.PI
+        // one-time static correction (not animated/continuous) for the
+        // projectile texture's own content orientation
+        plane.rotation.x = Math.PI / 2
+        plane.material = getIconMat(scene, skill)
+        plane.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
+
+        // every other shaped projectile style in this file (crystalshard,
+        // twinhalo, lightorb, boxcross, darkorb...) calls addGlow on its own
+        // mesh - this one didn't, which is why it read flat/dim instead of
+        // the same glowing look everything else has despite emissiveTexture
+        // already being set
+        addGlow(scene, plane, 0.6)
+
+        // (false, false) - material/texture are the shared persistent
+        // cache above, not owned by this one clone
+        return () => plane.dispose(false, false)
+    },
     // fully invisible - no mesh, no particle trail, no launch sound either
     // (see fireElementalProjectile's launch-sound special-case below). Used
     // by skill.swordRain skills (astralrainSkill) - this box is purely a
@@ -311,6 +581,123 @@ const PROJECTILE_STYLES = {
     marker(scene, box, skill){
         box.isVisible = false
         return () => {}
+    },
+    // tidalspikeSkill's own look - the projectile itself stays fully
+    // invisible for its entire flight (box never turns visible, nothing
+    // attached to it - same "marker" convention above), and only on actual
+    // impact does a glowing plane snap into existence, spanning from the
+    // caster's own position to wherever it hit, like a lance of water
+    // connecting the two instantly rather than something that visibly flew
+    // the distance. (A CreateCylinder version was tried in between - real
+    // volume instead of a flat plane, stays visible from any angle - but
+    // went back to a plane.) startPos is captured HERE, at style-setup
+    // time - box.position already equals spawnPos by the time any style
+    // function runs (fireElementalProjectile sets it just before calling
+    // this), which is the caster's own hand position at the moment this
+    // projectile launched - close enough to "starts from my character"
+    // without this style needing charState/player threaded in just for
+    // this one style.
+    //
+    // {cleanup, onHit} shape (not a plain function) - same darkorb uses -
+    // is what makes fireElementalProjectile's hit handler skip the generic
+    // EXPLOSION_STYLES burst entirely and defer to this style's own impact
+    // visual instead (see that handler's own onHitStyle branch).
+    beam(scene, box, skill){
+        box.isVisible = false
+        const startPos = box.position.clone()
+
+        return {
+            cleanup(){}, // nothing else was ever created during flight - the invisible box itself is disposed by the caller regardless
+            onHit(enemy, finishCleanup){
+                if(!enemy?.body){ finishCleanup(); return }
+                const endPos = enemy.body.position.clone()
+                const dir = endPos.subtract(startPos)
+                const dist = dir.length()
+                if(dist < 0.001){ finishCleanup(); return }
+                dir.normalize()
+
+                const BEAM_THICKNESS = 0.5
+                const beamMesh = MeshBuilder.CreatePlane(`tidalspike_beam_${Date.now()}`, { width: dist, height: BEAM_THICKNESS }, scene)
+                beamMesh.position = Vector3.Lerp(startPos, endPos, 0.5)
+                beamMesh.isPickable = false
+
+                // aligns the plane's own local +X axis (its width axis,
+                // matching CreatePlane's own width/height convention) to
+                // point along dir - axis-angle rotation derived from the
+                // cross/dot product between the reference axis and the
+                // actual travel direction, since dir is a fully arbitrary
+                // 3D vector (not just a flat horizontal yaw like every
+                // other style's box.rotation.y aim)
+                const referenceAxis = new Vector3(1, 0, 0)
+                const rotationAxis = Vector3.Cross(referenceAxis, dir)
+                if(rotationAxis.lengthSquared() < 0.0001){
+                    beamMesh.rotationQuaternion = Vector3.Dot(referenceAxis, dir) < 0
+                        ? Quaternion.RotationAxis(Vector3.Up(), Math.PI)
+                        : Quaternion.Identity()
+                } else {
+                    const angle = Math.acos(Math.min(1, Math.max(-1, Vector3.Dot(referenceAxis, dir))))
+                    beamMesh.rotationQuaternion = Quaternion.RotationAxis(rotationAxis.normalize(), angle)
+                }
+
+                beamMesh.material = getBeamMat(scene)
+                addGlow(scene, beamMesh, 0.6)
+
+                // second plane, same position/alignment, rolled 90° around
+                // the beam's own length axis (dir) - a single flat plane
+                // can go edge-on and all but vanish depending on camera
+                // angle (e.g. looking straight down from above), same
+                // problem boxcross/twinhalo elsewhere in this file already
+                // solve by crossing two planes instead of relying on one.
+                // .clone() carries over beamMesh's position AND its
+                // rotationQuaternion (see getShapeClone's own comment on
+                // this exact behavior) - only the extra local-X roll needs
+                // adding on top, not the whole alignment redone from scratch.
+                const beamMesh2 = beamMesh.clone(`tidalspike_beam2_${Date.now()}`)
+                beamMesh2.rotationQuaternion = beamMesh.rotationQuaternion.multiply(Quaternion.RotationAxis(new Vector3(1, 0, 0), Math.PI / 2))
+                addGlow(scene, beamMesh2, 0.6)
+                // playImpactSound already ran unconditionally, before the
+                // caller ever checks onHitStyle - not called again here
+
+                // impact splash - a burst of particles at the enemy's own
+                // hit position (not spanning the distance like the beam).
+                // Two earlier versions tried this as a single mesh (a
+                // billboarded plane, then a vertex-displaced "wiggling"
+                // plane) - a real particle burst reads as an actual splash
+                // of water flying outward far more directly than either.
+                const endSplashParticles = spawnSplashBurst(scene, endPos)
+                // spawnSplashHover (not spawnSplashBurst) at the ORIGIN end
+                // (startPos) - the beam mesh itself just starts abruptly
+                // with a hard, straight cut edge right there (visible
+                // in-game as a sharp line beginning near the caster's
+                // hand), this covers that seam - but this is water welling
+                // up at the SOURCE, not an impact, so it stays put in one
+                // spot at a low emitRate instead of bursting outward
+                const startSplashParticles = spawnSplashHover(scene, startPos)
+
+                const BEAM_LINGER_MS = 3000
+                setTimeout(() => {
+                    // (false) - both particle systems' own particleTexture
+                    // is getSplashParticleTex's shared persistent cache,
+                    // not owned by either instance - same "don't dispose
+                    // the shared texture out from under every other active
+                    // instance" reasoning every particle cleanup in this
+                    // file already follows (see e.g. spawnGroundTrap's own
+                    // burnParticles.dispose(false))
+                    endSplashParticles.dispose(false)
+                    startSplashParticles.dispose(false)
+                    // (false, false) - beamMesh's own material is
+                    // getBeamMat's shared persistent cache, not owned by
+                    // this one cast - (false, true) here disposed the
+                    // shared material itself the first time any beam ever
+                    // despawned, leaving every cast after that handing out
+                    // a reference to an already-disposed material (nothing
+                    // rendered - the "only appears once" bug this was)
+                    beamMesh.dispose(false, false)
+                    beamMesh2.dispose(false, false)
+                    finishCleanup()
+                }, BEAM_LINGER_MS)
+            }
+        }
     },
     // particle trail, box stays invisible - the default look. skill.particleStyles
     // ([{name, color}, ...], see tools/particlesystem.js's createParticleSystem)
@@ -347,6 +734,31 @@ const PROJECTILE_STYLES = {
         // material (createGlowingMat, a fresh instance per cast, never
         // shared - safe to free) behind every single time this skill fired.
         return () => bladeRoot.dispose(false, true)
+    },
+    // stoneshardSkill's own look (see its own projectileStyle in
+    // skillsData.js) - monolith/orangelith casts this exact skill (tcp/
+    // generate-datas/genenemy.ts's monolithBase.skills), where a tiny sword
+    // read as an odd fit for what's meant to be an insect-like sting
+    // attack. A thin glowing cone/needle instead - own separate style key,
+    // not a change to the shared "blade" style itself, so flamebrand/
+    // tidalspike/lightningbolt (the other 3 skills still using "blade")
+    // are untouched.
+    sting(scene, box, skill){
+        box.isVisible = false
+        const sting = getShapeClone(scene, "sting_projectile", () => MeshBuilder.CreateCylinder("sting_projectile_template", { diameterTop: 0, diameterBottom: 0.15, height: 0.9, tessellation: 10 }, scene))
+        sting.parent = box
+        sting.position = Vector3.Zero()
+        sting.isPickable = false
+        // cone's own local apex points +Y by default (diameterTop: 0) -
+        // rotating 90° around X tips it to point along +Z instead, matching
+        // box's own forward-aim rotation (fireElementalProjectile's atan2
+        // math above) without needing bladeRoot's extra corrective
+        // rotations (those exist to fix up an AUTHORED weapon asset's own
+        // default orientation quirks - this cone has none, I built it)
+        sting.rotation.x = Math.PI / 2
+        sting.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
+        sting.material = createGlowingMat(scene, skill.explosionColor || "green")
+        return () => sting.dispose(false, true)
     },
     // dark - shadowboltSkill's own distinct look: the FULL assembled spear
     // (blade+guard+handle+pommel via createWeapon, same "spearlance" above
@@ -399,6 +811,9 @@ const PROJECTILE_STYLES = {
         box.isVisible = true
         box.scaling = new Vector3(0.4, 0.4, 0.4).scale(skill.projectileScale ?? 1)
         box.material = createGlowingMat(scene, skill.explosionColor || "white")
+        // voidrendSkill only - lightpierceSkill shares this same "lightning"
+        // style but doesn't get this
+        if(skill.name === "voidrend") box.showBoundingBox = true
         attachLightning(scene, box, skill.explosionColor || "white", true, { arcCount: skill.arcCount ?? 3, width: 0.025, updateInterval: 60 })
         // no manual dispose here - attachLightning already wires its own
         // teardown to box.onDisposeObservable (addOnce), which fires when
@@ -552,8 +967,9 @@ const PROJECTILE_STYLES = {
     // celestialverdictSkill's own distinct look (used to share "twinhalo"
     // with seraphicascension - pulled out into its own style so the two no
     // longer look identical), also reused by stormsurgeSkill (lightning,
-    // yellow) - the shape/material aren't light-element-specific, just
-    // driven by skill.explosionColor like every other style here
+    // yellow) and abyssalcurrentSkill (water, blue) - the shape/material
+    // aren't light-element-specific, just driven by skill.explosionColor
+    // like every other style here
     lightorb(scene, box, skill){
         box.isVisible = false
         const sphere = getShapeClone(scene, "sphere_lightorb", () => MeshBuilder.CreateSphere("sphere_lightorb_template", { diameter: 0.4, segments: 16 }, scene))
@@ -898,17 +1314,22 @@ const EXPLOSION_STYLES = {
 const LAUNCH_SOUND_BY_STYLE = { blade: "spearS1", bladecross: "swordS1", spearlance: "spearS1" }
 const IMPACT_SOUND_BY_STYLE = { blade: "struckS", bladecross: "struckS", spearlance: "struckS" }
 
-// lightningboltSkill only (skillsData.js) - "blade" style already gets its
-// own struckS impact like every other blade skill, but a bolt of
-// electricity landing should ALSO carry its own elemental hit sound on top
-// of the generic weapon-strike one, not just the blade sound alone the way
-// flamebrand/tidalspike/stoneshard (the other "blade" skills) do. Called
-// from both player-cast and enemy-cast hit handlers below so lightningbolt
+// per-skill-name overrides, checked BEFORE the generic per-style map -
+// maelstrombolt (element: water, "icon" style - no style-based impact sound
+// of its own, would otherwise fall through to the generic fireHitS),
+// lightningbolt (element: lightning, "blade" style - previously layered its
+// own extra fireHitS on top of the shared struckS weapon-strike sound), and
+// shadowbolt (element: dark, "shadowblade" style - same "bolt" naming) all
+// use electrichit.mp3 as their actual impact/explosion sound instead.
+// tidalspike (element: water, "beam" style - also had no style-based sound
+// of its own) uses waterhit.mp3.
+const IMPACT_SOUND_BY_SKILL_NAME = { maelstrombolt: "electricHitS", lightningbolt: "electricHitS", shadowbolt: "electricHitS", tidalspike: "waterHitS" }
+
+// Called from both player-cast and enemy-cast hit handlers below so a skill
 // sounds the same either way it's cast.
 function playImpactSound(skill){
-    const impactSoundName = IMPACT_SOUND_BY_STYLE[skill.projectileStyle] || "fireHitS"
+    const impactSoundName = IMPACT_SOUND_BY_SKILL_NAME[skill.name] || IMPACT_SOUND_BY_STYLE[skill.projectileStyle] || "fireHitS"
     getAllSounds()[impactSoundName]?.play()
-    if(skill.name === "lightningbolt") getAllSounds().fireHitS?.play()
 }
 
 const PROJECTILE_SPEED = 12
@@ -1018,7 +1439,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     // getShapeClone (not .createInstance()) - "lightning" style below sets
     // box.material directly, which is a silent no-op on an InstancedMesh
     // (same trap already documented on fireEnemySkillProjectile's own box)
-    const box = getShapeClone(scene, "box_projectile", () => MeshBuilder.CreateBox("box_projectile_template", { size: 1 }, scene))
+    const box = getShapeClone(scene, "box_projectile", () => MeshBuilder.CreateBox("box_projectile_template", { size: 0.7 }, scene))
     box.position.copyFrom(spawnPos)
     box.isPickable = false
     box.isVisible = false // PROJECTILE_STYLES.lightning flips this back on for its own look
@@ -1633,6 +2054,224 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
     }, GROUND_SPIKE_LIFETIME_MS)
 }
 
+// --- disintegrationSkill's ground trap (skill.groundTrap, see skillsData.js
+// and the branch in castOffenseSkill above) ---
+// No projectile at all, and nothing aimed at a target - instead, a flat
+// ground-rune circle blooms a short distance in front of the caster
+// (createMagicCircle with facingDirection omitted - see that function's own
+// comment: without it, the circle lies flat facing the sky, the same
+// "environmental rune" look every non-combat circle in this game already
+// uses, instead of the usual upright in-front-of-hand circle every OTHER
+// offense skill's pre-cast circle shows), with an invisible box trigger
+// hovering over the same spot. The FIRST enemy to walk into that box (not
+// aimed, not a hit roll - purely "did anything cross into this box")
+// consumes the trap: fire particles burst, they take a hit, and get bound
+// via skill.enemyBind, same bind mechanic radiantjudgmentSkill already uses
+// off a landed hit instead of a walked-into trap.
+const GROUND_TRAP_DEFAULT_RADIUS = 1.8
+// 0 - "myBody position" (see skillsData.js's own groundTrap.distance on
+// disintegrationSkill), not out in front like the pre-cast circle every
+// other offense skill shows. Kept as a real (overridable) default rather
+// than hardcoded 0 below, in case a future groundTrap skill wants an
+// actual thrown-out-in-front trap instead of one centered on the caster.
+const GROUND_TRAP_DEFAULT_DISTANCE = 0
+const GROUND_TRAP_DEFAULT_DURATION_MS = 8000
+
+// createMagicCircle's own template is a fixed 2.5x2.5 plane (see
+// magiccircles.js's getCircleTemplate) - converts a real world-space radius
+// into the sizeScale multiplier that makes the circle's actual visual
+// diameter match its real trigger/AOE footprint, whether that's
+// disintegrationSkill's small 1.8-unit trap or massivedisintegrationSkill's
+// own 10-20-unit AOE, instead of a single fixed scale that only looked
+// right for one specific radius.
+const MAGIC_CIRCLE_BASE_DIAMETER = 2.5
+function groundTrapCircleScale(radius){
+    return (radius * 2) / MAGIC_CIRCLE_BASE_DIAMETER
+}
+
+// massivedisintegrationSkill (skill.groundTrap.aoe) scales its radius
+// linearly with level - radius: 10 at lvl 1, exactly radius*lvl, matching
+// "10 at lvl1, 20 at lvl2" as given. disintegrationSkill's own small
+// single-target trap stays fixed regardless of level (aoe isn't set on it).
+function getGroundTrapRadius(skill){
+    const baseRadius = skill.groundTrap?.radius ?? GROUND_TRAP_DEFAULT_RADIUS
+    return skill.groundTrap?.aoe ? baseRadius * skill.lvl : baseRadius
+}
+
+// the actual "disintegrate this one enemy" hit - shared between
+// spawnGroundTrap (one enemy, walked into a box trigger) and
+// spawnMassGroundTrap (every qualifying enemy in an AOE sweep) so both
+// trigger mechanisms produce the identical fire-burst/burning-body/hit/bind
+// sequence instead of two copies of the same logic drifting apart over
+// time. Visual portion (burst + burning body + sound) runs for every client
+// watching the cast; the actual hit/bind only fires from the real caster's
+// own client - see fireElementalProjectile's own isCaster comment for the
+// full multiplayer reasoning, identical here.
+function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, durationMs){
+    const explosionFn = EXPLOSION_STYLES[skill.explosionStyle] || EXPLOSION_STYLES.fire
+    explosionFn(scene, enemy.body.position.clone(), powerScale, skill.explosionColor || "red", skill)
+    playImpactSound(skill)
+
+    // persistent "burning" fire, ON the enemy's own body - see
+    // createBodyFireParticles' own comment in particlesystem.js for why
+    // this (not createParticlesForMesh) is what actually reads as
+    // "wreathed in flame" instead of one small poof. Lifetime matches
+    // skill.enemyBind's own bindDuration (falls back to durationMs if the
+    // skill somehow has no bind) - same client-side visual-duration
+    // convention applyEnemyBind's own torus ring already uses.
+    const burnMs = (skill.enemyBind?.bindDuration ?? durationMs / 1000) * 1000
+    const burnParticles = createBodyFireParticles(enemy.body, scene, enemy.det?.bodyHeight, enemy.det?.bodyWidenes)
+    setTimeout(() => {
+        burnParticles.stop()
+        // (false) - particleTexture is particlesystem.js's own
+        // shared/persistent texture cache, not owned by this one system
+        burnParticles.dispose(false)
+    }, burnMs)
+
+    if(charState.owner === getCharState()?.owner){
+        const freshCharState = getCharState()
+        const abilityAdditions = getAdditionalsFromAbilities()
+        let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+        if(abilityAdditions.additionalMagicDmg.percent){
+            magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+        }
+        const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+
+        emitEnemyIsHit({
+            playerId: freshCharState.owner,
+            dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+            targetId: enemy._id,
+            currentPlaceId: freshCharState.currentPlace.placeId,
+        })
+
+        if(skill.enemyBind){
+            emitEnemyBind({
+                targetId: enemy._id,
+                shape: skill.enemyBind.shape,
+                bindDuration: skill.enemyBind.bindDuration,
+                currentPlaceId: freshCharState.currentPlace.placeId,
+            })
+        }
+    }
+}
+
+// resolves where the trap actually sits, on the ground - shared between
+// castOffenseSkill's own pre-cast circle (so it blooms flat on the ground
+// in the right spot from the very start of the cast, not the usual upright
+// in-front-of-hand circle every other offense skill shows) and
+// spawnGroundTrap itself once the trap actually deploys, so both land on
+// the exact same spot instead of each computing it independently and
+// risking a slight drift if the caster turns mid-cast.
+function computeGroundTrapPos(charState, player, skill, forward){
+    const distance = skill.groundTrap?.distance ?? GROUND_TRAP_DEFAULT_DISTANCE
+
+    // horizontal-only direction, same reasoning triggerGroundSpikeLine's own
+    // flatForward has - the trap sits ON the ground straight out from the
+    // caster, shouldn't drift because their hand happened to be aimed
+    // slightly up/down at cast time
+    const flatForward = new Vector3(forward.x, 0, forward.z)
+    if(flatForward.lengthSquared() < 0.0001) flatForward.set(0, 0, 1)
+    flatForward.normalize()
+
+    // same ground-height resolution triggerGroundSpikeLine/spawnGroundSpike
+    // already use - flat-ground fallback (village/dungeon) vs per-point
+    // terrain sampling (openworld's uneven ground). Origin is the caster's
+    // own BODY position, not spawnPos (computeCastOrigin's hand-height,
+    // already-offset-forward spawn point) - distance: 0 needs to land
+    // exactly on the caster, not on wherever their hand happens to be.
+    const isOpenworld = charState.currentPlace.placeId === OPENWORLD_PLACE_ID
+    const originX = player.body.position.x
+    const originZ = player.body.position.z
+    const groundX = originX + flatForward.x * distance
+    const groundZ = originZ + flatForward.z * distance
+    const groundY = isOpenworld
+        ? sampleTerrainSurfaceHeight(groundX, groundZ, OPENWORLD_TERRAIN_VERTS)
+        : player.body.position.y - capsuleHeight / 2
+    return new Vector3(groundX, groundY, groundZ)
+}
+
+function spawnGroundTrap(scene, charState, skill, groundPos, powerScale){
+    const trapCfg = skill.groundTrap || {}
+    const radius = getGroundTrapRadius(skill)
+    const durationMs = trapCfg.duration ?? GROUND_TRAP_DEFAULT_DURATION_MS
+
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    createMagicCircle(groundPos, scene, circleImg, 0.8, durationMs, null, groundTrapCircleScale(radius))
+
+    const box = MeshBuilder.CreateBox(`groundtrap_${skill.name}_${randNum(1000, 9999)}`, { width: radius * 2, height: 2, depth: radius * 2 }, scene)
+    // centered a couple units up off the ground - an enemy's own body
+    // origin sits at roughly its OWN mid-height (see createEnemy.js), so a
+    // box hugging ground level would only catch very short enemies; this
+    // comfortably overlaps a normal-height body walking through
+    box.position.set(groundPos.x, groundPos.y + 1, groundPos.z)
+    box.isVisible = false
+    box.isPickable = false
+
+    let hasTriggered = false
+    // registered against whichever enemies exist right now - same accepted
+    // "won't catch an enemy created after this point" tradeoff
+    // fireElementalProjectile's own per-enemy trigger list already has (see
+    // its own comment) - an ActionManager intersection trigger keeps
+    // watching every frame though, so an enemy already on scene but far
+    // away still gets caught correctly whenever it later wanders in, this
+    // just can't register against something that doesn't exist yet
+    const triggerCleanups = []
+    const expireTimeout = setTimeout(() => {
+        if(hasTriggered) return
+        triggerCleanups.forEach(fn => fn())
+        box.dispose()
+    }, durationMs)
+
+    getEnemiesOnScene().forEach(enemy => {
+        if(!enemy.body) return
+        const enterAction = onIntersecEnterTrig(box, enemy.body, scene, () => {
+            if(hasTriggered) return
+            // stale trigger against an enemy that's since died elsewhere -
+            // same fresh liveness re-check fireElementalProjectile's own
+            // hit loop already does
+            if(!getEnemiesOnScene().some(e => e._id === enemy._id)) return
+            hasTriggered = true
+            clearTimeout(expireTimeout)
+            triggerCleanups.forEach(fn => fn())
+            box.dispose()
+            applyDisintegrationHit(scene, charState, skill, enemy, powerScale, durationMs)
+        })
+        triggerCleanups.push(() => removeIntersecTrig(box, enterAction))
+    })
+}
+
+// --- massivedisintegrationSkill's mass ground trap (skill.groundTrap.aoe,
+// see skillsData.js and the branch in castOffenseSkill above) ---
+// Same ground-rune circle as disintegrationSkill's own single-target trap
+// above, sized to a much bigger radius (getGroundTrapRadius scales it with
+// skill.lvl - see that function's own comment), but instead of waiting
+// indefinitely for one enemy to walk into a small box trigger, this hits
+// EVERY qualifying enemy at once: a brief beat after the circle blooms
+// (MASS_TRAP_ACTIVATE_DELAY_MS - long enough to read as "the circle just
+// activated", not an instant snap), it sweeps every enemy currently on
+// scene and runs the exact same applyDisintegrationHit on anyone within
+// radius, not just the first thing that wanders in.
+const MASS_TRAP_ACTIVATE_DELAY_MS = 600
+
+function spawnMassGroundTrap(scene, charState, skill, groundPos, powerScale){
+    const trapCfg = skill.groundTrap || {}
+    const radius = getGroundTrapRadius(skill)
+    const durationMs = trapCfg.duration ?? GROUND_TRAP_DEFAULT_DURATION_MS
+
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    createMagicCircle(groundPos, scene, circleImg, 0.8, durationMs, null, groundTrapCircleScale(radius))
+
+    setTimeout(() => {
+        getEnemiesOnScene().forEach(enemy => {
+            if(!enemy.body) return
+            const dx = enemy.body.position.x - groundPos.x
+            const dz = enemy.body.position.z - groundPos.z
+            if((dx * dx + dz * dz) > radius * radius) return
+            applyDisintegrationHit(scene, charState, skill, enemy, powerScale, durationMs)
+        })
+    }, MASS_TRAP_ACTIVATE_DELAY_MS)
+}
+
 // --- ENEMY-CAST SKILLS (det.skills, see tcp/recources/enemyDetails.ts -
 // fireslime/electricslime) - the reverse direction of everything above: an
 // ENEMY casting a player skill AT a player instead of a player casting one
@@ -1814,6 +2453,12 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         if(skill.projectileStyle === "blade"){
             targetPlayer.characterAnimations?.playAction(targetPlayer.anims, "hit_struct1", 1)
             getAllSounds().struckS?.attachToMesh(targetPlayer.bodytarget)
+            // bloodps (createcharacter.js) - createBloodSplatter's own
+            // returned shape is { ps, play(stopDelay) }, not a start()
+            // method directly - play() already does exactly "start, then
+            // auto-stop after a burst window" (default 1000ms), which is
+            // exactly what a one-shot splatter on getting hit should do
+            targetPlayer.bloodps?.play()
         }
 
         playImpactSound(skill)

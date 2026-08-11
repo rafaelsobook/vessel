@@ -210,7 +210,7 @@ export function activateOnSocketListeners(socket){
     socket.on("equiped-item", data => {
         if (!isSocketOn) return
         const charState = getCharState()
-        const {ownerId, itemName, itemModelStyle, itemModelName, itemType, currentPlaceId, metalColor, weaponType} = data
+        const {ownerId, itemName, itemModelStyle, itemModelName, itemType, currentPlaceId, metalColor, weaponType, hairVisible} = data
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
         // if(ownerId === charState.owner) return console.log("this is me return")
@@ -223,7 +223,7 @@ export function activateOnSocketListeners(socket){
 
             theEquipingPlayer.equipSword(itemName, theEquipingPlayer.mode === "fighting", data.parts, weaponType, metalColor)
         }
-        if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemModelName, metalColor, itemName)
+        if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemModelName, metalColor, itemName, hairVisible)
         if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)
         if(itemType === "pauldron") theEquipingPlayer.equipPauldron(itemName, metalColor)
 
@@ -645,6 +645,7 @@ export function activateOnSocketListeners(socket){
             // console.log("enemyDiedHere ", enemyDiedHere._id)
             enemyDiedHere.targetId = false
             enemiez = enemiez.filter(enmy => enmy._id !== enemyId)
+            allEnemiez = allEnemiez.filter(enmy => enmy._id !== enemyId)
          
             // disposal after a 2s delay.
             enemyDispose(enemyDiedHere)

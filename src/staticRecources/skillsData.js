@@ -179,7 +179,11 @@ export const tidalspikeSkill = {
     upgradePlus: 15,
     explosionColor: "blue",
     explosionScale: 1,
-    projectileStyle: "blade",
+    // "beam" (skillEffects.js's own PROJECTILE_STYLES) - the projectile
+    // itself stays fully invisible for its whole flight; on impact, a
+    // glowing plane spans from the caster to whoever it hit instead of the
+    // usual traveling shaped projectile
+    projectileStyle: "beam",
     explosionStyle: "water",
     arcCount: 0,
     onLevelUp: "growArcAura",
@@ -207,8 +211,11 @@ export const maelstromboltSkill = {
     upgradePlus: 28,
     explosionColor: "blue",
     explosionScale: 1,
-    projectileStyle: "bolt",
-    particleStyles: [{ name: "tentacles", color: "blue" }],
+    // "icon" (skillEffects.js's own PROJECTILE_STYLES) - flies this skill's
+    // own skill-bar icon (./images/skills/maelstrombolt.webp) as a
+    // billboarded, spinning glowing plane instead of the plain particle-
+    // trail bolt every other bolt-style skill uses
+    projectileStyle: "icon",
     explosionStyle: "water",
     onLevelUp: "growParticleAura",
     desc: "Writhing tendrils of water coil around the bolt, crashing outward in a wide burst on impact.",
@@ -237,7 +244,13 @@ export const stoneshardSkill = {
     upgradePlus: 15,
     explosionColor: "green",
     explosionScale: 1,
-    projectileStyle: "blade",
+    // "sting" (skillEffects.js's own PROJECTILE_STYLES) - a thin glowing
+    // cone/needle instead of "blade"'s tiny sword, since this is the exact
+    // skill monolith/orangelith casts (tcp's monolithBase.skills) and a
+    // sword read oddly for what's meant to be an insect-like sting attack.
+    // Own separate style, doesn't touch flamebrand/tidalspike/lightningbolt
+    // (still "blade").
+    projectileStyle: "sting",
     explosionStyle: "earth",
     magicCircleImg: "apt_earth",
     arcCount: 0,
@@ -595,7 +608,11 @@ export const abyssalcurrentSkill = {
     upgradePlus: 52,
     explosionColor: "blue",
     explosionScale: 1,
-    projectileStyle: "spearlance",
+    // "lightorb" (skillEffects.js's own PROJECTILE_STYLES) - a glowing
+    // sphere with a Fresnel "hollow shell" material, wrapped in
+    // attachLightning arcs, tinted by explosionColor above (blue) - same
+    // style celestialverdict/stormsurge already reuse, just their own color
+    projectileStyle: "lightorb",
     explosionStyle: "water",
     arcCount: 2,
     onLevelUp: "growArcAura",
@@ -958,6 +975,111 @@ export const multicastSkill = {
     desc: "Channels no power of its own - instead, it triggers every other skill currently in your bar, all at once.",
 }
 
+// --- DISINTEGRATION (fire) - a ground trap, not a projectile ---
+// requireMode intentionally OMITTED, not set to "none" - skillsui.js's own
+// gate is `if(skill.requireMode && charState.mode !== skill.requireMode)`,
+// which only skips the check when requireMode is FALSY. The literal string
+// "none" is truthy, so setting it to that would make the gate demand
+// charState.mode === "none" forever - a mode that doesn't exist and never
+// will - permanently locking the skill instead of freeing it. Leaving the
+// field out entirely is what every other unrestricted-mode skill in this
+// game actually does to mean "no gate."
+//
+// slotNumber bumped from 13 to 29 - 13 is already burstshotsSkill's own
+// slot (see above); giveSkill would auto-bump a live collision at grant
+// time anyway, but there's no reason to declare a collision in the static
+// data when 29 is simply the next free slot (every other number 2-28 is
+// already claimed - see every other skill's own slotNumber above).
+//
+// groundTrap (new flag, read by castOffenseSkill/spawnGroundTrap in
+// skillEffects.js) replaces the usual fired projectile entirely: after the
+// normal castDuration windup, a flat ground-rune circle blooms a short
+// distance in front of the caster (createMagicCircle with no
+// facingDirection - lies flat facing the sky, not the usual upright
+// in-front-of-hand circle) with an invisible box trigger over the same
+// spot. The FIRST enemy to walk into that box consumes the trap: fire
+// particles burst, they take a hit, and get bound via enemyBind below -
+// same bind mechanic radiantjudgmentSkill already uses, just triggered by
+// a walked-into trap instead of a landed hit.
+export const disintegrationSkill = {
+    slotNumber: 29,
+    equiped: true,
+    isActive: false,
+    name: "disintegration",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "fire",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Disintegration",
+    castDuration: 1.4,
+    returnModeDura: 900,
+    skillCoolDown: 4000,
+    demand: [{ name: "mp", minCost: 40, cost: 0 }],
+    effects: { effectType: "offense", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.25 },
+    skillrank: 3,
+    upgradePlus: 20,
+    explosionColor: "fire",
+    explosionScale: 1,
+    projectileStyle: "trap",
+    // distance omitted - defaults to 0 (skillEffects.js's own
+    // GROUND_TRAP_DEFAULT_DISTANCE), i.e. centered on the caster's own
+    // body, not thrown out in front like a targeted skill would be
+    groundTrap: { radius: 1.8, duration: 8000 },
+    explosionStyle: "fire",
+    magicCircleImg: "apt_fire_second",
+    enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
+    onLevelUp: "growParticleAura",
+    desc: "It traps the enemy in a circle of magic, then burn them until they disintegrate",
+}
+
+// --- MASSIVE DISINTEGRATION (fire) - the AOE version of disintegrationSkill ---
+// Same groundTrap mechanic, but with aoe: true (new flag, read by
+// castOffenseSkill/spawnMassGroundTrap in skillEffects.js) - instead of a
+// small trap waiting for one enemy to walk into it, a much bigger circle
+// blooms and, a beat later, hits EVERY enemy currently within radius at
+// once (see spawnMassGroundTrap's own header comment for the full
+// mechanism - it reuses disintegrationSkill's own applyDisintegrationHit
+// for the actual fire-burst/burning-body/hit/bind, so both skills apply
+// the identical effect, just triggered differently).
+//
+// radius: 10 scales LINEARLY with level (getGroundTrapRadius multiplies by
+// skill.lvl whenever aoe is set) - 10 at lvl 1, 20 at lvl 2, exactly as
+// specified, unlike disintegrationSkill's own radius which stays fixed
+// regardless of level (aoe isn't set on it).
+export const massivedisintegrationSkill = {
+    slotNumber: 30,
+    equiped: true,
+    isActive: false,
+    name: "massivedisintegration",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "fire",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Massive Disintegration",
+    castDuration: 3,
+    returnModeDura: 900,
+    skillCoolDown: 14000,
+    demand: [{ name: "mp", minCost: 140, cost: 0 }],
+    effects: { effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 },
+    skillrank: 4,
+    upgradePlus: 40,
+    explosionColor: "fire",
+    explosionScale: 1,
+    projectileStyle: "trap",
+    // distance omitted - defaults to 0, centered on the caster's own body,
+    // same as disintegrationSkill's own trap
+    groundTrap: { radius: 10, duration: 8000, aoe: true },
+    explosionStyle: "fire",
+    magicCircleImg: "apt_fire_second",
+    enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
+    onLevelUp: "growParticleAura",
+    desc: "Summons a massive circle of annihilation - anyone caught near or inside its radius is consumed by disintegrating flame.",
+}
+
 export const skillsData = [
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
@@ -974,7 +1096,7 @@ export const skillsData = [
     astralrainSkill,
     darkorbSkill,
     burstshotsSkill,
-    multicastSkill,
+    multicastSkill, disintegrationSkill, massivedisintegrationSkill
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an

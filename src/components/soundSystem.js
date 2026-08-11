@@ -63,6 +63,12 @@ export function initSounds(scene){
     const fireHitS = createSoundSafe("fireHitS", "./sounds/magic/firehit.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    const electricHitS = createSoundSafe("electricHitS", "./sounds/magic/electrichit.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    const waterHitS = createSoundSafe("waterHitS", "./sounds/magic/waterhit.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const enteredS = createSoundSafe("enteredS", "./sounds/enteredS.mp3", scene,
     {volume: 0.8, autoplay: false, loop: false})
 
@@ -123,6 +129,8 @@ export function initSounds(scene){
         magicCircle,
         fireBallS,
         fireHitS,
+        electricHitS,
+        waterHitS,
         enteredS,
         giantencounterS,
         struckS,

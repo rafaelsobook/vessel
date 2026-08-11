@@ -3,10 +3,10 @@ import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp } from '../charactersystem/characterstate';
-import { getPlayersOnScene, reCreateMeshesInScene } from '../sockets/worldsocket';
+import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
 import { ANIM_STATE, playAnim } from '../tools/animation';
-import { emitMove, emitStop } from '../sockets/emits';
+import { emitMove, emitStop, emitMode } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
@@ -191,6 +191,26 @@ function setupControls(scene, allsounds) {
         // walking away mid-swing should drop mining same as leaving the ore's
         // trigger zone or unequipping the weapon
         if(value && charState.mode === "minning") setCharStateMode("idle")
+
+        // moving out of casting - inputMovement.js's own movement code
+        // (see the isMoving && myPlayer?.mode === "casting" check further
+        // down this file) roots the player in place while casting instead
+        // of letting them slide around mid-cast, which otherwise meant
+        // pressing a movement key while casting did nothing at all. Same
+        // "walked away, drop the mode automatically" idea as minning above -
+        // switches to "fighting" (not "idle") so a movement key immediately
+        // starts a run, matching what running normally requires. setCharStateMode
+        // already updates the LOCAL player's own mode (see its own
+        // setPlayerMode(characterState.owner, ...) call), so this emitMode
+        // is only needed for everyone ELSE watching to see the casting
+        // stance/animation actually drop too.
+        if(value && charState.mode === "casting"){
+            setCharStateMode("fighting")
+            if(getIsSocketOn()){
+                const weapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                emitMode("fighting", weapon?.name)
+            }
+        }
 
         player._moving = value
         if (player) {
@@ -487,6 +507,40 @@ function setupControls(scene, allsounds) {
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickFive(scene, myPlayer.body, {
                     lookHeight: capsuleHeight / 2,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "6":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickSix(scene, myPlayer.body, {
+                    // lookHeight: capsuleHeight / 2,
+                    behindDistance: 10,
+                    willRewind: true,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "7":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickSeven(scene, myPlayer.body, {
+                    // lookHeight: capsuleHeight / 2,
+                    behindDistance: 10,
+                    willRewind: false,
+                    duration: 9,
+                    onComplete: () => {
+                        hideShowAllScreenUI(true)
+                    }
+                })
+            break
+            case "8":
+                hideShowAllScreenUI(false)
+                if(myPlayer?.body) camTrick.playTrickEight(scene, myPlayer.body, {
+                    lookHeight: capsuleHeight / 2,
+                    endDistance: 10,
+                    duration: 6,
                     onComplete: () => {
                         hideShowAllScreenUI(true)
                     }

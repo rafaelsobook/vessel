@@ -500,7 +500,8 @@ var ironmaskItem = {
         qnty: 1,
         desc: "A plain iron mask that hides the wearer's face, offering modest protection.",
         rarity: "common",
-        metalColor: METAL_COLOR.IRON
+        metalColor: METAL_COLOR.IRON,
+        hairVisible: true, // if false, hair is hidden when this helmet is equipped (see createHelmet() for how this works)
     }
 var bootsItem = {
     itemId: randomNum(), // should be string also in client

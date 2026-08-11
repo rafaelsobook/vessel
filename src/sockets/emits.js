@@ -109,7 +109,8 @@ export function emitEquipItem(itemDet, isHiding) {
         isHide: isHiding,
         parts: itemDet.parts ? itemDet.parts : null,
         metalColor: itemDet.metalColor,
-        weaponType: itemDet.weaponType
+        weaponType: itemDet.weaponType,
+        hairVisible: itemDet.hairVisible
     })
 }
 

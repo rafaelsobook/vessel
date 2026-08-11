@@ -152,15 +152,6 @@ export async function areaScene(placeDetail){
                 { texturePath: "./images/textures/grass/bush1.jpg", qnty: 10, size: "large" },
             ], { viewRadius: 1, verts: 12 })
 
-            setInterval(() => {
-                // const box = MeshBuilder.CreateBox("asd", {}, scene)
-                // const bpos = myCharacter.body.position.clone()
-                // box.position = bpos
-                // box.position.y += 5
-                // createAggregate(box, { mass: 1}, "box", scene)
-     
-            }, 1000)
-
             // showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
             console.log('[terrain] physics plugin=', scene.getPhysicsEngine()?.getPhysicsPlugin?.()?.name,
@@ -431,19 +422,6 @@ export async function areaScene(placeDetail){
     //     }, 2000)
 
     // }, 1000)
-
-    setInterval(() => {
-        // getEnemiesOnScene().forEach( enem => {
-        //     if(enem.name === "waterslime") console.log("slime ",enem.anims)
-        //     if(enem.name === "orangelith") console.log("orangelith ",enem.anims)
-            
-        //     const enemPos = enem.body.position
-        //     const myPos = myCharacter.body.position
-
-        //     const length = Vector3.Distance(enemPos, new Vector3(0,enemPos.y,500))
-        //     // console.log(length)
-        // })
-    }, 10000)
 
     return {scene, isSocketOn: isMultiplayer }
 }
