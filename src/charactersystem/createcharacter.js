@@ -629,9 +629,21 @@ function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
     let aggregate
     if (usePhysics) {
         aggregate = createAggregate(body, {mass: 10, friction: 1, restitution: 0}, "box", scene)
-        
-        // Lock rotation so capsule doesn't tip over
+
+        // Lock rotation so capsule doesn't tip over. mass MUST be repeated
+        // here - setMassProperties doesn't layer onto a previous call, each
+        // call recomputes mass/inertia/centerOfMass from scratch off the
+        // shape's own volume+density and only patches the fields you pass
+        // (see Havok plugin's _internalUpdateMassProperties). Calling this a
+        // second time with only inertia (as this used to) silently threw
+        // away the mass:10 set by createAggregate above and replaced it with
+        // Havok's density-derived default for this box's volume - which,
+        // going by how invisible even a huge test impulse was, is far
+        // heavier than 10. Any impulse/mass math anywhere else in the
+        // codebase assumes mass is actually 10 - this line is what makes
+        // that true.
         aggregate.body.setMassProperties({
+            mass: 10,
             inertia: Vector3.ZeroReadOnly,  // the exact constant the BJS team uses internally
             inertiaOrientation: Quaternion.Identity(),  // required alongside inertia in Havok
         });

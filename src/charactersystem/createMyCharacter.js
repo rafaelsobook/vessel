@@ -100,7 +100,7 @@ const ATK_COLLIDER_ACTIVE_MS = 500
 // player mass is 10 (see createcharacter.js's createAggregate call) - impulse
 // = mass * deltaV, so this gives an instant forward deltaV of 2 m/s. Bump
 // this up (not the deltaV math) if the dash should feel punchier.
-const DASH_IMPULSE = 100
+const DASH_IMPULSE = 25
 // tracks the pending "park it back out of reach" timeout across calls - a
 // second attack press before the first one's timeout fires would otherwise
 // leave two competing timeouts racing, the earlier one yanking the box away
@@ -153,11 +153,14 @@ export function positionAtkCollider(pos, dirTarg){
     // shouldn't tip over), so an off-center location wouldn't spin it
     // anyway, but there's no reason to rely on that here.
     if(player.aggregate){
-        player.aggregate.body.applyImpulse(worldForward.scale(DASH_IMPULSE), player.body.absolutePosition)
-        // without this, inputMovement.js's own movement loop hard-overwrites
-        // linear velocity every physics tick while a movement key/joystick is
-        // held - which stomps this impulse before it ever renders a frame
-        markDashActive()
+        setTimeout(() => {
+            player.aggregate.body.applyImpulse(worldForward.scale(DASH_IMPULSE), player.body.absolutePosition)
+            // without this, inputMovement.js's own movement loop hard-overwrites
+            // linear velocity every physics tick while a movement key/joystick is
+            // held - which stomps this impulse before it ever renders a frame
+            markDashActive()
+        }, 300)
+
     }
 
     clearTimeout(parkTimeoutId)
