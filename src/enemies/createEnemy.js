@@ -14,7 +14,7 @@ import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
-import { emitEnemyIsHit, emitEnemyYCorrection, emitSpawnCircle } from "../sockets/emits.js"
+import { emitEnemyIsHit, emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget } from "../sockets/emits.js"
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
@@ -25,6 +25,7 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
+import { faceForward } from "../controllers/inputMovement.js"
 
 
 
@@ -529,6 +530,22 @@ export default function createEnemy(scene, det) {
                 targetId: det._id,
                 currentPlaceId: det.currentPlaceId,
             })
+            // no notPlayerBody arg - faceForward targets the LOCAL PLAYER's
+            // own body (see its own comment on why it can't just reuse the
+            // shared rotationHelper mesh: updateMovement() copies that
+            // mesh's rotationQuaternion onto the player's body every frame,
+            // so this animates aggregate.transformNode.rotationQuaternion
+            // directly instead of fighting that). Smoothly slerps to face
+            // whichever enemy this swing actually landed on, same call
+            // areascene.js's own faceForward(res.position) already uses to
+            // turn the player toward an NPC.
+            faceForward(enemy.body.position)
+            // multiplayer sync - faceForward above only turns MY OWN body
+            // locally, nothing about it reaches the server on its own (see
+            // emitFaceTarget's own comment) - every other client watching
+            // this fight needs to see the same turn, not whatever facing I
+            // had right before the swing landed.
+            emitFaceTarget(enemy.body.position)
         })
     }
     playRandomAnim(entries.animationGroups, "idle", true)
@@ -730,7 +747,7 @@ export function enemyIsHit(data){
     // playSound(soundToPlay, .9, .3)
     const enemPos = enemy.body.position
  
-    poppingTextMesh(`-${dmgToApply}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
+    poppingTextMesh(`-${Math.floor(dmgToApply)}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`
     // keep the underlying data live-synced too, not just the visual bar -

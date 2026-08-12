@@ -127,6 +127,14 @@ let renderCallback = function () {
             case "structed":
                 player.characterAnimations.setState(ANIM_STATE.STRUCTED, 8)
             break
+            // uimanagement.js's startResting/stopResting - reuses the same
+            // STRUCTED clip "structed" mode already plays (a kneeling/
+            // seated-looking pose), just under its own distinct mode name
+            // rather than overloading "structed" itself, which questions.js
+            // already uses for an unrelated one-off post-hit stagger state
+            case "resting":
+                player.characterAnimations.setState(ANIM_STATE.STRUCTED, 8)
+            break
             case "casting":
                 player.characterAnimations.setState(ANIM_STATE.CASTING, 8)
             break

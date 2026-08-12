@@ -1,4 +1,4 @@
-import { getCharState, setCharStateMode, getTotal, updateMP_UI, updateMyDetailsOL } from "../charactersystem/characterstate.js";
+import { getCharState, setCharStateMode, getTotal, updateMP_UI, updateMyDetailsOL, getCanPress } from "../charactersystem/characterstate.js";
 import { getSocket } from "../sockets/joinsocket.js";
 import { getIsSocketOn } from "../sockets/worldsocket.js";
 import { createElement, checkIfTokenSaved } from "../tools/tools.js";
@@ -317,6 +317,10 @@ let cascadeActive = false
 
 slotbuttons.forEach(btn => {
     btn.addEventListener("click", () => {
+        // resting (uimanagement.js's startResting/stopResting) - same gate
+        // every raw movement input path and the walkrun-btns click handler
+        // already check, extended here so skill casting is unreachable too
+        if(!getCanPress()) return
         const socket = getSocket()
         const charState = getCharState()
         const skillName = btn.className.split(" ")[2]
@@ -424,7 +428,7 @@ slotbuttons.forEach(btn => {
         clearTimeout(activeSkillResetTimers.get(skill.name))
         activeSkillResetTimers.delete(skill.name)
 
-        if(willActivate && (skill.effects?.effectType === "offense" || skill.effects?.effectType === "trigger")){
+        if(willActivate && (skill.effects?.effectType === "offense" || skill.effects?.effectType === "trigger" || skill.effects?.effectType === "buff")){
             // burstshots (formerly named "multicast") is the only skill
             // whose own cast sequence outlives its nominal castDuration -
             // its circles keep staggering out for up to MULTICAST_MAX_STAGGER_MS

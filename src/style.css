@@ -85,8 +85,39 @@ canvas {
   top: 0;
   z-index: 2;
 }
+.walk-run-icons-container .rest {
+  right: -35px;
+  top: 20%;
+  z-index: 2;
+  width: 70px;
+  height: 70px;
+}
 .walk-run-icons-container .icon-btn:active {
   opacity: 0.9;
+}
+
+/* resting - shown only while player.mode === "resting" (uimanagement.js's
+startResting/stopResting), the one thing still clickable once
+hideShowAllScreenUI(false) + setCanPress(false) shut everything else off */
+.center-button {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  padding: 14px 36px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.75);
+  color: #f0e6d2;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+.center-button:active {
+  background: rgba(40, 40, 40, 0.85);
 }
 
 .disabled {

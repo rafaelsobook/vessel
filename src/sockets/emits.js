@@ -66,6 +66,48 @@ export function emitMyLoc(newMode, weaponName){
         weaponName: weaponName ? weaponName : undefined
     })
 }
+// createEnemy.js's atkCollider hit handler - faceForward(inputMovement.js)
+// only turns the LOCAL player's own body (a smooth multi-frame slerp, see
+// its own comment), nothing else in this game ever tells the server about
+// it, so every OTHER client just kept rendering whatever facing this player
+// had BEFORE the swing turned them - multiplayer sync now, matching the
+// "same" info every other move/mode change already broadcasts.
+//
+// Deliberately does NOT read dirTarg back from getPlayerCoord (like
+// emitMove/emitStop/emitMyLoc all do) - that recomputes dirTarg from the
+// body's CURRENT facing, which at the instant faceForward is called hasn't
+// actually turned yet (the slerp plays out over the next several frames).
+// targetPos is passed in directly instead - the exact point being faced,
+// known immediately, no need to wait for the animation to catch up.
+// Reuses "emitLoc" (same event emitMyLoc already sends) - tcp/index.ts's
+// handler for it just stores pos/dirTarg/mode verbatim and rebroadcasts,
+// no assumption about movement state, unlike emitmove/emitStop which also
+// flip player._moving.
+export function emitFaceTarget(targetPos){
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    const { pos, mode } = getPlayerCoord(charState.owner)
+    if(!pos) return
+
+    // dirTarg.y forced to the CASTER's own y, not targetPos.y - faceForward
+    // itself only ever rotates around the Up axis (Math.atan2 on x/z,
+    // vertical difference never enters the angle at all), so an enemy
+    // standing well above/below the player shouldn't pitch anyone's body up
+    // or down to "face" them. worldsocket.js's "emitLoc" receive handler
+    // uses dirTarg.y as-is with no flattening of its own (unlike its
+    // "emitStop" handler, which flattens to the RECEIVING player's own y) -
+    // has to be done here instead, or a tall/short enemy would visibly tilt
+    // every other client's view of this player.
+    socket.emit("emitLoc", {
+        ownerId: charState.owner,
+        pos,
+        dirTarg: { x: targetPos.x, y: pos.y, z: targetPos.z },
+        mode,
+        placeId: charState.currentPlace.placeId,
+    })
+}
 export function emitDied() {
     if (!getIsSocketOn()) return
     const socket = getSocket()
@@ -194,6 +236,21 @@ export function emitEnemyCurse(data){
     const socket = getSocket()
     if(!socket) return
     socket.emit("enemyCurse", data)
+}
+// tcp/index.ts's registerPlayerAsEnemy handler - sets enem._targetId/
+// _dirTarg so the enemy actually turns to fight back. createEnemy.js's own
+// atkDetection trigger already emits this same "registerPlayerAsEnemy"
+// event directly (melee proximity - a player's body physically entering
+// the enemy's trigger zone), this is the shared/exported twin of that for
+// skillEffects.js's ranged/AOE skill hits, which land with no proximity
+// trigger involved at all. Server-side _targetId is sticky (only ever set
+// once, see that handler's own early-return), so calling this again for an
+// enemy that's already aggroed on someone else is a harmless no-op.
+export function emitRegisterPlayerAsEnemy(data){
+    if(!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("registerPlayerAsEnemy", data)
 }
 export function emitEnemyYCorrection(enemyId, y, x, z){
     if (!getIsSocketOn()) return

@@ -24,7 +24,7 @@
  * @param {TcpCharDet} tcpCharDet
  */
 import { sceneCleanupReady } from "../components/cleanup.js"
-import { attachControllerToThisCharacter } from "../controllers/inputMovement.js"
+import { attachControllerToThisCharacter, markDashActive } from "../controllers/inputMovement.js"
 import { getSceneDet } from "../main/main.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { attachCam } from "../tools/camera.js"
@@ -69,15 +69,46 @@ function createAttackColliderForEnemy(scene, body){
     atkCollider.position = new Vector3(0, 0, 2.5)
     atkCollider.isVisible = false
     atkCollider.actionManager = new ActionManager(scene)
-    scene.registerBeforeRender(() => {
-        if(!body) return
-        atkCollider.position.y += 10 * (scene.getEngine().getDeltaTime() / 1000)
-    })
+    // parked far out of reach of anything at rest - see positionAtkCollider's
+    // own comment. No more perpetual registerBeforeRender climb here: that
+    // used to run every frame for the entire life of the scene with nothing
+    // ever capping it, so between attacks (most of actual play time) the box
+    // sat at some arbitrary, ever-growing Y - and Scene._checkIntersections()
+    // (@babylonjs/core/scene.pure.js) still bounding-box-tests it against
+    // every currently-loaded enemy every single frame regardless, since
+    // that check is unconditional for any mesh with an OnIntersection
+    // trigger registered, no matter how far away it actually is. Parking it
+    // at a single fixed, bounded position when idle doesn't reduce that
+    // per-frame check count (still O(enemy count), inherent to using
+    // ActionManager's intersection triggers at all), but at least it's a
+    // fixed number instead of drifting into the hundreds of thousands over
+    // a long session.
+    atkCollider.position.y = ATK_COLLIDER_PARKED_Y
     return atkCollider
 }
+// how far below the ground the box waits between attacks - arbitrary, just
+// has to be somewhere no enemy's hitbox could ever reach
+const ATK_COLLIDER_PARKED_Y = -1000
+// how long the box stays at the caster's own body height (where it was
+// positioned in front of them) before getting parked back out of reach -
+// long enough for a real swing to land (the exit-intersection trigger only
+// needs a single "was overlapping, now isn't" transition, whether that's
+// from the enemy walking out of it or from the box itself moving away), but
+// not so long it lingers as a stale hit zone well after the swing animation
+// finished
+const ATK_COLLIDER_ACTIVE_MS = 500
+// player mass is 10 (see createcharacter.js's createAggregate call) - impulse
+// = mass * deltaV, so this gives an instant forward deltaV of 2 m/s. Bump
+// this up (not the deltaV math) if the dash should feel punchier.
+const DASH_IMPULSE = 100
+// tracks the pending "park it back out of reach" timeout across calls - a
+// second attack press before the first one's timeout fires would otherwise
+// leave two competing timeouts racing, the earlier one yanking the box away
+// mid-way through the SECOND swing's own intersection window
+let parkTimeoutId
 export function positionAtkCollider(pos, dirTarg){
     const charState = getCharState()
-    if(!charState) return 
+    if(!charState) return
     const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!player) return
     const atkCollider = getSceneDet().scene.getMeshByName(`atkCollider`)
@@ -99,11 +130,38 @@ export function positionAtkCollider(pos, dirTarg){
     const spawnPos = player.body.absolutePosition
         .add(worldForward.scale(reach))
 
+    // spawnPos.y (the player's own body/chest height, not forced down to
+    // ATK_COLLIDER_PARKED_Y or swept up through it anymore) is what actually
+    // has to overlap the target enemy's hitbox now - every enemy body is
+    // sized well past a normal player's own height/width, so this stays a
+    // reliable overlap without needing a per-enemy-height sweep
     atkCollider.position.copyFrom(spawnPos)
-    
+
     // Optionally match player's Y rotation so collider faces same way
     if(player.body.rotationQuaternion){
         atkCollider.rotationQuaternion = player.body.rotationQuaternion.clone()
     }
-    atkCollider.position.y = -2
+
+    // Attack dash - shove the player forward in the swing direction.
+    // applyImpulse lives on aggregate.BODY, not the aggregate itself.
+    // mass:10 (set at aggregate creation, see createcharacter.js) means
+    // an impulse of DASH_IMPULSE gives an instant deltaV of
+    // DASH_IMPULSE/10 m/s forward (impulse = mass * deltaV) - tune the
+    // constant, not the math. Applied at the body's own position (its
+    // center) so this stays pure translation - the aggregate's inertia
+    // was already zeroed out at creation (locked rotation, capsule
+    // shouldn't tip over), so an off-center location wouldn't spin it
+    // anyway, but there's no reason to rely on that here.
+    if(player.aggregate){
+        player.aggregate.body.applyImpulse(worldForward.scale(DASH_IMPULSE), player.body.absolutePosition)
+        // without this, inputMovement.js's own movement loop hard-overwrites
+        // linear velocity every physics tick while a movement key/joystick is
+        // held - which stomps this impulse before it ever renders a frame
+        markDashActive()
+    }
+
+    clearTimeout(parkTimeoutId)
+    parkTimeoutId = setTimeout(() => {
+        atkCollider.position.y = ATK_COLLIDER_PARKED_Y
+    }, ATK_COLLIDER_ACTIVE_MS)
 }

@@ -1080,6 +1080,56 @@ export const massivedisintegrationSkill = {
     desc: "Summons a massive circle of annihilation - anyone caught near or inside its radius is consumed by disintegrating flame.",
 }
 
+// --- MJOLNIR (lightning) - the first BUFF skill, not an offense skill: no
+// target, no projectile, no damage roll of its own. Casting it wreathes
+// your own equipped weapon in lightning and grants a temporary flat bonus
+// to your melee weapon damage - see attackingSystem.js's activateSkill
+// ("buff" effectType, alongside "offense"/"trigger") and skillEffects.js's
+// castBuffSkill/applyWeaponBuff.
+//
+// requireMode intentionally OMITTED, not the literal string "none" -
+// disintegrationSkill's own comment above explains why: skillsui.js's gate
+// is `if(skill.requireMode && charState.mode !== skill.requireMode)`, only
+// skipped when requireMode is FALSY. Setting it to "none" would demand
+// charState.mode === "none" forever, a mode that doesn't exist - permanently
+// locking the skill instead of freeing it to fire from any mode.
+//
+// buff (new field, read by skillEffects.js's applyWeaponBuff) - toAdd is
+// scaled by powerScale (mana-output-slider * lvl-based explosionScale) at
+// cast time, same convention every other skill's plusDmg already follows,
+// so upgrading mjolnir's level (which bumps explosionScale automatically,
+// see upgradeSkill) makes the buff itself stronger even though
+// effects.plusDmg/dmgPm stay 0 here (there's no direct damage to bump).
+// buffDuration is independent of skillCoolDown - some overlap window (buff
+// still has 5s left when it comes off cooldown) is intentional, not a bug.
+export const mjolnirSkill = {
+    slotNumber: 31,
+    equiped: true,
+    isActive: false,
+    name: "mjolnir",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "lightning",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Mjolnir",
+    castDuration: 0.6,
+    returnModeDura: 900,
+    skillCoolDown: 15000,
+    demand: [{ name: "mp", minCost: 35, cost: 0 }],
+    effects: { effectType: "buff", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    buff: { stat: "meeleeDmg", toAdd: 60, percent: 0, buffDuration: 20000 },
+    skillrank: 3,
+    // no plusDmg/dmgPm to bump per level (same reasoning multicastSkill's
+    // own upgradePlus: 0 gives) - the buff itself still scales via
+    // explosionScale/powerScale at cast time, see the header comment above
+    upgradePlus: 0,
+    explosionColor: "blue",
+    magicCircleImg: "apt_lightning",
+    desc: "Calls down the hammer's own charge into your weapon - your blade crackles with lightning and strikes harder for a short time.",
+}
+
 export const skillsData = [
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
@@ -1096,7 +1146,8 @@ export const skillsData = [
     astralrainSkill,
     darkorbSkill,
     burstshotsSkill,
-    multicastSkill, disintegrationSkill, massivedisintegrationSkill
+    multicastSkill, disintegrationSkill, massivedisintegrationSkill,
+    mjolnirSkill
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an

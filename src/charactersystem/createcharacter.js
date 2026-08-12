@@ -425,15 +425,17 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
 
 function createMainCapsuleToClone(scene){
-    const mainCapsule = MeshBuilder.CreateCapsule("capsule", 
-        { 
-            radius: capsuleRadius, 
-            height: capsuleHeight 
-        }, 
+    const mainCapsule = MeshBuilder.CreateBox("capsule",
+        {
+            width: capsuleRadius * 2,
+            depth: capsuleRadius * 2,
+            height: capsuleHeight
+        },
         scene
     );
     mainCapsule.isVisible=false
     mainCapsule.isPickable=false
+    return mainCapsule
 }
 function createMainBodyTargetToClone(scene){
     const bodytarget = MeshBuilder.CreateBox("bodytarget", 
@@ -445,6 +447,7 @@ function createMainBodyTargetToClone(scene){
     );
     bodytarget.isVisible = false
     bodytarget.isPickable  =false
+    return bodytarget
 }
 function createAnimeBody(containers, body, bodytarget, det, scene){
     const { animeBody, hairs } = containers
@@ -585,12 +588,12 @@ function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
     let mainCapsule = scene.getMeshByName("capsule")
     let mainBodyTarget = scene.getMeshByName("bodytarget")
     if(mainCapsule === null){
-        createMainCapsuleToClone(scene)
-        mainCapsule = scene.getMeshByName("capsule")
+        
+        mainCapsule = createMainCapsuleToClone(scene)//scene.getMeshByName("capsule")
     }
     if(mainBodyTarget === null){
-        createMainBodyTargetToClone(scene)
-        mainBodyTarget = scene.getMeshByName("bodytarget")
+        mainBodyTarget =createMainBodyTargetToClone(scene)
+        // mainBodyTarget = scene.getMeshByName("bodytarget")
     }
 
     const body = mainCapsule.clone(`player.${ownerId}`, scene)

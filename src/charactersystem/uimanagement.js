@@ -1,7 +1,7 @@
 import { showItemInfo } from "./itemInfoSystem.js"
 import { closeInventory, openUpdateInventory } from "./inventory.js"
 import { openOrCloseStats } from "./statsSystem.js"
-import { getCharState, getTotal, setCanPress, setCharStateMode, updateSP_UI } from "./characterstate.js"
+import { getCharState, getTotal, setCanPress, getCanPress, setCharStateMode, updateSP_UI } from "./characterstate.js"
 import { getIsSocketOn } from "../sockets/worldsocket.js"
 import { emitAttack, emitMode, emitMyLoc } from "../sockets/emits.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
@@ -10,7 +10,7 @@ import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
 import { openCloseSkills } from "../components/skillsui.js"
-import { getIsGrounded, getPlayerMode } from "../controllers/inputMovement.js"
+import { getIsGrounded, getPlayerMode, forceStopMovement } from "../controllers/inputMovement.js"
 import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSliders.js"
 import { openCloseChatContainer, hideShowChatToggleBtn } from "../components/worldChatSystem.js"
 
@@ -21,6 +21,48 @@ const walkRunBtns       = document.querySelectorAll(".walkrun-btns")
 const conts       = document.querySelectorAll(".cont")
 const itemSlotList   = document.querySelector(".slots-list")
 const inventoryCont  = document.querySelector(".inventory-container")
+const wakeUpBtn      = document.querySelector(".wake-up-btn")
+
+// RESTING - player.mode "resting" (see skillsData.js-style mode gating
+// throughout this game: renderer.js's own switch drives the "structed"
+// clip off it, tcp/index.ts's "emitMode" handler just stores/rebroadcasts
+// it like any other mode). While resting, canPress is false - every other
+// input path (keyboard/joystick movement in inputMovement.js, this file's
+// own walkRunBtns click handler below, skillsui.js's skill-slot clicks)
+// already gates on getCanPress()/checks it here, so the ONLY thing still
+// reachable is wakeUpBtn's own click handler further below, which isn't
+// gated at all.
+export function startResting(){
+    const charState = getCharState()
+    if(!charState) return
+    if(charState.mode === "resting") return
+    const weapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+
+    // BEFORE setCanPress(false) - forceStopMovement's own comment covers
+    // why: a movement key still physically down at this exact instant
+    // would otherwise never get a clean release (canPress swallows the
+    // keyup that would've handled it), leaving stale input/velocity and no
+    // emitStop() ever reaching other clients
+    forceStopMovement()
+
+    setCharStateMode("resting")
+    if(getIsSocketOn()) emitMode("resting", weapon?.name)
+    setCanPress(false)
+    hideShowAllScreenUI(false)
+    if(wakeUpBtn) wakeUpBtn.style.display = "block"
+}
+export function stopResting(){
+    const charState = getCharState()
+    if(!charState) return
+    if(charState.mode !== "resting") return
+    const weapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+
+    setCharStateMode("idle")
+    if(getIsSocketOn()) emitMode("idle", weapon?.name)
+    setCanPress(true)
+    hideShowAllScreenUI(true)
+    if(wakeUpBtn) wakeUpBtn.style.display = "none"
+}
 
 let buttonsActivated = false
 let canChangeMode = true
@@ -73,6 +115,13 @@ export function activateBtnOnce(){
     walkRunBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
             if(getGameStatus() === "gameover" || getGameStatus() === "loading") return
+            // resting (see startResting/stopResting above) - canPress is
+            // already what every raw movement input path gates on
+            // (inputMovement.js), this is the same gate extended to these
+            // buttons too, so attack/cast/walk/running/rest are all
+            // unreachable while resting - only wakeUpBtn's own untouched
+            // handler further below can end it
+            if(!getCanPress()) return
             const btnName = e.target.className.split(" ")[1]
             const isSocketOn = getIsSocketOn()
             
@@ -207,6 +256,13 @@ export function activateBtnOnce(){
                     }
 
                 break
+                case "rest":
+                    clickedTimeOut = setTimeout(() => {
+                        disableEnableWalkRunButtons(true)
+                    }, 100)
+                    if(!canChangeMode) break
+                    startResting()
+                break
                 case "throw":
                     // if(this.myChar.mode !== "weapon") return this._statPopUp("You must hold a weapon")
                     // closeGameUI()
@@ -262,6 +318,12 @@ export function activateBtnOnce(){
         btn.addEventListener("click", e=> {
             e.target.parentElement.style.display="none"
         })
+    })
+    // wake up from resting - deliberately NOT gated by getCanPress() (it's
+    // false the entire time we're resting - this is the one control meant
+    // to still work)
+    wakeUpBtn?.addEventListener("click", () => {
+        stopResting()
     })
 
     document.addEventListener("keyup", e => {

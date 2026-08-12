@@ -1,11 +1,33 @@
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
-import { getAdditionalsFromAbilities, getCharState, getTotalAtkSpd } from "./characterstate"
+import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 import { getSceneDet } from "../main/main"
-import { castOffenseSkill, castMulticast, cancelPendingCast } from "../creations/skillEffects"
+import { castOffenseSkill, castMulticast, castBuffSkill, cancelPendingCast } from "../creations/skillEffects"
 import { UPGRADE_TEMPLATES } from "../staticRecources/skillUpgrades"
 
-export function attack(_attackInfo, attackAnimName){  
+// CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
+// stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
+// server/routes/characterR.js's own new-character stats) and grow together
+// (statsSystem.js's own dex upgrade bumps accuracy+=.25 alongside
+// critical+=.25 in the same click, with accuracy's own inline comment
+// already calling it "the higher chance of effective strike") - this is
+// just the first place that comment's promise actually gets paid off in a
+// real damage roll. Kept as tunable constants rather than baked into the
+// formula below so the curve can be adjusted without hunting through the
+// math.
+//
+// chancePercent = accuracy * CRIT_CHANCE_PER_ACCURACY, capped at
+// CRIT_CHANCE_CAP - a fresh lvl1 character (accuracy 1) starts at 5%,
+// capped at 75% so a crit never becomes a guaranteed every-hit at high
+// accuracy.
+const CRIT_CHANCE_PER_ACCURACY = 5
+const CRIT_CHANCE_CAP = 75
+// multiplier = 1 + (critical * CRIT_DMG_PER_CRITICAL) - a fresh lvl1
+// character (critical 1) crits for 1.5x, growing +0.125x per dex point
+// spent (critical+=.25 per point, same rate accuracy grows at)
+const CRIT_DMG_PER_CRITICAL = 0.5
+
+export function attack(_attackInfo, attackAnimName){
     const {
         owner,
         pos,
@@ -107,6 +129,16 @@ export function activateSkill(ownerId, skillDetail, casterStats){
                     // don't fire late
                     cancelPendingCast(skillDetail.name)
                 }
+            } else if(skillDetail.effects?.effectType === "buff"){
+                // any self-buff skill (mjolnirSkill and any future one,
+                // see skillsData.js) rides the same generic buff-cast
+                // engine, same "one skillsData.js entry, not a new case
+                // here" reasoning as offense skills above
+                if(skillDetail.isActive){
+                    castBuffSkill(getSceneDet().scene, player, skillDetail, casterState)
+                } else {
+                    cancelPendingCast(skillDetail.name)
+                }
             }
         break
     }
@@ -199,8 +231,15 @@ export function getAttackInfo(){
     }
 }
 export function calcDmg(charState){
-    
+
     const abilityAdditions = getAdditionalsFromAbilities()
+    // mjolnirSkill and any future skillEffects.js buff - summed in
+    // ADDITIVELY alongside whatever the ability system already grants,
+    // completely independent of it (see getActiveBuffAdditions' own
+    // comment on why this can't just live inside abilityAdditions itself).
+    // meeleeDmg only for now - {toAdd:0, percent:0} fallback so a charState
+    // with no active buff at all doesn't need its own separate branch below.
+    const buffAdditions = getActiveBuffAdditions().meeleeDmg || { toAdd: 0, percent: 0 }
     let weaponDet = undefined
     charState.items.forEach(itm => {
         if(itm.itemType === "weapon" && itm.equiped) {
@@ -208,12 +247,12 @@ export function calcDmg(charState){
         }
     })
 
-    let physicalDmg = abilityAdditions.additionalMeeleeDmg.toAdd + charState.stats.strength*4
-    
+    let physicalDmg = abilityAdditions.additionalMeeleeDmg.toAdd + buffAdditions.toAdd + charState.stats.strength*4
+
     // log(abilityAdditions.additionalMeeleeDmg.toAdd)
     // log(abilityAdditions.additionalMeeleeDmg.percent)
-    if(abilityAdditions.additionalMeeleeDmg.percent){
-        const addedDmgByPercent = physicalDmg*abilityAdditions.additionalMeeleeDmg.percent
+    if(abilityAdditions.additionalMeeleeDmg.percent || buffAdditions.percent){
+        const addedDmgByPercent = physicalDmg*(abilityAdditions.additionalMeeleeDmg.percent + buffAdditions.percent)
         physicalDmg = physicalDmg+addedDmgByPercent
         // console.log(addedDmgByPercent)
     }
@@ -232,7 +271,28 @@ export function calcDmg(charState){
     if(weaponDet){
         weaponDmg = physicalDmg + weaponDet.equipAbilities.dmg + (charState.stats.weapon*10)
     }
-    return { physicalDmg, weaponDmg, magicDmg, accuracy}
+
+    // resolved HERE, client-side, before dmgDetails ever leaves this
+    // function - same "server only authoritative for hp/removal, never for
+    // whether a hit even landed/how hard" convention every other hit-
+    // resolution decision in this game already follows (see
+    // emitEnemyIsHit's own comment, tcp/index.ts's "enemyIsHit" handler
+    // just does enemyTarg.hp -= dmgToApply on whatever physicalDmg/
+    // weaponDmg arrives, no crit logic of its own to keep in sync). Player-
+    // only, deliberately: enemies keep their own stats.critical/accuracy
+    // (genenemy.ts) as pure flavor data for now - "enemy-attacked"'s own
+    // damage-to-player path never calls calcDmg at all, so this can't
+    // reach it by accident.
+    const critChancePercent = Math.min(CRIT_CHANCE_CAP, accuracy * CRIT_CHANCE_PER_ACCURACY)
+    const isCritical = Math.random() * 100 < critChancePercent
+    if(isCritical){
+        const critMultiplier = 1 + charState.stats.critical * CRIT_DMG_PER_CRITICAL
+        physicalDmg = Math.round(physicalDmg * critMultiplier)
+        weaponDmg = Math.round(weaponDmg * critMultiplier)
+        magicDmg = Math.round(magicDmg * critMultiplier)
+    }
+
+    return { physicalDmg, weaponDmg, magicDmg, accuracy, isCritical }
 }
 export function calcPercent(currentNum, totalNum){
     return currentNum/totalNum * 100

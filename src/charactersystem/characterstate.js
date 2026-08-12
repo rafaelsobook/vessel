@@ -38,6 +38,9 @@ const negativeStatCont = document.querySelector(".negative-stats")
 let characterState = null;
 let canPress = false
 let outsideRoomPosition = null
+// uimanagement.js's startResting/stopResting - see restInterval's own
+// comment below for the resulting recovery time
+const REST_SLEEP_REGEN_PER_TICK = 2
 
 let hpRegenInterval
 let mpRegenInterval
@@ -253,6 +256,47 @@ export function getAdditionalsFromAbilities(){
     return addStats
 }
 
+// active timed buffs (skillEffects.js's castBuffSkill/applyWeaponBuff -
+// mjolnirSkill and any future buff skill) - deliberately a SEPARATE store
+// from addStats above, not just more fields folded into it. addStats is
+// wholly owned/overwritten by summarizeStats() every time it runs (from
+// equipment/blessing totals - see that function's own header comment on
+// why even a truthy check there only ever REPLACES a field, never adds to
+// it) - a temporary skill buff living in that same object would either get
+// silently overwritten the next time an ability/equip change triggers
+// summarizeStats(), or fight it in the other direction. Keeping buffs in
+// their own list that expires on its own wall-clock timer, summed in
+// separately wherever it's actually consumed (see attackingSystem.js's
+// calcDmg), avoids both.
+let activeBuffs = []
+// buff: {id, stat, toAdd, percent, expiresAt} - id re-adds replace any
+// existing buff with the same id (e.g. recasting mjolnir before the first
+// one expires refreshes it instead of stacking a second one)
+export function addTempBuff(buff){
+    activeBuffs = activeBuffs.filter(b => b.id !== buff.id)
+    activeBuffs.push(buff)
+}
+export function removeTempBuff(id){
+    activeBuffs = activeBuffs.filter(b => b.id !== id)
+}
+// sums every currently-active buff (stale/expired ones swept out here too,
+// not just wherever their own setTimeout fires - a stat read between the
+// wall-clock expiry and that timeout callback actually running would
+// otherwise still count it) into a {toAdd, percent} pair per stat, same
+// shape addStats.additionalMeeleeDmg/additionalMagicDmg already use so
+// callers can add the two together with identical math
+export function getActiveBuffAdditions(){
+    const now = Date.now()
+    activeBuffs = activeBuffs.filter(b => b.expiresAt > now)
+    const totals = {}
+    activeBuffs.forEach(b => {
+        if(!totals[b.stat]) totals[b.stat] = { toAdd: 0, percent: 0 }
+        totals[b.stat].toAdd += b.toAdd || 0
+        totals[b.stat].percent += b.percent || 0
+    })
+    return totals
+}
+
 // ACTIVATIONS
 export function activateLifeSystem(){
     const {name, lvl} = characterState
@@ -318,8 +362,17 @@ export function activateLifeSystem(){
     // I PUT THE STATS DEDCUTION HERE
     restInterval = setInterval(() => {
         // if(getGameStatus() === "gameover") return
-        if(characterState.survival.sleep > 0) characterState.survival.sleep-=.2
-        if(characterState.survival.sleep < 0.2) characterState.survival.sleep = 0
+        // uimanagement.js's startResting/stopResting - REST_SLEEP_REGEN_PER_TICK
+        // is 10x the normal depletion step, so resting from empty to full
+        // takes roughly 5 minutes at this same 6.2s cadence instead of the
+        // ~50 minutes a straight reversal of the depletion rate would take
+        if(characterState.mode === "resting"){
+            if(characterState.survival.sleep < 100) characterState.survival.sleep += REST_SLEEP_REGEN_PER_TICK
+            if(characterState.survival.sleep > 100) characterState.survival.sleep = 100
+        } else {
+            if(characterState.survival.sleep > 0) characterState.survival.sleep-=.2
+            if(characterState.survival.sleep < 0.2) characterState.survival.sleep = 0
+        }
         updateSurvival_UI();
         if(characterState.survival.sleep < 10){
             restStat.parentElement.children[0].style.animation = "blinkingRed .5s infinite"

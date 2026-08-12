@@ -23,6 +23,15 @@ let aggregate = null
 let myPlayer = null
 let rotationHelper = null;
 let saveLocTimeout
+// assigned inside setupControls() (see its own comment right where it's
+// set) - forceStopMovement below is the only way anything OUTSIDE this
+// closure (uimanagement.js's startResting) can reach setupControls()'s own
+// private input/isMoving state and its already-battle-tested
+// stopMovementAndSave (zeroes horizontal velocity, clears isMoving,
+// emitStop()s so every other client sees the stop too, schedules the
+// position save) - same function every existing "stop moving" path
+// (joystick release/deadzone) already calls
+let forceStopMovementFn = null
 let checkFallInVoidTimeout = undefined
 let isGroundedFlag = true
 let modeBeforeAir = null
@@ -32,6 +41,18 @@ let modeBeforeAir = null
 let fallPeakY = null
 // handle returned by attachLightning() - toggled on/off by repeated "e" presses
 let weaponLightning = null
+// timestamp (performance.now()) until which updateMovement's own isMoving
+// branch below should NOT hard-overwrite linear velocity - without this, an
+// attack-dash impulse (createMyCharacter.js's positionAtkCollider) gets
+// stomped on the very next physics tick whenever a movement key/joystick is
+// still held at the moment of the swing, since that branch runs unconditionally
+// every tick and SETS velocity rather than adding to it
+let dashLockUntil = 0
+// called by positionAtkCollider right after applyImpulse - see the isMoving
+// branch below for the other half of this
+export function markDashActive(ms = 300){
+    dashLockUntil = performance.now() + ms
+}
 
 // mirrors renderer.js's player.mode switch - used to tell the fallimpact
 // one-shot (see the landing branch in updateMovement()) which loop state to
@@ -42,6 +63,7 @@ const MODE_TO_ANIM_STATE = {
     structed: ANIM_STATE.STRUCTED,
     casting: ANIM_STATE.CASTING,
     minning: ANIM_STATE.MINNING,
+    resting: ANIM_STATE.STRUCTED,
 }
 
 // reused every physics tick instead of `new Vector3(...)` inline in
@@ -80,6 +102,22 @@ export function relocatePos(body, newPos){
         aggregate.body.setLinearVelocity(Vector3.Zero())
         aggregate.body.setAngularVelocity(Vector3.Zero())
     }
+}
+// uimanagement.js's startResting - forcing canPress false mid-stride only
+// blocks NEW input from here on (handleKeyDown/handleKeyUp/joystick
+// handlers, updateMovement's own early-return), it does nothing about
+// input/velocity ALREADY in flight the instant it happens: a movement key
+// released after canPress goes false never reaches stopMovementAndSave at
+// all (handleKeyUp's own canPress gate swallows it), leaving isMoving/
+// input.forward/right stuck AND the physics body still carrying whatever
+// velocity it already had - the character would keep visibly sliding, and
+// waking back up would resume walking in a direction nothing is actually
+// pressing anymore, with no emitStop() ever having told other clients any
+// of this happened. Call this instead, right when the caller flips
+// canPress false, to force the exact same clean stop every other "stopped
+// moving" path here already goes through.
+export function forceStopMovement(){
+    forceStopMovementFn?.()
 }
 export function faceForward(targP, notPlayerBody){
     const scene = getSceneDet().scene
@@ -403,9 +441,9 @@ function setupControls(scene, allsounds) {
             case "c":
                 console.log("players ", getPlayersOnScene())
                 clearLocTimeOut()
-                // myPlayer.body.position.x = 0
-                // myPlayer.body.position.z = 200
-                // myPlayer.body.position.y = 20
+                myPlayer.body.position.x = 0
+                myPlayer.body.position.z = 1100
+                myPlayer.body.position.y = 20
                 hideShowAllScreenUI(hideUIToggle)
                 hideUIToggle = !hideUIToggle
             break
@@ -675,7 +713,11 @@ function setupControls(scene, allsounds) {
             if (vel.x !== 0 || vel.z !== 0) {
                 aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
             }
-        } else if (isMoving) {
+        } else if (isMoving && performance.now() >= dashLockUntil) {
+            // dashLockUntil check above: a fresh attack-dash impulse is still
+            // resolving - skip the hard velocity overwrite below for a short
+            // window so the dash can actually move the body instead of being
+            // replaced by walk/run speed on the very next tick
             const fwd = rotationHelper.getDirection(Vector3.Forward());
             fwd.y = 0;
             fwd.normalize();
@@ -705,6 +747,16 @@ function setupControls(scene, allsounds) {
     window.addEventListener("pointerup", handleJoystickPointerUp);
     window.addEventListener("pointercancel", handleJoystickPointerUp);
     const physicsObserver = scene.onBeforePhysicsObservable.add(updateMovement);
+
+    // see forceStopMovement's own comment - reassigned every setupControls()
+    // call (i.e. every time a character/scene is (re)created), same as
+    // aggregate/myPlayer above
+    forceStopMovementFn = () => {
+        input.forward = 0
+        input.right = 0
+        if(isMoving) stopMovementAndSave()
+    }
+
     return {
         dispose: () => {
             window.removeEventListener("keydown", handleKeyDown);

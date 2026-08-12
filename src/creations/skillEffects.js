@@ -30,8 +30,8 @@ import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
-import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL } from "../charactersystem/characterstate.js"
+import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy } from "../sockets/emits.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff } from "../charactersystem/characterstate.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
@@ -256,6 +256,108 @@ export function castMulticast(scene, player, skill, charState){
     // harmless no-op), just keeps getPendingCast() accurate afterward
     const doneId = setTimeout(() => { pendingCasts.delete(skill.name) }, maxStaggerMs + perCircleMs + 50)
     timeoutIds.push(doneId)
+}
+
+// "below my feet" ground position for a self-cast skill - same ground-height
+// resolution computeGroundTrapPos already uses (flat-ground fallback vs
+// per-point terrain sampling for openworld's uneven ground), just centered
+// exactly on the caster's own body with no forward offset at all (a buff
+// has no direction to aim, unlike a ground trap which can be thrown some
+// distance out via skill.groundTrap.distance)
+function computeSelfCastGroundPos(charState, player){
+    const isOpenworld = charState.currentPlace.placeId === OPENWORLD_PLACE_ID
+    const x = player.body.position.x
+    const z = player.body.position.z
+    const y = isOpenworld
+        ? sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS)
+        : player.body.position.y - capsuleHeight / 2
+    return new Vector3(x, y, z)
+}
+
+// bound to any buff skill's activation (attackingSystem.js's activateSkill,
+// "buff" effectType branch) - mjolnirSkill and any future one. No target,
+// no projectile: a magic circle blooms flat on the ground right under the
+// caster's own feet (facingDirection omitted, same "lies flat facing the
+// sky" reasoning disintegrationSkill's own trap circle uses - this is an
+// on-yourself effect, not the usual upright in-front-of-hand circle every
+// targeted offense skill shows), then once castDuration elapses,
+// applyWeaponBuff below actually wreathes the weapon and grants the stat.
+export function castBuffSkill(scene, player, skill, charState){
+    cancelPendingCast(skill.name)
+    if(!player?.body || !scene) return
+
+    const powerScale = (skill._castPowerScale ?? 1) * (skill.explosionScale ?? 1)
+    const groundPos = computeSelfCastGroundPos(charState, player)
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    createMagicCircle(groundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, CIRCLE_SIZE_SCALE)
+
+    const timeoutId = setTimeout(() => {
+        pendingCasts.delete(skill.name)
+        applyWeaponBuff(scene, player, charState, skill, powerScale)
+    }, skill.castDuration * 1000)
+
+    pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
+}
+
+// the actual "wreathe the weapon + grant the stat" - runs identically on
+// every client watching the cast (same as every offense skill's own hit
+// handler - this function, like fireElementalProjectile, is reached via the
+// "skillactivated" relay on every connected client, caster included).
+// charState here is the CASTER's info (a lightweight stand-in for anyone
+// who isn't the real caster - see activateSkill's own comment), so the
+// weapon lookup below (player.swordMeshes, keyed off the REAL rendered
+// mesh, not charState) works the same regardless of who cast this, but the
+// actual stat mutation is still gated to the real caster's own client -
+// crediting every watching client with their OWN stat boost from someone
+// else's cast would be the exact same "other players get exp too" bug
+// class fireElementalProjectile's own isCaster comment describes, just for
+// a buff instead of a hit.
+function applyWeaponBuff(scene, player, charState, skill, powerScale){
+    const buffDuration = skill.buff?.buffDuration ?? 15000
+
+    // whichever weapon is actually visibly equipped right now -
+    // swordMeshes holds every weapon this player has ever equipped
+    // (createcharacter.js's createSword pushes, never removes), only one
+    // shown at a time. showHideSword only toggles the CHILD meshes'
+    // isVisible (see its own definition), not the parent sword entry's own
+    // mesh, so the visible weapon has to be found by checking its children,
+    // not sw.mesh.isVisible itself. Reading real rendered state instead of
+    // charState.items also means this works identically for a remote
+    // caster, whose charState here has no items list at all.
+    const weaponEntry = player.swordMeshes?.find(sw => sw.mesh?.getChildMeshes().some(m => m.isVisible))
+    // weaponGlow:false - the weapon keeps its own real material/texture,
+    // just gets lightning arcs crackling around it (same reasoning
+    // getIconMat's own comment gives for why true would flatten a mesh
+    // that already has real art onto it). Purely visual, runs for every
+    // watching client, no isCaster gate - everyone who saw the weapon light
+    // up should see it stop too, not just the caster.
+    const lightningFx = weaponEntry
+        ? attachLightning(scene, weaponEntry.mesh, skill.explosionColor || "blue", false, { arcCount: 3, width: 0.022, updateInterval: 80 })
+        : null
+    setTimeout(() => {
+        lightningFx?.dispose()
+    }, buffDuration)
+
+    if(charState.owner === getCharState()?.owner){
+        // one buff slot per skill name - recasting before the previous one
+        // expires refreshes the duration instead of stacking a second,
+        // independent bonus (see addTempBuff's own comment)
+        const buffId = `skillbuff_${skill.name}`
+        addTempBuff({
+            id: buffId,
+            stat: skill.buff?.stat || "meeleeDmg",
+            // scaled by powerScale (mana-output-slider * lvl-based
+            // explosionScale) at the moment the buff actually lands, same
+            // convention every offense skill's own totalDmg calc already
+            // follows for plusDmg
+            toAdd: Math.round((skill.buff?.toAdd || 0) * powerScale),
+            percent: skill.buff?.percent || 0,
+            expiresAt: Date.now() + buffDuration,
+        })
+        setTimeout(() => {
+            removeTempBuff(buffId)
+        }, buffDuration)
+    }
 }
 
 // cached template mesh per shape, CLONED (not instanced) per cast - every
@@ -1362,6 +1464,30 @@ function playImpactSound(skill){
     getAllSounds()[impactSoundName]?.play()
 }
 
+// tcp/index.ts's registerPlayerAsEnemy handler (enem._targetId/_dirTarg) -
+// createEnemy.js's own melee atkDetection trigger already does this the
+// instant a player's body physically walks into the enemy's trigger zone,
+// but a skill can land on an enemy from well outside that range (a
+// projectile, an AOE ground trap, a falling sword) with no proximity
+// trigger involved at all - without this, an enemy hit purely by a skill
+// never picked up a target and just kept doing whatever it was already
+// doing (usually nothing), regardless of who'd actually hit it. Called
+// from every real hit-emitting spot below, right alongside emitEnemyIsHit -
+// only from the real caster's own client, same isCaster gate. Cheap to
+// call repeatedly: _targetId is sticky server-side (registerPlayerAsEnemy
+// only ever sets it once), so re-registering an already-aggroed enemy is a
+// harmless no-op.
+function registerSkillHitTarget(enemy, freshCharState){
+    const caster = getPlayersOnScene().find(pl => pl.owner === freshCharState.owner)
+    if(!caster?.body) return
+    const pos = caster.body.position
+    emitRegisterPlayerAsEnemy({
+        _id: enemy._id,
+        targetId: freshCharState.owner,
+        dirTarg: { x: pos.x, y: pos.y, z: pos.z },
+    })
+}
+
 const PROJECTILE_SPEED = 12
 const PROJECTILE_RANGE_TIMEOUT = 3000 // ms of flight before despawning on a miss
 
@@ -1642,6 +1768,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                     targetId: enemy._id,
                     currentPlaceId: freshCharState.currentPlace.placeId,
                 })
+                registerSkillHitTarget(enemy, freshCharState)
 
                 // skill.enemyBind (see skillsData.js's radiantjudgmentSkill) -
                 // bindChance rolled here, client-side, same as every other hit-
@@ -1891,6 +2018,7 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
                     targetId: enemy._id,
                     currentPlaceId: freshCharState.currentPlace.placeId,
                 })
+                registerSkillHitTarget(enemy, freshCharState)
 
                 if(skill.element === "dark"){
                     emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
@@ -2073,6 +2201,7 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
                 targetId: enemy._id,
                 currentPlaceId: freshCharState.currentPlace.placeId,
             })
+            registerSkillHitTarget(enemy, freshCharState)
         })
     }
 
@@ -2173,6 +2302,7 @@ function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, dura
             targetId: enemy._id,
             currentPlaceId: freshCharState.currentPlace.placeId,
         })
+        registerSkillHitTarget(enemy, freshCharState)
 
         if(skill.enemyBind){
             emitEnemyBind({

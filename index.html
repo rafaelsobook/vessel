@@ -224,16 +224,24 @@
             <img src="./images/UI/cast.webp" alt="" class="icon-img">
         </button>
         <button class="icon-btn attack walkrun-btns">
-            <img src="./images/UI/attack.png" alt="" class="icon-img">
+            <img src="./images/UI/attack.webp" alt="" class="icon-img">
         </button>
         <button class="icon-btn walk walkrun-btns">
-            <img src="./images/UI/walk.png" alt="" class="icon-img">
+            <img src="./images/UI/walk.webp" alt="" class="icon-img">
         </button>
         <button class="icon-btn running walkrun-btns">
-            <img src="./images/UI/run.png" alt="" class="icon-img">
+            <img src="./images/UI/run.webp" alt="" class="icon-img">
             <!-- <img src="./images/UI/goldenring.png" alt="" class="icon-img-ring"> -->
         </button>
+        <button class="icon-btn rest walkrun-btns">
+            <img src="./images/UI/rest.webp" alt="" class="icon-img">
+        </button>
     </div>
+    <!-- shown only while resting (uimanagement.js's startResting/stopResting) -
+    everything else on screen is hidden via hideShowAllScreenUI(false) at the
+    same time, this is deliberately its own standalone element outside every
+    container that call touches, so it's the one thing still clickable -->
+    <button class="center-button wake-up-btn">Wake up</button>
     <!-- ICONS ON RIGHT -->
     <div class="upper-icons-container">
         <button id="actionsBtn" class="uppericon-btn">
