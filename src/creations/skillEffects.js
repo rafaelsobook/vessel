@@ -351,6 +351,7 @@ function getIconMat(scene, skill){
         // emissive + opacityTexture only (no diffuseTexture) - same pairing
         // createMagicCircle uses, reads as a glowing/self-lit icon
         // regardless of scene lighting instead of a flatly shaded image
+        mat.diffuseTexture = tex
         mat.emissiveTexture = tex
         mat.opacityTexture = tex
         mat.emissiveColor = new Color3(1, 1, 1)
@@ -447,7 +448,12 @@ function getSplashParticleTex(scene){
 // "just scaling" per its own request - size is the ONLY thing animated
 // over each particle's own lifetime (addSizeGradient: starts tiny, grows
 // as it flies outward) - no color gradient dance, no rotation, nothing else.
-function spawnSplashBurst(scene, position){
+// scale (default 1) - skill.projectileScale, same generic per-level growth
+// every other projectile style already reads (attackingSystem.js's
+// upgradeSkill) - grows both the particle sizes AND how far the burst
+// actually spreads (the sphere emitter's own radius), so a higher-level
+// cast visibly makes a bigger splash, not just more damage.
+function spawnSplashBurst(scene, position, scale = 1){
     const SPLASH_PARTICLE_COUNT = 40
     const particles = new ParticleSystem(`tidalspike_splash_${Date.now()}`, SPLASH_PARTICLE_COUNT, scene)
     particles.particleTexture = getSplashParticleTex(scene)
@@ -456,14 +462,14 @@ function spawnSplashBurst(scene, position){
     particles.emitter = position.clone()
     particles.minEmitBox = Vector3.Zero()
     particles.maxEmitBox = Vector3.Zero()
-    particles.createSphereEmitter(0.4, 0.7)
+    particles.createSphereEmitter(0.4 * scale, 0.7 * scale)
 
     particles.color1 = new Color4(1, 1, 1, 1)
     particles.color2 = new Color4(1, 1, 1, 1)
     particles.colorDead = new Color4(0, 0, 1, 0.2)
 
-    particles.addSizeGradient(0.05, 0.1)
-    particles.addSizeGradient(1.1, 1.9)
+    particles.addSizeGradient(0.05, 0.1 * scale)
+    particles.addSizeGradient(1.1, 1.9 * scale)
 
     particles.minLifeTime = 0.55
     particles.maxLifeTime = 0.9
@@ -486,7 +492,10 @@ function spawnSplashBurst(scene, position){
 // power, no gravity) instead of flying outward like spawnSplashBurst's own
 // impact version does, and emit sparsely (emitRate: 5, not a burst) for as
 // long as the caller keeps this system alive.
-function spawnSplashHover(scene, position){
+// scale (default 1) - same skill.projectileScale generic per-level growth
+// spawnSplashBurst reads - this one has no spread to widen (it deliberately
+// stays in one spot), so only the particle size itself grows with level.
+function spawnSplashHover(scene, position, scale = 1){
     const particles = new ParticleSystem(`tidalspike_splash_origin_${Date.now()}`, 30, scene)
     particles.particleTexture = getSplashParticleTex(scene)
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
@@ -507,8 +516,8 @@ function spawnSplashHover(scene, position){
     particles.color2 = new Color4(1, 1, 1, 1)
     particles.colorDead = new Color4(1, 1, 1, 0)
 
-    particles.addSizeGradient(0, 0.05)
-    particles.addSizeGradient(1, 1.0)
+    particles.addSizeGradient(0, 0.05 * scale)
+    particles.addSizeGradient(1, 1.0 * scale)
 
     particles.minLifeTime = 0.5
     particles.maxLifeTime = 0.9
@@ -567,6 +576,20 @@ const PROJECTILE_STYLES = {
         // already being set
         addGlow(scene, plane, 0.6)
 
+        // crackling arcs around the plane - same attachLightning call
+        // lightorb/spearlance/halo already use, driven by skill.explosionColor
+        // (maelstromboltSkill's own is "blue") rather than hardcoded, so any
+        // future skill adopting "icon" style gets arcs in its own color too.
+        // weaponGlow: false (not true) - true would flatten the plane's own
+        // material to a plain glow color, wiping out the real projectile
+        // texture underneath, same reason lightorb passes false here. No
+        // light (withLight: false) - one extra PointLight per cast adds up.
+        // Cleanup is automatic - attachLightning wires its own arc/material
+        // teardown to plane.onDisposeObservable, which fires from the
+        // plane.dispose() below on its own, same as every other style that
+        // uses this helper.
+        attachLightning(scene, plane, skill.explosionColor || "blue", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
+
         // (false, false) - material/texture are the shared persistent
         // cache above, not owned by this one clone
         return () => plane.dispose(false, false)
@@ -616,7 +639,14 @@ const PROJECTILE_STYLES = {
                 if(dist < 0.001){ finishCleanup(); return }
                 dir.normalize()
 
-                const BEAM_THICKNESS = 0.5
+                // * skill.projectileScale - same generic per-level growth
+                // every other projectile style already reads
+                // (attackingSystem.js's upgradeSkill) - width (dist) stays
+                // as the real caster-to-target distance regardless of
+                // level (that's not a "size", it's just where the target
+                // is), only the thickness itself grows
+                const projectileScale = skill.projectileScale ?? 1
+                const BEAM_THICKNESS = 0.5 * projectileScale
                 const beamMesh = MeshBuilder.CreatePlane(`tidalspike_beam_${Date.now()}`, { width: dist, height: BEAM_THICKNESS }, scene)
                 beamMesh.position = Vector3.Lerp(startPos, endPos, 0.5)
                 beamMesh.isPickable = false
@@ -664,7 +694,7 @@ const PROJECTILE_STYLES = {
                 // billboarded plane, then a vertex-displaced "wiggling"
                 // plane) - a real particle burst reads as an actual splash
                 // of water flying outward far more directly than either.
-                const endSplashParticles = spawnSplashBurst(scene, endPos)
+                const endSplashParticles = spawnSplashBurst(scene, endPos, projectileScale)
                 // spawnSplashHover (not spawnSplashBurst) at the ORIGIN end
                 // (startPos) - the beam mesh itself just starts abruptly
                 // with a hard, straight cut edge right there (visible
@@ -672,7 +702,7 @@ const PROJECTILE_STYLES = {
                 // hand), this covers that seam - but this is water welling
                 // up at the SOURCE, not an impact, so it stays put in one
                 // spot at a low emitRate instead of bursting outward
-                const startSplashParticles = spawnSplashHover(scene, startPos)
+                const startSplashParticles = spawnSplashHover(scene, startPos, projectileScale)
 
                 const BEAM_LINGER_MS = 3000
                 setTimeout(() => {

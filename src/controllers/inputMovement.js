@@ -527,6 +527,8 @@ function setupControls(scene, allsounds) {
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickSeven(scene, myPlayer.body, {
                     // lookHeight: capsuleHeight / 2,
+                
+                    startDistance: 10,
                     behindDistance: 10,
                     willRewind: false,
                     duration: 9,
