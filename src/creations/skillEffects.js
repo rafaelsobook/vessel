@@ -945,7 +945,7 @@ const PROJECTILE_STYLES = {
         box.material = createGlowingMat(scene, skill.explosionColor || "white")
         // voidrendSkill only - lightpierceSkill shares this same "lightning"
         // style but doesn't get this
-        if(skill.name === "voidrend") box.showBoundingBox = true
+        
         attachLightning(scene, box, skill.explosionColor || "white", true, { arcCount: skill.arcCount ?? 3, width: 0.025, updateInterval: 60 })
         // no manual dispose here - attachLightning already wires its own
         // teardown to box.onDisposeObservable (addOnce), which fires when
@@ -1630,6 +1630,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
         spd: PROJECTILE_SPEED,
         placeId: charState.currentPlace.placeId,
         stuck: false,
+        willDetectSurface: false
     }
     pushProjectile(projectile)
 

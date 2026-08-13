@@ -385,6 +385,7 @@ export const lightpierceSkill = {
     explosionScale: 1,
     projectileStyle: "lightning",
     explosionStyle: "light",
+    enemyBind: { effectType: "bind", shape: "box", bindDuration: 10.5, bindChance: 1 }, // shape: // torus, box,
     arcCount: 3,
     onLevelUp: "growArcAura",
     desc: "A radiant orb crackling with light lances forward, flashing into a bright burst on impact.",

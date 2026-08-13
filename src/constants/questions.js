@@ -246,30 +246,15 @@ export const questions = [
             {
                 name: "kamisama",
                 isLeft: false,
-                message: "I sense POWER from you .."
-            },
-            {
-                name: "kamisama",
-                isLeft: false,
-                message: "Farewell Player, You have a potential to be my vesse....."
-            },
-            {
-                name: "kamisama",
-                isLeft: false,
-                message: "...Eh Eheemm"
-            },
-            {
-                name: "kamisama",
-                isLeft: false,
-                message: "I will now bestow you a weapon useful for your adventure !"
+                message: "I sense your urgency to see the world"
             }
         ],
         answers: [],
         cb: () => { // In conversations.js it will check if answers.length obviously we dont have any so direct call the cb with characterbody passed in
             setTimeout(() => {
 
-                const armorToObtain = [swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem, lightArmorItem]
-                obtainAll([farmhatItem, laurietsHatItem, armorToObtain[Math.floor(Math.random()*armorToObtain.length)], swordsData[Math.floor(Math.random()*swordsData.length)] ])
+                // const armorToObtain = [swordItem, bootsItem, helmetItem, ironmaskItem, gauntletItem, pauldronItem, armorItem, lightArmorItem]
+                // obtainAll([farmhatItem, laurietsHatItem, armorToObtain[Math.floor(Math.random()*armorToObtain.length)], swordsData[Math.floor(Math.random()*swordsData.length)] ])
 
                 startQuestionare(2)
                 showHideIcons("block")

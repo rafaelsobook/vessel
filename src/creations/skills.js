@@ -44,7 +44,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     // ever actually glowed. null keeps the arg count correct.
     const weaponsRoot = createWeapon(scene, "sword", {x:0, y:0, z:0}, instance, null, weaponPartDetails, glowingColor)
     weaponsRoot.addRotation(Math.PI,0,Math.random())
-    weaponsRoot.scaling = new Vector3(0.3,0.3,0.3)
+    weaponsRoot.scaling = new Vector3(0.2,0.2,0.2)
     // weaponsRoot.bakeCurrentTransformIntoVertices()
 
     // instance.visibility = 1
