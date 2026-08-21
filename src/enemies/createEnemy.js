@@ -1,7 +1,7 @@
 import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, MeshBuilder, Quaternion, Sound } from "@babylonjs/core"
 import { checkDistance, createMesh, createMonsterMaterial } from "../creations/creationTools.js"
 import { lookAt } from "../tools/tools"
-import { createGlowingMat } from "../tools/materials.js"
+import { createGlowingMat, fresnelMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
 import { attachLightning } from "../effects/lightning.js"
 import { getEnemiesOnScene, getIsSocketOn, getPlayersOnScene, getProjectilesOnScene, getSocketContainers, removeEnemyOnScene } from "../sockets/worldsocket.js"
@@ -25,7 +25,7 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
-import { faceForward } from "../controllers/inputMovement.js"
+import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 
 
 
@@ -52,7 +52,7 @@ export default function createEnemy(scene, det) {
     const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? sampleTerrainSurfaceHeight(det.x, det.z, OPENWORLD_TERRAIN_VERTS) : det.y
     let yPos = groundY+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
-        { x: det.x, y:yPos , z: det.z }, 1, false, true)
+        { x: det.x, y:yPos , z: det.z }, 1, true, true)
 
     // openworld's terrain is uneven and this enemy's y can drift (chunk streaming,
     // chase movement across slopes, etc.) - periodically verify against the real
@@ -539,13 +539,18 @@ export default function createEnemy(scene, det) {
             // whichever enemy this swing actually landed on, same call
             // areascene.js's own faceForward(res.position) already uses to
             // turn the player toward an NPC.
-            faceForward(enemy.body.position)
+            // faceForward(enemy.body.position)
             // multiplayer sync - faceForward above only turns MY OWN body
             // locally, nothing about it reaches the server on its own (see
             // emitFaceTarget's own comment) - every other client watching
             // this fight needs to see the same turn, not whatever facing I
             // had right before the swing landed.
-            emitFaceTarget(enemy.body.position)
+            // emitFaceTarget(enemy.body.position)
+            // positionAtkCollider (createMyCharacter.js) reads this to bias
+            // the NEXT attack-dash toward whatever I just actually hit,
+            // instead of always my own local forward direction - cleared
+            // below once this specific enemy dies (see the hp<=0 branch)
+            setLastHitEnemy(enemy)
         })
     }
     playRandomAnim(entries.animationGroups, "idle", true)
@@ -763,11 +768,11 @@ export function enemyIsHit(data){
 
     const player = getPlayersOnScene().find(pl => pl.owner === playerId)
     if(!player) return
-    lookAt(enemy.body, player.body.position)
+    lookAt(enemy.body, player.body.position) // enemy will look on the player
 
-    console.log(`killer ID: ${playerId}`)
-    console.log(`${player.name}`)
-    console.log(`my own ID: ${getCharState().owner}`)
+    // console.log(`killer ID: ${playerId}`)
+    // console.log(`${player.name}`)
+    // console.log(`my own ID: ${getCharState().owner}`)
 
 
     if (playerId === getCharState().owner){
@@ -778,6 +783,11 @@ export function enemyIsHit(data){
     }
 
     if (data.hp <= 0) {
+        // this enemy's own body is about to get disposed below (enemyDispose) -
+        // if it was the one positionAtkCollider's dash was biasing toward,
+        // clear it now so the next attack falls back to local forward
+        // instead of reading .position off a disposed mesh
+        if(lastHitEnemy === enemy) setLastHitEnemy(null)
         enemy.deathSound?.play()
         removeEnemyOnScene(targetId)
         clearInterval(enemy.intervalWillAttack)
@@ -919,6 +929,32 @@ export function applyEnemyBind(scene, targetId, shape, bindDuration){
         mesh.position = new Vector3(0, 0, 0)
         mesh.isPickable = false
         mesh.material = createGlowingMat(scene, "white")
+        addGlow(scene, mesh, 0.5)
+    } else if(shape === "box"){
+        // a full cage enclosing the whole body, not just a torso-height ring -
+        // enemy.body's own local origin already sits at roughly the body's
+        // vertical center (see spawn: groundY + bodyHeight/2, then
+        // mainBodyMeshes shifted down by bodyHeight/2 to compensate), so a box
+        // sized to det.bodyHeight and centered at (0,0,0) naturally spans feet
+        // to head with no extra vertical offset needed, same as the torus's
+        // own (0,0,0) above. width/depth reuse the torus's own bodyWidenes*1.8
+        // scale-up so both bind shapes read as roughly the same "size" choice,
+        // just applied to a box instead of a ring diameter.
+        const width = Math.max(enemy.det.bodyWidenes * 1.8, 1)
+        const height = enemy.det.bodyHeight * 1.05 // slight margin so the body doesn't clip through the cage faces
+        mesh = MeshBuilder.CreateBox(`bind.${targetId}`, { width, depth: width, height }, scene)
+        mesh.parent = enemy.body
+        mesh.position = new Vector3(0, 0, 0)
+        mesh.isPickable = false
+        // fresnelMat instead of createGlowingMat (unlike the torus above) -
+        // a hollow, translucent-shell energy cage reads better for "trapped
+        // inside a box" than a solid opaque glowing brick would. Matches
+        // lightpierceSkill's own projectile shape ("box", see its
+        // projectileVisual in skillsData.js) rather than reusing that flying
+        // projectile mesh itself, which is already disposed by the time this
+        // runs - same "own dedicated mesh, not the projectile" approach the
+        // torus branch above already takes.
+        mesh.material = fresnelMat(scene, "white")
         addGlow(scene, mesh, 0.5)
     }
 

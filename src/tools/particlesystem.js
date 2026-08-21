@@ -46,6 +46,20 @@ function getParticleTexture(scene, path){
     return tex
 }
 
+// every ./images/particles/* sprite is .webp now EXCEPT the ones listed
+// here - still only a .png on disk, never actually converted. Route every
+// particle-texture-by-name lookup through this instead of hand-building the
+// `.webp` path inline, so a name missing its webp conversion doesn't just
+// silently 404 (magic circles' own sparkle trail - "thin1" - did exactly
+// this: nothing rendered, no console error either, since a failed Texture
+// load just shows nothing rather than throwing). Delete a name from this
+// set once its real .webp file actually exists.
+const PARTICLE_TEXTURE_STILL_PNG = new Set(["thin1"])
+function particleTexturePath(name){
+    const ext = PARTICLE_TEXTURE_STILL_PNG.has(name) ? "png" : "webp"
+    return `./images/particles/${name}.${ext}`
+}
+
 export function createFireParticles(position, scene) {
     const light = new PointLight("fire_light", new Vector3(position.x, position.y + 0.6, position.z), scene)
     light.diffuse  = new Color3(1.0, 0.4, 0.1)
@@ -60,7 +74,7 @@ export function createFireParticles(position, scene) {
     })
 
     const particles = new ParticleSystem("fire", 250, scene)
-    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.png")
+    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.webp")
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
     particles.emitter = new Vector3(position.x, position.y + 0.25, position.z)
@@ -109,7 +123,7 @@ export function createFireParticles(position, scene) {
 // it tracks automatically frame to frame like createParticlesForMesh does.
 export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadius = 0.6) {
     const particles = new ParticleSystem("body_fire", 300, scene)
-    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.png")
+    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.webp")
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
     // enemy.body's own position is VERTICALLY CENTERED on the capsule, not
@@ -168,7 +182,7 @@ export function createParticlesForMesh(mesh, scene, textureName = "flare", optio
     } = options
 
     const particles = new ParticleSystem("mesh_particles", capacity, scene)
-    particles.particleTexture = getParticleTexture(scene, `./images/particles/${textureName}.png`)
+    particles.particleTexture = getParticleTexture(scene, particleTexturePath(textureName))
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
     particles.emitter = mesh
@@ -238,7 +252,7 @@ export function createParticleSystem(scene, emitter, particleStyles = [{ name: "
         const { color1, color2, colorDead } = resolveParticleColor(color)
 
         const particles = new ParticleSystem(`skillfx_${name}_${Date.now()}`, 300, scene)
-        particles.particleTexture = getParticleTexture(scene, `./images/particles/${preset.texture}.png`)
+        particles.particleTexture = getParticleTexture(scene, `./images/particles/${preset.texture}.webp`)
         particles.blendMode = ParticleSystem.BLENDMODE_ADD
 
         const meshEmitter = new MeshParticleEmitter(emitter)
@@ -288,7 +302,7 @@ export function createParticle(scene, imgTex, capac, pos, spd, lifetime, minSize
             myParticleSystem.createConeEmitter(radius, angle)
         break
     }
-    myParticleSystem.particleTexture = getParticleTexture(scene, `./images/particles/${imgTex}.png`)
+    myParticleSystem.particleTexture = getParticleTexture(scene, particleTexturePath(imgTex))
     if(pos) myParticleSystem.emitter = new Vector3(pos.x, pos.y, pos.z)
     if(emitterMesh) myParticleSystem.emitter = emitterMesh
     willStart ? myParticleSystem.start() : myParticleSystem.stop()
@@ -329,7 +343,7 @@ export function createParticle(scene, imgTex, capac, pos, spd, lifetime, minSize
 // as the base for the floating-embers layer below - texture swapped from
 // the babylonjs.com CDN to the local flare.png every other particle system
 // in this file already uses.
-const EMBER_JSON = {"name":"Explode Particle","id":"default system","capacity":10000,"disposeOnStop":false,"manualEmitCount":-1,"emitter":[0,0,0],"particleEmitterType":{"type":"SphereParticleEmitter","radius":1,"radiusRange":1,"directionRandomizer":0},"texture":{"tags":null,"url":"./images/particles/flare.png","uOffset":0,"vOffset":0,"uScale":1,"vScale":1,"uAng":0,"vAng":0,"wAng":0,"uRotationCenter":0.5,"vRotationCenter":0.5,"wRotationCenter":0.5,"homogeneousRotationInUVTransform":false,"isBlocking":true,"name":"./images/particles/flare.png","hasAlpha":false,"getAlphaFromRGB":false,"level":1,"coordinatesIndex":0,"coordinatesMode":0,"wrapU":1,"wrapV":1,"wrapR":1,"anisotropicFilteringLevel":4,"isCube":false,"is3D":false,"is2DArray":false,"gammaSpace":true,"invertZ":false,"lodLevelInAlpha":false,"lodGenerationOffset":0,"lodGenerationScale":0,"linearSpecularLOD":false,"isRenderTarget":false,"animations":[],"invertY":true,"samplingMode":3,"_useSRGBBuffer":false},"isLocal":false,"animations":[],"beginAnimationOnStart":false,"beginAnimationFrom":0,"beginAnimationTo":60,"beginAnimationLoop":false,"startDelay":0,"renderingGroupId":0,"isBillboardBased":true,"billboardMode":7,"minAngularSpeed":0,"maxAngularSpeed":0,"minSize":0.1,"maxSize":0.1,"minScaleX":1,"maxScaleX":1,"minScaleY":1,"maxScaleY":1,"minEmitPower":3,"maxEmitPower":3,"minLifeTime":2.9,"maxLifeTime":3,"emitRate":800,"gravity":[0,0,0],"noiseStrength":[10,10,10],"color1":[0.10588235294117647,0,0,1],"color2":[0.1803921568627451,0.01568627450980392,0,1],"colorDead":[0.1568627450980392,0,0,1],"updateSpeed":0.083,"targetStopDuration":0,"blendMode":0,"preWarmCycles":0,"preWarmStepOffset":1,"minInitialRotation":0,"maxInitialRotation":0,"startSpriteCellID":0,"spriteCellLoop":true,"endSpriteCellID":0,"spriteCellChangeSpeed":1,"spriteCellWidth":0,"spriteCellHeight":0,"spriteRandomStartCell":false,"isAnimationSheetEnabled":false,"sizeGradients":[{"gradient":0,"factor1":1.4,"factor2":2},{"gradient":1,"factor1":0.01,"factor2":0.25}],"textureMask":[1,1,1,1],"customShader":null,"preventAutoStart":false}
+const EMBER_JSON = {"name":"Explode Particle","id":"default system","capacity":10000,"disposeOnStop":false,"manualEmitCount":-1,"emitter":[0,0,0],"particleEmitterType":{"type":"SphereParticleEmitter","radius":1,"radiusRange":1,"directionRandomizer":0},"texture":{"tags":null,"url":"./images/particles/flare.webp","uOffset":0,"vOffset":0,"uScale":1,"vScale":1,"uAng":0,"vAng":0,"wAng":0,"uRotationCenter":0.5,"vRotationCenter":0.5,"wRotationCenter":0.5,"homogeneousRotationInUVTransform":false,"isBlocking":true,"name":"./images/particles/flare.webp","hasAlpha":false,"getAlphaFromRGB":false,"level":1,"coordinatesIndex":0,"coordinatesMode":0,"wrapU":1,"wrapV":1,"wrapR":1,"anisotropicFilteringLevel":4,"isCube":false,"is3D":false,"is2DArray":false,"gammaSpace":true,"invertZ":false,"lodLevelInAlpha":false,"lodGenerationOffset":0,"lodGenerationScale":0,"linearSpecularLOD":false,"isRenderTarget":false,"animations":[],"invertY":true,"samplingMode":3,"_useSRGBBuffer":false},"isLocal":false,"animations":[],"beginAnimationOnStart":false,"beginAnimationFrom":0,"beginAnimationTo":60,"beginAnimationLoop":false,"startDelay":0,"renderingGroupId":0,"isBillboardBased":true,"billboardMode":7,"minAngularSpeed":0,"maxAngularSpeed":0,"minSize":0.1,"maxSize":0.1,"minScaleX":1,"maxScaleX":1,"minScaleY":1,"maxScaleY":1,"minEmitPower":3,"maxEmitPower":3,"minLifeTime":2.9,"maxLifeTime":3,"emitRate":800,"gravity":[0,0,0],"noiseStrength":[10,10,10],"color1":[0.10588235294117647,0,0,1],"color2":[0.1803921568627451,0.01568627450980392,0,1],"colorDead":[0.1568627450980392,0,0,1],"updateSpeed":0.083,"targetStopDuration":0,"blendMode":0,"preWarmCycles":0,"preWarmStepOffset":1,"minInitialRotation":0,"maxInitialRotation":0,"startSpriteCellID":0,"spriteCellLoop":true,"endSpriteCellID":0,"spriteCellChangeSpeed":1,"spriteCellWidth":0,"spriteCellHeight":0,"spriteRandomStartCell":false,"isAnimationSheetEnabled":false,"sizeGradients":[{"gradient":0,"factor1":1.4,"factor2":2},{"gradient":1,"factor1":0.01,"factor2":0.25}],"textureMask":[1,1,1,1],"customShader":null,"preventAutoStart":false}
 
 // Three layered systems - a quick bright sphere burst (createParticle,
 // texture "explodeTex"), floating embers (ParticleSystem.Parse from
@@ -440,7 +454,7 @@ export function createImplosionBurst(scene, position, powerScale = 1, color = "v
     const pos = new Vector3(position.x, position.y, position.z)
 
     const draw = new ParticleSystem(`implode_${randNum(1000, 99999)}`, 200, scene)
-    draw.particleTexture = getParticleTexture(scene, "./images/particles/smoke2.png")
+    draw.particleTexture = getParticleTexture(scene, "./images/particles/smoke2.webp")
     draw.blendMode = ParticleSystem.BLENDMODE_STANDARD
     draw.createSphereEmitter(2.2 * powerScale, 1)
     draw.emitter = pos.clone()
@@ -548,7 +562,7 @@ export function createBloodSplatter(scene, pos,burst){
 export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSize, minMaxLifeTime, minMaxEmitPower, qnty, gravityVector3, rgb1, rgb2, isDefaultSizeGrad, particleType, particleTypeRadius, activateRotations){
     const particleSystem = new ParticleSystem("particles", 8000, scene);
     //Texture of each particle
-    particleSystem.particleTexture = getParticleTexture(scene, `./images/particles/${particleImgName}.png`);
+    particleSystem.particleTexture = getParticleTexture(scene, particleTexturePath(particleImgName));
     // lifetime
     if(minMaxLifeTime){
         const {min,max} = minMaxLifeTime

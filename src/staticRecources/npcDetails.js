@@ -193,12 +193,14 @@ export default [
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
                 speech: [
-                    {name:"", message: "Congratulations on exterminating those pesky slimes"},
-                    {name:"", message: "Time for your reward"},
-                   
+                    {name:"", message: "Three slimes confirmed. I'll mark the commission as resolved."},
+                    {name:"", message: "The eastern farmers filed three separate complaints this week alone. You've bought them some peace, and us some credibility."},
+                    {name:"", message: "It was only F-rank, but you completed it cleanly and without incident. That matters more than people think - the guildmaster notices those reports."},
+                    {name:"", message: "Here is your reward, as promised. I've logged it against your file along with the guild points."},
+                    {name:"", message: "One commission in, and you're already off the 'unknown' list. Let's see what the guildmaster has for you next."},
                 ],
                 notCompletedSpeech: [
-                    {name:"", message: "I know you can kill those Slimes ! 3 Heads is enough !"},
+                    {name:"", message: "Three slimes, not two, not one. Come back when the count is complete."},
                 ],
                 questsToReceive: [
                     { 
@@ -209,7 +211,7 @@ export default [
                     }
                 ],
                 cbAfterNewQuestReceived: () => {
-                    // actually none because the questToReceive will activate when you go near the crystal
+                    
                 }
             },
         ]

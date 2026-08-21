@@ -24,7 +24,7 @@
  * @param {TcpCharDet} tcpCharDet
  */
 import { sceneCleanupReady } from "../components/cleanup.js"
-import { attachControllerToThisCharacter, markDashActive } from "../controllers/inputMovement.js"
+import { attachControllerToThisCharacter, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
 import { getSceneDet } from "../main/main.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { attachCam } from "../tools/camera.js"
@@ -154,7 +154,22 @@ export function positionAtkCollider(pos, dirTarg){
     // anyway, but there's no reason to rely on that here.
     if(player.aggregate){
         setTimeout(() => {
-            player.aggregate.body.applyImpulse(worldForward.scale(DASH_IMPULSE), player.body.absolutePosition)
+            // lastHitEnemy (inputMovement.js) - dash toward whatever I most
+            // recently landed a melee hit on instead of always my own local
+            // forward direction, if there IS a live one. Read fresh here
+            // (not captured back when positionAtkCollider itself was
+            // called) since this runs 300ms later - the tracked enemy could
+            // have died in that window (createEnemy.js's own melee hit
+            // handler clears it back to null the instant that happens, see
+            // setLastHitEnemy there) or gotten disposed some other way,
+            // hence the isDisposed() check on top of the null check.
+            let dashDirection = worldForward
+            // if(lastHitEnemy?.body && !lastHitEnemy.body.isDisposed()){
+            //     const toEnemy = lastHitEnemy.body.absolutePosition.subtract(player.body.absolutePosition)
+            //     toEnemy.y = 0 // keep the dash horizontal, same plane worldForward already stays in
+            //     if(toEnemy.lengthSquared() > 0.0001) dashDirection = toEnemy.normalize()
+            // }
+            player.aggregate.body.applyImpulse(dashDirection.scale(DASH_IMPULSE), player.body.absolutePosition)
             // without this, inputMovement.js's own movement loop hard-overwrites
             // linear velocity every physics tick while a movement key/joystick is
             // held - which stomps this impulse before it ever renders a frame

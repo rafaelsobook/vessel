@@ -87,16 +87,23 @@ export function growGroundSpikes(skillDetail){
     skillDetail.groundSpikes.count = Math.min(12, base + (skillDetail.lvl - 1))
 }
 
-// darkorb only - skillEffects.js's darkorb onHit reads darkorbGrowScale/
-// darkorbGrowIntensity (falling back to its own defaults, 10x/1x, if
-// absent) - so the stick-and-swell sequence itself becomes more extreme at
-// higher levels, on top of projectileScale making its BASE size bigger too
-// (both compound together automatically, since the grow animation starts
-// from box.scaling, which projectileScale already set at spawn time).
+// darkorb only - skillEffects.js's runSingleOnHitEffect (the generic
+// "stickAndGrow" onHitVisual.type handler) reads ohv.stickAndGrow.growScale/
+// intensityRamp (falling back to its own defaults, 5x/1x, if absent) - so the
+// stick-and-swell sequence itself becomes more extreme at higher levels, on
+// top of projectileScale making its BASE size bigger too (both compound
+// together automatically, since the grow animation starts from box.scaling,
+// which projectileScale already set at spawn time). Was two top-level fields
+// (darkorbGrowScale/darkorbGrowIntensity), then a single onHitVisual object,
+// before onHitVisual became an ARRAY (a skill can layer more than one on-hit
+// effect) - same numbers, [0] is the one stickAndGrow entry darkorb declares.
 export function growDarkOrb(skillDetail){
     const lvl = skillDetail.lvl
-    skillDetail.darkorbGrowScale = Math.min(16, 10 + (lvl - 1) * 1.5)
-    skillDetail.darkorbGrowIntensity = Math.min(3, 1 + (lvl - 1) * 0.4)
+    skillDetail.onHitVisual = skillDetail.onHitVisual || [{ type: "stickAndGrow" }]
+    const entry = skillDetail.onHitVisual[0]
+    entry.stickAndGrow = entry.stickAndGrow || {}
+    entry.stickAndGrow.growScale = Math.min(16, 10 + (lvl - 1) * 1.5)
+    entry.stickAndGrow.intensityRamp = Math.min(3, 1 + (lvl - 1) * 0.4)
 }
 
 // radiantjudgment only - wants both growArcAura AND growBindPower

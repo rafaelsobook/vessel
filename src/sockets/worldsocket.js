@@ -125,6 +125,7 @@ export function resetArray(){
         armors: null,
         belts: null,
         cloaks: null,
+        projectileModels: null,
 
         goblinRoot: null,
         monolithRoot: null,

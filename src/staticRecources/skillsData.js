@@ -17,42 +17,21 @@
 // actually looks the key up against the UPGRADE_TEMPLATES registry.
 //
 // Every offense skill here (effects.effectType === "offense") runs through
-// ONE generic engine - skillEffects.js's castOffenseSkill/fireElementalProjectile
-// - driven entirely by these fields, so adding another skill later is just
-// adding another object below, not writing a new cast function:
+// ONE generic engine - skillEffects.js's castOffenseSkill/fireElementalProjectile/
+// renderGenericProjectile/runOnHitVisual - driven entirely by these fields,
+// so adding another skill later is just adding another object below, not
+// writing a new render function:
 //   - element: "normal"/"fire"/"light"/"earth"/"water"/"dark"/"lightning" - picks the
 //     magic circle texture (ELEMENT_CIRCLES in skillEffects.js) unless
 //     magicCircleImg overrides it directly (radiantjudgment does, for a
 //     "divine1" circle instead of the plain apt_light every other light
 //     skill gets - same element, a deliberately fancier circle for the
 //     highest-rank skill of that element)
-//   - projectileStyle: "bolt" (particle trail, see particleStyles), "blade"
-//     (a tiny glowing sword flying out - reuses createWeapon's own glow
-//     support), "lightning" (a glowing orb wrapped in attachLightning arcs),
-//     or "halo" (a spinning glowing torus wrapped in the same arcs - just
-//     radiantjudgment for now). Five more styles further down all wrap the
-//     same attachLightning arc treatment around a more elaborate shape
-//     instead of a plain box: "bladecross" (two createWeapon swords crossed
-//     into an X, from allweapons - fire), "spearlance" (a single createWeapon
-//     spear, point-first - water), "crystalshard" (a tumbling
-//     MeshBuilder.CreatePolyhedron shard - earth), "twinhalo" (two tori
-//     crossed perpendicular, each spinning its own axis - light,
-//     seraphicascension only), "boxcross" (two thin glowing boxes crossed
-//     into an X, a sigil rather than a shaped weapon - dark). "lightorb"
-//     (a plain glowing sphere wrapped in the same arcs - light,
-//     celestialverdict only - it used to share "twinhalo" with
-//     seraphicascension, split out so the two read as genuinely different)
-//   - explosionStyle: "fire"/"water"/"earth"/"light" (all four are the same
-//     createExplosionBurst, just retextured/retinted/regravitied per style -
-//     see EXPLOSION_STYLES) or "dark" (createImplosionBurst - particles get
-//     pulled IN via a real Attractor instead of bursting out, then a bright
-//     "snap" flash once they've collapsed - genuinely different shape, not
-//     just a recolor)
-//   - explosionColor: a GLOW_COLORS/LIGHTNING_COLORS name - tints the burst/
-//     blade/lightning. The two palettes mostly share color words, but not
-//     entirely (LIGHTNING_COLORS has both "purple" and "violet", GLOW_COLORS
-//     only "violet") - use "violet" if a color needs to look right in both
-//     an attachLightning arc AND a createExplosionBurst/particle trail
+//   - explosionColor: a GLOW_COLORS name (tools/materials.js) - the single
+//     color source for BOTH the projectile's own material (projectileVisual)
+//     AND its impact visual (onHitVisual) - not duplicated as raw {r,g,b}
+//     anywhere, every material helper (createGlowingMat/fresnelMat) already
+//     takes a palette name, not RGB
 //   - skillrank: no mechanical effect, just how impressive the skill READS -
 //     0 "Basic Class" (singlecast, the starter skill), 1 "Elite Skill" (the
 //     fire/water/earth pairs), 2 "High Skill" (the light/dark pairs, plus the
@@ -67,6 +46,80 @@
 //   - explosionScale: baseline 1, raised by attackingSystem.js's
 //     upgradeSkill() as lvl climbs - multiplies into the particle system's
 //     powerScale at cast time, independent of how much mana was committed
+//
+// projectileVisual - the REAL, functional description of what a skill's
+// projectile looks like in flight. skillEffects.js's renderGenericProjectile
+// reads this directly - there is no more per-skill hand-written render
+// function, adding/re-skinning a skill's look is entirely a data edit here.
+//   - useProjectile: false = no projectile fires at all (groundTrap/
+//     groundSpikes/buff/trigger skills already route to their own dedicated
+//     mechanic before fireElementalProjectile is ever called)
+//   - visible: does a real mesh/particle trail appear while it's actually in
+//     flight? false for "marker" (silent+invisible targeting box) and "beam"
+//     (nothing exists until impact)
+//   - shape: "sphere" | "box" | "cone" | "icosahedron" | "torus" | "plane" |
+//     "particle" | "weapon" | "custom" | undefined (no shape at all).
+//     "box" reuses the shared projectile box mesh itself directly (no extra
+//     child mesh) - shapeParams.boxScale is its own extra size multiplier on
+//     top of projectileScale, since that shared box starts pre-sized larger
+//     than any other shape's own dimensions. "weapon" loads a real GLB
+//     weapon asset via createWeapon (the `weapon` field: type/rarities/scale).
+//     "custom" is darkorb only - hand-built mesh/material too bespoke for the
+//     shape/material model, fully described via the `customMesh` field
+//     instead (still pure data, just a much bigger bucket of it).
+//   - shapeParams: per-shape numeric dimensions (diameter/width/height/depth/
+//     thickness/tessellation/segments/size, whichever the chosen shape needs)
+//   - copies: array of { rotation:{x,y,z}, animation:{x,y,z}? } - one entry
+//     per mesh instance. >1 entry is how "twin"/"crossed" shapes (twinhalo,
+//     boxcross, bladecross) work - each copy gets its own rotation offset,
+//     and optionally its OWN independent spin (twinhalo's two rings each
+//     spin on a different axis with no shared root spin at all) instead of
+//     inheriting the top-level `animation`
+//   - weapon: { type: "sword"|"spear", rarities: {...}, scale } - only for
+//     shape:"weapon", passed straight into createWeapon (assetcreation/
+//     createweapon.js)
+//   - material.kind: "glow" (flat createGlowingMat) | "fresnel" (hollow-shell
+//     fresnelMat) | "texture" (shape:"plane" only, skill.name-derived image)
+//     | "none"
+//   - animation: {x,y,z} per-frame rotation speed on whichever axis, applied
+//     to the shared root (single mesh, or the wrapping TransformNode for a
+//     multi-copy shape spinning as one rigid unit)
+//   - arcs: { enabled, weaponGlow, width, updateInterval } - wraps the
+//     existing attachLightning() call; arc COUNT itself still comes from the
+//     skill's own top-level arcCount (growArcAura already targets that exact
+//     field name, unchanged)
+//   - launchSound / silentLaunch: which sound plays when the projectile
+//     fires (falls back to "fireBallS"), or true to fire completely
+//     silently (astralrainSkill's own targeting marker only)
+//
+// onHitVisual - the REAL description of what happens on impact.
+// skillEffects.js's runOnHitVisual (called from renderGenericProjectile's
+// own returned `onHit`) reads this directly.
+//   - type: "burst" (the old EXPLOSION_STYLES fire/water/earth/light/lightning,
+//     now just burst params on the skill itself) | "implode" (dark magic's
+//     particles-pulled-IN effect) | "stickAndGrow" (darkorb/stormsurge - box
+//     sticks to whatever it hit and swells instead of exploding) | "beam"
+//     (tidalspike - nothing exists until impact, a caster->target plane
+//     snaps into place) | "none" (no impact visual of its own - astralrainSkill's
+//     marker, whose real payload is its separate swordRain field/mechanic)
+//   - burst: { texture, fireScale, smokeScale, emberEmitRate, gravitySign,
+//     includeSmoke } - the exact params createExplosionBurst already takes,
+//     just per-skill instead of per-style. includeSmoke:false on every
+//     weapon-shaped skill that reads as a solid strike, not an elemental
+//     detonation (same reasoning the old WEAPON_LIKE_STYLES set encoded)
+//   - stickAndGrow: { growScale, growDurationMs, fadeOutMs (null = no fade,
+//     just grows and lingers - darkorb), lingerMs, intensityRamp (only
+//     meaningful for shape:"custom", ramps its particle layers too) }
+//   - beam: { width, lingerMs }
+//   - stickBriefly: true = after a normal burst/implode, the projectile
+//     ALSO embeds briefly into whatever it hit (MARKER_STICK_DURATION_MS)
+//     instead of despawning immediately - the old code's exact
+//     `skill.projectileStyle === "blade"` special case, now data instead of
+//     a hardcoded string check. Only flamebrandSkill/lightningboltSkill ever
+//     had this (NOT bladecross/spearlance/shadowblade, despite being
+//     similarly weapon-shaped - the old code's own check was that narrow)
+//   - impactSound: overrides the default "fireHitS" (e.g. "electricHitS",
+//     "waterHitS", "struckS")
 export const singlecastSkill = {
     slotNumber: 2,
     equiped: true,
@@ -92,9 +145,9 @@ export const singlecastSkill = {
     // skillEffects.js) - baseline 1 at lvl 1, upgradeSkill() (attackingSystem.js)
     // raises it as the skill levels up
     explosionScale: 1,
-    projectileStyle: "bolt",
     particleStyles: [{ name: "oneline", color: "blue" }],
-    explosionStyle: "water",
+    projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
+    onHitVisual: [{ type: "burst", burst: { texture: "drunkBubble", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: true } }],
     desc: "A basic arcane bolt. Casting it opens a 3-second window to combo into another elemental skill instead - if none is used in time, a magic circle blooms in front of your right hand and looses a bolt that deals damage based on your magic power.",
 }
 
@@ -121,10 +174,19 @@ export const flamebrandSkill = {
     upgradePlus: 15,
     explosionColor: "red",
     explosionScale: 1,
-    projectileStyle: "blade",
-    explosionStyle: "fire",
     arcCount: 0, // no arcs at lvl 1 - growArcAura unlocks them partway through leveling
     onLevelUp: "growArcAura",
+    // a tiny glowing sword flies out (createWeapon's own glow support) - arcs
+    // unlock in as arcCount grows past 0 via growArcAura
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "weapon",
+        weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.12 },
+        copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 2 } }],
+        material: { kind: "glow" },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        launchSound: "spearS1",
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: false }, stickBriefly: true, impactSound: "struckS" }],
     desc: "A small blade of solidified flame is hurled forward, bursting into fire on impact.",
 }
 export const infernorushSkill = {
@@ -149,10 +211,10 @@ export const infernorushSkill = {
     upgradePlus: 28,
     explosionColor: "red",
     explosionScale: 1,
-    projectileStyle: "bolt",
     particleStyles: [{ name: "flames", color: "red" }],
-    explosionStyle: "fire",
     onLevelUp: "growParticleAura",
+    projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
     desc: "A roaring column of flame trails behind the bolt, detonating into a much larger blaze.",
 }
 
@@ -179,14 +241,24 @@ export const tidalspikeSkill = {
     upgradePlus: 15,
     explosionColor: "blue",
     explosionScale: 1,
-    // "beam" (skillEffects.js's own PROJECTILE_STYLES) - the projectile
-    // itself stays fully invisible for its whole flight; on impact, a
-    // glowing plane spans from the caster to whoever it hit instead of the
-    // usual traveling shaped projectile
-    projectileStyle: "beam",
-    explosionStyle: "water",
     arcCount: 0,
     onLevelUp: "growArcAura",
+    // stays fully invisible for its whole flight - nothing to show until
+    // impact, where onHitVisual's "beam" type snaps a glowing plane into
+    // place spanning from the caster to whoever it hit
+    projectileVisual: { useProjectile: true, visible: false, material: { kind: "none" } },
+    // two effects layered on one hit: the beam itself, plus an extra splash
+    // burst right at the impact point on top of it - burst.texture is a bare
+    // NAME key (createParticle resolves it to ./images/particles/{name}.webp
+    // internally), not a file path - "splash" resolves to the real
+    // ./images/particles/splash.webp asset. impactSound only needs stating
+    // once (first entry with one wins, see playImpactSound) - not worth two
+    // slightly-different sounds overlapping
+    onHitVisual: [
+        { type: "beam", beam: { width: 0.5, lingerMs: 3000, texturePath: "./images/particles/watercurrent.webp", scrollSpeed: 0.6, uScale: 4 }, impactSound: "waterHitS" },
+        { type: "burst", burst: { texture: "splash", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: false } },
+    ],
+
     desc: "A blade of pressurized water lances forward, bursting into a spray on impact.",
 }
 export const maelstromboltSkill = {
@@ -211,13 +283,16 @@ export const maelstromboltSkill = {
     upgradePlus: 28,
     explosionColor: "blue",
     explosionScale: 1,
-    // "icon" (skillEffects.js's own PROJECTILE_STYLES) - flies this skill's
-    // own skill-bar icon (./images/skills/maelstrombolt.webp) as a
-    // billboarded, spinning glowing plane instead of the plain particle-
-    // trail bolt every other bolt-style skill uses
-    projectileStyle: "icon",
-    explosionStyle: "water",
     onLevelUp: "growParticleAura",
+    // flies this skill's own skill-bar icon (./images/projectiles/maelstromboltprojectile.webp)
+    // as a glowing plane instead of a plain particle-trail bolt, wrapped in
+    // the same crackling arcs every other style gets
+    projectileVisual: { useProjectile: true, visible: true, shape: "plane", material: { kind: "texture" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 } },
+    arcCount: 2,
+    onHitVisual: [
+        // { type: "burst", burst: { texture: "drunkBubble", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: true }, impactSound: "electricHitS" }
+        { type: "burst", burst: { texture: "splash", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: false } }, 
+    ],
     desc: "Writhing tendrils of water coil around the bolt, crashing outward in a wide burst on impact.",
 }
 
@@ -244,17 +319,31 @@ export const stoneshardSkill = {
     upgradePlus: 15,
     explosionColor: "green",
     explosionScale: 1,
-    // "sting" (skillEffects.js's own PROJECTILE_STYLES) - a thin glowing
-    // cone/needle instead of "blade"'s tiny sword, since this is the exact
-    // skill monolith/orangelith casts (tcp's monolithBase.skills) and a
-    // sword read oddly for what's meant to be an insect-like sting attack.
-    // Own separate style, doesn't touch flamebrand/tidalspike/lightningbolt
-    // (still "blade").
-    projectileStyle: "sting",
-    explosionStyle: "earth",
     magicCircleImg: "apt_earth",
     arcCount: 0,
     onLevelUp: "growArcAura",
+    // real modeled shard (models/projectiles/stoneshard.glb, see
+    // assetcreation/createProjectileModel.js) instead of a procedural cone -
+    // this is the exact skill monolith/orangelith casts too (tcp's
+    // monolithBase.skills). material.kind must NOT be "none" here -
+    // loadModel (tools/loadmodel.js) always strips the glb's own imported
+    // material to null on load, same convention allweapons' own part
+    // templates already follow (createweapon.js) - a "none" projectile here
+    // would render with no material at all. "texture" + texturePath instead
+    // of a flat glow color - a real rock surface, not tinted green.
+    // rotation is a first REAL test now (a prior guess here never actually
+    // applied - GLB-cloned meshes come with rotationQuaternion already set,
+    // which silently overrides a plain .rotation assignment; the engine now
+    // nulls it first, see renderGenericProjectile's own comment on this) -
+    // still just a guess at the right value though, adjust copies[0].rotation
+    // here if the shard doesn't point the direction it's actually flying
+    projectileVisual: {
+        useProjectile: true, visible: true, shape: "glbModel",
+        model: { name: "stoneshard", scale: 1 },
+        copies: [{ rotation: { x: Math.PI / 2, y: 0, z: 0 } }],
+        material: { kind: "texture", texturePath: "./images/modeltex/rock1.jpg" },
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "rockTex", fireScale: 1.2, smokeScale: 1.3, emberEmitRate: 13, gravitySign: -1, includeSmoke: true } }],
     desc: "A jagged shard of stone is flung forward, shattering into a spray of rock and dust.",
 }
 export const quakeboltSkill = {
@@ -279,11 +368,11 @@ export const quakeboltSkill = {
     upgradePlus: 28,
     explosionColor: "green",
     explosionScale: 1,
-    projectileStyle: "bolt",
     particleStyles: [{ name: "tentacles", color: "green" }],
-    explosionStyle: "earth",
     magicCircleImg: "apt_earth_second",
     onLevelUp: "growParticleAura",
+    projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
+    onHitVisual: [{ type: "burst", burst: { texture: "rockTex", fireScale: 1.2, smokeScale: 1.3, emberEmitRate: 13, gravitySign: -1, includeSmoke: true } }],
     desc: "Chunks of rock tumble along in the bolt's wake, slamming down in a rockslide on impact.",
 }
 
@@ -314,10 +403,20 @@ export const lightningboltSkill = {
     upgradePlus: 15,
     explosionColor: "yellow",
     explosionScale: 1,
-    projectileStyle: "blade",
-    explosionStyle: "lightning",
     arcCount: 0,
     onLevelUp: "growArcAura",
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "weapon",
+        weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.12 },
+        copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 2 } }],
+        material: { kind: "glow" },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        launchSound: "spearS1",
+    },
+    // "lightning" onHitVisual burst is ALWAYS includeSmoke:false, regardless
+    // of weapon-shape - its own distinct texture (flare3) so it doesn't read
+    // as a recolored "light" skill
+    onHitVisual: [{ type: "burst", burst: { texture: "flare3", fireScale: 0.85, smokeScale: 0.6, emberEmitRate: 10, gravitySign: 1, includeSmoke: false }, stickBriefly: true, impactSound: "electricHitS" }],
     desc: "A short blade of crackling electricity is hurled forward, arcing into a bright flash on impact.",
 }
 export const stormsurgeSkill = {
@@ -342,21 +441,17 @@ export const stormsurgeSkill = {
     upgradePlus: 28,
     explosionColor: "yellow",
     explosionScale: 1,
-    projectileStyle: "lightorb",
-    explosionStyle: "lightning", // unused when player-cast (stickAndGrow below) - see comment
     arcCount: 2,
-    // stickAndGrow (see PROJECTILE_STYLES.lightorb's own onHit) - skips the
-    // usual EXPLOSION_STYLES burst entirely: on hit the sphere itself
-    // setParent()s to whatever it struck, swells to stickGrowScale (5x)
-    // over half a second, then fades out over the next ~0.7s instead of
-    // just disappearing, same "stick and swell" precedent darkorbSkill's
-    // own onHit set (that one grows 10x with no fade, this one is smaller/
-    // faster and actually fades). explosionStyle above only still matters
-    // if this skill is ever enemy-cast (fireEnemySkillProjectile has no
-    // onHit support, same known gap darkorbSkill already has).
-    stickAndGrow: true,
-    stickGrowScale: 5,
     onLevelUp: "growArcAura",
+    // a plain glowing sphere with a Fresnel "hollow shell" material, wrapped
+    // in crackling arcs - this is the FLIGHT look only
+    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 } },
+    // skips the usual burst entirely: on hit the sphere itself sticks to
+    // whatever it struck, swells to 5x over half a second, then fades out
+    // over the next ~0.7s instead of just disappearing - same "stick and
+    // swell" precedent darkorbSkill's own onHit set, just smaller/faster and
+    // actually fades (darkorb grows 10x with no fade)
+    onHitVisual: [{ type: "stickAndGrow", stickAndGrow: { growScale: 5, growDurationMs: 500, fadeOutMs: 700 } }],
     desc: "A storm-charged bolt trails crackling arcs of electricity, discharging into a violent surge on impact.",
 }
 
@@ -383,11 +478,13 @@ export const lightpierceSkill = {
     upgradePlus: 20,
     explosionColor: "white",
     explosionScale: 1,
-    projectileStyle: "lightning",
-    explosionStyle: "light",
     enemyBind: { effectType: "bind", shape: "box", bindDuration: 10.5, bindChance: 1 }, // shape: // torus, box,
     arcCount: 3,
     onLevelUp: "growArcAura",
+    // reuses the shared projectile box itself (kept visible, scaled to 0.4x)
+    // wrapped in crackling arcs - a small glowing core, not a shaped mesh
+    projectileVisual: { useProjectile: true, visible: true, shape: "box", shapeParams: { boxScale: 0.4 }, material: { kind: "glow" }, arcs: { enabled: true, weaponGlow: true, width: 0.025, updateInterval: 60 } },
+    onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A radiant orb crackling with light lances forward, flashing into a bright burst on impact.",
 }
 export const radiantjudgmentSkill = {
@@ -412,12 +509,15 @@ export const radiantjudgmentSkill = {
     upgradePlus: 38,
     explosionColor: "white",
     explosionScale: 1,
-    projectileStyle: "halo",
-    explosionStyle: "light",
     magicCircleImg: "divine1",
     enemyBind: { effectType: "bind", shape: "torus", bindDuration: 10.5, bindChance: 1 }, // shape: // torus, box,
     arcCount: 3,
     onLevelUp: "growArcAuraAndBind",
+    // a spinning glowing torus instead of the shared box - "divine judgment
+    // descending" carried into the projectile itself, matching its own
+    // fancier "divine1" magic circle
+    projectileVisual: { useProjectile: true, visible: false, shape: "torus", shapeParams: { diameter: 0.55, thickness: 0.09, tessellation: 24 }, material: { kind: "glow" }, animation: { z: 0.12 }, arcs: { enabled: true, weaponGlow: true, width: 0.02, updateInterval: 60 } },
+    onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A divine circle blooms and calls down a lance of pure light, erupting in a blinding flash.",
 }
 
@@ -444,11 +544,23 @@ export const shadowboltSkill = {
     upgradePlus: 15,
     explosionColor: "violet",
     explosionScale: 1,
-    projectileStyle: "shadowblade",
-    explosionStyle: "dark",
     magicCircleImg: "apt_darkness",
-    arcCount: 0, // no arcs at lvl 1 - growArcAura unlocks them partway through leveling, same pattern flamebrand's own "blade" style uses
+    arcCount: 0, // no arcs at lvl 1 - growArcAura unlocks them partway through leveling, same pattern flamebrand's own weapon-shape uses
     onLevelUp: "growArcAura",
+    // the FULL assembled spear (blade+guard+handle+pommel, not just a bare
+    // blade piece) - fresnelMat (hollow-shell) applied uniformly over all 4
+    // parts instead of createWeapon's own flat glow. Hardcodes "purple" for
+    // both material and arcs, ignoring explosionColor above ("violet")
+    // entirely - same RGB either way (GLOW_COLORS treats them as synonyms),
+    // so this doesn't actually change how it looks, just how it's driven
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "weapon",
+        weapon: { type: "spear", rarities: { bladeRarity: "rare1", guardRarity: "rare1", handleRarity: "rare1", pommelRarity: "rare1" }, scale: 0.16 },
+        copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 2 } }],
+        material: { kind: "fresnel" },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+    },
+    onHitVisual: [{ type: "implode" }],
     desc: "A spectral blade wreathed in shadow tears through the air, collapsing inward on impact before snapping shut.",
 }
 export const voidrendSkill = {
@@ -473,11 +585,11 @@ export const voidrendSkill = {
     upgradePlus: 38,
     explosionColor: "violet",
     explosionScale: 1,
-    projectileStyle: "lightning",
-    explosionStyle: "dark",
     magicCircleImg: "apt_darkness_second",
     arcCount: 3,
     onLevelUp: "growArcAura",
+    projectileVisual: { useProjectile: true, visible: true, shape: "box", shapeParams: { boxScale: 0.4 }, material: { kind: "glow" }, arcs: { enabled: true, weaponGlow: true, width: 0.025, updateInterval: 60 } },
+    onHitVisual: [{ type: "implode" }],
     desc: "A crackling void-touched blade tears through the air, folding space inward before it snaps closed.",
 }
 
@@ -488,10 +600,10 @@ export const voidrendSkill = {
 // magic's own color, not an exclusive top-tier one), so a dozen skills all
 // sharing one glow color just reads as "this is what violet skills look
 // like," not "these ten are special." Kept the elaborate per-element
-// projectile shapes (bladecross/spearlance/crystalshard/twinhalo/boxcross -
-// see the projectileStyle bullet above) since those ARE genuinely distinct
-// per skill; only the rank/tier framing was wrong, not the visuals
-// themselves. Nothing currently sits at skillrank 4 "God Tier".
+// projectile shapes (bladecross/spearlance/crystalshard/twinhalo/boxcross)
+// since those ARE genuinely distinct per skill; only the rank/tier framing
+// was wrong, not the visuals themselves. Nothing currently sits at skillrank
+// 4 "God Tier".
 //
 // The two dark ones curse their target on hit - though this is actually an
 // ELEMENT rule, not a per-skill flag: skillEffects.js's hit handler curses
@@ -502,6 +614,12 @@ export const voidrendSkill = {
 // it only ever clears by the enemy dying, see createEnemy.js's
 // applyEnemyCurse). See tcp/index.ts's enemyCurse handler for the
 // server-authoritative half of this.
+//
+// arcs.weaponGlow is deliberately false on every "God Tier" skill below -
+// true would flatten every child mesh's material to a flat glow color,
+// wiping out createWeapon's own part materials/glow (bladecross/spearlance)
+// or this style's own hand-set material (crystalshard/twinhalo/boxcross);
+// false only adds the arc tubes around the shape, untouched otherwise.
 export const pyroclasmSkill = {
     slotNumber: 14,
     equiped: true,
@@ -524,10 +642,19 @@ export const pyroclasmSkill = {
     upgradePlus: 45,
     explosionColor: "red",
     explosionScale: 1,
-    projectileStyle: "bladecross",
-    explosionStyle: "fire",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // two glowing sword blades crossed into an X, spinning as one unit
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "weapon",
+        weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.1 },
+        copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 4 } }, { rotation: { x: Math.PI, y: 0, z: -Math.PI / 4 } }],
+        material: { kind: "glow" },
+        animation: { z: 0.05 },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        launchSound: "swordS1",
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: false }, impactSound: "struckS" }],
     desc: "A god-scale eruption crackling with borrowed lightning tears through the air, detonating into a mountain-splitting blaze.",
 }
 export const solarcataclysmSkill = {
@@ -552,10 +679,18 @@ export const solarcataclysmSkill = {
     upgradePlus: 52,
     explosionColor: "red",
     explosionScale: 1,
-    projectileStyle: "bladecross",
-    explosionStyle: "fire",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "weapon",
+        weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.1 },
+        copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 4 } }, { rotation: { x: Math.PI, y: 0, z: -Math.PI / 4 } }],
+        material: { kind: "glow" },
+        animation: { z: 0.05 },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        launchSound: "swordS1",
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: false }, impactSound: "struckS" }],
     desc: "A miniature sun given form, hurled as a lightning-wreathed lance that erupts into a cataclysmic solar flare.",
 }
 
@@ -581,10 +716,19 @@ export const tsunamiwrathSkill = {
     upgradePlus: 45,
     explosionColor: "blue",
     explosionScale: 1,
-    projectileStyle: "spearlance",
-    explosionStyle: "water",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // a single spear (spear only exists at one part-tier, see swordsdata.js's
+    // stormpiercer) flying point-first
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "weapon",
+        weapon: { type: "spear", rarities: { bladeRarity: "rare1", guardRarity: "rare1", handleRarity: "rare1", pommelRarity: "rare1" }, scale: 0.16 },
+        copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 2 } }],
+        material: { kind: "glow" },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        launchSound: "spearS1",
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "drunkBubble", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: false }, impactSound: "struckS" }],
     desc: "A wall of ocean given divine fury lances forward wreathed in crackling lightning, crashing down as a tsunami.",
 }
 export const abyssalcurrentSkill = {
@@ -609,14 +753,13 @@ export const abyssalcurrentSkill = {
     upgradePlus: 52,
     explosionColor: "blue",
     explosionScale: 1,
-    // "lightorb" (skillEffects.js's own PROJECTILE_STYLES) - a glowing
-    // sphere with a Fresnel "hollow shell" material, wrapped in
-    // attachLightning arcs, tinted by explosionColor above (blue) - same
-    // style celestialverdict/stormsurge already reuse, just their own color
-    projectileStyle: "lightorb",
-    explosionStyle: "water",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // a glowing sphere with a Fresnel "hollow shell" material, wrapped in
+    // crackling arcs - same shape stormsurge/celestialverdict reuse, just its
+    // own color
+    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 } },
+    onHitVisual: [{ type: "burst", burst: { texture: "drunkBubble", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: true } }],
     desc: "The crushing weight of the deepest trench rides a bolt of god-lightning, erupting into a drowning maelstrom.",
 }
 
@@ -626,10 +769,12 @@ export const abyssalcurrentSkill = {
 // different mechanic: no projectile at all - groundSpikes = { count,
 // spacing, staggerMs } marches a line of jagged rock spikes straight out
 // from the caster, each one erupting a beat after the last (see
-// triggerGroundSpikeLine/spawnGroundSpike in skillEffects.js). plusDmg is
-// PER SPIKE, not a one-shot total - same reasoning astralrainSkill's own
-// per-sword plusDmg already follows, since a target standing in the line
-// can take more than one hit as spikes march past it.
+// triggerGroundSpikeLine/spawnGroundSpike in skillEffects.js, which still
+// reads onHitVisual.burst below for the eruption's own params even though no
+// projectile ever fires). plusDmg is PER SPIKE, not a one-shot total - same
+// reasoning astralrainSkill's own per-sword plusDmg already follows, since a
+// target standing in the line can take more than one hit as spikes march
+// past it.
 export const continentalrendSkill = {
     slotNumber: 18,
     equiped: true,
@@ -652,10 +797,12 @@ export const continentalrendSkill = {
     upgradePlus: 22,
     explosionColor: "green",
     explosionScale: 1,
-    explosionStyle: "earth",
     magicCircleImg: "apt_earth_second",
     groundSpikes: { count: 5, spacing: 2.2, staggerMs: 160 },
     onLevelUp: "growGroundSpikes",
+    // no projectile at all - marches ground spikes out from the caster instead, see groundSpikes above
+    projectileVisual: { useProjectile: false },
+    onHitVisual: [{ type: "burst", burst: { texture: "rockTex", fireScale: 1.2, smokeScale: 1.3, emberEmitRate: 13, gravitySign: -1, includeSmoke: true } }],
     desc: "A line of jagged stone spikes tears forward from the ground, each one erupting a beat after the last.",
 }
 export const seismicjudgmentSkill = {
@@ -680,11 +827,14 @@ export const seismicjudgmentSkill = {
     upgradePlus: 52,
     explosionColor: "green",
     explosionScale: 1,
-    projectileStyle: "crystalshard",
-    explosionStyle: "earth",
     magicCircleImg: "apt_earth_second",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // a jagged glowing crystal shard (a many-faceted, rock-like icosahedron
+    // instead of a smooth primitive), tumbling irregularly on all three axes
+    // rather than spinning cleanly
+    projectileVisual: { useProjectile: true, visible: false, shape: "icosahedron", shapeParams: { size: 0.22 }, material: { kind: "glow" }, animation: { x: 0.04, y: 0.07, z: 0.02 }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 100 } },
+    onHitVisual: [{ type: "burst", burst: { texture: "rockTex", fireScale: 1.2, smokeScale: 1.3, emberEmitRate: 13, gravitySign: -1, includeSmoke: true } }],
     desc: "The world's own tectonic wrath channeled through a lightning-wreathed lance, judging the ground itself to ruin.",
 }
 
@@ -710,11 +860,15 @@ export const celestialverdictSkill = {
     upgradePlus: 45,
     explosionColor: "white",
     explosionScale: 1,
-    projectileStyle: "lightorb",
-    explosionStyle: "light",
     magicCircleImg: "divine1",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // a plain radiant glowing sphere with a Fresnel "hollow shell" material -
+    // its own distinct look (used to share "twinhalo" with seraphicascension,
+    // pulled into its own shape so the two no longer look identical), same
+    // shape stormsurge/abyssalcurrent reuse, just its own color
+    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 } },
+    onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A verdict passed by the heavens themselves descends through the divine circle, wreathed in crackling light.",
 }
 export const seraphicascensionSkill = {
@@ -739,11 +893,20 @@ export const seraphicascensionSkill = {
     upgradePlus: 52,
     explosionColor: "white",
     explosionScale: 1,
-    projectileStyle: "twinhalo",
-    explosionStyle: "light",
     magicCircleImg: "divine1",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // two tori crossed perpendicular (a gyroscope/aegis read), each spinning
+    // on its own independent axis - no shared root spin at all, distinct
+    // from "halo" (radiantjudgment's single flat ring)
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "torus",
+        shapeParams: { diameter: 0.45, thickness: 0.05, tessellation: 24 },
+        copies: [{ rotation: { x: 0, y: 0, z: 0 }, animation: { z: 0.03 } }, { rotation: { x: 0, y: Math.PI / 2, z: 0 }, animation: { x: 0.045 } }],
+        material: { kind: "glow" },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A seraph's own ascending light given form, a lance of pure judgment erupting in a blinding heavenly flash.",
 }
 
@@ -771,11 +934,21 @@ export const voidcurseSkill = {
     upgradePlus: 45,
     explosionColor: "violet",
     explosionScale: 1,
-    projectileStyle: "boxcross",
-    explosionStyle: "dark",
     magicCircleImg: "apt_darkness_second",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    // two thin glowing bars crossed into an X (exactly two boxes, rotated) -
+    // a stark geometric sigil/rune instead of a shaped weapon, fitting a
+    // curse mark more than a blade would
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "box",
+        shapeParams: { width: 0.06, height: 0.06, depth: 0.5 },
+        copies: [{ rotation: { x: 0, y: 0, z: Math.PI / 4 } }, { rotation: { x: 0, y: 0, z: -Math.PI / 4 } }],
+        material: { kind: "glow" },
+        animation: { y: 0.06 },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+    },
+    onHitVisual: [{ type: "implode" }],
     desc: "A sliver of the void given form curses whatever it touches - every blow the cursed lands is turned back upon itself.",
 }
 export const abyssaldamnationSkill = {
@@ -801,18 +974,24 @@ export const abyssaldamnationSkill = {
     upgradePlus: 52,
     explosionColor: "violet",
     explosionScale: 1,
-    projectileStyle: "boxcross",
-    explosionStyle: "dark",
     magicCircleImg: "apt_darkness_second",
     arcCount: 2,
     onLevelUp: "growArcAura",
+    projectileVisual: {
+        useProjectile: true, visible: false, shape: "box",
+        shapeParams: { width: 0.06, height: 0.06, depth: 0.5 },
+        copies: [{ rotation: { x: 0, y: 0, z: Math.PI / 4 } }, { rotation: { x: 0, y: 0, z: -Math.PI / 4 } }],
+        material: { kind: "glow" },
+        animation: { y: 0.06 },
+        arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+    },
+    onHitVisual: [{ type: "implode" }],
     desc: "Damnation itself given form crackles forth, cursing its target so thoroughly that its own strength becomes its undoing.",
 }
 
 // --- ASTRAL RAIN (God Tier - genuinely different mechanic, not a recolor) ---
-// The invisible marker box (projectileStyle "marker" - see PROJECTILE_STYLES
-// in skillEffects.js, it's completely silent and never visible) deals no
-// damage and doesn't explode itself - it only marks where it lands. skill.
+// The invisible marker box (projectileVisual.visible:false, no shape) deals
+// no damage and doesn't explode itself - it only marks where it lands. skill.
 // swordRain = { min, max, spread } is what actually happens once it does:
 // a random min-max count of swords (creations/skills.js's spawnProjectile,
 // same mesh/movement the "throw weapon" mechanic uses) fall from directly
@@ -847,25 +1026,32 @@ export const astralrainSkill = {
     upgradePlus: 18,
     explosionColor: "white",
     explosionScale: 1,
-    projectileStyle: "marker",
-    explosionStyle: "light",
     swordRain: { min: 2, max: 3, spread: 4.5 },
     onLevelUp: "growSwordRain",
+    // invisible+silent targeting marker only - a stealthy targeting box
+    // firing off a fireball whoosh would undercut the whole point of it
+    projectileVisual: { useProjectile: true, visible: false, material: { kind: "none" }, silentLaunch: true },
+    // "none" - the marker's own hit never actually reaches onHitVisual
+    // dispatch at all (its swordRain branch in fireElementalProjectile
+    // returns before onHit ever runs) - the real visual is the falling
+    // sword rain, entirely separate from this
+    onHitVisual: [{ type: "none" }],
     desc: "An invisible arrow marks its target - moments later, blades of astral light rain down from above.",
 }
 
 // --- DARK ORB (God Tier - dark magic's own signature, alongside astralrain) ---
-// projectileStyle "darkorb" (see skillEffects.js) is a genuinely built mesh -
-// a glassy dark-purple sphere (real StandardMaterial Fresnel rim glow + a
-// NoiseProceduralTexture veined bump map) wrapped around a jagged white-
+// shape:"custom" (see skillEffects.js's buildCustomMesh) is a genuinely built
+// mesh - a glassy dark-purple sphere (real StandardMaterial Fresnel rim glow
+// + a NoiseProceduralTexture veined bump map) wrapped around a jagged white-
 // glowing splinter built with createRock.js's own displaceWithNoise, plus
 // two orbiting particle layers (a dark smoky aura, a purple spark layer) -
-// not a recolor of an existing shape. It also skips the usual explode-and-
-// vanish impact entirely: darkorb is the one projectile style with its own
-// onHit hook (see fireElementalProjectile), so explosionStyle below is
-// unused for this skill - on hit it setParent()s to whatever it struck and
-// swells 10x "like a wildfire" instead (both particle layers grow with it),
-// only actually despawning once that sequence finishes. element "dark" still
+// not a recolor of an existing shape, and too bespoke for the plain
+// shape/material model every other skill uses, hence its own `customMesh`
+// data bucket. It also skips the usual explode-and-vanish impact entirely:
+// onHitVisual.type "stickAndGrow" sticks to whatever it struck and swells
+// 10x "like a wildfire" instead (both particle layers grow with it), only
+// actually despawning once that sequence finishes (fadeOutMs:null - no fade,
+// unlike stormsurge's own smaller/faster stickAndGrow). element "dark" still
 // curses its target for free on hit, same as every other dark-element skill
 // (see this file's top header comment on that rule) - that part isn't
 // skipped, only the visual explosion is.
@@ -891,9 +1077,37 @@ export const darkorbSkill = {
     upgradePlus: 50,
     explosionColor: "violet",
     explosionScale: 1,
-    projectileStyle: "darkorb",
-    explosionStyle: "dark", // unused by darkorb itself - see comment above
     onLevelUp: "growDarkOrb",
+    projectileVisual: {
+        useProjectile: true, visible: true, shape: "custom",
+        // slow independent tumble so the vein pattern/rim glow/core facets
+        // all read as alive rather than a static prop flying in a straight line
+        animation: { x: 0.008, y: 0.02, z: 0 },
+        customMesh: {
+            shell: { diameter: 0.5, segments: 20 },
+            shellMaterial: {
+                diffuse: { r: 0.05, g: 0.0, b: 0.08 }, specular: { r: 0.05, g: 0.0, b: 0.08 }, emissive: { r: 0.3, g: 0.05, b: 0.45 }, alpha: 0.9,
+                bumpOctaves: 4, bumpPersistence: 0.65, bumpAnimSpeed: 3,
+                fresnelBias: 0.3, fresnelPower: 2, fresnelLeft: { r: 0.8, g: 0.4, b: 1.0 }, fresnelRight: { r: 0.2, g: 0.0, b: 0.3 },
+            },
+            core: { radius: 0.14, subdivisions: 3, color: "white" },
+            coreAnimation: { x: 0.05, y: 0.08, z: 0 },
+            particleLayers: [
+                // dark smoky aura - standard alpha blend, not additive, so it
+                // reads as smoke/shadow rather than another glow layer
+                { texture: "smoke2", capacity: 40, spd: 0.02, lifetimeMin: 0.5, lifetimeMax: 0.9, minSize: 0.12, maxSize: 0.3, particleType: "sphere", color: { r: 0.02, g: 0.0, b: 0.04 }, emitterRadius: 0.32, emitterRadiusRange: 0.4, minEmitPower: 0.05, maxEmitPower: 0.15, emitRate: 26, blendMode: "standard" },
+                // purple energetic sparks - additive, the "crackling" read
+                { texture: "flare", capacity: 30, spd: 0.025, lifetimeMin: 0.15, lifetimeMax: 0.4, minSize: 0.04, maxSize: 0.12, particleType: "sphere", color: { r: 0.55, g: 0.15, b: 0.9 }, emitterRadius: 0.28, emitterRadiusRange: 0.6, minEmitPower: 0.3, maxEmitPower: 0.65, emitRate: 40, blendMode: "additive" },
+            ],
+        },
+    },
+    // growDarkOrb (skillUpgrades.js) writes growScale/intensityRamp here as
+    // this levels up - starting defaults (10x/1x) match what darkorb always
+    // used before leveling made the sequence itself more extreme
+    onHitVisual: [{
+        type: "stickAndGrow",
+        stickAndGrow: { growScale: 10, growDurationMs: 900, lingerMs: 400, fadeOutMs: null, intensityRamp: 1, growEmissive: { r: 0.85, g: 0.5, b: 1.0 } },
+    }],
     desc: "A crackling black-purple sphere given form - a white-hot splinter caged inside branching dark veins, latching onto its target and swelling into an inferno of caged energy.",
 }
 
@@ -928,10 +1142,10 @@ export const burstshotsSkill = {
     upgradePlus: 20,
     explosionColor: "blue",
     explosionScale: 1,
-    projectileStyle: "bolt",
     particleStyles: [{ name: "oneline", color: "blue" }],
-    explosionStyle: "water",
     onLevelUp: "growParticleAura",
+    projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
+    onHitVisual: [{ type: "burst", burst: { texture: "drunkBubble", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: true } }],
     desc: "Weaves multiple arcane circles in sequence - one at a time, never all at once - each loosing its own bolt. More circles at higher levels.",
 }
 
@@ -973,6 +1187,12 @@ export const multicastSkill = {
     // no damage/projectile to scale, so leveling makes it cheaper and
     // faster to re-trigger instead - see growMulticastEfficiency
     onLevelUp: "growMulticastEfficiency",
+    // trigger skill - fires no projectile of its own, clicks other skill
+    // slots instead. Never actually reaches fireElementalProjectile/
+    // renderGenericProjectile at all (activateSkill's own switch no-ops for
+    // effects.effectType === "trigger"), these are here only so scanning the
+    // file top-to-bottom stays uniform.
+    projectileVisual: { useProjectile: false },
     desc: "Channels no power of its own - instead, it triggers every other skill currently in your bar, all at once.",
 }
 
@@ -992,16 +1212,17 @@ export const multicastSkill = {
 // data when 29 is simply the next free slot (every other number 2-28 is
 // already claimed - see every other skill's own slotNumber above).
 //
-// groundTrap (new flag, read by castOffenseSkill/spawnGroundTrap in
-// skillEffects.js) replaces the usual fired projectile entirely: after the
-// normal castDuration windup, a flat ground-rune circle blooms a short
-// distance in front of the caster (createMagicCircle with no
-// facingDirection - lies flat facing the sky, not the usual upright
-// in-front-of-hand circle) with an invisible box trigger over the same
-// spot. The FIRST enemy to walk into that box consumes the trap: fire
-// particles burst, they take a hit, and get bound via enemyBind below -
-// same bind mechanic radiantjudgmentSkill already uses, just triggered by
-// a walked-into trap instead of a landed hit.
+// groundTrap (read by castOffenseSkill/spawnGroundTrap in skillEffects.js)
+// replaces the usual fired projectile entirely: after the normal
+// castDuration windup, a flat ground-rune circle blooms a short distance in
+// front of the caster (createMagicCircle with no facingDirection - lies flat
+// facing the sky, not the usual upright in-front-of-hand circle) with an
+// invisible box trigger over the same spot. The FIRST enemy to walk into
+// that box consumes the trap: fire particles burst (onHitVisual.burst below,
+// read by applyDisintegrationHit even though no projectile ever fires), they
+// take a hit, and get bound via enemyBind below - same bind mechanic
+// radiantjudgmentSkill already uses, just triggered by a walked-into trap
+// instead of a landed hit.
 export const disintegrationSkill = {
     slotNumber: 29,
     equiped: true,
@@ -1023,27 +1244,28 @@ export const disintegrationSkill = {
     upgradePlus: 20,
     explosionColor: "fire",
     explosionScale: 1,
-    projectileStyle: "trap",
     // distance omitted - defaults to 0 (skillEffects.js's own
     // GROUND_TRAP_DEFAULT_DISTANCE), i.e. centered on the caster's own
     // body, not thrown out in front like a targeted skill would be
     groundTrap: { radius: 1.8, duration: 8000 },
-    explosionStyle: "fire",
     magicCircleImg: "apt_fire_second",
     enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
     onLevelUp: "growParticleAura",
+    // no projectile - ground trap instead, see groundTrap above
+    projectileVisual: { useProjectile: false },
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
     desc: "It traps the enemy in a circle of magic, then burn them until they disintegrate",
 }
 
 // --- MASSIVE DISINTEGRATION (fire) - the AOE version of disintegrationSkill ---
-// Same groundTrap mechanic, but with aoe: true (new flag, read by
-// castOffenseSkill/spawnMassGroundTrap in skillEffects.js) - instead of a
-// small trap waiting for one enemy to walk into it, a much bigger circle
-// blooms and, a beat later, hits EVERY enemy currently within radius at
-// once (see spawnMassGroundTrap's own header comment for the full
-// mechanism - it reuses disintegrationSkill's own applyDisintegrationHit
-// for the actual fire-burst/burning-body/hit/bind, so both skills apply
-// the identical effect, just triggered differently).
+// Same groundTrap mechanic, but with aoe: true (read by castOffenseSkill/
+// spawnMassGroundTrap in skillEffects.js) - instead of a small trap waiting
+// for one enemy to walk into it, a much bigger circle blooms and, a beat
+// later, hits EVERY enemy currently within radius at once (see
+// spawnMassGroundTrap's own header comment for the full mechanism - it
+// reuses disintegrationSkill's own applyDisintegrationHit for the actual
+// fire-burst/burning-body/hit/bind, so both skills apply the identical
+// effect, just triggered differently).
 //
 // radius: 10 scales LINEARLY with level (getGroundTrapRadius multiplies by
 // skill.lvl whenever aoe is set) - 10 at lvl 1, 20 at lvl 2, exactly as
@@ -1070,14 +1292,15 @@ export const massivedisintegrationSkill = {
     upgradePlus: 40,
     explosionColor: "fire",
     explosionScale: 1,
-    projectileStyle: "trap",
     // distance omitted - defaults to 0, centered on the caster's own body,
     // same as disintegrationSkill's own trap
     groundTrap: { radius: 10, duration: 8000, aoe: true },
-    explosionStyle: "fire",
     magicCircleImg: "apt_fire_second",
     enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
     onLevelUp: "growParticleAura",
+    // no projectile - AOE ground trap instead, see groundTrap above
+    projectileVisual: { useProjectile: false },
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
     desc: "Summons a massive circle of annihilation - anyone caught near or inside its radius is consumed by disintegrating flame.",
 }
 
@@ -1095,11 +1318,11 @@ export const massivedisintegrationSkill = {
 // charState.mode === "none" forever, a mode that doesn't exist - permanently
 // locking the skill instead of freeing it to fire from any mode.
 //
-// buff (new field, read by skillEffects.js's applyWeaponBuff) - toAdd is
-// scaled by powerScale (mana-output-slider * lvl-based explosionScale) at
-// cast time, same convention every other skill's plusDmg already follows,
-// so upgrading mjolnir's level (which bumps explosionScale automatically,
-// see upgradeSkill) makes the buff itself stronger even though
+// buff (read by skillEffects.js's applyWeaponBuff) - toAdd is scaled by
+// powerScale (mana-output-slider * lvl-based explosionScale) at cast time,
+// same convention every other skill's plusDmg already follows, so upgrading
+// mjolnir's level (which bumps explosionScale automatically, see
+// upgradeSkill) makes the buff itself stronger even though
 // effects.plusDmg/dmgPm stay 0 here (there's no direct damage to bump).
 // buffDuration is independent of skillCoolDown - some overlap window (buff
 // still has 5s left when it comes off cooldown) is intentional, not a bug.
@@ -1128,6 +1351,10 @@ export const mjolnirSkill = {
     upgradePlus: 0,
     explosionColor: "blue",
     magicCircleImg: "apt_lightning",
+    // buff skill - wreathes own equipped weapon, no target/projectile of any
+    // kind. castBuffSkill never touches fireElementalProjectile/
+    // renderGenericProjectile at all.
+    projectileVisual: { useProjectile: false },
     desc: "Calls down the hammer's own charge into your weapon - your blade crackles with lightning and strikes harder for a short time.",
 }
 

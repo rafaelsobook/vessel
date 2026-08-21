@@ -1,5 +1,6 @@
 import {SceneLoader} from "@babylonjs/core"
 import { loadAvatarContainer, loadMeshOnlyParts } from "../tools/loadmodel"
+import { loadProjectileModels } from "../assetcreation/createProjectileModel"
 import { setSocketContainers } from "../sockets/worldsocket"
 
 // monster model containers are added incrementally as new enemy types get
@@ -59,6 +60,12 @@ export async function setStartingContainers(scene){
             allweaponParts = []
         }
 
+        // real GLB projectile models (models/projectiles/*.glb) -
+        // createProjectileModel.js's own PROJECTILE_MODEL_PATHS registry;
+        // loadProjectileModels already warns-and-skips per missing/failed
+        // model rather than throwing, so no try/catch needed here
+        const projectileModels = await loadProjectileModels(scene)
+
         const containers = setSocketContainers({
             hairs: HairModel.meshes,
             animeBody: animeBodyContainer,
@@ -70,6 +77,7 @@ export async function setStartingContainers(scene){
             armors: null,
             belts: null,
             cloaks: null,
+            projectileModels,
 
             goblinRoot,
             monolithRoot,

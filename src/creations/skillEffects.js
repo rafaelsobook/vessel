@@ -22,6 +22,7 @@ import { MeshBuilder, TransformNode, Vector3, Quaternion, StandardMaterial, Colo
 import { createMagicCircle } from "./magiccircles.js"
 import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle, createBodyFireParticles } from "../tools/particlesystem.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
+import { createProjectileModelInstance } from "../assetcreation/createProjectileModel.js"
 import { spawnProjectile } from "./skills.js"
 import { createGlowingMat, fresnelMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
@@ -419,111 +420,9 @@ function getShapeClone(scene, key, build){
     return clone
 }
 
-// PROJECTILE_STYLES.icon's own material - one shared instance PER SKILL
-// NAME, cached persistently, not per-cast like halo/crystalshard/etc's own
-// materials. Those each need an INDEPENDENT material because they animate
-// their own per-cast state (halo's spin, magic circles' fade) - a plain
-// static texture has no such state to protect, so every cast of the same
-// skill can safely reuse one material/texture pair forever instead of
-// decoding ./images/projectiles/${skill.name}projectile.webp again each
-// time. Same "shared, fixed look never varies per cast" reasoning
-// getGroundSpikeMat already uses, just keyed per skill instead of a single
-// fixed material.
-const iconMatCache = new Map()
-let iconMatCacheScene = null
-function getIconMat(scene, skill){
-    if(iconMatCacheScene !== scene){
-        iconMatCache.clear()
-        iconMatCacheScene = scene
-    }
-    let mat = iconMatCache.get(skill.name)
-    if(!mat){
-        mat = new StandardMaterial(`icon_mat_${skill.name}`, scene)
-        const tex = new Texture(`./images/projectiles/${skill.name}projectile.webp`, scene)
-        // same technique magiccircles.js's own createMagicCircle uses
-        // (getCircleTexture's "rgb" alpha mode) - alpha DERIVED FROM RGB
-        // LUMINANCE, not the image's own embedded alpha channel. A first
-        // version used tex.hasAlpha (trusts the file's real alpha channel)
-        // + useAlphaFromDiffuseTexture, which rendered the icon's black
-        // background as solid black instead of transparent - these skill
-        // icons apparently don't carry a real alpha channel the same way
-        // circle textures don't either, which is exactly why every magic
-        // circle already routes around this the same way.
-        tex.getAlphaFromRGB = true
-        // emissive + opacityTexture only (no diffuseTexture) - same pairing
-        // createMagicCircle uses, reads as a glowing/self-lit icon
-        // regardless of scene lighting instead of a flatly shaded image
-        mat.diffuseTexture = tex
-        mat.emissiveTexture = tex
-        mat.opacityTexture = tex
-        mat.emissiveColor = new Color3(1, 1, 1)
-        mat.backFaceCulling = false
-        mat.specularColor = new Color3(0, 0, 0)
-        
-        iconMatCache.set(skill.name, mat)
-    }
-    return mat
-}
-
-// PROJECTILE_STYLES.beam's own material (tidalspikeSkill) - one shared
-// instance, cached persistently, same "shared, fixed look never varies per
-// cast" reasoning getIconMat above already uses. Safe to share even though
-// beam length varies per cast: the texture itself isn't tiled/scaled per
-// instance (it just stretches to fit whatever width the plane mesh itself
-// is given), so nothing about this material actually differs cast to cast.
-let beamMat = null
-let beamMatScene = null
-// units of texture-length scrolled per second - tuned so the current
-// pattern reads as flowing steadily along the beam's length, not a slow
-// crawl or a blur
-const BEAM_SCROLL_SPEED = 0.6
-function getBeamMat(scene){
-    if(!beamMat || beamMatScene !== scene){
-        beamMat = new StandardMaterial("beam_mat_watercurrent", scene)
-        const tex = new Texture("./images/projectiles/watercurrent.webp", scene)
-        // same getAlphaFromRGB technique getIconMat/createMagicCircle both
-        // already use - alpha derived from RGB luminance, not a real alpha
-        // channel in the file
-        tex.getAlphaFromRGB = true
-        // tiled (not clamped) along U so scrolling it wraps seamlessly
-        // instead of dragging the same single copy off the edge into
-        // nothing - U, not V, since CreatePlane's own width axis (the
-        // beam's actual length) maps to U (V wraps the plane's short/
-        // thickness axis instead)
-        tex.wrapU = Texture.WRAP_ADDRESSMODE
-        tex.uScale = 4
-        beamMat.diffuseTexture = tex
-        beamMat.emissiveTexture = tex
-        beamMat.opacityTexture = tex
-        beamMat.emissiveColor = new Color3(1, 1, 1)
-        beamMat.backFaceCulling = false
-        beamMat.specularColor = new Color3(0, 0, 0)
-        beamMatScene = scene
-
-        // continuously scrolls the water-current pattern along the beam's
-        // own length so it reads as flowing water instead of a static
-        // decal - registered ONCE here (not per-cast), tied to this shared
-        // material/texture's own lifetime, same as createFireParticles' own
-        // persistent flicker loop (particlesystem.js) - cleaned up
-        // implicitly whenever the scene itself is disposed (main.js's
-        // changeScene()), no separate teardown needed since every active
-        // beam mesh shares this exact same texture object anyway.
-        // U=0 sits at startPos (the caster) and U=1 at endPos (the target) -
-        // see CreatePlaneVertexData's own corner/UV layout and the beam's
-        // own alignment (local +X, i.e. increasing U, rotated to point
-        // along dir, which points caster->target). Decrementing uOffset
-        // (not incrementing) is what makes the pattern read as flowing
-        // onward toward the target instead of back toward the caster.
-        scene.onBeforeRenderObservable.add(() => {
-            tex.uOffset -= (scene.getEngine().getDeltaTime() / 1000) * BEAM_SCROLL_SPEED
-        })
-    }
-    return beamMat
-}
-
-// PROJECTILE_STYLES.beam's own impact splash (tidalspikeSkill) - a burst of
+// beam onHitVisual's own impact splash (tidalspikeSkill) - a burst of
 // particles (not a single mesh - see spawnSplashBurst's own header comment
-// for why) at the enemy's own hit position, using splash.png as every
+// for why) at the enemy's own hit position, using splash.webp as every
 // particle's own sprite. Cached persistently, same reasoning every other
 // texture cache in this file already uses - a small, fixed asset, no
 // reason to decode it fresh every single cast.
@@ -531,7 +430,7 @@ let splashParticleTex = null
 let splashParticleTexScene = null
 function getSplashParticleTex(scene){
     if(!splashParticleTex || splashParticleTexScene !== scene){
-        splashParticleTex = new Texture("./images/projectiles/splash.png", scene)
+        splashParticleTex = new Texture("./images/projectiles/splash.webp", scene)
         splashParticleTexScene = scene
     }
     return splashParticleTex
@@ -629,839 +528,622 @@ function spawnSplashHover(scene, position, scale = 1){
     particles.start()
     return particles
 }
+// --- projectile/on-hit visuals - GENERIC, data-driven engine ---
+// Replaces the old per-style hand-written functions entirely. What a skill's
+// projectile looks like (shape/material/color/animation/arcs) and what
+// happens when it lands (burst/implode/stick-and-grow/beam) is read straight
+// off skill.projectileVisual/skill.onHitVisual (skillsData.js) - adding or
+// re-skinning a skill is a data edit here, never a new function. The
+// underlying mesh/material/particle helpers (createWeapon, createGlowingMat,
+// fresnelMat, attachLightning, createExplosionBurst, createImplosionBurst,
+// createParticle(System), displaceWithNoise) are unchanged - this only
+// replaces the hardcoded per-skill wiring that used to call them.
+//
+// Hard rule carried over from the old code (see fireEnemySkillProjectile's
+// own InstancedMesh comment): material NEVER gets assigned to the shared
+// `box` itself - always to a spawned child mesh. InstancedMesh.material is a
+// silent no-op, so this is what keeps every shape safe to hand to an enemy,
+// not just the ones that happened to already route through a child mesh.
 
-// --- projectile visuals ---
-// fn(scene, box, skill) => cleanup() - called once the projectile despawns
-// (hit or miss) to stop/dispose whatever this style attached to it.
-const PROJECTILE_STYLES = {
-    // the skill's own dedicated projectile texture
-    // (./images/projectiles/${skill.name}projectile.webp), flying as a flat
-    // glowing plane instead of a shaped/colored projectile -
-    // maelstromboltSkill is the first to use this (projectileStyle: "icon"),
-    // but any skill can opt in the same way, since the texture path is
-    // derived from the skill's own name rather than hardcoded. Not
-    // billboarded - an earlier version billboarded it (always facing
-    // camera) with a continuous rotation.z spin on top, which read as a
-    // flat disc spinning face-on to the camera the whole time ("a flying
-    // pizza") rather than something flying forward - static/no spin now,
-    // just carried by box's own aim rotation like every other projectile
-    // shape in this file.
-    icon(scene, box, skill){
-        box.isVisible = false
-        // width:height matches maelstromboltprojectile.webp's own real
-        // pixel dimensions (705x1254, confirmed via its VP8 header) so the
-        // splash texture doesn't stretch/squash to fit a square plane -
-        // a future skill adopting this same "icon" style with a
-        // differently-shaped texture would need its own geometry key here
-        // instead of reusing this one, since getShapeClone's cache is keyed
-        // by shape, not by skill
-        const plane = getShapeClone(scene, "icon_plane", () => MeshBuilder.CreatePlane("icon_plane_template", { width: 1, height: 1254 / 705 }, scene))
+function buildProjectileShapeMesh(scene, shape, shapeParams = {}){
+    switch(shape){
+        case "sphere":
+            return getShapeClone(scene, `gen_sphere_${shapeParams.diameter}_${shapeParams.segments}`, () =>
+                MeshBuilder.CreateSphere("gen_sphere_template", { diameter: shapeParams.diameter ?? 0.4, segments: shapeParams.segments ?? 16 }, scene))
+        case "box":
+            return getShapeClone(scene, `gen_box_${shapeParams.width}_${shapeParams.height}_${shapeParams.depth}`, () =>
+                MeshBuilder.CreateBox("gen_box_template", { width: shapeParams.width ?? 0.5, height: shapeParams.height ?? shapeParams.width ?? 0.5, depth: shapeParams.depth ?? shapeParams.width ?? 0.5 }, scene))
+        case "cone":
+            return getShapeClone(scene, `gen_cone_${shapeParams.diameterBottom}_${shapeParams.height}`, () =>
+                MeshBuilder.CreateCylinder("gen_cone_template", { diameterTop: 0, diameterBottom: shapeParams.diameterBottom ?? 0.15, height: shapeParams.height ?? 0.9, tessellation: shapeParams.tessellation ?? 10 }, scene))
+        case "icosahedron":
+            return getShapeClone(scene, `gen_poly_${shapeParams.size}`, () =>
+                MeshBuilder.CreatePolyhedron("gen_poly_template", { type: 3, size: shapeParams.size ?? 0.22 }, scene))
+        case "torus":
+            return getShapeClone(scene, `gen_torus_${shapeParams.diameter}_${shapeParams.thickness}`, () =>
+                MeshBuilder.CreateTorus("gen_torus_template", { diameter: shapeParams.diameter ?? 0.5, thickness: shapeParams.thickness ?? 0.08, tessellation: shapeParams.tessellation ?? 24 }, scene))
+        default:
+            return null
+    }
+}
+
+// material.kind: "glow"/"fresnel" applied directly to a plain-shape mesh.
+// "texture" is only meaningful for shape:"plane" (icon-style) and "weapon"
+// material handling lives in buildWeaponCopies below (createWeapon's own
+// glowingColor path vs a uniform fresnelMat override) - not handled here.
+function applyPlainMaterial(scene, mesh, materialKind, color, texturePath){
+    if(materialKind === "glow"){
+        mesh.material = createGlowingMat(scene, color)
+        addGlow(scene, mesh, 0.5)
+    } else if(materialKind === "fresnel"){
+        mesh.material = fresnelMat(scene, color)
+        addGlow(scene, mesh, 0.6)
+    } else if(materialKind === "texture" && texturePath){
+        mesh.material = getGenericFlatTextureMat(scene, texturePath)
+    }
+}
+
+// Material (unlike Mesh/AbstractMesh) has no isDisposed() at all - confirmed
+// against @babylonjs/core's own material.pure.d.ts, not just assumed. What
+// it DOES have is onDisposeObservable, which is the actually-correct tool
+// here anyway: rather than polling a flag, this makes the CACHE react the
+// instant a disposal genuinely happens, from whichever code path triggers
+// it (this file's own disposables array, OR worldsocket.js's removeProjectile,
+// which disposes shape:"box" skills' shared box through a call this file
+// doesn't control at all) - evict the entry so the next getXMat() call for
+// that same key naturally falls into its own existing "not cached yet"
+// branch and rebuilds, instead of ever handing out a dead material.
+function evictCacheOnDispose(cache, key, mat){
+    mat.onDisposeObservable.addOnce(() => {
+        if(cache.get(key) === mat) cache.delete(key)
+    })
+}
+
+// a plain image texture with no glow/fresnel treatment, for any shape that
+// wants a real photographed/painted surface instead of a flat glow color -
+// stoneshardSkill's own modeled shard (shape:"glbModel") is the first user,
+// pointed at a rock texture instead of a glow tint. Cached per path, same
+// "one shared material per distinct asset, never rebuilt per cast" reasoning
+// every other texture cache in this file already follows.
+const genFlatTexMatCache = new Map()
+let genFlatTexMatCacheScene = null
+function getGenericFlatTextureMat(scene, texturePath){
+    if(genFlatTexMatCacheScene !== scene){ genFlatTexMatCache.clear(); genFlatTexMatCacheScene = scene }
+    let mat = genFlatTexMatCache.get(texturePath)
+    if(!mat){
+        mat = new StandardMaterial(`flat_tex_mat_${texturePath}`, scene)
+        mat.diffuseTexture = new Texture(texturePath, scene)
+        genFlatTexMatCache.set(texturePath, mat)
+        evictCacheOnDispose(genFlatTexMatCache, texturePath, mat)
+    }
+    return mat
+}
+
+// skill.name-derived texture, same convention getIconMat used to hardcode -
+// still one shared cache per skill name, just living here now
+const genIconMatCache = new Map()
+let genIconMatCacheScene = null
+function getGenericIconMat(scene, skill){
+    if(genIconMatCacheScene !== scene){ genIconMatCache.clear(); genIconMatCacheScene = scene }
+    let mat = genIconMatCache.get(skill.name)
+    if(!mat){
+        mat = new StandardMaterial(`icon_mat_${skill.name}`, scene)
+        const tex = new Texture(`./images/projectiles/${skill.name}projectile.webp`, scene)
+        tex.getAlphaFromRGB = true
+        mat.diffuseTexture = tex
+        mat.emissiveTexture = tex
+        mat.opacityTexture = tex
+        mat.emissiveColor = new Color3(1, 1, 1)
+        mat.backFaceCulling = false
+        mat.specularColor = new Color3(0, 0, 0)
+        genIconMatCache.set(skill.name, mat)
+        evictCacheOnDispose(genIconMatCache, skill.name, mat)
+    }
+    return mat
+}
+
+// beam material - keyed by texturePath (skill.onHitVisual.beam.texturePath)
+// so a future beam-type skill can use its own scrolling texture instead of
+// tidalspikeSkill's watercurrent.webp; each distinct path gets one shared,
+// persistent instance (texture/scroll-speed never vary per cast of the same
+// skill, only the plane mesh's own stretched width does)
+const genBeamMatCache = new Map()
+let genBeamMatCacheScene = null
+function getGenericBeamMat(scene, texturePath, scrollSpeed, uScale){
+    if(genBeamMatCacheScene !== scene){ genBeamMatCache.clear(); genBeamMatCacheScene = scene }
+    let mat = genBeamMatCache.get(texturePath)
+    if(!mat){
+        mat = new StandardMaterial(`beam_mat_${texturePath}`, scene)
+        const tex = new Texture(texturePath, scene)
+        tex.getAlphaFromRGB = true
+        tex.wrapU = Texture.WRAP_ADDRESSMODE
+        tex.uScale = uScale
+        mat.diffuseTexture = tex
+        mat.emissiveTexture = tex
+        mat.opacityTexture = tex
+        mat.emissiveColor = new Color3(1, 1, 1)
+        mat.backFaceCulling = false
+        mat.specularColor = new Color3(0, 0, 0)
+
+        // continuously scrolls the pattern toward the target - registered
+        // once here (shared material/texture), same as the original
+        // getBeamMat's own scroll observer
+        scene.onBeforeRenderObservable.add(() => {
+            tex.uOffset -= (scene.getEngine().getDeltaTime() / 1000) * scrollSpeed
+        })
+        genBeamMatCache.set(texturePath, mat)
+        evictCacheOnDispose(genBeamMatCache, texturePath, mat)
+    }
+    return mat
+}
+
+// weapon copies (blade/shadowblade/spearlance/bladecross/bladecross's 2nd
+// blade) - createWeapon (assetcreation/createweapon.js) is reused verbatim.
+// "glow" material: createWeapon's own glowingColor arg gives each part its
+// own createGlowingMat instance, same as the old per-style code. "fresnel":
+// no glowingColor passed (parts default to createMetalMat), then every part
+// across every copy gets ONE shared fresnelMat instance overlaid uniformly -
+// same "shadowblade" approach the old code used for its single copy,
+// extended to however many copies a skill's data asks for.
+function buildWeaponCopies(scene, box, weapon, copies, materialKind, color){
+    const roots = []
+    const glowingColor = materialKind === "glow" ? color : undefined
+    copies.forEach(copy => {
+        const root = createWeapon(scene, weapon.type, { x: 0, y: 0, z: 0 }, box, null, weapon.rarities, glowingColor)
+        root.scaling = new Vector3(weapon.scale ?? 0.16, weapon.scale ?? 0.16, weapon.scale ?? 0.16)
+        const rot = copy.rotation || { x: 0, y: 0, z: 0 }
+        root.addRotation(rot.x, rot.y, rot.z)
+        roots.push(root)
+    })
+    if(materialKind === "fresnel"){
+        const sharedMat = fresnelMat(scene, color)
+        roots.forEach(root => root.getChildMeshes().forEach(part => {
+            part.material = sharedMat
+            addGlow(scene, part, 0.6)
+        }))
+    }
+    return roots
+}
+
+// darkorbSkill's own build - the one shape genuinely too bespoke for the
+// generic shape/copies model above (a displaced-noise inner mesh, a hand-
+// wired StandardMaterial+NoiseProceduralTexture+FresnelParameters shell, two
+// particle layers). Still fully driven by skill.projectileVisual.customMesh -
+// every number that used to be hardcoded here now comes from data; this
+// function itself stays generic (shape:"custom" is the only thing that
+// routes here, nothing here reads skill.name).
+function buildCustomMesh(scene, box, customMesh, color){
+    const shell = customMesh.shell || {}
+    const core = customMesh.core || {}
+    const mat = customMesh.shellMaterial || {}
+
+    const orb = getShapeClone(scene, `gen_custom_shell_${shell.diameter}_${shell.segments}`, () =>
+        MeshBuilder.CreateSphere("gen_custom_shell_template", { diameter: shell.diameter ?? 0.5, segments: shell.segments ?? 20 }, scene))
+    orb.parent = box
+    orb.isPickable = false
+
+    const orbMat = new StandardMaterial(`custom_shell_mat_${Date.now()}`, scene)
+    orbMat.diffuseColor = new Color3(mat.diffuse?.r ?? 0.05, mat.diffuse?.g ?? 0, mat.diffuse?.b ?? 0.08)
+    orbMat.specularColor = new Color3(mat.specular?.r ?? 0.05, mat.specular?.g ?? 0, mat.specular?.b ?? 0.08)
+    orbMat.emissiveColor = new Color3(mat.emissive?.r ?? 0.3, mat.emissive?.g ?? 0.05, mat.emissive?.b ?? 0.45)
+    orbMat.alpha = mat.alpha ?? 0.9
+
+    const veinNoise = new NoiseProceduralTexture(`custom_shell_veins_${Date.now()}`, 256, scene)
+    veinNoise.octaves = mat.bumpOctaves ?? 4
+    veinNoise.persistence = mat.bumpPersistence ?? 0.65
+    veinNoise.animationSpeedFactor = mat.bumpAnimSpeed ?? 3
+    orbMat.bumpTexture = veinNoise
+
+    orbMat.emissiveFresnelParameters = new FresnelParameters()
+    orbMat.emissiveFresnelParameters.bias = mat.fresnelBias ?? 0.3
+    orbMat.emissiveFresnelParameters.power = mat.fresnelPower ?? 2
+    orbMat.emissiveFresnelParameters.leftColor = new Color3(mat.fresnelLeft?.r ?? 0.8, mat.fresnelLeft?.g ?? 0.4, mat.fresnelLeft?.b ?? 1.0)
+    orbMat.emissiveFresnelParameters.rightColor = new Color3(mat.fresnelRight?.r ?? 0.2, mat.fresnelRight?.g ?? 0, mat.fresnelRight?.b ?? 0.3)
+
+    orb.material = orbMat
+    addGlow(scene, orb, 0.6)
+
+    const coreRadius = core.radius ?? 0.14
+    const coreNoise = createSimplex(randBetween(1, 9999))
+    const coreMesh = MeshBuilder.CreateIcoSphere(`custom_core_${Date.now()}`, {
+        radius: coreRadius, subdivisions: core.subdivisions ?? 3, updatable: true, flat: false,
+    }, scene)
+    coreMesh.parent = box
+    coreMesh.isPickable = false
+    displaceWithNoise(coreMesh, coreNoise, 0, coreRadius)
+    coreMesh.convertToFlatShadedMesh()
+    coreMesh.material = createGlowingMat(scene, core.color || "white")
+    addGlow(scene, coreMesh, 1)
+
+    const particles = (customMesh.particleLayers || []).map(layer => {
+        const ps = createParticle(scene, layer.texture, layer.capacity ?? 30, null, layer.spd ?? 0.02,
+            { min: layer.lifetimeMin ?? 0.2, max: layer.lifetimeMax ?? 0.5 }, layer.minSize ?? 0.05, layer.maxSize ?? 0.2,
+            0, layer.particleType || "sphere", true, orb, layer.color || { r: 1, g: 1, b: 1 }, false)
+        ps.createSphereEmitter(layer.emitterRadius ?? 0.3, layer.emitterRadiusRange ?? 0.5)
+        ps.minEmitPower = layer.minEmitPower ?? 0.1
+        ps.maxEmitPower = layer.maxEmitPower ?? 0.3
+        ps.emitRate = layer.emitRate ?? 30
+        ps.blendMode = layer.blendMode === "additive" ? ParticleSystem.BLENDMODE_ADD : ParticleSystem.BLENDMODE_STANDARD
+        return ps
+    })
+
+    return { orb, orbMat, veinNoise, core: coreMesh, particles }
+}
+
+// the single entry point every projectile now goes through - reads
+// skill.projectileVisual, builds whatever it describes, returns
+// {cleanup, onHit}. onHit is ALWAYS present now (the old code sometimes
+// returned a plain function, sometimes {cleanup, onHit} depending on style -
+// collapsed into one consistent shape here, with onHit itself internally
+// dispatching skill.onHitVisual.type instead of the caller having to branch).
+function renderGenericProjectile(scene, box, skill){
+    const pv = skill.projectileVisual || {}
+    const color = skill.explosionColor || "white"
+    const scale = skill.projectileScale ?? 1
+    const copies = pv.copies && pv.copies.length ? pv.copies : [{ rotation: { x: 0, y: 0, z: 0 } }]
+    const materialKind = pv.material?.kind || "none"
+    // captured NOW, before this projectile ever starts flying (box.position
+    // still equals spawnPos - the caster's own hand position at cast time) -
+    // onHitVisual's "beam" type needs this exact launch point later, at hit
+    // time, to draw a plane spanning caster->target. Reading box.position
+    // again AT HIT TIME instead (the bug this fixed) gives the wrong answer:
+    // by the moment onHit fires, box.position IS essentially the enemy's own
+    // position (that's what "hit" means), so start and end would be almost
+    // the same point - dist collapses to ~0 and the beam never even builds
+    // (see the dist < 0.001 guard below).
+    const launchPosition = box.position.clone()
+
+    // box itself stays invisible by default - every shape below (plane,
+    // sphere, weapon, custom, etc.) builds its OWN visible child mesh and
+    // parents it to this invisible box, same as the old code always did.
+    // Only the shape:"box" branch further down flips this back to true (it
+    // reuses the shared box directly, with no child mesh at all) - doing it
+    // here unconditionally off pv.visible was the actual bug behind "why
+    // does my plane/sphere-shaped skill show as a plain box": ANY visible:
+    // true skill got the raw shared box turned on too, floating right on
+    // top of (or instead of) whatever shape it actually built.
+    box.isVisible = false
+
+    let animatables = [] // {node, axes} - driven every frame by the shared spin observer below
+    let disposables = [] // anything with its own .dispose() not already covered by root/box disposal
+    let root = null // set for shapes needing an intermediate TransformNode (multi-copy, or explicit root request)
+    let customBuild = null
+
+    if(pv.shape === "particle"){
+        const styles = skill.particleStyles ?? [{ name: "oneline", color }]
+        const systems = createParticleSystem(scene, box, styles)
+        disposables.push(() => systems.forEach(ps => { ps.stop(); ps.dispose(false) }))
+    } else if(pv.shape === "plane"){
+        const plane = getShapeClone(scene, "gen_icon_plane", () => MeshBuilder.CreatePlane("gen_icon_plane_template", { width: 1, height: 1254 / 705 }, scene))
         plane.parent = box
-        plane.position = Vector3.Zero()
         plane.isPickable = false
-        // CreatePlane's own front face points -Z by default (see
-        // createMagicCircle's identical comment) - box's own aim rotation
-        // points its forward at +Z, so without this the icon's readable
-        // face would point back toward the caster instead of the direction
-        // it's actually flying
-        // plane.rotation.y = Math.PI
-        // one-time static correction (not animated/continuous) for the
-        // projectile texture's own content orientation
         plane.rotation.x = Math.PI / 2
-        plane.material = getIconMat(scene, skill)
-        plane.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-
-        // every other shaped projectile style in this file (crystalshard,
-        // twinhalo, lightorb, boxcross, darkorb...) calls addGlow on its own
-        // mesh - this one didn't, which is why it read flat/dim instead of
-        // the same glowing look everything else has despite emissiveTexture
-        // already being set
+        plane.material = materialKind === "texture" ? getGenericIconMat(scene, skill) : (materialKind === "fresnel" ? fresnelMat(scene, color) : createGlowingMat(scene, color))
+        plane.scaling = new Vector3(1, 1, 1).scale(scale)
         addGlow(scene, plane, 0.6)
-
-        // crackling arcs around the plane - same attachLightning call
-        // lightorb/spearlance/halo already use, driven by skill.explosionColor
-        // (maelstromboltSkill's own is "blue") rather than hardcoded, so any
-        // future skill adopting "icon" style gets arcs in its own color too.
-        // weaponGlow: false (not true) - true would flatten the plane's own
-        // material to a plain glow color, wiping out the real projectile
-        // texture underneath, same reason lightorb passes false here. No
-        // light (withLight: false) - one extra PointLight per cast adds up.
-        // Cleanup is automatic - attachLightning wires its own arc/material
-        // teardown to plane.onDisposeObservable, which fires from the
-        // plane.dispose() below on its own, same as every other style that
-        // uses this helper.
-        attachLightning(scene, plane, skill.explosionColor || "blue", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-
-        // (false, false) - material/texture are the shared persistent
-        // cache above, not owned by this one clone
-        return () => plane.dispose(false, false)
-    },
-    // fully invisible - no mesh, no particle trail, no launch sound either
-    // (see fireElementalProjectile's launch-sound special-case below). Used
-    // by skill.swordRain skills (astralrainSkill) - this box is purely a
-    // targeting marker, never meant to be seen or heard flying through the
-    // air. Box already defaults to invisible before any style runs, but this
-    // is spelled out explicitly rather than left to fall through to "bolt"'s
-    // default (which WOULD spawn a visible particle trail).
-    marker(scene, box, skill){
-        box.isVisible = false
-        return () => {}
-    },
-    // tidalspikeSkill's own look - the projectile itself stays fully
-    // invisible for its entire flight (box never turns visible, nothing
-    // attached to it - same "marker" convention above), and only on actual
-    // impact does a glowing plane snap into existence, spanning from the
-    // caster's own position to wherever it hit, like a lance of water
-    // connecting the two instantly rather than something that visibly flew
-    // the distance. (A CreateCylinder version was tried in between - real
-    // volume instead of a flat plane, stays visible from any angle - but
-    // went back to a plane.) startPos is captured HERE, at style-setup
-    // time - box.position already equals spawnPos by the time any style
-    // function runs (fireElementalProjectile sets it just before calling
-    // this), which is the caster's own hand position at the moment this
-    // projectile launched - close enough to "starts from my character"
-    // without this style needing charState/player threaded in just for
-    // this one style.
-    //
-    // {cleanup, onHit} shape (not a plain function) - same darkorb uses -
-    // is what makes fireElementalProjectile's hit handler skip the generic
-    // EXPLOSION_STYLES burst entirely and defer to this style's own impact
-    // visual instead (see that handler's own onHitStyle branch).
-    beam(scene, box, skill){
-        box.isVisible = false
-        const startPos = box.position.clone()
-
-        return {
-            cleanup(){}, // nothing else was ever created during flight - the invisible box itself is disposed by the caller regardless
-            onHit(enemy, finishCleanup){
-                if(!enemy?.body){ finishCleanup(); return }
-                const endPos = enemy.body.position.clone()
-                const dir = endPos.subtract(startPos)
-                const dist = dir.length()
-                if(dist < 0.001){ finishCleanup(); return }
-                dir.normalize()
-
-                // * skill.projectileScale - same generic per-level growth
-                // every other projectile style already reads
-                // (attackingSystem.js's upgradeSkill) - width (dist) stays
-                // as the real caster-to-target distance regardless of
-                // level (that's not a "size", it's just where the target
-                // is), only the thickness itself grows
-                const projectileScale = skill.projectileScale ?? 1
-                const BEAM_THICKNESS = 0.5 * projectileScale
-                const beamMesh = MeshBuilder.CreatePlane(`tidalspike_beam_${Date.now()}`, { width: dist, height: BEAM_THICKNESS }, scene)
-                beamMesh.position = Vector3.Lerp(startPos, endPos, 0.5)
-                beamMesh.isPickable = false
-
-                // aligns the plane's own local +X axis (its width axis,
-                // matching CreatePlane's own width/height convention) to
-                // point along dir - axis-angle rotation derived from the
-                // cross/dot product between the reference axis and the
-                // actual travel direction, since dir is a fully arbitrary
-                // 3D vector (not just a flat horizontal yaw like every
-                // other style's box.rotation.y aim)
-                const referenceAxis = new Vector3(1, 0, 0)
-                const rotationAxis = Vector3.Cross(referenceAxis, dir)
-                if(rotationAxis.lengthSquared() < 0.0001){
-                    beamMesh.rotationQuaternion = Vector3.Dot(referenceAxis, dir) < 0
-                        ? Quaternion.RotationAxis(Vector3.Up(), Math.PI)
-                        : Quaternion.Identity()
-                } else {
-                    const angle = Math.acos(Math.min(1, Math.max(-1, Vector3.Dot(referenceAxis, dir))))
-                    beamMesh.rotationQuaternion = Quaternion.RotationAxis(rotationAxis.normalize(), angle)
-                }
-
-                beamMesh.material = getBeamMat(scene)
-                addGlow(scene, beamMesh, 0.6)
-
-                // second plane, same position/alignment, rolled 90° around
-                // the beam's own length axis (dir) - a single flat plane
-                // can go edge-on and all but vanish depending on camera
-                // angle (e.g. looking straight down from above), same
-                // problem boxcross/twinhalo elsewhere in this file already
-                // solve by crossing two planes instead of relying on one.
-                // .clone() carries over beamMesh's position AND its
-                // rotationQuaternion (see getShapeClone's own comment on
-                // this exact behavior) - only the extra local-X roll needs
-                // adding on top, not the whole alignment redone from scratch.
-                const beamMesh2 = beamMesh.clone(`tidalspike_beam2_${Date.now()}`)
-                beamMesh2.rotationQuaternion = beamMesh.rotationQuaternion.multiply(Quaternion.RotationAxis(new Vector3(1, 0, 0), Math.PI / 2))
-                addGlow(scene, beamMesh2, 0.6)
-                // playImpactSound already ran unconditionally, before the
-                // caller ever checks onHitStyle - not called again here
-
-                // impact splash - a burst of particles at the enemy's own
-                // hit position (not spanning the distance like the beam).
-                // Two earlier versions tried this as a single mesh (a
-                // billboarded plane, then a vertex-displaced "wiggling"
-                // plane) - a real particle burst reads as an actual splash
-                // of water flying outward far more directly than either.
-                const endSplashParticles = spawnSplashBurst(scene, endPos, projectileScale)
-                // spawnSplashHover (not spawnSplashBurst) at the ORIGIN end
-                // (startPos) - the beam mesh itself just starts abruptly
-                // with a hard, straight cut edge right there (visible
-                // in-game as a sharp line beginning near the caster's
-                // hand), this covers that seam - but this is water welling
-                // up at the SOURCE, not an impact, so it stays put in one
-                // spot at a low emitRate instead of bursting outward
-                const startSplashParticles = spawnSplashHover(scene, startPos, projectileScale)
-
-                const BEAM_LINGER_MS = 3000
-                setTimeout(() => {
-                    // (false) - both particle systems' own particleTexture
-                    // is getSplashParticleTex's shared persistent cache,
-                    // not owned by either instance - same "don't dispose
-                    // the shared texture out from under every other active
-                    // instance" reasoning every particle cleanup in this
-                    // file already follows (see e.g. spawnGroundTrap's own
-                    // burnParticles.dispose(false))
-                    endSplashParticles.dispose(false)
-                    startSplashParticles.dispose(false)
-                    // (false, false) - beamMesh's own material is
-                    // getBeamMat's shared persistent cache, not owned by
-                    // this one cast - (false, true) here disposed the
-                    // shared material itself the first time any beam ever
-                    // despawned, leaving every cast after that handing out
-                    // a reference to an already-disposed material (nothing
-                    // rendered - the "only appears once" bug this was)
-                    beamMesh.dispose(false, false)
-                    beamMesh2.dispose(false, false)
-                    finishCleanup()
-                }, BEAM_LINGER_MS)
+        animatables.push({ node: plane, axes: pv.animation })
+        disposables.push(() => plane.dispose(false, materialKind !== "texture"))
+        root = plane
+    } else if(pv.shape === "glbModel" && pv.model){
+        // a real modeled GLB projectile (models/projectiles/*.glb, see
+        // assetcreation/createProjectileModel.js) instead of a primitive
+        // MeshBuilder shape or a weapon-part assembly - material.kind:"none"
+        // (the default) leaves the model's own baked-in material untouched;
+        // "glow"/"fresnel" override it the same way every other shape can,
+        // for a skill that wants its modeled projectile tinted/glowing too
+        const useRoot = copies.length > 1
+        if(useRoot){ root = new TransformNode(`gen_glbmodel_root_${skill.name}_${Date.now()}`, scene); root.parent = box }
+        const instances = copies.map(copy => {
+            const inst = createProjectileModelInstance(scene, pv.model.name, useRoot ? root : box)
+            if(!inst) return null
+            inst.isPickable = false
+            inst.scaling = new Vector3(1, 1, 1).scale(scale * (pv.model.scale ?? 1))
+            // GLB-imported meshes come with rotationQuaternion already set
+            // (glTF stores rotation as quaternions) - Babylon computes the
+            // world transform from THAT when it's non-null and silently
+            // ignores a plain .rotation assignment entirely. Null it out
+            // first so the Euler rotation below actually takes effect -
+            // same trap createweapon.js's own createPartsWeapon avoids by
+            // using .addRotation() instead of a raw assignment.
+            inst.rotationQuaternion = null
+            const rot = copy.rotation || { x: 0, y: 0, z: 0 }
+            inst.rotation = new Vector3(rot.x, rot.y, rot.z)
+            if(materialKind !== "none") applyPlainMaterial(scene, inst, materialKind, color, pv.material?.texturePath)
+            return inst
+        }).filter(Boolean)
+        if(instances.length){
+            if(!useRoot){ root = instances[0] }
+            instances.forEach((inst, i) => { if(copies[i]?.animation) animatables.push({ node: inst, axes: copies[i].animation }) })
+            if(!copies.some(c => c.animation)) animatables.push({ node: root, axes: pv.animation })
+            // dispose the MATERIAL too only for "glow"/"fresnel" - those are
+            // a fresh instance created per cast (createGlowingMat/fresnelMat),
+            // safe/correct to free right along with the mesh. "texture" is
+            // the OPPOSITE: getGenericFlatTextureMat hands back one SHARED,
+            // cached-by-path instance reused across every cast - disposing
+            // it here would destroy it the moment the very first stoneshard
+            // cast finishes, leaving every cast after that pointing at an
+            // already-disposed material (renders as nothing - exactly the
+            // "only see it once" bug this fixes). Same reasoning the "plane"
+            // branch's own disposal already correctly follows above.
+            const disposeMat = materialKind === "glow" || materialKind === "fresnel"
+            disposables.push(() => (useRoot ? root : instances[0]).dispose(false, disposeMat))
+            if(pv.arcs?.enabled){
+                attachLightning(scene, root, color, !!pv.arcs.weaponGlow, { arcCount: skill.arcCount ?? 2, width: pv.arcs.width ?? 0.015, updateInterval: pv.arcs.updateInterval ?? 90, withLight: false })
             }
         }
-    },
-    // particle trail, box stays invisible - the default look. skill.particleStyles
-    // ([{name, color}, ...], see tools/particlesystem.js's createParticleSystem)
-    // picks the trail's shape; falls back to a plain colored "oneline" streak.
-    bolt(scene, box, skill){
-        const styles = skill.particleStyles ?? [{ name: "oneline", color: skill.explosionColor || "blue" }]
-        const systems = createParticleSystem(scene, box, styles)
-        // dispose(false) - particleTexture is particlesystem.js's own
-        // shared/persistent texture cache now, not owned by this one
-        // system; disposing it here would evict it for every OTHER trail/
-        // burst currently using the same sprite
-        return () => systems.forEach(ps => { ps.stop(); ps.dispose(false) })
-    },
-    // a tiny glowing sword flies out instead of a bolt - reuses createWeapon's
-    // own glow support (the same one equipped weapons/thrown projectiles use)
-    // rather than building a new glowing-mesh system from scratch. Starts
-    // with no arcs at all - skill.arcCount (skillUpgrades.js's growArcAura)
-    // UNLOCKS them partway through leveling instead of just growing an
-    // already-crackling blade, since this style never had any to begin with.
-    blade(scene, box, skill){
-        box.isVisible = false
-        const bladeRoot = createWeapon(scene, "sword", { x: 0, y: 0, z: 0 }, box, null, {
-            bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1",
-        }, skill.explosionColor || "blue")
-        bladeRoot.scaling = new Vector3(0.12, 0.12, 0.12).scale(skill.projectileScale ?? 1)
-        bladeRoot.addRotation(Math.PI, 0, Math.PI / 2) // tip-forward instead of a flat sideways blade
-        if((skill.arcCount ?? 0) > 0){
-            attachLightning(scene, bladeRoot, skill.explosionColor || "blue", false, { arcCount: skill.arcCount, width: 0.015, updateInterval: 90, withLight: false })
+        // instances.length === 0 (model failed/never loaded, already warned
+        // by createProjectileModelInstance) - box stays invisible, same
+        // silent-degrade behavior every other optional asset in this game falls back to
+    } else if(pv.shape === "weapon" && pv.weapon){
+        const useRoot = copies.length > 1
+        if(useRoot){ root = new TransformNode(`gen_weapon_root_${skill.name}_${Date.now()}`, scene); root.parent = box }
+        const weaponRoots = buildWeaponCopies(scene, useRoot ? root : box, pv.weapon, copies, materialKind, color)
+        weaponRoots.forEach((wroot, i) => { if(copies[i]?.animation) animatables.push({ node: wroot, axes: copies[i].animation }) })
+        if(!useRoot) root = weaponRoots[0]
+        else animatables.push({ node: root, axes: pv.animation })
+        disposables.push(() => (useRoot ? root : weaponRoots[0]).dispose(false, true))
+        if(pv.arcs?.enabled && (skill.arcCount ?? 0) > 0){
+            attachLightning(scene, useRoot ? root : weaponRoots[0], color, false, { arcCount: skill.arcCount, width: pv.arcs.width ?? 0.015, updateInterval: pv.arcs.updateInterval ?? 90, withLight: false })
         }
-        // (false, true) = recurse into the 4 part meshes (and the arcs, if
-        // any) AND dispose each one's own material/texture along with it -
-        // Mesh/Node.dispose()'s disposeMaterialAndTextures param defaults
-        // to false, so a plain bladeRoot.dispose() was leaving every part's
-        // material (createGlowingMat, a fresh instance per cast, never
-        // shared - safe to free) behind every single time this skill fired.
-        return () => bladeRoot.dispose(false, true)
-    },
-    // stoneshardSkill's own look (see its own projectileStyle in
-    // skillsData.js) - monolith/orangelith casts this exact skill (tcp/
-    // generate-datas/genenemy.ts's monolithBase.skills), where a tiny sword
-    // read as an odd fit for what's meant to be an insect-like sting
-    // attack. A thin glowing cone/needle instead - own separate style key,
-    // not a change to the shared "blade" style itself, so flamebrand/
-    // tidalspike/lightningbolt (the other 3 skills still using "blade")
-    // are untouched.
-    sting(scene, box, skill){
-        box.isVisible = false
-        const sting = getShapeClone(scene, "sting_projectile", () => MeshBuilder.CreateCylinder("sting_projectile_template", { diameterTop: 0, diameterBottom: 0.15, height: 0.9, tessellation: 10 }, scene))
-        sting.parent = box
-        sting.position = Vector3.Zero()
-        sting.isPickable = false
-        // cone's own local apex points +Y by default (diameterTop: 0) -
-        // rotating 90° around X tips it to point along +Z instead, matching
-        // box's own forward-aim rotation (fireElementalProjectile's atan2
-        // math above) without needing bladeRoot's extra corrective
-        // rotations (those exist to fix up an AUTHORED weapon asset's own
-        // default orientation quirks - this cone has none, I built it)
-        sting.rotation.x = Math.PI / 2
-        sting.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-        sting.material = createGlowingMat(scene, skill.explosionColor || "green")
-        return () => sting.dispose(false, true)
-    },
-    // dark - shadowboltSkill's own distinct look: the FULL assembled spear
-    // (blade+guard+handle+pommel via createWeapon, same "spearlance" above
-    // already uses successfully) instead of just the bare blade piece alone -
-    // a single part with no guard/handle/pommel read as an unrecognizable
-    // abstract chevron shape rather than an actual weapon silhouette.
-    // fresnelMat (translucent hollow-shell look, tools/materials.js)
-    // applied over all 4 parts uniformly, one shared material instance,
-    // instead of createWeapon's own glowingColor path (a flat
-    // createGlowingMat) - see that function's own comment.
-    shadowblade(scene, box, skill){
-        box.isVisible = false
-        const spearOptions = { bladeRarity: "rare1", guardRarity: "rare1", handleRarity: "rare1", pommelRarity: "rare1" }
-        // no glowingColor (7th arg) - createWeapon would assign a flat
-        // createGlowingMat per part otherwise; material gets overridden
-        // with fresnelMat uniformly below instead
-        const spearRoot = createWeapon(scene, "spear", { x: 0, y: 0, z: 0 }, box, null, spearOptions)
-        // 0.16 - same scale spearlance already uses for this exact asset.
-        // The bare-blade attempt this replaced used 1 (no scale-down at
-        // all) - full weapon-asset size, which is what actually made it
-        // look "not properly positioned": not a location bug, just so much
-        // bigger than every other projectile style's own 0.1-0.5 range
-        // that it read as a huge shape floating apart from the caster
-        // rather than a small thing flying from them.
-        spearRoot.scaling = new Vector3(0.16, 0.16, 0.16).scale(skill.projectileScale ?? 1)
-        // same tip-forward formula "blade"/"spearlance" both use for their
-        // own weapon-derived projectiles
-        spearRoot.addRotation(Math.PI, 0, Math.PI / 2)
-        const spearMat = fresnelMat(scene, "purple")
-        spearRoot.getChildMeshes().forEach(part => {
-            part.material = spearMat
-            addGlow(scene, part, 0.6)
+    } else if(pv.shape === "custom"){
+        customBuild = buildCustomMesh(scene, box, pv.customMesh || {}, color)
+        box.scaling = new Vector3(1, 1, 1).scale(scale)
+        animatables.push({ node: customBuild.orb, axes: pv.animation || { x: 0.008, y: 0.02, z: 0 } })
+        if(pv.customMesh?.coreAnimation) animatables.push({ node: customBuild.core, axes: pv.customMesh.coreAnimation })
+        disposables.push(() => {
+            customBuild.particles.forEach(ps => { ps.stop(); ps.dispose(false) })
+            customBuild.veinNoise.dispose()
+            customBuild.orbMat.dispose()
+            customBuild.orb.dispose()
+            customBuild.core.dispose(false, true)
         })
-        if((skill.arcCount ?? 0) > 0){
-            attachLightning(scene, spearRoot, "purple", false, { arcCount: skill.arcCount, width: 0.015, updateInterval: 90, withLight: false })
-        }
-        // (false, true) recurses into all 4 part meshes (and the arcs, if
-        // any) and disposes their material along with them - all 4 parts
-        // share the SAME spearMat instance, so this only actually frees it
-        // once (Material.dispose() is safely idempotent against being
-        // called more than once, same reasoning already established for
-        // "bladecross"/"twinhalo"/"boxcross" above, each of which also
-        // disposes more than one mesh sharing/holding its own material)
-        return () => spearRoot.dispose(false, true)
-    },
-    // a small glowing core wrapped in crackling arcs - attachLightning
-    // already handles both the arcs AND making the mesh itself glow
-    // (weaponGlow: true), see effects/lightning.js
-    lightning(scene, box, skill){
+        root = box // "custom" grows box.scaling itself in the onHit stickAndGrow path, matching darkorb's original behavior
+    } else if(pv.shape === "box" && copies.length === 1){
+        // reuses the shared projectile box ITSELF (already sized 0.7, no
+        // child mesh) - matching the old "lightning" style exactly, which
+        // flipped box.isVisible back on and materialed box directly rather
+        // than spawning a same-sized-or-different child. Only takes this
+        // fast path for a single copy - a "box" skill wanting multiple
+        // crossed boxes would fall through to the generic multi-copy branch
+        // below instead, same as any other primitive shape.
         box.isVisible = true
-        box.scaling = new Vector3(0.4, 0.4, 0.4).scale(skill.projectileScale ?? 1)
-        box.material = createGlowingMat(scene, skill.explosionColor || "white")
-        // voidrendSkill only - lightpierceSkill shares this same "lightning"
-        // style but doesn't get this
-        
-        attachLightning(scene, box, skill.explosionColor || "white", true, { arcCount: skill.arcCount ?? 3, width: 0.025, updateInterval: 60 })
-        // no manual dispose here - attachLightning already wires its own
-        // teardown to box.onDisposeObservable (addOnce), which fires when
-        // removeProjectile() disposes the box right after this cleanup runs.
-        // Calling bolt.dispose() here too would double-dispose the arcs/
-        // light/material a second time when that observable then fires.
-        return () => {}
-    },
-    // a spinning halo/ring instead of a glowing box - radiantjudgment's own
-    // projectile style (it already gets the special "divine1" magic circle;
-    // this carries the same "divine judgment descending" read into the
-    // projectile itself). Same crackling-arcs-plus-glow treatment as
-    // "lightning" above, attachLightning(weaponGlow: true) applies both the
-    // material/glow AND the arcs to the torus in one call, just built from a
-    // torus instead of a box.
-    halo(scene, box, skill){
-        box.isVisible = false
-        const halo = getShapeClone(scene, "torus_halo", () => MeshBuilder.CreateTorus("torus_halo_template", { diameter: 0.55, thickness: 0.09, tessellation: 24 }, scene))
-        halo.parent = box
-        halo.position = Vector3.Zero()
-        halo.isPickable = false
-        halo.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-        attachLightning(scene, halo, skill.explosionColor || "white", true, { arcCount: skill.arcCount ?? 3, width: 0.02, updateInterval: 60 })
-
-        // spins face-on as it flies instead of just sitting there
-        const spinObserver = scene.onBeforeRenderObservable.add(() => { halo.rotation.z += 0.12 })
-        return () => {
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            // attachLightning's own arcs/light/mat teardown is wired to
-            // halo.onDisposeObservable, fires from this either way - (false,
-            // true) additionally frees halo's OWN material (createGlowingMat,
-            // set inline by attachLightning's weaponGlow:true), which a plain
-            // .dispose() would otherwise leave behind every cast
-            halo.dispose(false, true)
+        // shapeParams.boxScale - the old "lightning" style always scaled the
+        // shared 0.7-sized box DOWN to 0.4x rather than showing it at full
+        // size - only meaningful here, every other shape builds its own
+        // appropriately-sized child mesh instead
+        box.scaling = new Vector3(1, 1, 1).scale(scale * (pv.shapeParams?.boxScale ?? 1))
+        applyPlainMaterial(scene, box, materialKind, color)
+        root = box
+        animatables.push({ node: box, axes: pv.animation })
+        if(pv.arcs?.enabled){
+            attachLightning(scene, box, color, !!pv.arcs.weaponGlow, { arcCount: skill.arcCount ?? 3, width: pv.arcs.width ?? 0.025, updateInterval: pv.arcs.updateInterval ?? 60, withLight: false })
         }
-    },
-
-    // --- God Tier styles (skillrank 4, see skillsData.js) - each element
-    // pair gets its own distinct shape instead of reusing plain "lightning"'s
-    // glowing box, all still wrapped in the same crackling-arc treatment.
-    // weaponGlow is deliberately false on every attachLightning call below -
-    // true would flatten every child mesh's material to a flat glow color,
-    // wiping out createWeapon's own part materials/glow (bladecross/
-    // spearlance) or this style's own hand-set material (crystalshard/
-    // twinhalo/boxcross); false only adds the arc tubes around the shape,
-    // untouched otherwise. No light (withLight: false) on any of them -
-    // every hit already spawns its own EXPLOSION_STYLES burst with a real
-    // light-adjacent glow; a PointLight per in-flight projectile on top of
-    // that adds up fast with several God Tier casts on screen at once.
-
-    // fire - two glowing sword blades (reused from allweapons/createWeapon,
-    // the same part-mesh system equipped swords use) crossed into an X,
-    // spinning as one unit
-    bladecross(scene, box, skill){
-        box.isVisible = false
-        const root = new TransformNode(`bladecross_${skill.name}_${Date.now()}`, scene)
-        root.parent = box
-
-        const bladeOptions = { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }
-        const bladeA = createWeapon(scene, "sword", { x: 0, y: 0, z: 0 }, root, null, bladeOptions, skill.explosionColor || "red")
-        bladeA.scaling = new Vector3(0.1, 0.1, 0.1).scale(skill.projectileScale ?? 1)
-        bladeA.addRotation(Math.PI, 0, Math.PI / 4)
-        const bladeB = createWeapon(scene, "sword", { x: 0, y: 0, z: 0 }, root, null, bladeOptions, skill.explosionColor || "red")
-        bladeB.scaling = new Vector3(0.1, 0.1, 0.1).scale(skill.projectileScale ?? 1)
-        bladeB.addRotation(Math.PI, 0, -Math.PI / 4)
-
-        const spinObserver = scene.onBeforeRenderObservable.add(() => { root.rotation.z += 0.05 })
-        attachLightning(scene, root, skill.explosionColor || "red", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-        return () => {
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            // recurses into both blades' part meshes and the arcs; (false,
-            // true) also frees each part's own material along with them
-            root.dispose(false, true)
-        }
-    },
-
-    // water - a single spear (also from allweapons - spear only exists at
-    // one part-tier, see swordsdata.js's stormpiercer) flying point-first
-    spearlance(scene, box, skill){
-        box.isVisible = false
-        const spearOptions = { bladeRarity: "rare1", guardRarity: "rare1", handleRarity: "rare1", pommelRarity: "rare1" }
-        const spearRoot = createWeapon(scene, "spear", { x: 0, y: 0, z: 0 }, box, null, spearOptions, skill.explosionColor || "blue")
-        spearRoot.scaling = new Vector3(0.16, 0.16, 0.16).scale(skill.projectileScale ?? 1)
-        // same tip-forward formula as PROJECTILE_STYLES.blade above - spear's
-        // own default orientation hasn't been visually verified against this
-        // (no live render pass was possible), may need adjusting once seen
-        spearRoot.addRotation(Math.PI, 0, Math.PI / 2)
-        attachLightning(scene, spearRoot, skill.explosionColor || "blue", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-        return () => spearRoot.dispose(false, true)
-    },
-
-    // earth - a jagged glowing crystal shard (MeshBuilder.CreatePolyhedron,
-    // type 3 = icosahedron - a many-faceted, rock-like silhouette instead of
-    // a smooth primitive), tumbling irregularly on all three axes rather
-    // than spinning cleanly like everything else here
-    crystalshard(scene, box, skill){
-        box.isVisible = false
-        const shard = getShapeClone(scene, "polyhedron_shard", () => MeshBuilder.CreatePolyhedron("polyhedron_shard_template", { type: 3, size: 0.22 }, scene))
-        shard.parent = box
-        shard.isPickable = false
-        shard.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-        shard.material = createGlowingMat(scene, skill.explosionColor || "green")
-        addGlow(scene, shard, 0.5)
-
-        const spinObserver = scene.onBeforeRenderObservable.add(() => {
-            shard.rotation.x += 0.04
-            shard.rotation.y += 0.07
-            shard.rotation.z += 0.02
+        // no manual dispose pushed here - attachLightning already wires its
+        // own arc/material teardown to box.onDisposeObservable, same as the
+        // original "lightning" style's own comment on this exact point
+    } else if(pv.shape){
+        // every other plain primitive shape (sphere/cone/icosahedron/torus,
+        // or "box" with more than one copy)
+        const useRoot = copies.length > 1
+        if(useRoot){ root = new TransformNode(`gen_shape_root_${skill.name}_${Date.now()}`, scene); root.parent = box }
+        const meshes = copies.map(copy => {
+            const mesh = buildProjectileShapeMesh(scene, pv.shape, pv.shapeParams)
+            mesh.parent = useRoot ? root : box
+            mesh.isPickable = false
+            applyPlainMaterial(scene, mesh, materialKind, color, pv.material?.texturePath)
+            const rot = copy.rotation || { x: 0, y: 0, z: 0 }
+            mesh.rotation = new Vector3(rot.x, rot.y, rot.z)
+            return mesh
         })
-        attachLightning(scene, shard, skill.explosionColor || "green", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 100, withLight: false })
-        return () => {
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            shard.dispose(false, true) // also frees shard.material (createGlowingMat)
+        if(!useRoot){ root = meshes[0]; root.scaling = new Vector3(1, 1, 1).scale(scale) }
+        else root.scaling = new Vector3(1, 1, 1).scale(scale)
+        meshes.forEach((mesh, i) => { if(copies[i]?.animation) animatables.push({ node: mesh, axes: copies[i].animation }) })
+        if(!copies.some(c => c.animation)) animatables.push({ node: root, axes: pv.animation })
+        // same "texture" is a SHARED cache, never dispose it per-cast
+        // reasoning the glbModel branch's own comment covers in full
+        const disposeMat = materialKind === "glow" || materialKind === "fresnel"
+        disposables.push(() => (useRoot ? root : meshes[0]).dispose(false, disposeMat))
+        if(pv.arcs?.enabled){
+            attachLightning(scene, root, color, !!pv.arcs.weaponGlow, { arcCount: skill.arcCount ?? 2, width: pv.arcs.width ?? 0.015, updateInterval: pv.arcs.updateInterval ?? 90, withLight: false })
         }
-    },
+    }
+    // no shape at all ("none"/marker/beam-in-flight) - box just stays
+    // invisible, nothing built, nothing to dispose beyond the caller's own
+    // box.dispose() later
 
-    // light - two tori crossed perpendicular (a gyroscope/aegis read),
-    // each spinning on its own independent axis - distinct from "halo"
-    // (radiantjudgment's single flat ring)
-    twinhalo(scene, box, skill){
-        box.isVisible = false
-        const root = new TransformNode(`twinhalo_${skill.name}_${Date.now()}`, scene)
-        root.parent = box
-        root.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1) // scales both rings together
-
-        const ringA = getShapeClone(scene, "torus_twinhalo", () => MeshBuilder.CreateTorus("torus_twinhalo_template", { diameter: 0.45, thickness: 0.05, tessellation: 24 }, scene))
-        ringA.parent = root
-        ringA.isPickable = false
-        ringA.material = createGlowingMat(scene, skill.explosionColor || "white")
-        addGlow(scene, ringA, 0.5)
-
-        const ringB = getShapeClone(scene, "torus_twinhalo", () => MeshBuilder.CreateTorus("torus_twinhalo_template", { diameter: 0.45, thickness: 0.05, tessellation: 24 }, scene))
-        ringB.parent = root
-        ringB.isPickable = false
-        ringB.rotation.y = Math.PI / 2 // perpendicular to ringA
-        ringB.material = createGlowingMat(scene, skill.explosionColor || "white")
-        addGlow(scene, ringB, 0.5)
-
-        const spinObserver = scene.onBeforeRenderObservable.add(() => {
-            ringA.rotation.z += 0.03
-            ringB.rotation.x += 0.045
+    const spinObserver = animatables.length
+        ? scene.onBeforeRenderObservable.add(() => {
+            animatables.forEach(({ node, axes }) => {
+                if(!axes || node.isDisposed?.()) return
+                if(axes.x) node.rotation.x += axes.x
+                if(axes.y) node.rotation.y += axes.y
+                if(axes.z) node.rotation.z += axes.z
+            })
         })
-        attachLightning(scene, root, skill.explosionColor || "white", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-        return () => {
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            root.dispose(false, true) // also frees ringA/ringB's own separate materials (createGlowingMat, two of them)
+        : null
+
+    function cleanup(){
+        if(spinObserver) scene.onBeforeRenderObservable.remove(spinObserver)
+        disposables.forEach(fn => fn())
+    }
+
+    function onHit(enemy, finishCleanup, projectile){
+        runOnHitVisual(scene, box, skill, skill.onHitVisual, { root, customBuild, launchPosition }, enemy, finishCleanup, projectile)
+    }
+
+    return { cleanup, onHit }
+}
+
+// skill.onHitVisual is an ARRAY of effect descriptors, not a single object -
+// a skill can layer more than one on-hit effect at once (e.g. a beam AND a
+// splash burst) instead of being locked to exactly one. Normalizes a bare
+// object (or undefined) into a 1-entry/0-entry array too, so nothing else
+// has to care which shape a given skill actually wrote. The real
+// finishCleanup only runs once EVERY effect in the array has finished its
+// own sequence - each effect gets its own private "I'm done" callback that
+// just decrements a shared counter, same idea as Promise.all but for these
+// callback-based visual sequences instead of promises.
+function runOnHitVisual(scene, box, skill, onHitVisual, built, enemy, finishCleanup, projectile){
+    const effects = Array.isArray(onHitVisual) ? onHitVisual : (onHitVisual ? [onHitVisual] : [])
+    if(effects.length === 0){ finishCleanup(); return }
+
+    let pending = effects.length
+    function effectDone(){
+        pending -= 1
+        if(pending <= 0) finishCleanup()
+    }
+    effects.forEach(ohv => runSingleOnHitEffect(scene, box, skill, ohv, built, enemy, effectDone, projectile))
+}
+
+// one entry from the onHitVisual array - burst/implode (position-only, box
+// already stops moving/gets disposed right after by the caller), stickAndGrow
+// (grows whatever renderGenericProjectile just built, sticking to the target
+// first), beam (tidalspikeSkill - nothing exists until impact, built
+// entirely here). finishCleanup here is really "this ONE effect is done",
+// wired by runOnHitVisual above - not the projectile's real cleanup.
+function runSingleOnHitEffect(scene, box, skill, ohv, built, enemy, finishCleanup, projectile){
+    const powerScale = skill.projectileScale ?? 1
+    const type = ohv.type || "burst"
+
+    function finishWithOptionalStick(){
+        // "stickBriefly" (old code's `skill.projectileStyle === "blade"` check) -
+        // embeds briefly into the enemy after a normal burst, same as every
+        // weapon-shaped skill used to, instead of despawning instantly
+        if(ohv.stickBriefly && enemy?.body && projectile) return stickMarkerToMesh(projectile, box, enemy.body, finishCleanup)
+        finishCleanup()
+    }
+
+    if(type === "burst" || type === "implode"){
+        fireGenericBurst(scene, box.position.clone(), powerScale, ohv, skill.explosionColor || "red")
+        finishWithOptionalStick()
+    } else if(type === "beam"){
+        const beam = ohv.beam || {}
+        if(!enemy?.body){ finishCleanup(); return }
+        // built.launchPosition (captured at spawn, see renderGenericProjectile) -
+        // NOT box.position here, which by hit time is essentially AT the
+        // enemy already (see renderGenericProjectile's own comment on this)
+        const startPos = built.launchPosition ? built.launchPosition.clone() : box.position.clone()
+        const endPos = enemy.body.position.clone()
+        const dir = endPos.subtract(startPos)
+        const dist = dir.length()
+        if(dist < 0.001){ finishCleanup(); return }
+        dir.normalize()
+
+        const thickness = (beam.width ?? 0.5) * powerScale
+        const beamMesh = MeshBuilder.CreatePlane(`gen_beam_${Date.now()}`, { width: dist, height: thickness }, scene)
+        beamMesh.position = Vector3.Lerp(startPos, endPos, 0.5)
+        beamMesh.isPickable = false
+        const referenceAxis = new Vector3(1, 0, 0)
+        const rotationAxis = Vector3.Cross(referenceAxis, dir)
+        if(rotationAxis.lengthSquared() < 0.0001){
+            beamMesh.rotationQuaternion = Vector3.Dot(referenceAxis, dir) < 0 ? Quaternion.RotationAxis(Vector3.Up(), Math.PI) : Quaternion.Identity()
+        } else {
+            const angle = Math.acos(Math.min(1, Math.max(-1, Vector3.Dot(referenceAxis, dir))))
+            beamMesh.rotationQuaternion = Quaternion.RotationAxis(rotationAxis.normalize(), angle)
         }
-    },
+        beamMesh.material = getGenericBeamMat(scene, beam.texturePath || "./images/projectiles/watercurrent.webp", beam.scrollSpeed ?? 0.6, beam.uScale ?? 4)
+        addGlow(scene, beamMesh, 0.6)
+        const beamMesh2 = beamMesh.clone(`gen_beam2_${Date.now()}`)
+        beamMesh2.rotationQuaternion = beamMesh.rotationQuaternion.multiply(Quaternion.RotationAxis(new Vector3(1, 0, 0), Math.PI / 2))
+        addGlow(scene, beamMesh2, 0.6)
 
-    // a plain radiant glowing sphere with a Fresnel "hollow shell" material -
-    // celestialverdictSkill's own distinct look (used to share "twinhalo"
-    // with seraphicascension - pulled out into its own style so the two no
-    // longer look identical), also reused by stormsurgeSkill (lightning,
-    // yellow) and abyssalcurrentSkill (water, blue) - the shape/material
-    // aren't light-element-specific, just driven by skill.explosionColor
-    // like every other style here
-    lightorb(scene, box, skill){
-        box.isVisible = false
-        const sphere = getShapeClone(scene, "sphere_lightorb", () => MeshBuilder.CreateSphere("sphere_lightorb_template", { diameter: 0.4, segments: 16 }, scene))
-        sphere.parent = box
-        sphere.isPickable = false
-        sphere.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-        // fresnelMat (tools/materials.js) instead of a flat createGlowingMat -
-        // a hollow-looking glowing shell (transparent center, brighter/more
-        // opaque rim) rather than a solid glowing ball
-        const sphereMat = fresnelMat(scene, skill.explosionColor || "white")
-        sphere.material = sphereMat
-        addGlow(scene, sphere, 0.6)
+        const endSplashParticles = spawnSplashBurst(scene, endPos, powerScale)
+        const startSplashParticles = spawnSplashHover(scene, startPos, powerScale)
+        const lingerMs = beam.lingerMs ?? 3000
+        setTimeout(() => {
+            endSplashParticles.dispose(false)
+            startSplashParticles.dispose(false)
+            beamMesh.dispose(false, false)
+            beamMesh2.dispose(false, false)
+            finishCleanup()
+        }, lingerMs)
+    } else if(type === "stickAndGrow"){
+        const sag = ohv.stickAndGrow || {}
+        const growDurationMs = sag.growDurationMs ?? 900
+        const lingerMs = sag.lingerMs ?? 400
+        const growScale = sag.growScale ?? 5
+        const fadeOutMs = sag.fadeOutMs ?? null
 
-        const spinObserver = scene.onBeforeRenderObservable.add(() => {
-            sphere.rotation.y += 0.05
-            sphere.rotation.x += 0.03
-        })
-        attachLightning(scene, sphere, skill.explosionColor || "white", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
+        if(enemy?.body) box.setParent(enemy.body)
+        const startScale = box.scaling.clone()
+        const targetScale = startScale.scale(growScale)
+        const startTime = performance.now()
 
-        function cleanup(){
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            sphere.dispose(false, true) // also frees sphere's own material (createGlowingMat)
-        }
+        // darkorb's own custom build additionally lerps its emissive color +
+        // grows both particle layers' emitRate/maxSize - a plain shape (e.g.
+        // lightorb-based stormsurge) only ever grows box.scaling and fades
+        // its own material alpha, nothing else
+        const material = built.customBuild ? built.customBuild.orbMat : (built.root?.material || null)
+        const startEmissive = built.customBuild ? built.customBuild.orbMat.emissiveColor.clone() : null
+        const targetEmissive = built.customBuild ? new Color3(sag.growEmissive?.r ?? 0.85, sag.growEmissive?.g ?? 0.5, sag.growEmissive?.b ?? 1.0) : null
+        const particleStarts = built.customBuild ? built.customBuild.particles.map(ps => ({ ps, rate: ps.emitRate, size: ps.maxSize })) : []
+        const intensityRamp = sag.intensityRamp ?? 1
+        const baseAlpha = material?.alpha ?? 1
 
-        // skill.stickAndGrow (stormsurgeSkill) - instead of the usual
-        // EXPLOSION_STYLES burst, the sphere itself sticks to whatever it
-        // hit (box.setParent, same "ride along with the enemy" trick
-        // darkorb's own onHit uses), swells to skill.stickGrowScale (default
-        // 5x) over STICK_GROW_DURATION_MS, then fades out (material alpha ->
-        // 0, not just an abrupt disappear) over STICK_FADE_DURATION_MS before
-        // finishCleanup runs. celestialverdict never sets this flag, so its
-        // own lightorb cast falls through to the plain cleanup-only return
-        // below and keeps its usual EXPLOSION_STYLES.light burst untouched.
-        if(!skill.stickAndGrow) return cleanup
-
-        const STICK_GROW_DURATION_MS = 500
-        const STICK_FADE_DURATION_MS = 700
-        const STICK_GROW_SCALE = skill.stickGrowScale ?? 5
-        const baseAlpha = sphereMat.alpha
-        function onHit(hitTarget, finishCleanup){
-            if(hitTarget?.body) box.setParent(hitTarget.body)
-
-            const startScale = box.scaling.clone()
-            const targetScale = startScale.scale(STICK_GROW_SCALE)
-            const growStart = performance.now()
-            const growObserver = scene.onBeforeRenderObservable.add(() => {
-                // hit target died / projectile got disposed mid-grow - bail
-                // rather than animating properties on a disposed mesh
-                if(box.isDisposed()){
-                    scene.onBeforeRenderObservable.remove(growObserver)
-                    return
-                }
-                const t = Math.min((performance.now() - growStart) / STICK_GROW_DURATION_MS, 1)
-                const eased = 1 - Math.pow(1 - t, 3) // ease-out cubic, fast swell up front
-                box.scaling = Vector3.Lerp(startScale, targetScale, eased)
-                if(t >= 1){
-                    scene.onBeforeRenderObservable.remove(growObserver)
+        const growObserver = scene.onBeforeRenderObservable.add(() => {
+            if(box.isDisposed()){ scene.onBeforeRenderObservable.remove(growObserver); return }
+            const t = Math.min((performance.now() - startTime) / growDurationMs, 1)
+            const eased = 1 - Math.pow(1 - t, 3)
+            box.scaling = Vector3.Lerp(startScale, targetScale, eased)
+            if(built.customBuild){
+                built.customBuild.orbMat.emissiveColor = Color3.Lerp(startEmissive, targetEmissive, eased)
+                particleStarts.forEach(({ ps, rate, size }) => {
+                    ps.emitRate = rate + (rate * 3 * intensityRamp) * eased
+                    ps.maxSize = size + (size * 2 * intensityRamp) * eased
+                })
+            }
+            if(t >= 1){
+                scene.onBeforeRenderObservable.remove(growObserver)
+                if(fadeOutMs && material){
                     const fadeStart = performance.now()
                     const fadeObserver = scene.onBeforeRenderObservable.add(() => {
-                        if(box.isDisposed()){
-                            scene.onBeforeRenderObservable.remove(fadeObserver)
-                            return
-                        }
-                        const ft = Math.min((performance.now() - fadeStart) / STICK_FADE_DURATION_MS, 1)
-                        sphereMat.alpha = baseAlpha * (1 - ft)
-                        if(ft >= 1){
-                            scene.onBeforeRenderObservable.remove(fadeObserver)
-                            finishCleanup()
-                        }
+                        if(box.isDisposed()){ scene.onBeforeRenderObservable.remove(fadeObserver); return }
+                        const ft = Math.min((performance.now() - fadeStart) / fadeOutMs, 1)
+                        material.alpha = baseAlpha * (1 - ft)
+                        if(ft >= 1){ scene.onBeforeRenderObservable.remove(fadeObserver); finishCleanup() }
                     })
+                } else {
+                    setTimeout(finishCleanup, lingerMs)
                 }
-            })
-        }
-        return { cleanup, onHit }
-    },
-
-    // dark - two thin glowing bars crossed into an X (exactly two boxes,
-    // rotated) - a stark geometric sigil/rune instead of a shaped weapon,
-    // fitting a curse mark more than a blade would
-    boxcross(scene, box, skill){
-        box.isVisible = false
-        const root = new TransformNode(`boxcross_${skill.name}_${Date.now()}`, scene)
-        root.parent = box
-        root.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-
-        const barA = getShapeClone(scene, "box_boxcross", () => MeshBuilder.CreateBox("box_boxcross_template", { width: 0.06, height: 0.06, depth: 0.5 }, scene))
-        barA.parent = root
-        barA.isPickable = false
-        barA.rotation.z = Math.PI / 4
-        barA.material = createGlowingMat(scene, skill.explosionColor || "violet")
-        addGlow(scene, barA, 0.5)
-
-        const barB = getShapeClone(scene, "box_boxcross", () => MeshBuilder.CreateBox("box_boxcross_template", { width: 0.06, height: 0.06, depth: 0.5 }, scene))
-        barB.parent = root
-        barB.isPickable = false
-        barB.rotation.z = -Math.PI / 4
-        barB.material = createGlowingMat(scene, skill.explosionColor || "violet")
-        addGlow(scene, barB, 0.5)
-
-        const spinObserver = scene.onBeforeRenderObservable.add(() => { root.rotation.y += 0.06 })
-        attachLightning(scene, root, skill.explosionColor || "violet", false, { arcCount: skill.arcCount ?? 2, width: 0.015, updateInterval: 90, withLight: false })
-        return () => {
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            root.dispose(false, true) // also frees barA/barB's own separate materials (createGlowingMat, two of them)
-        }
-    },
-
-    // dark - a genuinely different build from every other style above: a
-    // small glassy sphere with a real (if restrained) shader material -
-    // dark base, purple emissive, and a StandardMaterial Fresnel rim so the
-    // silhouette edge glows brighter than the face (no custom GLSL needed,
-    // StandardMaterial has this built in) - wrapped in a NoiseProceduralTexture
-    // bump map for a veined/cracked surface instead of a flat color. A tiny
-    // jagged white-glowing splinter sits inside, built with createRock.js's
-    // own displaceWithNoise (the exact technique createOre's rock peaks use,
-    // just a much smaller radius) instead of a plain sphere/box, for a
-    // sharp faceted point rather than a smooth ball. Two particle layers
-    // orbit it - a dark smoky aura and a purple energetic spark layer -
-    // for astralrainSkill-style layered ambience. darkorbSkill (skillsData.js)
-    // is the only skill using this - it's meaningfully heavier than every
-    // other projectile style here (a live shader material + a procedural
-    // texture + a displaced mesh + two particle systems, all built fresh
-    // per cast), so deliberately kept to one skill rather than reused broadly.
-    darkorb(scene, box, skill){
-        box.isVisible = false
-        const color = skill.explosionColor || "violet"
-        // base size grows with level same as every other style (skill.
-        // projectileScale) - onHit's grow sequence below starts its own 1x
-        // point FROM whatever box.scaling already is, so a leveled-up orb's
-        // bigger starting size and its onHit swell compound automatically
-        box.scaling = new Vector3(1, 1, 1).scale(skill.projectileScale ?? 1)
-
-        const orb = getShapeClone(scene, "sphere_darkorb", () => MeshBuilder.CreateSphere("sphere_darkorb_template", { diameter: 0.5, segments: 20 }, scene))
-        orb.parent = box
-        orb.isPickable = false
-
-        const orbMat = new StandardMaterial(`darkorbMat_${Date.now()}`, scene)
-        orbMat.diffuseColor = new Color3(0.05, 0.0, 0.08)
-        orbMat.specularColor = new Color3(0.05, 0.0, 0.08)
-        orbMat.emissiveColor = new Color3(0.3, 0.05, 0.45)
-        orbMat.alpha = 0.9
-
-        // veined/cracked surface - real noise (not a flat color), bound as
-        // a bump map so the cracks actually catch light as the orb turns
-        const veinNoise = new NoiseProceduralTexture(`darkorbVeins_${Date.now()}`, 256, scene)
-        veinNoise.octaves = 4
-        veinNoise.persistence = 0.65
-        veinNoise.animationSpeedFactor = 3
-        orbMat.bumpTexture = veinNoise
-
-        // brighter at the silhouette edge than face-on - the "electric
-        // sphere" read, via StandardMaterial's built-in Fresnel support
-        orbMat.emissiveFresnelParameters = new FresnelParameters()
-        orbMat.emissiveFresnelParameters.bias = 0.3
-        orbMat.emissiveFresnelParameters.power = 2
-        orbMat.emissiveFresnelParameters.leftColor = new Color3(0.8, 0.4, 1.0)
-        orbMat.emissiveFresnelParameters.rightColor = new Color3(0.2, 0.0, 0.3)
-
-        orb.material = orbMat
-        addGlow(scene, orb, 0.6)
-
-        // inner white-hot splinter - createRock.js's displaceWithNoise
-        // reused verbatim on a tiny icosphere (its own fresh noise
-        // instance, seedOffset 0 since nothing else shares this noiseFn),
-        // then flat-shaded once displacement is final for a faceted point
-        // instead of a smooth pebble - same order createOre's own peaks use
-        const coreRadius = 0.14
-        const coreNoise = createSimplex(randBetween(1, 9999))
-        const core = MeshBuilder.CreateIcoSphere(`darkorbCore_${skill.name}_${Date.now()}`, {
-            radius: coreRadius, subdivisions: 3, updatable: true, flat: false,
-        }, scene)
-        core.parent = box
-        core.isPickable = false
-        displaceWithNoise(core, coreNoise, 0, coreRadius)
-        core.convertToFlatShadedMesh()
-        core.material = createGlowingMat(scene, "white")
-        addGlow(scene, core, 1)
-
-        // dark smoky aura - standard alpha blend, not additive, so it reads
-        // as smoke/shadow rather than another glow layer
-        const blackAura = createParticle(scene, "smoke2", 40, null, 0.02, { min: 0.5, max: 0.9 }, 0.12, 0.3, 0, "sphere", true, orb, { r: 0.02, g: 0.0, b: 0.04 }, false)
-        blackAura.createSphereEmitter(0.32, 0.4)
-        blackAura.minEmitPower = 0.05
-        blackAura.maxEmitPower = 0.15
-        blackAura.emitRate = 26
-        blackAura.blendMode = ParticleSystem.BLENDMODE_STANDARD
-
-        // purple energetic sparks - additive, the "crackling" read
-        const purpleSpark = createParticle(scene, "flare", 30, null, 0.025, { min: 0.15, max: 0.4 }, 0.04, 0.12, 0, "sphere", true, orb, { r: 0.55, g: 0.15, b: 0.9 }, false)
-        purpleSpark.createSphereEmitter(0.28, 0.6)
-        purpleSpark.minEmitPower = 0.3
-        purpleSpark.maxEmitPower = 0.65
-        purpleSpark.emitRate = 40
-        purpleSpark.blendMode = ParticleSystem.BLENDMODE_ADD
-
-        // slow independent tumble so the vein pattern/rim glow/core facets
-        // all read as alive rather than a static prop flying in a straight line -
-        // keeps running through the onHit grow sequence below too (a
-        // spinning, swelling inferno reads more alive than one that freezes
-        // still the instant it lands)
-        const spinObserver = scene.onBeforeRenderObservable.add(() => {
-            orb.rotation.y += 0.02
-            orb.rotation.x += 0.008
-            core.rotation.x += 0.05
-            core.rotation.y += 0.08
+            }
         })
-
-        function cleanup(){
-            scene.onBeforeRenderObservable.remove(spinObserver)
-            // dispose(false) - both particleTextures are particlesystem.js's
-            // own shared/persistent cache now (smoke2/flare), not owned by
-            // these two systems specifically
-            blackAura.stop(); blackAura.dispose(false)
-            purpleSpark.stop(); purpleSpark.dispose(false)
-            veinNoise.dispose()
-            orbMat.dispose()
-            orb.dispose()
-            // core's own material (createGlowingMat, a SEPARATE instance
-            // from orbMat above) was never disposed here before - core.dispose()
-            // alone only freed the mesh, leaving that material behind every
-            // single darkorb cast. (false, true) fixes it the same way every
-            // other style's cleanup above does.
-            core.dispose(false, true)
-        }
-
-        // on hit: instead of the usual explode-and-vanish every other style
-        // gets, this sticks to whatever it hit and swells "like a wildfire"
-        // catching - box.setParent(enemy.body) rides along with the enemy
-        // from here on (Babylon's setParent, not a raw .parent assignment,
-        // recomputes the local transform to keep it exactly where it hit
-        // instead of snapping), scales up GROW_SCALE over GROW_DURATION_MS
-        // (orb+core scale together for free since both are parented to box),
-        // and both particle layers grow their emit rate/size to match.
-        // finishCleanup (fireElementalProjectile's own cleanupProjectile) is
-        // called by the caller once this whole sequence finishes, not here -
-        // this only owns the growth, not the projectile's lifecycle.
-        //
-        // skill.darkorbGrowScale/darkorbGrowIntensity (skillUpgrades.js's
-        // growDarkOrb) let leveling make this sequence itself more extreme,
-        // not just bigger going in - falls back to the original fixed
-        // 10x/1x if darkorbSkill was never upgraded past lvl 1.
-        const GROW_DURATION_MS = 900
-        const GROW_LINGER_MS = 400 // sits at full size/intensity for a beat before actually despawning
-        const GROW_SCALE = skill.darkorbGrowScale ?? 10
-        const GROW_INTENSITY = skill.darkorbGrowIntensity ?? 1
-        function onHit(enemy, finishCleanup){
-            if(enemy?.body) box.setParent(enemy.body)
-
-            const startScale = box.scaling.clone()
-            const targetScale = startScale.scale(GROW_SCALE)
-            const startEmissive = orbMat.emissiveColor.clone()
-            const targetEmissive = new Color3(0.85, 0.5, 1.0) // brighter, hotter, closer to the rim color as it swells
-
-            const startBlackRate = blackAura.emitRate, targetBlackRate = startBlackRate * 4 * GROW_INTENSITY
-            const startPurpleRate = purpleSpark.emitRate, targetPurpleRate = startPurpleRate * 4 * GROW_INTENSITY
-            const startBlackMax = blackAura.maxSize, targetBlackMax = startBlackMax * 3 * GROW_INTENSITY
-            const startPurpleMax = purpleSpark.maxSize, targetPurpleMax = startPurpleMax * 3 * GROW_INTENSITY
-
-            const startTime = performance.now()
-            const growObserver = scene.onBeforeRenderObservable.add(() => {
-                // enemy died mid-grow (its body got disposed) - bail out
-                // rather than animating properties on disposed objects
-                if(box.isDisposed()){
-                    scene.onBeforeRenderObservable.remove(growObserver)
-                    return
-                }
-
-                const t = Math.min((performance.now() - startTime) / GROW_DURATION_MS, 1)
-                const eased = 1 - Math.pow(1 - t, 3) // ease-out cubic - fast swell up front, settles near the end
-
-                box.scaling = Vector3.Lerp(startScale, targetScale, eased)
-                orbMat.emissiveColor = Color3.Lerp(startEmissive, targetEmissive, eased)
-                blackAura.emitRate = startBlackRate + (targetBlackRate - startBlackRate) * eased
-                purpleSpark.emitRate = startPurpleRate + (targetPurpleRate - startPurpleRate) * eased
-                blackAura.maxSize = startBlackMax + (targetBlackMax - startBlackMax) * eased
-                purpleSpark.maxSize = startPurpleMax + (targetPurpleMax - startPurpleMax) * eased
-
-                if(t >= 1){
-                    scene.onBeforeRenderObservable.remove(growObserver)
-                    setTimeout(finishCleanup, GROW_LINGER_MS)
-                }
-            })
-        }
-
-        return { cleanup, onHit }
-    },
+    } else {
+        // "none" - no on-hit visual of its own (astralrainSkill's marker never
+        // actually reaches here - its swordRain branch returns before onHit
+        // dispatch ever runs, see fireElementalProjectile) - defensive no-op
+        finishCleanup()
+    }
 }
 
-// --- explosion visuals ---
-// fn(scene, position, powerScale, color, skill) - fire/water/earth/light are
-// all createExplosionBurst with a different burstTexture/gravitySign/
-// includeSmoke preset (see that function's own comment for why one function
-// covers all four instead of four copies of it); dark is the genuinely
-// different createImplosionBurst. skill is only read for projectileStyle -
-// a "blade" skill (flamebrand/tidalspike/stoneshard) is a solid weapon
-// striking something, not a bolt of pure element detonating, so it skips
-// the smoke layer regardless of which explosionStyle it's using.
-// a solid weapon striking something (a blade, a crossed pair of blades, a
-// spear) shouldn't leave lingering smoke behind any more than the original
-// "blade" style did - see EXPLOSION_STYLES.fire/water/earth below
-const WEAPON_LIKE_STYLES = new Set(["blade", "bladecross", "spearlance"])
-
-// emberEmitRate (the 6th positional arg to createExplosionBurst) halved
-// across every element below - fire 30->15, water 22->11, earth 25->13,
-// light 15->8, lightning 20->10 - fewer embers per explosion, cut for
-// performance (see createImplosionBurst's own emitRate cuts too, same pass).
-const EXPLOSION_STYLES = {
-    fire(scene, pos, powerScale, color, skill){
-        createExplosionBurst(scene, pos, powerScale, 1, 1, 15, color, { burstTexture: "explodeTex", gravitySign: 1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
-    },
-    water(scene, pos, powerScale, color, skill){
-        // bubbles drifting up instead of embers - drunkBubble.png is
-        // literally a bubble sprite, sitting unused until now
-        createExplosionBurst(scene, pos, powerScale, 0.9, 0.7, 11, color, { burstTexture: "drunkBubble", gravitySign: 1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
-    },
-    earth(scene, pos, powerScale, color, skill){
-        // debris FALLS (gravitySign -1) instead of rising like fire/embers do
-        createExplosionBurst(scene, pos, powerScale, 1.2, 1.3, 13, color, { burstTexture: "rockTex", gravitySign: -1, includeSmoke: !WEAPON_LIKE_STYLES.has(skill.projectileStyle) })
-    },
-    light(scene, pos, powerScale, color, skill){
-        // clean and bright - no smoke residue, cooler/faster burst
-        createExplosionBurst(scene, pos, powerScale, 0.8, 0.5, 8, color, { burstTexture: "flare2", gravitySign: 1, includeSmoke: false })
-    },
-    dark(scene, pos, powerScale, color, skill){
-        createImplosionBurst(scene, pos, powerScale, color)
-    },
-    lightning(scene, pos, powerScale, color, skill){
-        // clean and sharp like "light"'s burst, but its own texture
-        // (flare3, otherwise unused) so a bright lightning discharge reads
-        // as a distinct flash rather than a recolored light skill
-        createExplosionBurst(scene, pos, powerScale, 0.85, 0.6, 10, color, { burstTexture: "flare3", gravitySign: 1, includeSmoke: false })
-    },
+// skill.onHitVisual is always an array of effect descriptors now (see
+// runOnHitVisual's own header comment) - this is the one place that
+// normalizing happens, every other reader (playImpactSound, fireGenericBurst's
+// two non-projectile callers, the stuck-flag check in fireElementalProjectile)
+// goes through this instead of re-deriving the array/object distinction itself
+function getOnHitEffects(skill){
+    const onHitVisual = skill.onHitVisual
+    return Array.isArray(onHitVisual) ? onHitVisual : (onHitVisual ? [onHitVisual] : [])
 }
 
-// launch/impact sound per projectile style - falls back to the generic
-// fireball whoosh/impact (every bolt/lightning-style skill). The weapon-like
-// styles reuse the spear/sword swing sounds already loaded for melee (see
-// soundSystem.js's spearS1/swordS1/struckS) since an actual blade/spear
-// whipping through the air and striking something reads better than a
-// fireball whoosh - struckS covers the impact for all three, same sound
-// melee already uses for a solid hit.
-const LAUNCH_SOUND_BY_STYLE = { blade: "spearS1", bladecross: "swordS1", spearlance: "spearS1" }
-const IMPACT_SOUND_BY_STYLE = { blade: "struckS", bladecross: "struckS", spearlance: "struckS" }
-
-// per-skill-name overrides, checked BEFORE the generic per-style map -
-// maelstrombolt (element: water, "icon" style - no style-based impact sound
-// of its own, would otherwise fall through to the generic fireHitS),
-// lightningbolt (element: lightning, "blade" style - previously layered its
-// own extra fireHitS on top of the shared struckS weapon-strike sound), and
-// shadowbolt (element: dark, "shadowblade" style - same "bolt" naming) all
-// use electrichit.mp3 as their actual impact/explosion sound instead.
-// tidalspike (element: water, "beam" style - also had no style-based sound
-// of its own) uses waterhit.mp3.
-const IMPACT_SOUND_BY_SKILL_NAME = { maelstrombolt: "electricHitS", lightningbolt: "electricHitS", shadowbolt: "electricHitS", tidalspike: "waterHitS" }
-
-// Called from both player-cast and enemy-cast hit handlers below so a skill
-// sounds the same either way it's cast.
 function playImpactSound(skill){
-    const impactSoundName = IMPACT_SOUND_BY_SKILL_NAME[skill.name] || IMPACT_SOUND_BY_STYLE[skill.projectileStyle] || "fireHitS"
-    getAllSounds()[impactSoundName]?.play()
+    const withSound = getOnHitEffects(skill).find(e => e.impactSound)
+    getAllSounds()[withSound?.impactSound || "fireHitS"]?.play()
+}
+
+// shared by runSingleOnHitEffect's own "burst"/"implode" branch AND the two
+// other spots that need an impact burst without going through a fired
+// projectile at all (spawnGroundSpike/applyDisintegrationHit) - takes the
+// specific effect entry directly (not the whole skill) so it works the same
+// whether it's one of several entries in an array or the only one either
+// call site found
+function fireGenericBurst(scene, pos, powerScale, ohv, color){
+    if(ohv?.type === "implode"){
+        createImplosionBurst(scene, pos, powerScale, color)
+        return
+    }
+    const b = ohv?.burst || {}
+    createExplosionBurst(scene, pos, powerScale, b.fireScale ?? 1, b.smokeScale ?? 1, b.emberEmitRate ?? 15, color,
+        { burstTexture: b.texture || "explodeTex", gravitySign: b.gravitySign ?? 1, includeSmoke: b.includeSmoke ?? true })
 }
 
 // tcp/index.ts's registerPlayerAsEnemy handler (enem._targetId/_dirTarg) -
@@ -1598,23 +1280,20 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     const box = getShapeClone(scene, "box_projectile", () => MeshBuilder.CreateBox("box_projectile_template", { size: 0.7 }, scene))
     box.position.copyFrom(spawnPos)
     box.isPickable = false
-    box.isVisible = false // PROJECTILE_STYLES.lightning flips this back on for its own look
+    box.isVisible = false // renderGenericProjectile flips this back on for shapes that want the box itself visible (e.g. shape:"box")
 
-    const styleFn = PROJECTILE_STYLES[skill.projectileStyle] || PROJECTILE_STYLES.bolt
-    const styleResult = styleFn(scene, box, skill)
-    // every style but "darkorb" just returns its cleanup function directly;
-    // darkorb also needs an onHit hook (sticks + grows instead of the usual
-    // explode-and-vanish, see PROJECTILE_STYLES.darkorb's own comment), so
-    // it returns { cleanup, onHit } instead - this stays backward compatible
-    // with every plain-function style rather than changing all of their
-    // return shapes for one skill's sake
-    const cleanupStyle = typeof styleResult === "function" ? styleResult : styleResult.cleanup
-    const onHitStyle = typeof styleResult === "function" ? null : styleResult.onHit
-    // "marker" stays silent too, not just invisible - a stealthy targeting
-    // box firing off a fireball whoosh would undercut the whole point of it
-    if(skill.projectileStyle !== "marker"){
-        const launchSoundName = LAUNCH_SOUND_BY_STYLE[skill.projectileStyle] || "fireBallS"
-        getAllSounds()[launchSoundName]?.play()
+    // reads skill.projectileVisual/skill.onHitVisual - see renderGenericProjectile's
+    // own header comment. onHit is always present now (it internally dispatches
+    // skill.onHitVisual.type), collapsing the old "sometimes a plain cleanup
+    // function, sometimes {cleanup, onHit}" split into one consistent shape.
+    const { cleanup: cleanupStyle, onHit } = renderGenericProjectile(scene, box, skill)
+    // marker-style skills (projectileVisual.silentLaunch, astralrainSkill's
+    // own targeting box) stay silent too, not just invisible - a stealthy
+    // targeting box firing off a fireball whoosh would undercut the whole
+    // point of it. Explicit flag, not inferred from visible/shape - "beam"
+    // (tidalspike) is ALSO invisible in flight but still launches with sound.
+    if(!skill.projectileVisual?.silentLaunch){
+        getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"]?.play()
     }
 
     const dx = targetPoint.x - box.position.x
@@ -1699,19 +1378,17 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
 
             playImpactSound(skill)
 
-            // onHitStyle (darkorb) owns its own impact visual (stick + grow)
-            // instead of the usual burst - skip EXPLOSION_STYLES entirely
-            // for it, and stop the shared projectile-movement loop from
-            // still trying to translate it forward now that it's stuck
-            // (renderer.js's per-projectile loop checks this same flag -
-            // every other style skips this since cleanupProjectile below
-            // removes it from that array immediately anyway)
-            if(onHitStyle){
-                projectile.stuck = true
-            } else {
-                const explosionFn = EXPLOSION_STYLES[skill.explosionStyle] || EXPLOSION_STYLES.fire
-                explosionFn(scene, box.position.clone(), powerScale, skill.explosionColor || "red", skill)
-            }
+            // "stickAndGrow"/"beam" onHitVisual types stick to (or hang
+            // around near) the enemy instead of a one-shot burst - stop the
+            // shared projectile-movement loop from still trying to translate
+            // it forward now that it's effectively stuck (renderer.js's
+            // per-projectile loop checks this flag every frame; set it
+            // immediately here rather than waiting for the visual sequence
+            // itself to get around to it, same timing the old code used).
+            // "burst"/"implode"/"none" all despawn immediately instead
+            // (cleanupProjectile removes it from that array right away
+            // regardless), so this flag doesn't matter for them.
+            if(getOnHitEffects(skill).some(e => e.type === "stickAndGrow" || e.type === "beam")) projectile.stuck = true
 
             // this callback fires whenever the projectile actually CONNECTS,
             // which can be several seconds after the skill was activated
@@ -1807,20 +1484,14 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 }
             }
 
-            // darkorb's onHit owns when cleanupProjectile actually runs from
-            // here (after its stick-and-grow sequence finishes); "blade"
-            // style skills stick into the enemy they hit for
-            // MARKER_STICK_DURATION_MS instead of vanishing on impact
-            // (enemies have no bodytarget/spine mount like players do, so
-            // this attaches to the enemy's own whole body) - every other
-            // style cleans up immediately, right when it lands
-            if(onHitStyle){
-                onHitStyle(enemy, cleanupProjectile)
-            } else if(skill.projectileStyle === "blade"){
-                stickMarkerToMesh(projectile, box, enemy.body, cleanupProjectile)
-            } else {
-                cleanupProjectile()
-            }
+            // onHit owns when cleanupProjectile actually runs from here -
+            // for "stickAndGrow" that's after its grow(+fade) sequence
+            // finishes; for onHitVisual.stickBriefly (the old "blade" style's
+            // own behavior) it embeds into the enemy for MARKER_STICK_DURATION_MS
+            // first (enemies have no bodytarget/spine mount like players do,
+            // so this attaches to the enemy's own whole body); everything
+            // else calls finishCleanup immediately, right when it lands
+            onHit(enemy, cleanupProjectile, projectile)
         })
     })
 
@@ -2173,7 +1844,13 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
     })
 
     getAllSounds().rockSmashS?.play()
-    EXPLOSION_STYLES.earth(scene, new Vector3(groundPos.x, groundPos.y, groundPos.z), powerScale, skill.explosionColor || "green", skill)
+    // continentalrend's own onHitVisual burst entry (earth-style: debris
+    // FALLS, gravitySign -1, instead of rising like fire/embers do) -
+    // groundSpikes bypasses projectileVisual entirely (no projectile fires),
+    // but the burst itself still reads its params from skill data like every
+    // other burst. getOnHitEffects()[0] - a ground spike only ever needs ONE
+    // effect, no reason for continentalrend to declare more than one entry
+    fireGenericBurst(scene, new Vector3(groundPos.x, groundPos.y, groundPos.z), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
 
     // magic damage recomputed at each spike's own eruption, same formula
     // fireElementalProjectile's own hit handler uses. Same isCaster gate as
@@ -2268,8 +1945,9 @@ function getGroundTrapRadius(skill){
 // own client - see fireElementalProjectile's own isCaster comment for the
 // full multiplayer reasoning, identical here.
 function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, durationMs){
-    const explosionFn = EXPLOSION_STYLES[skill.explosionStyle] || EXPLOSION_STYLES.fire
-    explosionFn(scene, enemy.body.position.clone(), powerScale, skill.explosionColor || "red", skill)
+    // no projectile fires for a ground trap (projectileVisual.useProjectile:false),
+    // but the burst itself still reads its onHitVisual entry like every other burst
+    fireGenericBurst(scene, enemy.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
     playImpactSound(skill)
 
     // persistent "burning" fire, ON the enemy's own body - see
@@ -2534,12 +2212,11 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
     box.position.copyFrom(spawnPos)
     box.isPickable = false
 
-    const styleFn = PROJECTILE_STYLES[skill.projectileStyle] || PROJECTILE_STYLES.bolt
-    const styleResult = styleFn(scene, box, skill)
-    const cleanupStyle = typeof styleResult === "function" ? styleResult : styleResult.cleanup
+    const { cleanup: cleanupStyle, onHit } = renderGenericProjectile(scene, box, skill)
 
-    const launchSoundName = LAUNCH_SOUND_BY_STYLE[skill.projectileStyle] || "fireBallS"
-    getAllSounds()[launchSoundName]?.play()
+    if(!skill.projectileVisual?.silentLaunch){
+        getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"]?.play()
+    }
 
     const targetPoint = spawnPos.add(forward.scale(10))
     const dx = targetPoint.x - box.position.x
@@ -2600,18 +2277,16 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         clearTimeout(missTimeout)
         removeIntersecTrig(box, enterAction)
 
-        // "blade" style skills - play the actual "got struck" reaction
-        // (animation + a struckS play spatially re-attached to bodytarget,
-        // so it audibly comes from the target's own body rather than
-        // wherever struckS last played from) before the generic impact
-        // sound/explosion/damage below. attachToMesh right before
-        // playImpactSound's own struckS.play() call (IMPACT_SOUND_BY_STYLE
-        // maps "blade" to struckS already) rather than playing it twice.
-        // targetPlayer's own characterAnimations (not necessarily "my own
-        // character" anymore) - this now plays the right person's own
-        // reaction animation whether targetPlayer is this client's own
-        // character or someone else's being watched.
-        if(skill.projectileStyle === "blade"){
+        // onHitVisual.stickBriefly skills (weapon-shaped: blade/bladecross/
+        // spearlance/shadowblade family) - play the actual "got struck"
+        // reaction (animation + a struckS play spatially re-attached to
+        // bodytarget, so it audibly comes from the target's own body rather
+        // than wherever struckS last played from) before the generic impact
+        // sound/explosion/damage below. targetPlayer's own characterAnimations
+        // (not necessarily "my own character" anymore) - this now plays the
+        // right person's own reaction animation whether targetPlayer is this
+        // client's own character or someone else's being watched.
+        if(skill.onHitVisual?.stickBriefly){
             targetPlayer.characterAnimations?.playAction(targetPlayer.anims, "hit_struct1", 1)
             getAllSounds().struckS?.attachToMesh(targetPlayer.bodytarget)
             // bloodps (createcharacter.js) - createBloodSplatter's own
@@ -2623,21 +2298,15 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         }
 
         playImpactSound(skill)
-        const explosionFn = EXPLOSION_STYLES[skill.explosionStyle] || EXPLOSION_STYLES.fire
-        explosionFn(scene, box.position.clone(), 1, skill.explosionColor || "red", skill)
-
-        // "blade" style skills stick into the target's bodytarget for
-        // MARKER_STICK_DURATION_MS instead of vanishing on impact - purely
-        // visual, so this runs identically for everyone watching now, not
-        // just the victim. Every client independently owns/cleans up its
-        // own local projectile mesh either way, whether "blade" (stick,
-        // then cleanupProjectile after the stick duration) or any other
-        // style (clean up immediately on impact).
-        if(skill.projectileStyle === "blade"){
-            stickMarkerToMesh(projectile, box, targetPlayer.bodytarget, cleanupProjectile)
-        } else {
-            cleanupProjectile()
-        }
+        // onHit (renderGenericProjectile's own return) owns the actual burst/
+        // stick dispatch from here - stickBriefly skills embed into the
+        // target's bodytarget for MARKER_STICK_DURATION_MS instead of
+        // vanishing on impact, everything else cleans up immediately.
+        // targetPlayer has no `.body` (players use `.bodytarget` for this
+        // exact stick point, not the whole capsule body an enemy uses) - a
+        // thin { body: targetPlayer.bodytarget } wrapper lets the same
+        // generic onHit function work against either shape uniformly.
+        onHit({ body: targetPlayer.bodytarget }, cleanupProjectile, projectile)
 
         // damage/death and camera shake are local-feedback-only from here
         // on - only the actual victim's own client should ever apply

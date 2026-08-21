@@ -19,6 +19,19 @@ import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
 import { checkDistance } from '../creations/creationTools';
 
+
+// the most recent enemy MY OWN melee attack actually landed on (see
+// createEnemy.js's atkCollider hit handler, right alongside its own
+// faceForward call) - createMyCharacter.js's positionAtkCollider reads this
+// to bias the attack-dash impulse toward whatever I just hit instead of
+// always my own local forward direction. A plain `let` export is only a
+// LIVE READ from another module though - the module that owns it has to be
+// the one to actually reassign it, hence this setter.
+export let lastHitEnemy = null
+export function setLastHitEnemy(enemy){
+    lastHitEnemy = enemy
+}
+
 let aggregate = null
 let myPlayer = null
 let rotationHelper = null;
@@ -53,6 +66,18 @@ let dashLockUntil = 0
 export function markDashActive(ms = 300){
     dashLockUntil = performance.now() + ms
 }
+
+// >0 while at least one faceForward call is actively slerping the LOCAL
+// PLAYER's own body toward a target (an enemy just hit, etc.) - see
+// updateMovement()'s own rotation-sync line below for why this exists.
+// A COUNTER, not a boolean - attacking two enemies in quick succession can
+// have a second faceForward call start before the first one's turn
+// finishes; a plain boolean would get cleared by whichever call finishes
+// FIRST even while the other is still actively turning. Not touched by
+// faceForward's OTHER use (turning an NPC/notPlayerBody to face the
+// player) - that path never touches the player's own aggregate at all,
+// nothing to guard against.
+let facingOverrideCount = 0
 
 // mirrors renderer.js's player.mode switch - used to tell the fallimpact
 // one-shot (see the landing branch in updateMovement()) which loop state to
@@ -146,6 +171,36 @@ export function faceForward(targP, notPlayerBody){
     const faceAngle = Math.atan2(toFacePos.x, toFacePos.z)
     let faceTargetQuat = Quaternion.RotationAxis(Vector3.Up(), faceAngle)
 
+    // updateMovement() (below) unconditionally overwrites
+    // aggregate.transformNode.rotationQuaternion from rotationHelper EVERY
+    // physics tick - without this guard, that sync fights this slerp frame
+    // by frame (physics tick resets to rotationHelper's value, THEN this
+    // render-time nudge moves it a little, THEN the next physics tick wipes
+    // that nudge again before it's ever actually rendered) - the turn never
+    // reliably completes, and worse, anything reading player.body's rotation
+    // at cast time (computeCastOrigin's own forward direction, positionAtkCollider's
+    // dash direction) can read a stale/inconsistent value that doesn't match
+    // what's actually on screen. Only the player-body path needs this -
+    // notPlayerBody's own rotationQuaternion isn't touched by updateMovement at all.
+    if(!notPlayerBody) facingOverrideCount++
+
+    // safety backstop for the facingOverrideCount++ above - if this turn
+    // never naturally reaches its own dot-product threshold (e.g. a place
+    // transition disposes the scene/observable mid-turn, orphaning it
+    // before the completion branch below ever runs), the counter would
+    // otherwise stay incremented forever, permanently freezing
+    // updateMovement()'s rotation sync for the rest of the session. finished
+    // guards against double-decrementing if both this AND the real
+    // completion somehow fire (shouldn't happen, cheap to guard anyway).
+    const FACE_FORWARD_SAFETY_TIMEOUT_MS = 3000
+    let finished = false
+    function finishFacingOverride(){
+        if(finished) return
+        finished = true
+        if(!notPlayerBody) facingOverrideCount--
+    }
+    const safetyTimeoutId = notPlayerBody ? null : setTimeout(finishFacingOverride, FACE_FORWARD_SAFETY_TIMEOUT_MS)
+
     let observable = scene.onAfterRenderObservable.add(() => {
         const cur = getCurrentQuat();
         if (faceTargetQuat) {
@@ -154,6 +209,8 @@ export function faceForward(targP, notPlayerBody){
                 cur.copyFrom(faceTargetQuat);
                 faceTargetQuat = null;
                 scene.onAfterRenderObservable.remove(observable);
+                clearTimeout(safetyTimeoutId)
+                finishFacingOverride()
                 // we're turning an NPC to face the player, not the player itself -
                 // the caller only froze canPress to stop movement input from
                 // fighting this turn, so hand control back the moment it's done
@@ -702,7 +759,14 @@ function setupControls(scene, allsounds) {
         }
 
         if(!getCanPress()) return
-        aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
+        // facingOverrideCount>0 - faceForward is actively turning the player
+        // to face something it just hit (see its own comment on why this
+        // guard exists) - back off from this sync for that window instead
+        // of stomping the slerp's progress every single tick before it's
+        // ever actually rendered
+        if(facingOverrideCount === 0){
+            aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
+        }
 
         if (isMoving && myPlayer?.mode === "casting") {
             // rooted while casting - a movement key held down (or a
