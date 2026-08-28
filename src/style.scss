@@ -1158,22 +1158,23 @@ canvas {
   top: 22%;
   left: 1%;
   z-index: $uiz;
-  padding: 5px 10px;
-  border: 1px solid $bronze;
   width: 20%;
-  background: rgba(24, 23, 23, 0.9);
   display: none;
-  border-radius: 3px;
-  cursor: pointer;
-  .story-bx {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    pointer-events: none;
+  .story{
+    padding:10px;
+    border: 1px solid $bronze;
 
+    background: rgba(24, 23, 23, 0.9);
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    border-radius: 3px;
+  }
+  .story-bx {
     .story-title {
       font-family: $copyrightFont;
       color: rgba(228, 158, 29, 0.863);
+      margin-bottom: 10px;
     }
     .story-required {
       font-family: $tipsFont;
@@ -2241,7 +2242,7 @@ canvas {
       }
       .stat-value {
         color: #edd59f;
-        font-size: 0.9rem;
+        font-size: 1.1rem;
       }
       .durability-bar-outline {
         width: 50%;
@@ -2342,6 +2343,281 @@ canvas {
     font-size: 1.1rem;
   }
   transition: 0.1s;
+}
+// TITLE ACQUIRED POPUP (celebration banner shown by titleUI.js's popupReceiveTitleUI)
+.title-acquired-popup {
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  transform: translate(-50%, -20px);
+  z-index: $popupz + 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+
+  .tap-icon {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 10px rgba(202, 165, 1, 0.8)) drop-shadow(0 0 18px rgba(202, 165, 1, 0.5));
+  }
+  .tap-caption {
+    font-family: $tipsFont;
+    color: rgba(245, 245, 245, 0.75);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    margin: 2px 0;
+  }
+  .tap-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tap-wing {
+    width: 40px;
+    height: auto;
+    filter: drop-shadow(0 0 6px rgba(202, 165, 1, 0.6));
+  }
+  .tap-name {
+    font-family: $choicefont;
+    font-style: italic;
+    font-weight: 600;
+    font-size: 1.8rem;
+    color: rgb(202, 165, 1);
+    text-shadow: 0 0 12px rgba(202, 165, 1, 0.6);
+    margin: 0;
+    white-space: nowrap;
+  }
+}
+.title-popup-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+// SKILL LEARNED POPUP (skillAcquiredUI.js's popupReceiveSkillUI) - same
+// hidden/show two-class pattern as .title-acquired-popup above. Rank
+// theming ([data-rank="N"] below) reuses the EXACT same color palette
+// skillsui.js's own .skill-info[data-rank] rules already established
+// (emerald/violet/gold/shimmering gold), so a skill's rank reads
+// consistently whether you're looking at the info panel or this popup.
+.skill-acquired-popup {
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  transform: translate(-50%, -20px);
+  z-index: $popupz + 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+
+  .sap-circle-wrap {
+    position: relative;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    // Deliberate dark circular backdrop, NOT a "reveal gameplay through it"
+    // trick - relying on mix-blend-mode alone to punch all the way through
+    // to whatever's behind the popup on the real page turned out unreliable
+    // (this popup's own opacity fade forces the browser to flatten this
+    // subtree into an offscreen buffer first, and how much of the true page
+    // still shows through that varies/wasn't consistently working - the
+    // circle's own black canvas kept showing as a flat black square rather
+    // than clearing). This instead gives the circle/frame/icon a strong,
+    // OPAQUE-ish dark plate to sit on/screen against, same dark-panel
+    // register the rest of this game's popups already use (see
+    // .popup-container's own dark gradient) - so a black canvas edge
+    // reads as "this is a dark plate behind a glowing circle, on purpose"
+    // instead of a leftover unfixed square. Still fades to transparent past
+    // ~85% so the frame's own square corners (outside the circular design)
+    // keep showing real gameplay through them, same look as before.
+    background: radial-gradient(circle, rgba(18, 15, 12, 0.95) 0%, rgba(18, 15, 12, 0.9) 60%, rgba(18, 15, 12, 0.5) 85%, transparent 100%);
+    // real glow - box-shadow follows THIS element's own round geometry
+    // (border-radius:50% above), not the circle/frame image's actual alpha
+    // channel the way filter:drop-shadow does. That's WHY drop-shadow got
+    // removed from .sap-magic-circle below: these webp assets have no real
+    // alpha (solid black canvas baked in), so drop-shadow cast a shadow
+    // shaped like the whole opaque square instead of hugging the circle
+    // linework - an ugly box/outline effect. box-shadow here sidesteps that
+    // entirely since it's not reading the image at all.
+    box-shadow: 0 0 14px 2px rgba(255, 255, 255, 0.25);
+    transition: box-shadow 0.3s ease, background 0.3s ease;
+  }
+  // Shared shape for every masked layer below - background-image supplies
+  // the real full-color artwork, mask-image (SAME url, set together in
+  // skillAcquiredUI.js's setMaskedImage) reads that same picture's own
+  // brightness as a genuine alpha channel: bright pixels are opaque, black
+  // pixels aren't part of the shape at all. This is what actually removes
+  // these webp's baked-in solid-black canvas - mix-blend-mode was tried
+  // first and left visible black regardless of what was behind it (see
+  // this block's own prior comments/git history); masking doesn't care
+  // what's behind at all, it just doesn't paint the black pixels, full stop.
+  %sap-masked-layer {
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    // THE actual missing piece - mask-image defaults to mask-mode:
+    // match-source, which for a plain raster image (no SVG mask-type hint)
+    // means "use the image's own ALPHA channel as the cutout." These webp
+    // files have no real alpha at all (fully opaque everywhere, black
+    // canvas included), so that default mode was doing literally nothing -
+    // the whole square stayed fully visible regardless of mask-image being
+    // set correctly. Forcing luminance mode is what actually makes bright
+    // pixels opaque and black pixels transparent.
+    -webkit-mask-mode: luminance;
+    mask-mode: luminance;
+  }
+  // spins continuously behind the frame/icon
+  .sap-magic-circle {
+    @extend %sap-masked-layer;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    // was 150% (bigger than .sap-frame's own 100%) - now that masking
+    // actually removes the black instead of it staying opaque, an
+    // oversized circle rides OUTSIDE the frame's own ring and visually
+    // swallows it instead of the frame reading as the outer border. Same
+    // size as the frame keeps the frame as the true outer boundary, with
+    // the circle's glow/motion showing inside/through its window instead.
+    width: 100%;
+    height: 100%;
+    transform: translate(-50%, -50%);
+    animation: sapCircleSpin 6s linear infinite;
+    opacity: 0.85;
+  }
+  .sap-frame {
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .sap-skill-icon {
+    @extend %sap-masked-layer;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 66%;
+    height: 66%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+  }
+  .sap-caption {
+    font-family: $tipsFont;
+    color: rgba(245, 245, 245, 0.75);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    margin: 4px 0 0 0;
+  }
+  .sap-name {
+    font-family: $choicefont;
+    font-style: italic;
+    font-weight: 600;
+    font-size: 1.5rem;
+    margin: 0;
+    color: #f5f5f5;
+    white-space: nowrap;
+  }
+}
+.skill-popup-hidden {
+  display: none;
+}
+.skill-popup-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+@keyframes sapCircleSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+// rank 0 (Basic Class) - plain/unglamorous baseline, faint white glow only
+// (the .sap-circle-wrap default above), no override needed here at all -
+// no .sap-name override either, stays the default #f5f5f5
+//
+// Every tier below recolors .sap-circle-wrap's own background gradient +
+// box-shadow (NOT .sap-magic-circle directly) - see that element's own
+// comment for why filter:drop-shadow on the circle image itself doesn't
+// work on these assets.
+.skill-acquired-popup[data-rank="1"] {
+  // Elite Skill - emerald, same hue as skillsui.js's own rank-1 theming.
+  // Still a dark plate (not a bright one) - the rank hue shows up as a
+  // dark tint plus the box-shadow's brighter rim glow, same register the
+  // base/rank-0 dark plate already established.
+  .sap-circle-wrap {
+    background: radial-gradient(circle, rgba(18, 40, 32, 0.95) 0%, rgba(18, 40, 32, 0.9) 60%, rgba(18, 40, 32, 0.5) 85%, transparent 100%);
+    box-shadow: 0 0 16px 3px rgba(127, 227, 180, 0.5);
+  }
+  .sap-name { color: #7fe3b4; text-shadow: 0 0 8px rgba(127, 227, 180, 0.5); }
+}
+.skill-acquired-popup[data-rank="2"] {
+  // High Skill - arcane violet
+  .sap-circle-wrap {
+    background: radial-gradient(circle, rgba(34, 20, 48, 0.95) 0%, rgba(34, 20, 48, 0.9) 60%, rgba(34, 20, 48, 0.5) 85%, transparent 100%);
+    box-shadow: 0 0 16px 3px rgba(196, 139, 255, 0.5);
+  }
+  .sap-name { color: #c48bff; text-shadow: 0 0 8px rgba(196, 139, 255, 0.5); }
+}
+.skill-acquired-popup[data-rank="3"] {
+  // Legendary Class - gold (borrows the god-tier frame too, see
+  // skillAcquiredUI.js's own RANK_FRAMES comment on why)
+  .sap-circle-wrap {
+    background: radial-gradient(circle, rgba(42, 33, 12, 0.95) 0%, rgba(42, 33, 12, 0.9) 60%, rgba(42, 33, 12, 0.5) 85%, transparent 100%);
+    box-shadow: 0 0 18px 4px rgba(240, 201, 74, 0.55);
+  }
+  .sap-name { color: #f0c94a; text-shadow: 0 0 10px rgba(240, 201, 74, 0.6); }
+}
+.skill-acquired-popup[data-rank="4"] {
+  // God Tier - the showstopper: a faster spin (sapCircleSpin at 3s instead
+  // of the default 6s - transform-only, unaffected by the alpha issue) plus
+  // a breathing box-shadow glow (sapGodTierGlowBox - a real box-shadow
+  // animation, not filter, same reasoning as .sap-circle-wrap's own
+  // comment), and the same animated gold/white shimmer sweeping through the
+  // name text (godTierShimmer) skillsui.js's own rank-4 rank label already
+  // uses - that one keyframe is shared/reused as-is since it only ever
+  // touched background-position, never filter/alpha
+  .sap-magic-circle {
+    animation: sapCircleSpin 3s linear infinite;
+  }
+  .sap-circle-wrap {
+    background: radial-gradient(circle, rgba(48, 38, 14, 0.95) 0%, rgba(48, 38, 14, 0.9) 60%, rgba(48, 38, 14, 0.5) 85%, transparent 100%);
+    animation: sapGodTierGlowBox 2s ease-in-out infinite alternate;
+  }
+  .sap-name {
+    background: linear-gradient(90deg, #fff6d0, #f0c94a, #ffffff, #f0c94a, #fff6d0);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: godTierShimmer 3s linear infinite;
+  }
+}
+@keyframes sapGodTierGlowBox {
+  0% { box-shadow: 0 0 10px 2px rgba(240, 201, 74, 0.4); }
+  100% { box-shadow: 0 0 24px 7px rgba(255, 255, 255, 0.85); }
 }
 .upper-icons-container {
   position: fixed;
@@ -3254,6 +3530,95 @@ canvas {
       }
     }
   }
+}
+// SKILL RANK THEMING - skillsui.js's renderSkillInfo stamps
+// .skill-info[data-rank] with skill.skillrank (0-4, SKILL_RANK_LABELS)
+// every time a different skill gets selected - before this, "Basic Class"
+// and "High Skill" rendered in the exact same plain white .stat-value/
+// .skill-info-desc color, giving no visual sense that one is meant to feel
+// more powerful/rare than the other. Each tier below escalates in color
+// richness AND embellishment (plain -> solid color -> soft glow -> gold
+// glow+italic serif -> animated shimmer), not just a different flat hue,
+// so the JUMP in rank reads as a jump in magnificence at a glance.
+// data-rank="0" (Basic Class) is deliberately left at the original plain
+// values (no override rule needed) - the unglamorous baseline every other
+// tier is measured against.
+//
+// Written at the SAME real nesting depth as the base .stat-value/
+// .skill-info-desc rules above (.skill-container .skill-info-right
+// .skill-info .skill-info-details ...), not a flat shortcut - a shallower
+// selector here would lose to that deeply-nested base rule regardless of
+// source order, since CSS specificity (not "last rule wins") decides ties
+// between rules that don't share an ancestor chain.
+.skill-container .skill-info-right .skill-info {
+  &[data-rank="1"] {
+    .skill-info-details {
+      // Elite Skill - a confident, solid emerald - a clear step up from
+      // plain white, but still calm/grounded, nothing mysterious yet
+      .skill-stats .skill-stat-row .stat-value.skillInfoRank { color: #7fe3b4; }
+      .skill-info-desc { color: rgba(127, 227, 180, 0.6); }
+    }
+  }
+  &[data-rank="2"] {
+    .skill-info-details {
+      // High Skill - arcane violet with a soft glow - starts to feel like
+      // real magic, not just a stronger color
+      .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+        color: #c48bff;
+        text-shadow: 0 0 6px rgba(196, 139, 255, 0.5);
+      }
+      .skill-info-desc { color: rgba(196, 139, 255, 0.55); }
+    }
+  }
+  &[data-rank="3"] {
+    .skill-info-details {
+      // Legendary Class - gold, italic serif (same $choicefont/Cormorant
+      // Garamond "nostalgic" register the title-acquired popup and
+      // leaderboard title column already use), stronger glow
+      .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+        font-family: $choicefont;
+        font-style: italic;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        color: #f0c94a;
+        text-shadow: 0 0 10px rgba(240, 201, 74, 0.65);
+      }
+      .skill-info-desc { color: rgba(240, 201, 74, 0.6); }
+    }
+  }
+  &[data-rank="4"] {
+    .skill-info-details {
+      // God Tier - the showstopper: an animated gold/white shimmer
+      // sweeping through the rank text itself (background-clip:text
+      // gradient, same "text IS the gradient" technique as a foil/holo
+      // card) plus a slow breathing glow, so it reads as genuinely
+      // otherworldly rather than just "gold but more so"
+      .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+        font-family: $choicefont;
+        font-style: italic;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        background: linear-gradient(90deg, #fff6d0, #f0c94a, #ffffff, #f0c94a, #fff6d0);
+        background-size: 300% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: godTierShimmer 3s linear infinite, godTierGlow 2s ease-in-out infinite alternate;
+      }
+      .skill-info-desc {
+        color: rgba(255, 246, 208, 0.75);
+        text-shadow: 0 0 6px rgba(240, 201, 74, 0.3);
+      }
+    }
+  }
+}
+@keyframes godTierShimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@keyframes godTierGlow {
+  0% { filter: drop-shadow(0 0 2px rgba(240, 201, 74, 0.45)); }
+  100% { filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.9)); }
 }
 .home-page {
   @include flexCenter();
@@ -4337,10 +4702,13 @@ canvas {
       text-transform: uppercase;
     }
     .lb-title-lbl {
-      color: #9fd6ed;
+      font-family: $choicefont;
+      font-style: italic;
+      font-weight: 500;
+      color: rgba(237, 213, 159, 0.8);
       text-align: left;
-      text-transform: uppercase;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
+      letter-spacing: 0.3px;
     }
   }
 
@@ -4358,4 +4726,10 @@ canvas {
       font-family: $numFont;
     }
   }
+}
+.wake-up-btn{
+  display: none;
+}
+.title-popup-hidden{
+  display: none;
 }

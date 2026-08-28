@@ -247,3 +247,24 @@ export class CharacterAnimations {
         return !!this._isActionPlaying
     }
 }
+
+// Held-pose loop for a stance flag (currently just weaponBlocking) that has
+// to visibly persist for an ARBITRARY duration - as long as right-click
+// stays down, not a fixed clip length. playAction() only ever plays a
+// one-shot (loop=false, see its own header comment), so this just keeps
+// re-triggering that same one-shot via its own onComplete callback for as
+// long as player.weaponBlocking stays true, checked fresh on every replay -
+// releasing the button (inputMovement.js's activateMouseControls) or a
+// remote update (worldsocket.js's "emitted-weaponblock" handler) flipping
+// the flag back to false just lets the NEXT scheduled replay's check fail,
+// at which point playAction's own normal end-of-action blend-back into
+// whatever loop state (idle/combatIdle/running) was active before blocking
+// started takes over - nothing else to clean up here.
+// Shared by both the local player (inputMovement.js) and remote players
+// (worldsocket.js) - both are createCharacter() rig objects with the same
+// characterAnimations/anims/weaponBlocking shape, so one function covers
+// either.
+export function playBlockingLoop(player){
+    if(!player?.weaponBlocking || !player.characterAnimations) return
+    player.characterAnimations.playAction(player.anims, "weaponblock", 1, () => playBlockingLoop(player))
+}

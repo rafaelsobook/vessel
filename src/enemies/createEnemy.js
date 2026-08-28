@@ -52,7 +52,7 @@ export default function createEnemy(scene, det) {
     const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? sampleTerrainSurfaceHeight(det.x, det.z, OPENWORLD_TERRAIN_VERTS) : det.y
     let yPos = groundY+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
-        { x: det.x, y:yPos , z: det.z }, 1, true, true)
+        { x: det.x, y:yPos , z: det.z }, 1, false, true)
 
     // openworld's terrain is uneven and this enemy's y can drift (chunk streaming,
     // chase movement across slopes, etc.) - periodically verify against the real
@@ -595,6 +595,9 @@ export default function createEnemy(scene, det) {
         // worldsocket.js's "enemy-attacked" handler checks this to redirect
         // a cursed enemy's own attack damage back onto itself.
         _cursed: det._cursed ? det._cursed : false,
+        weaponBlocking: det.weaponBlocking ? det.weaponBlocking : false,
+        magicBlocking: det.magicBlocking ? det.magicBlocking : false,
+        IsInVulnerable: det.IsInVulnerable ? det.IsInVulnerable : false,
         // wander/dodge waypoint (tcp/index.ts's wander interval, or this
         // file's own dodge-detection interval below) - a plain {x,z}
         // point, not a player. renderer.js's movement loop moves toward

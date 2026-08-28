@@ -10,7 +10,7 @@ import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
 import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worldsocket.js";
-import { emitMode } from "../sockets/emits.js";
+import { emitMode, emitWeaponBlock } from "../sockets/emits.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
@@ -38,6 +38,19 @@ const negativeStatCont = document.querySelector(".negative-stats")
 let characterState = null;
 let canPress = false
 let outsideRoomPosition = null
+// soft-loss switch for non-multiplayer duels (npc/duelSystem.js) - default
+// true (normal death) everywhere. areascene.js flips this false only while
+// actually inside the "duel" areaType scene, and back to true at the top of
+// every other scene load, so it self-corrects on any transition out rather
+// than duelSystem.js needing to remember to reset it on every win/lose/exit
+// path. A single flag deductHp itself checks, instead of threading an
+// allowDeath param through every call site that can deal damage (this file's
+// own callers, skillEffects.js's fireEnemySkillProjectile, etc.) - so skill
+// damage automatically respects a duel too, with no changes needed there.
+let allowDeath = true
+export function setAllowDeath(value){
+    allowDeath = value
+}
 // uimanagement.js's startResting/stopResting - see restInterval's own
 // comment below for the resulting recovery time
 const REST_SLEEP_REGEN_PER_TICK = 2
@@ -46,6 +59,7 @@ let hpRegenInterval
 let mpRegenInterval
 let spRegenInterval
 let castingDrainInterval
+let blockingDrainInterval
 
 let hungerInterval
 let restInterval
@@ -347,12 +361,44 @@ export function activateLifeSystem(){
     // STAMINA
     spRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
+        // regen and the blocking drain below would otherwise just fight
+        // each other every tick instead of actually draining anything -
+        // same "skip regen entirely while the drain is active" rule
+        // mpRegenInterval above already applies for mana/casting.
+        // weaponBlocking lives on the createCharacter() rig object
+        // (playersOnScene), not on characterState itself - see
+        // createcharacter.js's own comment on why - so this has to look
+        // the local player up rather than just reading a characterState field
+        const myPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+        if(myPlayer?.weaponBlocking) return
         if(characterState.sp < characterState.maxSp) {
             characterState.sp += getTotal().spRegen
         }
         if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
         updateSP_UI()
     }, 100)
+    // BLOCKING - stamina drains continuously while the LOCAL player's own
+    // weaponBlocking flag is true (inputMovement.js's activateMouseControls,
+    // r-click hold-to-block). Same "-1 flat per 500ms, own interval separate
+    // from regen" shape castingDrainInterval above already uses for mana
+    // while casting - draining to 0 auto-releases the block the same way
+    // running out of mana auto-exits casting mode.
+    blockingDrainInterval = setInterval( () => {
+        const myPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+        if(!myPlayer?.weaponBlocking) return
+        characterState.sp -= 1
+        if(characterState.sp <= 0){
+            characterState.sp = 0
+            myPlayer.weaponBlocking = false
+            // multiplayer sync - flipping the flag above only updates this
+            // client's own local rig, same as inputMovement.js's own
+            // POINTERUP handler, so everyone else watching needs the same
+            // "ran out of stamina, stopped blocking" broadcast
+            if(getIsSocketOn()) emitWeaponBlock(false)
+            popStatusEffect("out of stamina", "yellow")
+        }
+        updateSP_UI()
+    }, 500)
     updateHunger()
     
     hungerInterval = setInterval(() => {
@@ -482,7 +528,20 @@ export async function initiateCharacter(_accountDet){
 
     activateLifeSystem()
     updateSkillListUI(characterState.skills)
-    // updateStoryQuestUI(characterState.stories[0])
+    // restore the story-quest tracker (top-left) after a fresh load/reload -
+    // this call used to be commented out entirely (and pointed at the wrong
+    // field, characterState.stories, which nothing in this game actually
+    // populates - the real data lives in characterState.quests, see
+    // storyQuestSystem.js) so the tracker only ever reappeared once some
+    // OTHER event happened to call updateStoryQuestUI again (accepting a
+    // new quest, completing one, etc) - never just from loading the game
+    // with one already active. updateStoryQuestUI now does a full rebuild
+    // straight from characterState.quests itself (renderStoryQuests, see
+    // its own header comment) and already filters out completed quests on
+    // its own, so no argument/pre-filtering is needed here anymore - it
+    // correctly shows nothing for a fresh character whose only quest is the
+    // server's own pre-completed backstory placeholder.
+    updateStoryQuestUI()
     return characterState
 }
 export function clearIntervals(){
@@ -490,6 +549,7 @@ export function clearIntervals(){
     clearInterval(mpRegenInterval)
     clearInterval(spRegenInterval)
     clearInterval(castingDrainInterval)
+    clearInterval(blockingDrainInterval)
     clearInterval(hungerInterval)
     clearInterval(restInterval)
 }
@@ -532,6 +592,9 @@ export function updateHunger(){
 }
 // only for checking if dmg has effect
 // then will add to your sickness status
+// reads the module-level allowDeath flag above (not a parameter) - see its
+// own comment for why. false (duelSystem.js's soft-loss duels) clamps hp at
+// 1 instead of running the normal gameOver() flow.
 export async function deductHp(dmg, effects, enemyStats){
 
     let totalDmg = dmg
@@ -588,6 +651,12 @@ export async function deductHp(dmg, effects, enemyStats){
     if(characterState.mp <= 0) characterState.mp = 0
     if(characterState.sp+addStats.additionalSp <=0) characterState.sp = 0
     if(characterState.hp+addStats.additionalHp <= 0) {
+        if(!allowDeath){
+            characterState.hp = Math.max(1, characterState.hp)
+            updateHpMpSp_UI()
+            updateSurvival_UI()
+            return false
+        }
         await gameOver()
         return true;
     }

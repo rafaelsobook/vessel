@@ -16,6 +16,7 @@ import abilitiesData from "../staticRecources/abilities.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { APTITUDE_ELEMENT_ALIASES, LIGHTNING_UNLOCK_FIRE_LEVEL } from "./aptitudeSystem.js"
 
 const wheelContainer = document.querySelector(".skill-wheel-container")
 const wheelEl = document.querySelector(".skill-wheel")
@@ -182,29 +183,79 @@ function grantBlessingReward(){
     receiveAbilities(false, false, randomAbility)
 }
 
-// a random skill the player doesn't already know - giveSkill already shows
-// its own "Learned {displayName}" popup and handles slot-assignment/
-// saving. Same "already have it -> level it up instead" fallback
-// grantBlessingReward gets for free from receiveAbilities, just done
-// explicitly here since giveSkill's own version of that (skillsui.js) is a
-// no-op "Already know X" message, not an upgrade - once every skill in
-// skillsData is learned, upgradeOwnedSkill (also skillsui.js, same
-// function the "h" debug key and the manual upgrade-in-info-panel button
-// already use) picks a random OWNED skill to level up instead, so landing
-// on "skill" always does SOMETHING once you own everything, the same way
-// blessing/heart never dead-end either.
+// charState.aptitude entries are { element, level } (server/routes/
+// characterR.js's generateAptitudes) - "darkness" there, but "dark" in
+// skillsData.js's own element field, a real pre-existing naming mismatch
+// between the two data sources. Normalized here (same alias
+// aptitudeSystem.js's own trackAptitudeUsage uses, imported not duplicated)
+// so a dark-aptitude character isn't silently locked out of every
+// dark-element skill.
+//
+// skillsData.js's element:"normal" skills (singlecastSkill, dashstrikeSkill,
+// multicastSkill, etc) aren't tied to any one elemental aptitude at all -
+// stay offerable to everyone regardless of which aptitudes were rolled,
+// same as every other skill of theirs already works today.
+//
+// element:"lightning" skills are a special case: there's no "lightning"
+// aptitude slot at all (generateAptitudes never rolls one) - by design,
+// lightning is meant to read as an offshoot of a character's own FIRE
+// mastery rather than its own separate roll. Only unlocked once the fire
+// aptitude climbs past LIGHTNING_UNLOCK_FIRE_LEVEL - aptitudeSystem.js's
+// own trackAptitudeUsage already feeds lightning-skill casts into that same
+// fire usage count, so casting lightning skills (once unlocked) keeps
+// pushing fire's own level further, not a separate lightning count.
+function eligibleSkillsFor(charState){
+    const aptitudes = charState.aptitude || []
+    const myElements = new Set(
+        aptitudes.map(apt => APTITUDE_ELEMENT_ALIASES[apt.element] ?? apt.element)
+    )
+    const fireApt = aptitudes.find(apt => (APTITUDE_ELEMENT_ALIASES[apt.element] ?? apt.element) === "fire")
+    const lightningUnlocked = (fireApt?.level ?? 0) > LIGHTNING_UNLOCK_FIRE_LEVEL
+
+    return skillsData.filter(sk => {
+        if(sk.element === "normal") return true
+        if(sk.element === "lightning") return lightningUnlocked
+        return myElements.has(sk.element)
+    })
+}
+
+// a random skill the player doesn't already know, restricted to their own
+// aptitudes (eligibleSkillsFor above) - no more handing out a fire skill to
+// someone with zero fire aptitude. giveSkill already shows its own "Learned
+// {displayName}" popup and handles slot-assignment/saving. Same "already
+// have it -> level it up instead" fallback grantBlessingReward gets for
+// free from receiveAbilities, just done explicitly here since giveSkill's
+// own version of that (skillsui.js) is a no-op "Already know X" message,
+// not an upgrade - once every ELIGIBLE skill is already learned,
+// upgradeOwnedSkill (also skillsui.js, same function the "h" debug key and
+// the manual upgrade-in-info-panel button already use) picks a random
+// OWNED skill within that same aptitude-matched pool to level up instead,
+// so landing on "skill" always does SOMETHING once you own everything you
+// can, the same way blessing/heart never dead-end either. Falls back to
+// upgrading ANY owned skill only in the edge case where the player owns
+// skills entirely outside their current aptitude pool (e.g. granted before
+// this restriction existed, or via the "n"/"l" debug cheats) but nothing
+// inside it - so a spin still never comes up completely empty-handed.
 function grantSkillReward(){
     const charState = getCharState()
     if(!charState) return
+    const eligible = eligibleSkillsFor(charState)
+
     const owned = new Set((charState.skills || []).map(sk => sk.name))
-    const unowned = skillsData.filter(sk => !owned.has(sk.name))
+    const unowned = eligible.filter(sk => !owned.has(sk.name))
 
     if(unowned.length){
         const skill = unowned[Math.floor(Math.random() * unowned.length)]
         giveSkill(skill)
         return
     }
-    if(charState.skills.length){
+
+    const eligibleNames = new Set(eligible.map(sk => sk.name))
+    const ownedEligible = charState.skills.filter(sk => eligibleNames.has(sk.name))
+    if(ownedEligible.length){
+        const ownedSkill = ownedEligible[Math.floor(Math.random() * ownedEligible.length)]
+        upgradeOwnedSkill(ownedSkill)
+    } else if(charState.skills.length){
         const ownedSkill = charState.skills[Math.floor(Math.random() * charState.skills.length)]
         upgradeOwnedSkill(ownedSkill)
     }

@@ -7,12 +7,20 @@ import { MULTICAST_MAX_STAGGER_MS } from "../creations/skillEffects.js";
 import { popStatusEffect, openClosePopup } from "../tools/popupUI.js";
 import { getManaOutputPercent } from "../charactersystem/outputSliders.js";
 import { skillsData } from "../staticRecources/skillsData.js";
+import { popupReceiveSkillUI } from "./skillAcquiredUI.js";
 const skillCont = document.querySelector(".skill-container");
 
 
 // skills list inside the container on left side
 const skillListLeft = document.querySelector(".skill-list");
 
+// ancestor of every skillInfo* element below - carries the rank-based
+// data-rank attribute (see renderSkillInfo/SKILL_RANK_LABELS) that
+// style.scss's own [data-rank="N"] rules key off of, so the rank label AND
+// the description both visually escalate with the skill's actual rank
+// instead of reading identically regardless of tier (High Skill and Basic
+// Class used to render in the exact same plain white/grey)
+const skillInfoPanel    = document.querySelector(".skill-info");
 const skillInfoImg      = document.querySelector(".skillInfoImg");
 const skillInfoTitle    = document.querySelector(".skillInfoTitle");
 const skillInfoStatus   = document.querySelector(".skillInfoStatus");
@@ -76,7 +84,9 @@ export function giveSkill(skillDetail){
     charState.skills.push({ ...skillDetail, slotNumber })
     updateSkillListUI()
     updateMyDetailsOL(charState, checkIfTokenSaved())
-    openClosePopup(`Learned ${skillDetail.displayName}`, true, 1500)
+    // rank-framed celebration popup (skillAcquiredUI.js) instead of the old
+    // plain text toast - same upgrade titleUI.js's own popup already got
+    popupReceiveSkillUI(skillDetail)
 }
 
 // DEBUG CHEAT - bound to the "l" key in controllers/inputMovement.js. Grants
@@ -111,6 +121,18 @@ export function giveAllSkills(){
     updateSkillListUI()
     updateMyDetailsOL(charState, checkIfTokenSaved())
     openClosePopup(`Learned ${learnedCount} new skill${learnedCount > 1 ? "s" : ""}`, true, 1500)
+}
+
+// DEBUG CHEAT - bound to the "b" key in controllers/inputMovement.js, same
+// spirit as titleUI.js's giveRandomTitle (bound to "t"). Picks one at random
+// from skillsData.js's own full pool and runs it through the exact same
+// giveSkill() path a real "learn this skill" grant uses - already-known/
+// slot-bumping logic all comes along for free, so a re-roll that lands on
+// something already owned just shows giveSkill's own "Already know X" popup
+// instead of silently no-oping.
+export function giveRandomSkill(){
+    const skillDetail = skillsData[Math.floor(Math.random() * skillsData.length)]
+    giveSkill(skillDetail)
 }
 
 // Takes the same static skillsData.js object giveSkill() does (e.g.
@@ -257,6 +279,9 @@ function renderSkillInfo(skill){
 
     skillInfoType.innerText = capitalize(skill.effects?.effectType)
     skillInfoRank.innerText = SKILL_RANK_LABELS[skill.skillrank] ?? "—"
+    // drives style.scss's [data-rank="N"] theming on the rank value + desc -
+    // see skillInfoPanel's own comment above
+    if(skillInfoPanel) skillInfoPanel.dataset.rank = skill.skillrank ?? 0
 
     const demand = skill.demand?.[0]
     skillInfoCost.innerText = demand ? `${demand.cost} ${demand.name.toUpperCase()}` : "—"
@@ -328,9 +353,9 @@ slotbuttons.forEach(btn => {
         if(!skillName) return
 
         const skill = charState.skills.find(sk => sk.name === skillName)
-        console.log(skill.isActive)
+
         const willActivate = !skill.isActive
-        console.log(willActivate)
+
         if(willActivate){
             // requireMode gates activation to a specific charState.mode (e.g.
             // singlecast needs "casting", see the cast button in
@@ -338,6 +363,18 @@ slotbuttons.forEach(btn => {
             if(skill.requireMode && charState.mode !== skill.requireMode){
                 popStatusEffect(`must be ${skill.requireMode} to use this`, "yellow")
                 return
+            }
+
+            // requiresWeapon (dashstrikeSkill and any future weapon skill,
+            // skillsData.js) - a WEAPON skill needs an actual weapon in hand,
+            // same rule the npcFighter side of this exact skill enforces too
+            // (duelSystem.js's rollNearSkill checks hasDrawnWeapon)
+            if(skill.requiresWeapon){
+                const hasWeaponEquipped = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                if(!hasWeaponEquipped){
+                    popStatusEffect("equip a weapon to use this", "yellow")
+                    return
+                }
             }
 
             // mp demand cost scales with the mana output slider - minCost is
@@ -428,7 +465,7 @@ slotbuttons.forEach(btn => {
         clearTimeout(activeSkillResetTimers.get(skill.name))
         activeSkillResetTimers.delete(skill.name)
 
-        if(willActivate && (skill.effects?.effectType === "offense" || skill.effects?.effectType === "trigger" || skill.effects?.effectType === "buff")){
+        if(willActivate && (skill.effects?.effectType === "offense" || skill.effects?.effectType === "trigger" || skill.effects?.effectType === "buff" || skill.effects?.effectType === "dash")){
             // burstshots (formerly named "multicast") is the only skill
             // whose own cast sequence outlives its nominal castDuration -
             // its circles keep staggering out for up to MULTICAST_MAX_STAGGER_MS

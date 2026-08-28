@@ -15,6 +15,7 @@ import { createMagicCircle } from '../creations/magiccircles.js';
 import { getAllSounds } from '../components/soundSystem.js';
 import { getSocket } from '../sockets/joinsocket.js';
 import { emitSpawnCircle } from '../sockets/emits.js';
+import { randomNum } from '../tools/tools.js';
 
 export const metaDatas = [
 
@@ -491,6 +492,221 @@ export const metaDatas = [
             ],
         },
         isMultiplayer: true
+    },
+
+
+    {
+        placeId: 101, // Guildmaster's Office
+        name: "Guildmaster's Office",
+        width: 20, // ground width
+        height: 16, // ground height - was 10; the desk/chair/shelves cluster needs
+        // more depth to breathe (see the repositioning below) than a shallow room allows
+        wallTexPath: "./images/modeltex/brick2.jpg", // wallHeight left at the default 0.5 knee-wall, same as every other room
+        areaType: "room",
+        layout: { cellSize: 1 },
+        spawn: {x: 0, y: 0.4, z: -1, rotation: Math.PI}, // was z:3, same spot as the desk - moved clear of it
+        paintedPlanes: [
+            {
+                name: "floorcarpet",
+                texturePath: "./images/modeltex/decor1.jpg",
+                rotation: {x: Math.PI/2, y: Math.PI/2, z: 0},
+                position: {x: 0, y: 0.016, z: -2.5},
+                width: 6,
+                height: 10,
+            }
+        ],
+        woodboxes: [
+            { name: "woodbox1", position: {x: -8.5, y: 0.5, z: -6} },
+            { name: "woodbox2", position: {x: -8.5, y: 1.5, z: -6} }, // stacked on top of woodbox1
+            { name: "woodbox3", position: {x: -7.3, y: 0.5, z: -6} },
+        ],
+
+        optionalObjects: [
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "roomdoor",
+                position: {x: 0, y: 0, z: -8.5}, // south wall now at z:-8 (height:16 → halfH:8)
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/door.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "guildmasterdesk",
+                position: {x: 0, y: 0, z: 3},
+                scale: null,
+                rotation: Math.PI,
+                glbPath: "./models/indors/guildDesk.glb",
+                diffuseTexPath: "./images/modeltex/wood2.jpg",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "guildmasterchair",
+                position: {x: 0, y: 0, z: 3.7},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/tavChair.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "officescroll",
+                position: {x: 0.9, y: 0.9, z: 3},
+                scale: null,
+                rotation: Math.PI/2,
+                glbPath: "./models/indors/scroll.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "officeshelvesleft",
+                position: {x: -6, y: 0, z: 7.3},
+                scale: null,
+                rotation: Math.PI,
+                glbPath: "./models/indors/shelves.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "officeshelvesright",
+                position: {x: 6, y: 0, z: 7.3},
+                scale: null,
+                rotation: Math.PI,
+                glbPath: "./models/indors/shelves.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+        ],
+        exit: "south",
+        exitPlaceDetail: {
+            placeId: 9,
+            name: "guild house",
+            areaType: "room",
+        },
+        entryExitPlaceId: {
+            exit: {
+                placeId: 9,
+                name: "guild house",
+                areaType: "room",
+            }
+        },
+        sceneTemp: {
+            fogDensity: 0,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+                // {name:"hemispheric", intensity: 0.1},
+            ],
+        },
+        isMultiplayer: false
+    },
+    {
+        placeId: 200,
+        name: "Dueling Grounds",
+        areaType: "duel",
+        npcEnemies: [
+            {
+                npcId: "112_renarden",
+                // flanking left/right on the opponents' side of the arena
+                // (placeId 200's own player spawn is {x:0,z:-20}) instead of
+                // both stacking on duelSystem.js's single OPPONENT_SPAWN
+                // default - same side-by-side pairing convention already used
+                // elsewhere in this project (e.g. the guildmaster's office
+                // shelves/woodboxes)
+                position: {x: -6, y: 0.01, z: 20},
+                assistants: [
+                    {
+                        npcId: "113_robin",
+                        position: {x: 6, y: 0.01, z: 20}
+                    }
+                ]
+            }
+        ],
+        width: 50,
+        height: 50,
+        wallHeight: 0.5,
+        layout: { cellSize: 1 },
+        spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
+        exitPlaceDetail: {
+            placeId: 1,
+            name: "village",
+            areaType: "village",
+        },
+        sceneTemp: {
+            fogDensity: 0,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+                {name:"hemispheric", intensity: 0.6},
+            ],
+        },
+        swordsStrucked: [
+            {
+                lootPosition: {x: 0, y: 0.2, z: 1},
+                itemId: randomNum(), // should be string also in client
+                name: "frostbite", // is also the image name
+                dn: "Frost Bite",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: "sword",
+                equipAbilities: { 
+                    dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true, // only for equipable items
+                enhancedLevel: 0,
+                slots: [],// { name, dn, equipAbilities } cores
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: "Frost Bite, A deadly Blade. It's blade is sharp as frozen blade",
+                rarity: "rare",
+            
+                parts: {
+                    bladeRarity: "rare1",
+                    guardRarity: "rare1",
+                    handleRarity: "common1",
+                    pommelRarity: "common1",
+            
+                    bladeColor: "iron",
+                    guardColor: "sodalite", // bluegranite, Steel, iron, bronze (practical/common)
+                    handleColor: "wood", // bone,
+                    pommelColor: "firecrystal", // frostshard, stormcrystal,beastheart
+                }
+            }
+        ],
+
+        isMultiplayer: false
     },
 
 

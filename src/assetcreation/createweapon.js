@@ -44,6 +44,33 @@ function hasPartMeshes(weaponType){
     return Object.keys(allweapons).some(key => key.startsWith(`${weaponType}_`))
 }
 
+// Which parts each weaponType actually has - sword and spear (both from
+// allswords.glb) are the original 4-part weapons (blade/guard/handle/
+// pommel). axe/pickaxe (models/axe/axes.glb) only ever have 3 - there's no
+// axe_pommel_*/pickaxe_pommel_* mesh at all, the artist never modeled one
+// (see the Blender outliner: axe_blade/axe_guard/axe_handle, pickaxe_blade/
+// pickaxe_guard, nothing else). Any weaponType not listed here falls back
+// to the original 4-part list, so this only needs an entry for families
+// that deviate from that.
+const WEAPON_PART_LIST = {
+    axe: ["blade", "guard", "handle"],
+    pickaxe: ["blade", "guard", "handle"],
+}
+const DEFAULT_PART_LIST = ["blade", "guard", "handle", "pommel"]
+
+// Some weapon families SHARE a specific part's actual mesh with a
+// DIFFERENT weaponType instead of having their own - pickaxe has no
+// pickaxe_handle_* mesh in axes.glb at all (the artist's own outliner only
+// has axe_handle_common1, meant to double as the pickaxe's handle too), so
+// pickaxe's "handle" part is looked up under weaponType "axe" instead of
+// "pickaxe". { [weaponType]: { [part]: sourceWeaponType } } - any
+// part/weaponType combination not listed here just uses its own
+// weaponType, no override (every part of every OTHER weapon, and blade/
+// guard for pickaxe specifically, which DO have their own pickaxe_ meshes).
+const SHARED_PART_SOURCE = {
+    pickaxe: { handle: "axe" },
+}
+
 function createPartsWeapon(scene, weaponType, root, options, glowingColor) {
     const { allweapons } = getSocketContainers()
     if (!allweapons) return console.warn("allweapons not yet imported")
@@ -55,20 +82,20 @@ function createPartsWeapon(scene, weaponType, root, options, glowingColor) {
         bladeColor = "steel", guardColor = "bronze", handleColor = "leather", pommelColor = "gold",
     } = options
 
-    const partDefs = [
-        { part: "blade",  rarity: bladeRarity,  materialName: bladeColor  },
-        { part: "guard",  rarity: guardRarity,  materialName: guardColor  },
-        { part: "handle", rarity: handleRarity, materialName: handleColor },
-        { part: "pommel", rarity: pommelRarity, materialName: pommelColor },
-    ]
+    const PART_RARITY = { blade: bladeRarity, guard: guardRarity, handle: handleRarity, pommel: pommelRarity }
+    const PART_COLOR  = { blade: bladeColor,  guard: guardColor,  handle: handleColor,  pommel: pommelColor  }
+    const parts = WEAPON_PART_LIST[weaponType] ?? DEFAULT_PART_LIST
 
     let mat = null
     if(glowingColor){
         mat = createGlowingMat(scene, glowingColor)
     }
 
-    for (const { part, rarity, materialName } of partDefs) {
-        const key = `${weaponType}_${part}_${rarity}`
+    for (const part of parts) {
+        const rarity = PART_RARITY[part]
+        const materialName = PART_COLOR[part]
+        const sourceWeaponType = SHARED_PART_SOURCE[weaponType]?.[part] ?? weaponType
+        const key = `${sourceWeaponType}_${part}_${rarity}`
         const template = allweapons[key]
         if (!template) {
             console.warn(`createWeapon: missing part "${key}"`)
@@ -121,12 +148,12 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
     pommelRarity: "common1"
 }, glowingColor) {
     const root = new TransformNode(`weapon_${weaponType}_${Date.now()}`,scene)
+
+    root.position = new Vector3(pos.x, pos.y,pos.z)
+    root.isVisible = true
     if (parent) {
         root.parent = parent
     }
-    root.position = new Vector3(pos.x, pos.y,pos.z)
-    root.isVisible = true
-
     if (hasPartMeshes(weaponType)) {
         createPartsWeapon(scene, weaponType, root, options, glowingColor)
     } else {
@@ -134,4 +161,29 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
     }
 
     return root
+}
+
+// Explicit convenience wrappers for the axe family (models/axe/axes.glb,
+// containers.js's own setStartingContainers merges it into the SAME
+// allweapons object allswords.glb already fills) - createWeapon(scene,
+// "axe", ...) / createWeapon(scene, "pickaxe", ...) already work fine on
+// their own (weaponType is fully data-driven, same generic engine sword/
+// spear already ride), these just give the axe family its own named entry
+// point rather than a bare string literal at every call site. Options
+// default to axe/pickaxe's ONLY currently-modeled tier (common1 on every
+// part - axes.glb has no rare variants yet, unlike allswords.glb) instead
+// of createWeapon's own sword-shaped defaults (rare2/rare1/common1/common1)
+// which don't correspond to any real axe mesh.
+const AXE_DEFAULT_OPTIONS = {
+    bladeRarity: "common1",
+    guardRarity: "common1",
+    handleRarity: "common1",
+}
+
+export function createAxe(scene, pos = {x:0,y:0,z:0}, parent, options = AXE_DEFAULT_OPTIONS, glowingColor) {
+    return createWeapon(scene, "axe", pos, parent, undefined, options, glowingColor)
+}
+
+export function createPickaxe(scene, pos = {x:0,y:0,z:0}, parent, options = AXE_DEFAULT_OPTIONS, glowingColor) {
+    return createWeapon(scene, "pickaxe", pos, parent, undefined, options, glowingColor)
 }

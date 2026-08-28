@@ -24,13 +24,13 @@
  * @param {TcpCharDet} tcpCharDet
  */
 import { sceneCleanupReady } from "../components/cleanup.js"
-import { attachControllerToThisCharacter, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
+import { attachControllerToThisCharacter, activateMouseControls, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
 import { getSceneDet } from "../main/main.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { attachCam } from "../tools/camera.js"
 import { getSpawnPos } from "../tools/position.js"
 import { createCharacter } from "./createcharacter.js"
-import { ActionManager, MeshBuilder, Vector3 } from "@babylonjs/core"
+import { ActionManager, MeshBuilder, Quaternion, Vector3 } from "@babylonjs/core"
 import { getCharState, setCharStateMode } from "./characterstate"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 
@@ -52,6 +52,11 @@ export function createMyCharacter(charState, scene, allsounds){
     attachCam(player.camParent)
 
     const controls = attachControllerToThisCharacter(player, scene, allsounds)
+    // r-click hold-to-block - myPlayer (inputMovement.js's own module-level
+    // ref) is already set to this exact `player` object by
+    // attachControllerToThisCharacter above, so this is safe to activate
+    // right after it returns
+    activateMouseControls(scene)
 
     const atkCollider = createAttackColliderForEnemy(scene, player.body)
 
@@ -65,8 +70,21 @@ export function createMyCharacter(charState, scene, allsounds){
 function createAttackColliderForEnemy(scene, body){
     const atkCollider = MeshBuilder.CreateBox("atkCollider", {width: 2, height: 0.25, depth: 1}, scene)
     atkCollider.isPickable = false
-    // atkCollider.parent = body
-    atkCollider.position = new Vector3(0, 0, 2.5)
+    // Parented to the player's own body instead of being repositioned in
+    // world space every swing (positionAtkCollider used to recompute a
+    // worldForward vector off player.body.getWorldMatrix() and clone its
+    // rotationQuaternion every single attack just to keep the box "in front
+    // of me"). Parenting means the box just sits at a fixed LOCAL offset
+    // (position.z, see positionAtkCollider's reach) and Babylon's own
+    // transform hierarchy keeps it correctly positioned/rotated relative to
+    // the body for free, every frame, with no manual math needed.
+    // skillEffects.js's strikeWithHandCollider (dashstrike) already expects
+    // this - it saves whatever atkCollider.parent already is as
+    // originalParent before reparenting onto player.rHand, then restores it
+    // afterward, so it hands the box right back to the body once its own
+    // hand-parented window ends.
+    atkCollider.parent = body
+    atkCollider.position = new Vector3(0, ATK_COLLIDER_PARKED_Y, 0)
     atkCollider.isVisible = false
     atkCollider.actionManager = new ActionManager(scene)
     // parked far out of reach of anything at rest - see positionAtkCollider's
@@ -82,13 +100,12 @@ function createAttackColliderForEnemy(scene, body){
     // per-frame check count (still O(enemy count), inherent to using
     // ActionManager's intersection triggers at all), but at least it's a
     // fixed number instead of drifting into the hundreds of thousands over
-    // a long session.
-    atkCollider.position.y = ATK_COLLIDER_PARKED_Y
+    // a long session. (Position already set above.)
     return atkCollider
 }
 // how far below the ground the box waits between attacks - arbitrary, just
 // has to be somewhere no enemy's hitbox could ever reach
-const ATK_COLLIDER_PARKED_Y = -1000
+export const ATK_COLLIDER_PARKED_Y = -1000
 // how long the box stays at the caster's own body height (where it was
 // positioned in front of them) before getting parked back out of reach -
 // long enough for a real swing to land (the exit-intersection trigger only
@@ -101,6 +118,10 @@ const ATK_COLLIDER_ACTIVE_MS = 500
 // = mass * deltaV, so this gives an instant forward deltaV of 2 m/s. Bump
 // this up (not the deltaV math) if the dash should feel punchier.
 const DASH_IMPULSE = 25
+// how much bigger atkCollider's own Z depth gets for a running attack (see
+// positionAtkCollider's own pos.isRunningAttack branch) - tune this number
+// directly if it still whiffs too often, or overshoots too far
+const RUNNING_ATK_COLLIDER_Z_MULT = 2.5
 // tracks the pending "park it back out of reach" timeout across calls - a
 // second attack press before the first one's timeout fires would otherwise
 // leave two competing timeouts racing, the earlier one yanking the box away
@@ -114,7 +135,23 @@ export function positionAtkCollider(pos, dirTarg){
     const atkCollider = getSceneDet().scene.getMeshByName(`atkCollider`)
     if(!atkCollider) return
 
-    // Get forward direction from player's world matrix
+    // atkCollider is parented to player.body (createAttackColliderForEnemy)
+    // now instead of being repositioned in world space every swing - so
+    // "in front of me" is just a fixed LOCAL z offset, and Babylon's
+    // transform hierarchy keeps it correctly positioned/rotated relative to
+    // the body for free every frame. No more per-attack worldForward
+    // recompute off getWorldMatrix() or rotationQuaternion cloning needed -
+    // a local Identity rotation always faces the same way the parent does.
+    const reach = pos?.reach ?? 1.0       // local forward distance (punch ~0.8, kick ~1.0, weapon ~1.5)
+
+    // local X/Y stay 0 (centered on the body, chest height) - only Z (how
+    // far in front) changes per attack
+    atkCollider.position.set(0, 0, reach)
+    atkCollider.rotationQuaternion = Quaternion.Identity()
+
+    // Get forward direction from player's world matrix - still needed below
+    // for the dash impulse direction (world-space), unrelated to the box's
+    // own now-local positioning above
     const forward = new Vector3(0, 0, 1)
     const worldForward = Vector3.TransformNormal(
         forward,
@@ -122,25 +159,26 @@ export function positionAtkCollider(pos, dirTarg){
     )
     worldForward.normalize()
 
-    // Offset multiplier — how far in front of the body
-    const reach = pos?.reach ?? 1.0       // forward distance (punch ~0.8, kick ~1.0, weapon ~1.5)
-    // const heightOffset = pos?.height ?? 0  // 0 = same level, negative = low kick, positive = high punch
-
-    // Final position: player pos + forward * reach + Y offset
-    const spawnPos = player.body.absolutePosition
-        .add(worldForward.scale(reach))
-
-    // spawnPos.y (the player's own body/chest height, not forced down to
-    // ATK_COLLIDER_PARKED_Y or swept up through it anymore) is what actually
-    // has to overlap the target enemy's hitbox now - every enemy body is
-    // sized well past a normal player's own height/width, so this stays a
-    // reliable overlap without needing a per-enemy-height sweep
-    atkCollider.position.copyFrom(spawnPos)
-
-    // Optionally match player's Y rotation so collider faces same way
-    if(player.body.rotationQuaternion){
-        atkCollider.rotationQuaternion = player.body.rotationQuaternion.clone()
-    }
+    // running attacks (uimanagement.js's own "running_<weaponType>1" clip,
+    // pos.isRunningAttack) cover more ground mid-swing than a stationary
+    // one - the collider's own fixed depth (1 unit, see
+    // createAttackColliderForEnemy) was too short to still be overlapping
+    // the target by the time the hit actually needs to register, reading
+    // as "attacks while running just don't land." Temporarily scale up its
+    // Z (forward/backward depth) for this one swing, restored by this same
+    // call's own park-timeout below.
+    //
+    // Only touches scaling.z when THIS call actually boosted it (never for
+    // a plain grounded/stationary attack) - skillEffects.js's own
+    // strikeWithHandCollider independently scales this exact shared mesh
+    // for dashstrike's own reach extension, and a plain attack forcing it
+    // back to 1 here could clip a dashstrike's own still-active window
+    // short. Set to a fixed absolute value (not "current * multiplier")
+    // for the same reason parkTimeoutId's own comment above already flags -
+    // a second running attack landing before the first one's timeout fires
+    // would otherwise compound the multiplier further each time instead of
+    // just re-applying the same boost.
+    if(pos?.isRunningAttack) atkCollider.scaling.z = RUNNING_ATK_COLLIDER_Z_MULT
 
     // Attack dash - shove the player forward in the swing direction.
     // applyImpulse lives on aggregate.BODY, not the aggregate itself.
@@ -181,5 +219,9 @@ export function positionAtkCollider(pos, dirTarg){
     clearTimeout(parkTimeoutId)
     parkTimeoutId = setTimeout(() => {
         atkCollider.position.y = ATK_COLLIDER_PARKED_Y
+        // only undo what THIS call actually set - see this function's own
+        // isRunningAttack comment above for why a blind reset here would
+        // be wrong
+        if(pos?.isRunningAttack) atkCollider.scaling.z = 1
     }, ATK_COLLIDER_ACTIVE_MS)
 }

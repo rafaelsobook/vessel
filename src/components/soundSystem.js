@@ -44,6 +44,9 @@ export function initSounds(scene){
     const enhanceS = createSoundSafe("enhanceS", "./sounds/weapons/enhanceS.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    const weaponblockS = createSoundSafe("weaponblockS", "./sounds/weapons/weaponblock.mp3", scene,
+    {volume: .5, autoplay: false, loop: false})
+
     const goblinDeathS = createSoundSafe("goblinDeathS", "./sounds/monsters/goblindeath.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
@@ -83,6 +86,9 @@ export function initSounds(scene){
     const rockSmashS = createSoundSafe("rockSmashS", "./sounds/effects/rockSmashS.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    const bulletS = createSoundSafe("bulletS", "./sounds/effects/bullet.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const minningS = createSoundSafe("minningS", "./sounds/weapons/minning.mp3", scene,
     {volume: 1, autoplay: false, loop: false}) // not spatial - plays the same regardless of camera/mesh position
 
@@ -95,6 +101,9 @@ export function initSounds(scene){
     const notif2S = createSoundSafe("notif2S", "./sounds/notifs/notif2S.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
     notif2S?.setPlaybackRate(1.1)
+
+    const titleAcquiredS = createSoundSafe("titleAcquiredS", "./sounds/notifs/titleacquired.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
 
     const runningS = createSoundSafe("runningS", "./sounds/indor/running.mp3", scene,
     {volume: 0.5, autoplay: false, loop: false})
@@ -142,9 +151,11 @@ export function initSounds(scene){
         enhanceS,spearS1,demonoidS,
         runningS, woodrunS,
         poisonS,
+        bulletS,
         pickItemS,
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
-        staffS1,goblinDeathS,notif1S,notif2S
+        staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,
+        weaponblockS
     }
     return allSounds;
 }

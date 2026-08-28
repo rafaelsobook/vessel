@@ -65,6 +65,21 @@ export function growBindPower(skillDetail){
     skillDetail.enemyBind.bindChance = Math.min(1, +(skillDetail.enemyBind.bindChance + 0.08).toFixed(2))
 }
 
+// pyroclasmSkill only - its projectileVisual.plasma dot count grows 1-for-1
+// with level (lvl 2 -> qnty:2, lvl 3 -> qnty:3, and so on - literally
+// `base + (lvl-1)`, per how this was asked for), on top of whichever aura
+// template it's also using (see growArcAuraAndPlasma below). _basePlasmaQnty
+// remembered once (same "remembered base" pattern every other grow*
+// template here uses) so repeated levels compute off the ORIGINAL starting
+// qnty, not whatever a previous upgrade already bumped it to.
+export function growPlasmaCount(skillDetail){
+    const plasma = skillDetail.projectileVisual?.plasma
+    if(!plasma) return
+    const base = skillDetail._basePlasmaQnty ?? plasma.qnty
+    skillDetail._basePlasmaQnty = base
+    plasma.qnty = base + (skillDetail.lvl - 1)
+}
+
 // astralrain only - the whole point of the feature per its own request:
 // MORE swords per level, not bigger or more-arc'd ones. Reaches min 6 /
 // max 10 by lvl 5 ("if it is lvl5 maybe 10 swords", verbatim).
@@ -112,6 +127,12 @@ function growArcAuraAndBind(skillDetail){
     growBindPower(skillDetail)
 }
 
+// pyroclasmSkill only - wants both growArcAura AND growPlasmaCount
+function growArcAuraAndPlasma(skillDetail){
+    growArcAura(skillDetail)
+    growPlasmaCount(skillDetail)
+}
+
 // multicast only - a pure trigger has no damage/projectile of its own to
 // scale, so leveling makes it cheaper and faster to re-trigger instead: its
 // own mana cost and cooldown both shrink. _base* remembered once (same
@@ -143,6 +164,7 @@ export const UPGRADE_TEMPLATES = {
     growParticleAura,
     growArcAura,
     growArcAuraAndBind,
+    growArcAuraAndPlasma,
     growSwordRain,
     growGroundSpikes,
     growDarkOrb,

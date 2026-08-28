@@ -85,39 +85,8 @@ canvas {
   top: 0;
   z-index: 2;
 }
-.walk-run-icons-container .rest {
-  right: -35px;
-  top: 20%;
-  z-index: 2;
-  width: 70px;
-  height: 70px;
-}
 .walk-run-icons-container .icon-btn:active {
   opacity: 0.9;
-}
-
-/* resting - shown only while player.mode === "resting" (uimanagement.js's
-startResting/stopResting), the one thing still clickable once
-hideShowAllScreenUI(false) + setCanPress(false) shut everything else off */
-.center-button {
-  display: none;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10;
-  padding: 14px 36px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
-  background: rgba(20, 20, 20, 0.75);
-  color: #f0e6d2;
-  font-family: "Cormorant Garamond", serif;
-  font-size: 1.4rem;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-}
-.center-button:active {
-  background: rgba(40, 40, 40, 0.85);
 }
 
 .disabled {
@@ -1153,23 +1122,22 @@ canvas {
   top: 22%;
   left: 1%;
   z-index: 4;
-  padding: 5px 10px;
-  border: 1px solid rgba(168, 86, 19, 0.4);
   width: 20%;
-  background: rgba(24, 23, 23, 0.9);
   display: none;
-  border-radius: 3px;
-  cursor: pointer;
 }
-.story-notif-container .story-bx {
+.story-notif-container .story {
+  padding: 10px;
+  border: 1px solid rgba(168, 86, 19, 0.4);
+  background: rgba(24, 23, 23, 0.9);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   pointer-events: none;
+  border-radius: 3px;
 }
 .story-notif-container .story-bx .story-title {
   font-family: "M PLUS Rounded 1c", sans-serif;
   color: rgba(228, 158, 29, 0.863);
+  margin-bottom: 10px;
 }
 .story-notif-container .story-bx .story-required {
   font-family: "Bellefair", serif;
@@ -2251,7 +2219,7 @@ canvas {
 }
 .item-info-cont .item-stats .item-stat-row .stat-value {
   color: #edd59f;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
 .item-info-cont .item-stats .item-stat-row .durability-bar-outline {
   width: 50%;
@@ -2353,6 +2321,219 @@ canvas {
   transition: 0.1s;
 }
 
+.title-acquired-popup {
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  transform: translate(-50%, -20px);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.title-acquired-popup .tap-icon {
+  width: 70px;
+  height: 70px;
+  -o-object-fit: contain;
+     object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(202, 165, 1, 0.8)) drop-shadow(0 0 18px rgba(202, 165, 1, 0.5));
+}
+.title-acquired-popup .tap-caption {
+  font-family: "Bellefair", serif;
+  color: rgba(245, 245, 245, 0.75);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  margin: 2px 0;
+}
+.title-acquired-popup .tap-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.title-acquired-popup .tap-wing {
+  width: 40px;
+  height: auto;
+  filter: drop-shadow(0 0 6px rgba(202, 165, 1, 0.6));
+}
+.title-acquired-popup .tap-name {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.8rem;
+  color: rgb(202, 165, 1);
+  text-shadow: 0 0 12px rgba(202, 165, 1, 0.6);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.title-popup-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.skill-acquired-popup {
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  transform: translate(-50%, -20px);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.skill-acquired-popup .sap-circle-wrap {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(18, 15, 12, 0.95) 0%, rgba(18, 15, 12, 0.9) 60%, rgba(18, 15, 12, 0.5) 85%, transparent 100%);
+  box-shadow: 0 0 14px 2px rgba(255, 255, 255, 0.25);
+  transition: box-shadow 0.3s ease, background 0.3s ease;
+}
+.skill-acquired-popup .sap-skill-icon, .skill-acquired-popup .sap-magic-circle {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-mode: luminance;
+  mask-mode: luminance;
+}
+.skill-acquired-popup .sap-magic-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  animation: sapCircleSpin 6s linear infinite;
+  opacity: 0.85;
+}
+.skill-acquired-popup .sap-frame {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.skill-acquired-popup .sap-skill-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 66%;
+  height: 66%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+.skill-acquired-popup .sap-caption {
+  font-family: "Bellefair", serif;
+  color: rgba(245, 245, 245, 0.75);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  margin: 4px 0 0 0;
+}
+.skill-acquired-popup .sap-name {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin: 0;
+  color: #f5f5f5;
+  white-space: nowrap;
+}
+
+.skill-popup-hidden {
+  display: none;
+}
+
+.skill-popup-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@keyframes sapCircleSpin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+.skill-acquired-popup[data-rank="1"] .sap-circle-wrap {
+  background: radial-gradient(circle, rgba(18, 40, 32, 0.95) 0%, rgba(18, 40, 32, 0.9) 60%, rgba(18, 40, 32, 0.5) 85%, transparent 100%);
+  box-shadow: 0 0 16px 3px rgba(127, 227, 180, 0.5);
+}
+.skill-acquired-popup[data-rank="1"] .sap-name {
+  color: #7fe3b4;
+  text-shadow: 0 0 8px rgba(127, 227, 180, 0.5);
+}
+
+.skill-acquired-popup[data-rank="2"] .sap-circle-wrap {
+  background: radial-gradient(circle, rgba(34, 20, 48, 0.95) 0%, rgba(34, 20, 48, 0.9) 60%, rgba(34, 20, 48, 0.5) 85%, transparent 100%);
+  box-shadow: 0 0 16px 3px rgba(196, 139, 255, 0.5);
+}
+.skill-acquired-popup[data-rank="2"] .sap-name {
+  color: #c48bff;
+  text-shadow: 0 0 8px rgba(196, 139, 255, 0.5);
+}
+
+.skill-acquired-popup[data-rank="3"] .sap-circle-wrap {
+  background: radial-gradient(circle, rgba(42, 33, 12, 0.95) 0%, rgba(42, 33, 12, 0.9) 60%, rgba(42, 33, 12, 0.5) 85%, transparent 100%);
+  box-shadow: 0 0 18px 4px rgba(240, 201, 74, 0.55);
+}
+.skill-acquired-popup[data-rank="3"] .sap-name {
+  color: #f0c94a;
+  text-shadow: 0 0 10px rgba(240, 201, 74, 0.6);
+}
+
+.skill-acquired-popup[data-rank="4"] .sap-magic-circle {
+  animation: sapCircleSpin 3s linear infinite;
+}
+.skill-acquired-popup[data-rank="4"] .sap-circle-wrap {
+  background: radial-gradient(circle, rgba(48, 38, 14, 0.95) 0%, rgba(48, 38, 14, 0.9) 60%, rgba(48, 38, 14, 0.5) 85%, transparent 100%);
+  animation: sapGodTierGlowBox 2s ease-in-out infinite alternate;
+}
+.skill-acquired-popup[data-rank="4"] .sap-name {
+  background: linear-gradient(90deg, #fff6d0, #f0c94a, #ffffff, #f0c94a, #fff6d0);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: godTierShimmer 3s linear infinite;
+}
+
+@keyframes sapGodTierGlowBox {
+  0% {
+    box-shadow: 0 0 10px 2px rgba(240, 201, 74, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 24px 7px rgba(255, 255, 255, 0.85);
+  }
+}
 .upper-icons-container {
   position: fixed;
   top: 1%;
@@ -3289,6 +3470,63 @@ canvas {
   background: rgba(120, 30, 30, 0.4);
 }
 
+.skill-container .skill-info-right .skill-info[data-rank="1"] .skill-info-details .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+  color: #7fe3b4;
+}
+.skill-container .skill-info-right .skill-info[data-rank="1"] .skill-info-details .skill-info-desc {
+  color: rgba(127, 227, 180, 0.6);
+}
+.skill-container .skill-info-right .skill-info[data-rank="2"] .skill-info-details .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+  color: #c48bff;
+  text-shadow: 0 0 6px rgba(196, 139, 255, 0.5);
+}
+.skill-container .skill-info-right .skill-info[data-rank="2"] .skill-info-details .skill-info-desc {
+  color: rgba(196, 139, 255, 0.55);
+}
+.skill-container .skill-info-right .skill-info[data-rank="3"] .skill-info-details .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #f0c94a;
+  text-shadow: 0 0 10px rgba(240, 201, 74, 0.65);
+}
+.skill-container .skill-info-right .skill-info[data-rank="3"] .skill-info-details .skill-info-desc {
+  color: rgba(240, 201, 74, 0.6);
+}
+.skill-container .skill-info-right .skill-info[data-rank="4"] .skill-info-details .skill-stats .skill-stat-row .stat-value.skillInfoRank {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  background: linear-gradient(90deg, #fff6d0, #f0c94a, #ffffff, #f0c94a, #fff6d0);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: godTierShimmer 3s linear infinite, godTierGlow 2s ease-in-out infinite alternate;
+}
+.skill-container .skill-info-right .skill-info[data-rank="4"] .skill-info-details .skill-info-desc {
+  color: rgba(255, 246, 208, 0.75);
+  text-shadow: 0 0 6px rgba(240, 201, 74, 0.3);
+}
+
+@keyframes godTierShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 300% 50%;
+  }
+}
+@keyframes godTierGlow {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(240, 201, 74, 0.45));
+  }
+  100% {
+    filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.9));
+  }
+}
 .home-page {
   display: flex;
   justify-content: center;
@@ -4419,10 +4657,13 @@ canvas {
   text-transform: uppercase;
 }
 .leaderboard-container .lb-list .lb-title-lbl {
-  color: #9fd6ed;
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 500;
+  color: rgba(237, 213, 159, 0.8);
   text-align: left;
-  text-transform: uppercase;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.3px;
 }
 .leaderboard-container .lb-footer {
   margin-top: 12px;
@@ -4436,4 +4677,12 @@ canvas {
 .leaderboard-container .lb-footer .lb-my-rank-value {
   color: #edd59f;
   font-family: "Graduate", cursive;
+}
+
+.wake-up-btn {
+  display: none;
+}
+
+.title-popup-hidden {
+  display: none;
 }/*# sourceMappingURL=style.css.map */

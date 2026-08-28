@@ -1,4 +1,4 @@
-import { Vector3, Quaternion } from '@babylonjs/core'
+import { Vector3, Quaternion, MeshBuilder } from '@babylonjs/core'
 import { createMesh } from '../creations/creationTools.js'
 import { loadAvatarContainer } from '../tools/loadmodel.js'
 import { createTextMesh } from '../gui/textmesh.js'
@@ -85,4 +85,29 @@ export async function createNpc(scene, det) {
         anims: entries.animationGroups,
         nameMesh
     }
+}
+
+// characterType:"npcFighter" npcs (see duelSystem.js) need to actually fight,
+// which createNpc()'s glbPath:null branch can't support - it deliberately
+// takes createCharacter()'s isNpc:true path, which returns early with no
+// characterAnimations wrapper, no equipSword/equip* methods, none of the real
+// player rig (see createcharacter.js's own isNpc early-return). This calls
+// the same createCharacter() with isNpc:false instead, so a fighter gets the
+// exact same characterAnimations/equip machinery the player has. usePhysics
+// stays false though (not true, like the real player) - a duel opponent's
+// movement is driven by directly setting body.position each frame
+// (duelSystem.js's chase loop), which would fight a dynamic physics body
+// trying to simulate its own motion at the same time.
+export function createFighterNpc(scene, det) {
+    const x = det.x ?? 0
+    const y = det.y ?? 0
+    const z = det.z ?? 0
+
+    const npcDet = { ...det, owner: det._id, ownerId: det._id }
+    const npc = createCharacter(scene, { x, y, z }, npcDet, false, false)
+    const meeleeCollider = MeshBuilder.CreateBox("meeleeCollider", { size: 2.5, height: 1.8}, scene)
+    meeleeCollider.parent = npc.body
+    meeleeCollider.isVisible = false
+    
+    return npc
 }

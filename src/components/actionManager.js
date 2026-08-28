@@ -24,7 +24,7 @@ export function onIntersecExitTrig(mesh, otherMesh, scene, callb){
                 trigger: ActionManager.OnIntersectionExitTrigger,
                 parameter: otherMesh
             },
-            () => { if(callb) callb() }
+            () => { if(callb) callb(otherMesh) }
         )
     );
     

@@ -10,9 +10,10 @@ import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
 import { openCloseSkills } from "../components/skillsui.js"
-import { getIsGrounded, getPlayerMode, forceStopMovement } from "../controllers/inputMovement.js"
+import { getIsGrounded, getIsMoving, getPlayerMode, forceStopMovement } from "../controllers/inputMovement.js"
 import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSliders.js"
 import { openCloseChatContainer, hideShowChatToggleBtn } from "../components/worldChatSystem.js"
+import { updateStoryQuestUI } from "./storyQuestSystem.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -22,6 +23,7 @@ const conts       = document.querySelectorAll(".cont")
 const itemSlotList   = document.querySelector(".slots-list")
 const inventoryCont  = document.querySelector(".inventory-container")
 const wakeUpBtn      = document.querySelector(".wake-up-btn")
+const storyNotifCont = document.querySelector(".story-notif-container")
 
 // RESTING - player.mode "resting" (see skillsData.js-style mode gating
 // throughout this game: renderer.js's own switch drives the "structed"
@@ -87,6 +89,17 @@ export function hideShowAllScreenUI(_isVisible = false){
     openCloseChatContainer(_isVisible)
     showHideOutputSliders(_isVisible ? "flex" : "none")
     hideShowChatToggleBtn(!_isVisible)
+    // story-notif-container (storyQuestSystem.js) was missing from this list
+    // entirely - every other call site of this function (conversations.js's
+    // cutscene dialogue, startResting, etc) hid the rest of the HUD but left
+    // the story tracker sitting there on top of a black screen. Hidden the
+    // same blunt way as everything else above, but restored via a real
+    // re-render (updateStoryQuestUI, not a blind display:block) - that
+    // function already hides itself when there's no longer an active quest,
+    // so this can't leave a stale/empty tracker box on screen if the one
+    // active quest happened to complete while the UI was hidden.
+    if(_isVisible) updateStoryQuestUI()
+    else if(storyNotifCont) storyNotifCont.style.display = "none"
 }
 export function openCloseLifeDisplay(_isVisible){
     lifeManaStamCont.style.display = _isVisible ? "block":"none"
@@ -141,7 +154,7 @@ export function activateBtnOnce(){
             // attack is allowed through even while airborne - everything
             // else (walk/running/cast) still can't change mode mid-jump.
             // case "attack" below already has its own dedicated air-attack
-            // clip (equippedWeaponType + "attackair") wired up for exactly
+            // clip (equippedWeaponType + "attack_1_air") wired up for exactly
             // this - it was just unreachable before, since this early
             // return happens before the switch ever runs.
             if(plMode === "inAir" && btnName !== "attack") return console.log("cannot change mode while inAir")
@@ -201,28 +214,71 @@ export function activateBtnOnce(){
                     getAllSounds().voiceAttackS?.setPlaybackRate(0.9 + (Math.random()*0.2))
                     getAllSounds().voiceAttackS?.play()
                     
-                    let animName = 'kick1'
+                    // unarmed combo alternates punch1/kick1 - same swordAnimNum
+                    // toggle already used for the weapon combo below, reused
+                    // here since it flips 1/2 on every attack regardless of
+                    // whether a weapon ends up overriding animName next.
+                    let animName = swordAnimNum === 1 ? 'punch1' : 'kick1'
                     let equippedWeaponType = null
                     charState.items.forEach(itm => {
                         if (itm.itemType === "weapon" && itm.equiped) {
-                            equippedWeaponType = itm.weaponType
-                            animName = `${itm.weaponType}attack${swordAnimNum}`
+                            // pickaxe has no animation clips of its own on the
+                            // rig (axeattack1/2, axeattack_1_air, running_axe1
+                            // are the only ones that actually exist) - it
+                            // swings using the exact same clips axe does.
+                            // Only the CLIP NAME is aliased here, not
+                            // itm.weaponType itself - hit sound
+                            // (duelSystem.js's WEAPON_HIT_SOUNDS), the mesh
+                            // building (createweapon.js), and attackInfo's
+                            // own weaponType below all still correctly see
+                            // the real "pickaxe".
+                            const animWeaponType = itm.weaponType === "pickaxe" ? "axe" : itm.weaponType
+                            equippedWeaponType = animWeaponType
+                            animName = `${animWeaponType}attack${swordAnimNum}`
                         }
                     })
 
                     // airborne + weapon equipped uses the dedicated air-attack
                     // clip instead of the normal grounded combo (no alternating
                     // swordAnimNum for this one - there's only one air-attack
-                    // anim). "swordattackair" for weaponType "sword" - no
-                    // underscore/number, unlike the grounded combo's own
+                    // anim). Real clip name confirmed as "swordattack_1_air"
+                    // for weaponType "sword" (the previous "swordattackair"
+                    // guess here never matched anything on the rig, so this
+                    // branch silently never played at all) - "_1_" in the
+                    // middle, unlike the grounded combo's own plain
                     // "swordattack1"/"swordattack2" naming.
+                    // captured once, reused both for picking the clip below
+                    // AND for telling positionAtkCollider to widen its own
+                    // reach for this swing (see its own isRunningAttack
+                    // comment - a running swing covers more ground than a
+                    // stationary one, the collider's fixed default depth
+                    // was too short to still catch the target in time)
+                    const isRunningAttack = !!(equippedWeaponType && getIsGrounded() && getIsMoving())
+
+                    // air-attack and running-attack clips only exist for
+                    // weaponType "sword" on the rig (swordattack_1_air,
+                    // running_sword1) - axe/pickaxe have no dedicated
+                    // versions of either, so BOTH alias to "sword" for just
+                    // these two special clips. Their own grounded combo
+                    // (animName above) is untouched by this - it already
+                    // correctly plays axeattack1/2 via equippedWeaponType's
+                    // own pickaxe->axe alias.
+                    const airRunWeaponType = (equippedWeaponType === "axe" || equippedWeaponType === "pickaxe")
+                        ? "sword"
+                        : equippedWeaponType
+
                     if(equippedWeaponType && !getIsGrounded()){
-                        animName = `${equippedWeaponType}attackair`
+                        animName = `${airRunWeaponType}attack_1_air`
+                    } else if(isRunningAttack){
+                        // grounded + weapon equipped + actually running gets
+                        // its own dedicated clip too, same "no alternating
+                        // swordAnimNum, only one variant" precedent the
+                        // air-attack clip above already set - only confirmed
+                        // to exist for weaponType "sword" ("running_sword1")
+                        animName = `running_${airRunWeaponType}1`
                     }
 
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1
-
-                    
 
                     if(attackInfo.weaponType) playSound(getAllSounds().swordWhooshS)
                     
@@ -231,7 +287,7 @@ export function activateBtnOnce(){
                     }else{
                         attack(attackInfo, animName)
                     } 
-                    positionAtkCollider({ reach: 1})
+                    positionAtkCollider({ reach: 1, isRunningAttack })
 
                 break
                 case "cast":

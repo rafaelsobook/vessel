@@ -7,7 +7,7 @@ import { getProjectilesOnScene } from "../sockets/worldsocket.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
 import { getAllSounds } from "../components/soundSystem.js"
 
-export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy){
+export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround){
     let weaponPartDetails = _weaponPartDetails;
 
     if(weaponPartDetails === "default"){
@@ -162,7 +162,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     // overlap on the exact frame the check runs, so it doesn't have that
     // failure mode.
     const physicsEngine = scene.getPhysicsEngine()
-    if(physicsEngine){
+    if(physicsEngine && !willNotHitTheGround){
         envHitObserver = scene.onBeforeRenderObservable.add(() => {
             if(hasHit) return
             if(instance.isDisposed()){

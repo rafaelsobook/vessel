@@ -41,6 +41,10 @@ export default async function loadScene(){
             sceneDetail = await areaScene(placeDetail)
             console.log(sceneDetail)
         break
+        case "duel":
+            sceneDetail = await areaScene(placeDetail)
+            console.log(sceneDetail)
+        break
     }
 
     getAllSounds().enteredS?.play()

@@ -2,8 +2,10 @@ import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
 import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 import { getSceneDet } from "../main/main"
-import { castOffenseSkill, castMulticast, castBuffSkill, cancelPendingCast } from "../creations/skillEffects"
+import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, cancelPendingCast } from "../creations/skillEffects"
 import { UPGRADE_TEMPLATES } from "../staticRecources/skillUpgrades"
+import { onIntersecEnterTrig } from "../components/actionManager"
+import { trackAptitudeUsage } from "./aptitudeSystem"
 
 // CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
 // stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
@@ -87,6 +89,16 @@ export function activateSkill(ownerId, skillDetail, casterStats){
         stats: casterStats || {},
     }
 
+    // aptitudeSystem.js - only counts a real activation (not the
+    // isActive:false toggle-off) of an elemental skill (element:"normal"
+    // utility skills like singlecast/dashstrike/multicast aren't tied to
+    // any aptitude, trackAptitudeUsage no-ops on a falsy/"normal" element
+    // anyway but the isActive/isMe gate here is the one that actually
+    // matters - this whole function also runs for every OTHER player's
+    // cast via the same socket relay, see this function's own header
+    // comment on isMe)
+    if(isMe && skillDetail.isActive) trackAptitudeUsage(skillDetail.element)
+
     switch(skillDetail.name){
         case "flexaura":
             if(skillDetail.isActive){
@@ -138,6 +150,14 @@ export function activateSkill(ownerId, skillDetail, casterStats){
                     castBuffSkill(getSceneDet().scene, player, skillDetail, casterState)
                 } else {
                     cancelPendingCast(skillDetail.name)
+                }
+            } else if(skillDetail.effects?.effectType === "dash"){
+                // dashstrikeSkill and any future weapon skill like it - no
+                // cast window to cancel (castDuration is 0, see skillsData.js's
+                // own comment), so there's nothing to do on the isActive:false
+                // toggle-off, unlike offense/buff above
+                if(skillDetail.isActive){
+                    castDashSkill(getSceneDet().scene, player, skillDetail, casterState)
                 }
             }
         break
@@ -301,4 +321,26 @@ export function calcPercent(currentNum, totalNum){
 export function clearAttackingIntervals(){
     // clearInterval(attackingInterval)
     // clearInterval(detectingInterval)
+}
+
+export function registerToAtkCollider(scene, meshName, cb){
+    const atkCollider = scene.getMeshByName(`atkCollider`)
+    scene.meshes.forEach(mesh => {
+
+        if(mesh.getClassName() === "GroundMesh" && mesh.name === "water"){
+
+        }
+        // "Mesh" alone only matches the original/root mesh - every tree you
+        // actually see is placed via .createInstance() (createvillage.js's
+        // spawnProps/spawnNonPhysics, and infterrain's own foliage placement),
+        // which returns an "InstancedMesh", not a "Mesh". Both need to be checked.
+        if(mesh.getClassName() === "Mesh" || mesh.getClassName() === "InstancedMesh"){
+            
+            if(mesh.name && mesh.name.toLocaleLowerCase().includes(meshName)){
+                console.log("hello tree")
+                onIntersecEnterTrig(atkCollider, mesh, scene, cb)
+            }
+        }
+        // if(mesh.name.includes("tree")) console.log(mesh.name)
+    })
 }

@@ -2,18 +2,24 @@ import { randomNum } from "../tools/tools";
 import { METAL_COLOR } from "../tools/metalmat.js";
 
 export default  [
+
+    // pickaxe (weaponType "pickaxe", same axes.glb as the axe entries
+    // above) - shares its handle mesh directly with the axe family (no
+    // separate pickaxe_handle_* mesh exists at all, see createweapon.js's
+    // own SHARED_PART_SOURCE), only blade/guard are actually its own.
+    // First pickaxe item added, mainly to prove the weaponType actually
+    // works end to end - rename/reprice/reflavor freely.
     {
         sellerId: "sellerEldric123",
         itemId: randomNum(), // should be string also in client
-        name: "knightaxe", // is also the image name
-        dn: "Knight's Axe",
+        name: "minersedge", // is also the image name
+        dn: "Miner's Edge",
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
-        weaponType: "axe",
-        equipAbilities: { 
-            dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
+        weaponType: "pickaxe",
+        equipAbilities: {
+            dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0,
         }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
-        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
         consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
         equiped: false,
         soulFeed: 0,
@@ -23,59 +29,51 @@ export default  [
         durability: { current: 100, max: 100},
         price: { coinType: "bronze", pieces: 10 },
         qnty: 1,
-        desc: "From war to war this axe is commendable for battle, durable and sharp",
-        rarity: "rare"
-    },
-    {
-        sellerId: "sellerEldric123",
-        itemId: randomNum(), // should be string also in client
-        name: "silverwood", // is also the image name
-        dn: "Silver & Wood",
-        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
-        itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
-        weaponType: "axe",
-        equipAbilities: { 
-            dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
-        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
-        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
-        consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
-        equiped: false,
-        soulFeed: 0,
-        isEnhanceAble: true, // only for equipable items
-        enhancedLevel: 0,
-        slots: [],// { name, dn, equipAbilities } cores
-        durability: { current: 100, max: 100},
-        price: { coinType: "bronze", pieces: 10 },
-        qnty: 1,
-        desc: "The classic Silver & wood crafted from nature's spirit and silverine",
-        rarity: "rare"
-    },
-    {
-        sellerId: "sellerEldric123",
-        itemId: randomNum(), // should be string also in client
-        name: "daedalus", // is also the image name
-        dn: "Daedalus",
-        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
-        itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
-        weaponType: "axe",
-        equipAbilities: { 
-            dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
-        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
-        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
-        consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
-        equiped: false,
-        soulFeed: 0,
-        isEnhanceAble: true, // only for equipable items
-        enhancedLevel: 0,
-        slots: [],// { name, dn, equipAbilities } cores
-        durability: { current: 100, max: 100},
-        price: { coinType: "bronze", pieces: 10 },
-        qnty: 1,
-        desc: "Daedalus Axe, named after Daedalus a fallen meteor that killed dozen of life",
-        rarity: "rare"
+        desc: "A well-balanced pick, equally at home splitting stone or skulls",
+        rarity: "rare",
+        parts: {
+            bladeRarity: "common1",
+            guardRarity: "common1",
+            handleRarity: "common1",
+
+            bladeColor: "steel",
+            guardColor: "iron",
+            handleColor: "leather",
+        }
     },
 
+   {
+        sellerId: "sellerEldric123",
+        itemId: randomNum(), // should be string also in client
+        name: "farmersaxe", // is also the image name
+        dn: "Farmer's Axe",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
+        weaponType: "axe",
+        equipAbilities: {
+            dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: { coinType: "bronze", pieces: 10 },
+        qnty: 1,
+        desc: "A well-balanced Axe, equally at home cutting trees",
+        rarity: "rare",
+        parts: {
+            bladeRarity: "common1",
+            guardRarity: "common1",
+            handleRarity: "common1",
 
+            bladeColor: "steel",
+            guardColor: "iron",
+            handleColor: "wood",
+        }
+    },
     {
         sellerId: "sellerSylvan123",
         itemId: randomNum(), // should be string also in client
@@ -273,3 +271,111 @@ export default  [
         }
     },
 ]
+
+
+//     {
+    //     sellerId: "sellerEldric123",
+    //     itemId: randomNum(), // should be string also in client
+    //     name: "knightaxe", // is also the image name
+    //     dn: "Knight's Axe",
+    //     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    //     itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
+    //     weaponType: "axe",
+    //     equipAbilities: { 
+    //         dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
+    //     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    //     // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    //     consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+    //     equiped: false,
+    //     soulFeed: 0,
+    //     isEnhanceAble: true, // only for equipable items
+    //     enhancedLevel: 0,
+    //     slots: [],// { name, dn, equipAbilities } cores
+    //     durability: { current: 100, max: 100},
+    //     price: { coinType: "bronze", pieces: 10 },
+    //     qnty: 1,
+    //     desc: "From war to war this axe is commendable for battle, durable and sharp",
+    //     rarity: "rare",
+    //     // axe only ever has blade/guard/handle (no pommel mesh exists for
+    //     // this weaponType - see createweapon.js's own WEAPON_PART_LIST) and
+    //     // axes.glb only has ONE modeled tier per part (common1, no rare
+    //     // variants yet, unlike allswords.glb) - without this, equipping this
+    //     // item would've silently tried (and failed) to look up
+    //     // axe_blade_rare2/axe_guard_rare1 (createWeapon's own default
+    //     // options), which don't exist in the glb at all.
+    //     parts: {
+    //         bladeRarity: "common1",
+    //         guardRarity: "common1",
+    //         handleRarity: "common1",
+
+    //         bladeColor: "steel",
+    //         guardColor: "bronze",
+    //         handleColor: "leather",
+    //     }
+    // },
+    // {
+    //     sellerId: "sellerEldric123",
+    //     itemId: randomNum(), // should be string also in client
+    //     name: "silverwood", // is also the image name
+    //     dn: "Silver & Wood",
+    //     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    //     itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
+    //     weaponType: "axe",
+    //     equipAbilities: { 
+    //         dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
+    //     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    //     // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    //     consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+    //     equiped: false,
+    //     soulFeed: 0,
+    //     isEnhanceAble: true, // only for equipable items
+    //     enhancedLevel: 0,
+    //     slots: [],// { name, dn, equipAbilities } cores
+    //     durability: { current: 100, max: 100},
+    //     price: { coinType: "bronze", pieces: 10 },
+    //     qnty: 1,
+    //     desc: "The classic Silver & wood crafted from nature's spirit and silverine",
+    //     rarity: "rare",
+    //     parts: {
+    //         bladeRarity: "common1",
+    //         guardRarity: "common1",
+    //         handleRarity: "common1",
+
+    //         bladeColor: "silver",
+    //         guardColor: "silver",
+    //         handleColor: "wood",
+    //     }
+    // },
+    // {
+    //     sellerId: "sellerEldric123",
+    //     itemId: randomNum(), // should be string also in client
+    //     name: "daedalus", // is also the image name
+    //     dn: "Daedalus",
+    //     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+    //     itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
+    //     weaponType: "axe",
+    //     equipAbilities: { 
+    //         dmg: 100, def: 100, magicDmg: 100, plusStr: 0, plusDex: 0, plusInt: 0,
+    //     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+    //     // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+    //     consumeAbilities: { plusHp: 100, plusMp: 100, plusSp: 100, plusDmg: 10, plusSpd: 1, }, //for buffs foods potions
+    //     equiped: false,
+    //     soulFeed: 0,
+    //     isEnhanceAble: true, // only for equipable items
+    //     enhancedLevel: 0,
+    //     slots: [],// { name, dn, equipAbilities } cores
+    //     durability: { current: 100, max: 100},
+    //     price: { coinType: "bronze", pieces: 10 },
+    //     qnty: 1,
+    //     desc: "Daedalus Axe, named after Daedalus a fallen meteor that killed dozen of life",
+    //     rarity: "rare",
+    //     parts: {
+    //         bladeRarity: "common1",
+    //         guardRarity: "common1",
+    //         handleRarity: "common1",
+
+    //         bladeColor: "mythril",
+    //         guardColor: "iron",
+    //         handleColor: "bone",
+    //     }
+    // },

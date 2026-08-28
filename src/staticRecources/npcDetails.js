@@ -1,16 +1,173 @@
 import { receiveAbilities } from "../charactersystem/abilitySystem.js"
-import { evaluateRank, getCharState } from "../charactersystem/characterstate.js"
+import { evaluateRank, getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
 import { startQuestionare } from "../components/conversations.js"
 // import { openCloseShop, updateShopItem } from "../charactersystem/shopSystem.js"
 // import { activateCinemaOne } from "../tools/cameraTools.js"
-import { randomNum, getNumUntil} from "../tools/tools.js"
+import { randomNum, getNumUntil, checkIfTokenSaved} from "../tools/tools.js"
 import { SKIN_COLORS } from "../constants/skinColors.js"
 import { METAL_COLOR } from "../tools/metalmat.js"
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js"
+import { findPlaceMetaData } from "../states/placestates.js"
+import { exitScene } from "../sockets/exitsocket.js"
+import { changeScene } from "../main/main.js"
+import { flameWardTitle } from "./titlesData.js"
 
 const npcEnemySpd = 4
 const npcPatrolSpd = 1
+
+// Renarden's own skill set - pulled out to its own top-level const (instead
+// of staying inline as his `skills:` field) so `reward.skills` below can
+// reference the SAME objects rather than a second, hand-duplicated copy of
+// ~140 lines that would inevitably drift out of sync the next time one of
+// these skills gets tuned. duelSystem.js reads reward.skills on defeat to
+// grant the player these exact skills (see the "Want to check who's
+// stronger?" win-reward wiring).
+const renardenSkills = {
+    nearSkill: {
+        equiped: true,
+        isActive: false,
+        name: "dashstrike",
+        lvl: 1,
+        pointsToClaim: 1,
+        pointsForUpgrade: 1,
+        element: "normal",
+        skillElementType: "na",
+        animationLoop: false,
+        displayName: "Dashstrike",
+        // documented here to match skillsData.js's own dashstrikeSkill -
+        // not actually read on this side though, duelSystem.js's
+        // rollNearSkill gates on hasDrawnWeapon (a live runtime check,
+        // since even an armed fighter's sword may still be sheathed),
+        // not this static flag
+        requiresWeapon: true,
+        // 0, not omitted - activating this skill IS the dash+strike, nothing
+        // plays out after a separate cast bar finishes the way every
+        // requireMode:"casting" skill above works
+        castDuration: 0,
+        returnModeDura: 900,
+        skillCoolDown: 3000,
+        demand: [{ name: "mp", minCost: 25, cost: 0 }],
+        effects: { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+        // durationMs: 1000 (not the player's own dashstrikeSkill
+        // default of 350) - this npc opponent has no physics
+        // aggregate at all, so its own dash is a plain locallyTranslate
+        // ramp (duelSystem.js's performOpponentDashStrike) rather than
+        // an impulse - a full second reads clearly as a real lunge;
+        // impulseForce is unused on this side entirely (physics-only)
+        dash: { distance: 6, impulseForce: 120, durationMs: 1000 },
+        animationName: "dashstrike",
+        // played on a timeout after activation (durationMs -> ms, read by the
+        // not-yet-written castDashSkill: setTimeout(..., activationSound.willPlayAfterSeconds)),
+        // not immediately on cast the way launchSound/impactSound above fire -
+        // lets the strike's own sound land in sync with the animation's actual
+        // swing frame instead of right when the button is pressed
+        activationSound: { soundType: "blade", willPlayAfterSeconds: 200 },
+        skillrank: 1,
+        upgradePlus: 18,
+        explosionColor: "red",
+        explosionScale: 1,
+        // no target circle/projectile at all - a melee weapon skill, not a caster
+        projectileVisual: { useProjectile: false },
+        desc: "Surge forward in an instant and cleave through anything in your path.",
+    },
+    basicSkill: {
+        slotNumber: 3,
+        equiped: true,
+        isActive: false,
+        name: "flamebrand",
+        lvl: 1,
+        pointsToClaim: 1,
+        pointsForUpgrade: 1,
+        element: "fire",
+        requireMode: "casting",
+        skillElementType: "na",
+        animationLoop: false,
+        displayName: "Flamebrand",
+        castDuration: 2,
+        returnModeDura: 900,
+        skillCoolDown: 1500,
+        demand: [{ name: "mp", minCost: 15, cost: 0 }],
+        effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+        skillrank: 1,
+        upgradePlus: 15,
+        explosionColor: "red",
+        explosionScale: 1,
+        arcCount: 0, // no arcs at lvl 1 - growArcAura unlocks them partway through leveling
+        onLevelUp: "growArcAura",
+        // a tiny glowing sword flies out (createWeapon's own glow support) - arcs
+        // unlock in as arcCount grows past 0 via growArcAura
+        projectileVisual: {
+            useProjectile: true, visible: false, shape: "weapon",
+            weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.12 },
+            copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 2 } }],
+            material: { kind: "glow" },
+            arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+            launchSound: "spearS1",
+        },
+        onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: false }, stickBriefly: true, impactSound: "struckS" }],
+        desc: "A small blade of solidified flame is hurled forward, bursting into fire on impact.",
+    },
+    seriousSkill:{
+        equiped: true,
+        isActive: false,
+        name: "infernorush",
+        lvl: 1,
+        pointsToClaim: 1,
+        pointsForUpgrade: 1,
+        element: "fire",
+        requireMode: "casting",
+        skillElementType: "na",
+        animationLoop: false,
+        displayName: "Infernorush",
+        castDuration: 2.8,
+        returnModeDura: 900,
+        skillCoolDown: 2200,
+        demand: [{ name: "mp", minCost: 32, cost: 0 }],
+        effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+        skillrank: 1,
+        upgradePlus: 28,
+        explosionColor: "red",
+        explosionScale: 1,
+        particleStyles: [{ name: "flames", color: "red" }],
+        onLevelUp: "growParticleAura",
+        projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
+        onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
+        desc: "A roaring column of flame trails behind the bolt, detonating into a much larger blaze.",
+    },
+    hiddenSkill: {
+        equiped: true,
+        isActive: false,
+        name: "massivedisintegration",
+        lvl: 5,
+        pointsToClaim: 1,
+        pointsForUpgrade: 1,
+        element: "fire",
+        skillElementType: "na",
+        animationLoop: false,
+        displayName: "Massive Disintegration",
+        castDuration: 3,
+        returnModeDura: 900,
+        skillCoolDown: 14000,
+        demand: [{ name: "mp", minCost: 140, cost: 0 }],
+        effects: { effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 },
+        skillrank: 4,
+        upgradePlus: 40,
+        explosionColor: "fire",
+        explosionScale: 1,
+        // distance omitted - defaults to 0, centered on the caster's own body,
+        // same as disintegrationSkill's own trap
+        groundTrap: { radius: 10, duration: 8000, aoe: true },
+        magicCircleImg: "apt_fire_second",
+        enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
+        onLevelUp: "growParticleAura",
+        // no projectile - AOE ground trap instead, see groundTrap above
+        projectileVisual: { useProjectile: false },
+        onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
+        desc: "Summons a massive circle of annihilation - anyone caught near or inside its radius is consumed by disintegrating flame.",
+    }
+}
+
 export default [
     {
         glbPath: "./models/avatar/vanessa.glb",
@@ -203,15 +360,147 @@ export default [
                     {name:"", message: "Three slimes, not two, not one. Come back when the count is complete."},
                 ],
                 questsToReceive: [
-                    { 
-                        qName: "talk-to-guild-master-first", 
-                        qTtle: "Hunt Down Insects", 
-                        desc: "Slay insects near the borders", 
+                    {
+                        qName: "talk-to-guild-master-first",
+                        qTtle: "Meet the Guildmaster",
+                        desc: "Head up to the guildmaster's office - he's asked to see you.",
                         questRequirements: { reqType: false, completed: true }, //reqType'enemy/item/money
                     }
                 ],
+                cbAfterNewQuestReceived: async () => {
+                    // send the player up to the guildmaster's office (placeId 101) -
+                    // same transition procedure areascene.js's roomPaths trigger uses
+                    const guildmasterOffice = findPlaceMetaData(101)
+                    if(!guildmasterOffice) return console.warn("guildmaster office metadata not found")
+
+                    const charState = getCharState()
+
+                    charState.currentPlace.placeId = guildmasterOffice.placeId
+                    charState.currentPlace.name = guildmasterOffice.name
+                    charState.currentPlace.areaType = guildmasterOffice.areaType
+
+                    charState.x = guildmasterOffice.spawn.x
+                    charState.y = guildmasterOffice.spawn.y
+                    charState.z = guildmasterOffice.spawn.z
+
+                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                    exitScene(charState.owner)
+                    await changeScene("whatever")
+                }
+            },
+        ]
+    },
+    {
+        glbPath: null, // guildavatar.glb turned out to be a fixed female model despite
+        // the generic name - every other male NPC (Armin, Kraun, Doran, etc.) uses
+        // glbPath:null, building from the generic avatar body instead
+        currentPlaceId: 101,
+        mode: "idle",
+        _id: "111_halric",
+        name: "Halric",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x: 0,
+        y: 0.01,
+        z: 1.8, // standing in front of the desk (desk is at z:3), facing the door
+        _dirTarg: {x:0, z:-100}, // faces straight south, toward the door/spawn point
+        cloth: 'style2',
+        pants: 'style2',
+        hair: 'style2',
+        boots: 'style1',
+        skinColor: SKIN_COLORS.mid,
+        hairColor: ADVENTURER_COLORS.gray,
+        clothColor: ADVENTURER_COLORS.darkBrown,
+        pantsColor: ADVENTURER_COLORS.charcoal,
+        items: [
+        ],
+        titles: ['guildmaster'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['light'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message:"Mana's thickenin' by the day. Don't like what that means. *hic*"}
+        ],
+        forQuests: [
+            { // storyInfo
+                qName: "talk-to-guild-master-first",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "So. *hic* You're the one Emry wouldn't shut up about."},
+                    {name:"", message: "Don't need no crystal to tell me you ain't from this land. I can smell it on you - like somethin' that don't belong anywhere I've drank."},
+                    {name:"", message: "Don't matter none. Not tonight."},
+                    {name:"", message: "Somethin's turned in this world, and it didn't ask nobody's permission. Adventurers go out on routine jobs and just... don't come back. No bodies. No blood. No screamin' anyone heard. Just gone, mid-step, like the world reached out and plucked 'em off the board."},
+                    {name:"", message: "We call 'em Entities. Fancy word for somethin' none of us can rightly describe, showin' up in places that shouldn't exist. Whether they're the cause, or just what's left when the cause walks through... nobody knows."},
+                    {name:"", message: "Here's the part that oughta keep you up tonight - keeps me up plenty too, and I drink for it. The mana in this land's risin'. Fast. And it ain't stayin' in the ground no more. It's gettin' into people."},
+                    {name:"", message: "I've watched ordinary men and women change mid-sentence. No warnin', no ritual, no chosen moment. One breath they're haulin' firewood. Next, they're standin' in a crater they made and can't tell you how."},
+                    {name:"", message: "Power like that don't wait for permission either."},
+                    {name:"", message: "So no - I don't rightly know what you are, or what dropped you into this land. But whatever's comin' for us, somethin' tells me you're gonna matter a whole lot more than either of us understands right now."},
+                    {name:"", message: "If you wanna know more about this land, I got the perfect task for you."},
+                    {name:"", message: "But I want you ready first. This ain't the kinda work where you walk out and swing at whatever crosses your path."},
+                    {name:"", message: "We got two breeds of fighters in this land. Mandirigmas - folk who use raw strength to force their way through anything standin' in front of 'em."},
+                    {name:"", message: "And salamankeros - folk who let their salamanka do the endin', not their fists."},
+                    {name:"", message: "Every so often somebody's exceptional at both. Those are the ones I really worry about, one way or another. *hic*"},
+                    {name:"", message: "For now, I'll give you somethin' simple. Find a mine, cut what timber you can on the way there, and clear out whatever's nestin' in that area. Gather what you can and bring it back to me."},
+                    {name:"", message: "Do that, and I'll show you an idea - how a weapon can be built to break on purpose, and why that ain't the flaw it sounds like."},
+                ],
+                notCompletedSpeech: false,
+                questsToReceive: [
+                    {
+                        qName: "proveYourself",
+                        qTtle: "Prove Your Worth",
+                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Halric once it's done.",
+                        questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 5, completed: false }, //reqType'enemy/item/money
+                    }
+                ],
                 cbAfterNewQuestReceived: () => {
-                    
+                    updateStoryQuestUI({
+                        qName: "proveYourself",
+                        qTtle: "Prove Your Worth",
+                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Halric once it's done.",
+                        questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 5, completed: false },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "proveYourself",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Back already, and still standin'. Let's see what you gathered."},
+                    {name:"", message: "Good. Now, the part most guilds won't tell a new recruit on day one. *pours himself another*"},
+                    {name:"", message: "Every weapon we forge here's built to fail eventually - on purpose. A blade that never breaks never warns you when it's about to fail on you, mid-swing, when it matters most."},
+                    {name:"", message: "Durability ain't somethin' we tolerate as a flaw. It's a warnin' system we build in, on purpose."},
+                    {name:"", message: "Learn to read that warnin', and you'll walk away from fights that would've taken an arm off somebody who didn't."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Still five short, or thereabouts. Come back when the area's clear, eh?"},
+                ],
+                questsToReceive: [
+                ],
+                cbAfterNewQuestReceived: () => {
+
                 }
             },
         ]
@@ -1826,5 +2115,448 @@ export default [
         callbackAfterRandomSpeech: () => {
             startQuestionare(300)
         }
+    },
+    {
+        glbPath: null,
+        currentPlaceId: 1,
+        // createAllNpcInArea.js's own npcDetails.forEach filter reads the flat
+        // currentPlaceId above - this nested shape is what createCharacter.js's
+        // full (isNpc:false) path needs instead (`det.currentPlace.placeId`,
+        // line ~392) - npcFighter-type npcs go through that fuller path (see
+        // npc/createnpc.js's createFighterNpc) to get a real characterAnimations/
+        // equipSword rig instead of createNpc()'s lightweight isNpc:true one,
+        // which is why this couldn't just reuse the flat field above.
+        currentPlace: { placeId: 1, name: "village", areaType: "village" },
+        mode: "idle",
+        _id: "112_renarden",
+        name: "Renarden",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 10000,
+        maxHp:10000,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // near the weaponHouse/forge pair ({x:28,z:-43} and {x:29,z:-42}, see
+        // localroomdb.js originalGlbs) but off to the side from Bram
+        // (28.4, -42.6, standing right between the two) so they don't overlap
+        x: 22,
+        y: 0.01,
+        z: -41,
+        _dirTarg: {x:28.4, z:-42.6},
+        cloth: 'style1',
+        pants: 'style2',
+        hair: 'style1',
+        boots: 'style1',
+        skinColor: SKIN_COLORS.mid,
+        hairColor: ADVENTURER_COLORS.darkBrown,
+        clothColor: ADVENTURER_COLORS.tan,
+        pantsColor: ADVENTURER_COLORS.brown,
+        items: [
+            {
+                itemId: randomNum(),
+                name: "renardensedge",
+                dn: "Renarden's Edge",
+                itemCateg: "equipable", //equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: "sword",
+                equipAbilities: {
+                    dmg: 15, def: 0, resistance: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 40 },
+                qnty: 1,
+                desc: "A well-balanced blade, kept sharp by whoever's willing to spar with him.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.STEEL,
+                parts: {
+                    bladeRarity: "rare1",
+                    guardRarity: "common2",
+                    handleRarity: "common1",
+                    pommelRarity: "common1",
+                }
+            },
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "leatherboots", // is also the image name
+                dn: "Leather Boots",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "boots", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                equipAbilities: {
+                    dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+                // true - other npcs already use this exact item name
+                // (leatherboots) with equiped:true, and equipBoots() only
+                // ever toggles visibility among the avatar's own already-
+                // baked-in boot variants (createcharacter.js), never loads
+                // anything new - equiped:false was the entire reason this
+                // never showed up on the body at all
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false, // only for weapons
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            },
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "gauntler", // is also the image name
+                dn: "Gauntlet",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: undefined,
+                equipAbilities: {
+                    dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+                // true - same reasoning as the boots above: other npcs
+                // already use this exact "gauntler" item name with
+                // equiped:true, and equipGauntlet() resolves it against a
+                // real asset container (createGauntlet), so this name is
+                // already proven to exist
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true, // only for equipable items
+                enhancedLevel: 0,
+                slots: [],// { name, dn, equipAbilities } cores
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: undefined,
+                rarity: "rare",
+                // ruby/red per spec, not the adamantine originally pasted in
+                metalColor: METAL_COLOR.RUBY
+            },
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "ironjaw", // is also the image name
+                modelName: "ironjaw",
+                dn: "Knight's Helm III",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: undefined,
+                equipAbilities: {
+                    dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true, // only for equipable items
+                enhancedLevel: 0,
+                slots: [],// { name, dn, equipAbilities } cores
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: undefined,
+                rarity: "rare",
+                metalColor: METAL_COLOR.RUBY
+            },
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "lightarmor", // is also the image name
+                dn: "Light Armor",
+                itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: undefined,
+                equipAbilities: {
+                    dmg: 0, def: 10, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+                // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, }, //for buffs foods potions
+                // true - same reasoning as the boots/gauntlet above: this
+                // exact "lightarmor" item name is already used elsewhere
+                // (constants/questions.js) with equiped:true
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true, // only for equipable items
+                enhancedLevel: 0,
+                slots: [],// { name, dn, equipAbilities } cores
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 7 },
+                qnty: 1,
+                desc: "A light and flexible armor favoring mobility over raw protection.",
+                rarity: "common",
+                // ruby/red per spec, not the steel originally pasted in
+                metalColor: METAL_COLOR.RUBY
+            }
+        ],
+        // references the canonical entry in titlesData.js instead of a
+        // hand-duplicated inline copy - see that file's own header comment
+        titles: [flameWardTitle],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['fire'],
+        blessings: [],
+        race: "human",
+        characterType:"npcFighter",// npcStandby//npcEnemy//npcFighter//npcWalk - npcFighter
+        // automatically gets the duel-offer conversation after randomSpeech,
+        // see createAllNpcInArea.js
+        skills: renardenSkills,
+        randomSpeech: [
+            {name: "", message: "don't just keep on standing on my face talk. "}
+        ],
+        battleSpeech: {
+            whileFighting: [
+                "You're brave, but it's not enough",
+                "Know the difference in our strengths",
+                "I hope you can keep up with me"
+            ],
+            afterTheFightSpeech: "I guess you really are strong"
+        },
+        // duelSystem.js grants these to the player on Renarden's defeat -
+        // same renardenSkills object his own skills: field above points to,
+        // not a separate copy (see that const's own header comment)
+        reward: { skills: renardenSkills },
+        forQuests: []
+    },
+    {
+        glbPath: null,
+        currentPlaceId: 1,
+        // createAllNpcInArea.js's own npcDetails.forEach filter reads the flat
+        // currentPlaceId above - this nested shape is what createCharacter.js's
+        // full (isNpc:false) path needs instead (`det.currentPlace.placeId`,
+        // line ~392) - npcFighter-type npcs go through that fuller path (see
+        // npc/createnpc.js's createFighterNpc) to get a real characterAnimations/
+        // equipSword rig instead of createNpc()'s lightweight isNpc:true one,
+        // which is why this couldn't just reuse the flat field above.
+        currentPlace: { placeId: 1, name: "village", areaType: "village" },
+        mode: "idle",
+        _id: "113_robin",
+        name: "Robin",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 1000,
+        maxHp:1000,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // near the weaponHouse/forge pair ({x:28,z:-43} and {x:29,z:-42}, see
+        // localroomdb.js originalGlbs) but off to the side from Bram
+        // (28.4, -42.6, standing right between the two) so they don't overlap
+        x: 25,
+        y: 0.01,
+        z: -40,
+        _dirTarg: {x:28.4, z:-42.6},
+        cloth: 'style1',
+        pants: 'style2',
+        hair: 'style1',
+        boots: 'style1',
+        skinColor: SKIN_COLORS.mid,
+        hairColor: ADVENTURER_COLORS.darkBrown,
+        clothColor: ADVENTURER_COLORS.tan,
+        pantsColor: ADVENTURER_COLORS.brown,
+        items: [
+            {
+                itemId: randomNum(),
+                name: "renardensedge",
+                dn: "Renarden's Edge",
+                itemCateg: "equipable", //equipable,crafting(for item looted),consum(/foods/buffs/potions)
+                itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+                weaponType: "sword",
+                equipAbilities: {
+                    dmg: 15, def: 0, resistance: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 40 },
+                qnty: 1,
+                desc: "A well-balanced blade, kept sharp by whoever's willing to spar with him.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.STEEL,
+                parts: {
+                    bladeRarity: "rare1",
+                    guardRarity: "common2",
+                    handleRarity: "common1",
+                    pommelRarity: "common1",
+                }
+            }
+        ],
+        titles: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['fire'],
+        blessings: [],
+        race: "human",
+        characterType:"npcFighter",// npcStandby//npcEnemy//npcFighter//npcWalk - npcFighter
+        // automatically gets the duel-offer conversation after randomSpeech,
+        // see createAllNpcInArea.js
+        skills: {
+            nearSkill: {
+                equiped: true,
+                isActive: false,
+                name: "dashstrike",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "normal",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Dashstrike",
+                // documented here to match skillsData.js's own dashstrikeSkill -
+                // not actually read on this side though, duelSystem.js's
+                // rollNearSkill gates on hasDrawnWeapon (a live runtime check,
+                // since even an armed fighter's sword may still be sheathed),
+                // not this static flag
+                requiresWeapon: true,
+                // 0, not omitted - activating this skill IS the dash+strike, nothing
+                // plays out after a separate cast bar finishes the way every
+                // requireMode:"casting" skill above works
+                castDuration: 0,
+                returnModeDura: 900,
+                skillCoolDown: 3000,
+                demand: [{ name: "mp", minCost: 25, cost: 0 }],
+                effects: { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+                // durationMs: 1000 (not the player's own dashstrikeSkill
+                // default of 350) - this npc opponent has no physics
+                // aggregate at all, so its own dash is a plain locallyTranslate
+                // ramp (duelSystem.js's performOpponentDashStrike) rather than
+                // an impulse - a full second reads clearly as a real lunge;
+                // impulseForce is unused on this side entirely (physics-only)
+                dash: { distance: 6, impulseForce: 120, durationMs: 1000 },
+                animationName: "dashstrike",
+                // played on a timeout after activation (durationMs -> ms, read by the
+                // not-yet-written castDashSkill: setTimeout(..., activationSound.willPlayAfterSeconds)),
+                // not immediately on cast the way launchSound/impactSound above fire -
+                // lets the strike's own sound land in sync with the animation's actual
+                // swing frame instead of right when the button is pressed
+                activationSound: { soundType: "blade", willPlayAfterSeconds: 200 },
+                skillrank: 1,
+                upgradePlus: 18,
+                explosionColor: "red",
+                explosionScale: 1,
+                // no target circle/projectile at all - a melee weapon skill, not a caster
+                projectileVisual: { useProjectile: false },
+                desc: "Surge forward in an instant and cleave through anything in your path.",
+            },
+            basicSkill: {
+                slotNumber: 3,
+                equiped: true,
+                isActive: false,
+                name: "flamebrand",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "fire",
+                requireMode: "casting",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Flamebrand",
+                castDuration: 2,
+                returnModeDura: 900,
+                skillCoolDown: 1500,
+                demand: [{ name: "mp", minCost: 15, cost: 0 }],
+                effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+                skillrank: 1,
+                upgradePlus: 15,
+                explosionColor: "red",
+                explosionScale: 1,
+                arcCount: 0, // no arcs at lvl 1 - growArcAura unlocks them partway through leveling
+                onLevelUp: "growArcAura",
+                // a tiny glowing sword flies out (createWeapon's own glow support) - arcs
+                // unlock in as arcCount grows past 0 via growArcAura
+                projectileVisual: {
+                    useProjectile: true, visible: false, shape: "weapon",
+                    weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.12 },
+                    copies: [{ rotation: { x: Math.PI, y: 0, z: Math.PI / 2 } }],
+                    material: { kind: "glow" },
+                    arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+                    launchSound: "spearS1",
+                },
+                onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: false }, stickBriefly: true, impactSound: "struckS" }],
+                desc: "A small blade of solidified flame is hurled forward, bursting into fire on impact.",
+            },
+            seriousSkill:{
+                equiped: true,
+                isActive: false,
+                name: "infernorush",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "fire",
+                requireMode: "casting",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Infernorush",
+                castDuration: 2.8,
+                returnModeDura: 900,
+                skillCoolDown: 2200,
+                demand: [{ name: "mp", minCost: 32, cost: 0 }],
+                effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+                skillrank: 1,
+                upgradePlus: 28,
+                explosionColor: "red",
+                explosionScale: 1,
+                particleStyles: [{ name: "flames", color: "red" }],
+                onLevelUp: "growParticleAura",
+                projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
+                onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
+                desc: "A roaring column of flame trails behind the bolt, detonating into a much larger blaze.",
+            },
+            hiddenSkill: {
+                equiped: true,
+                isActive: false,
+                name: "massivedisintegration",
+                lvl: 5,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "fire",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Massive Disintegration",
+                castDuration: 3,
+                returnModeDura: 900,
+                skillCoolDown: 14000,
+                demand: [{ name: "mp", minCost: 140, cost: 0 }],
+                effects: { effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 },
+                skillrank: 4,
+                upgradePlus: 40,
+                explosionColor: "fire",
+                explosionScale: 1,
+                // distance omitted - defaults to 0, centered on the caster's own body,
+                // same as disintegrationSkill's own trap
+                groundTrap: { radius: 10, duration: 8000, aoe: true },
+                magicCircleImg: "apt_fire_second",
+                enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
+                onLevelUp: "growParticleAura",
+                // no projectile - AOE ground trap instead, see groundTrap above
+                projectileVisual: { useProjectile: false },
+                onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
+                desc: "Summons a massive circle of annihilation - anyone caught near or inside its radius is consumed by disintegrating flame.",
+            }
+        },
+        randomSpeech: [
+            {name: "", message: "don't just keep on standing on my face talk. "}
+        ],
+        forQuests: []
     }
 ]

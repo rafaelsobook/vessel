@@ -51,6 +51,17 @@ export async function getVillageAssetRegistry() {
     if(bigTree) bigTree.isVisible = false
     if(mediumTree) mediumTree.isVisible = false
 
+    // Mesh.MergeMeshes (inside mergeAndLoadModel) names the merged mesh after
+    // whatever the FIRST child mesh inside the glb happens to be called (e.g.
+    // however the artist named it in Blender) - not the glb filename. Forcing
+    // these names explicitly guarantees every spawned instance
+    // (`${mainMesh.name}_${item.id}`, see createvillage.js's spawnProps) is
+    // reliably matchable by name - areascene.js's choppable-tree detection
+    // looks for "tree" in the mesh name, which otherwise isn't guaranteed.
+    if(smallTree) smallTree.name = "smallTree"
+    if(bigTree) bigTree.name = "bigTree"
+    if(mediumTree) mediumTree.name = "mediumTree"
+
     if(pole) pole.isVisible = false
     if(gate) gate.isVisible = false
 

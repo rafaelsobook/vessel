@@ -68,6 +68,10 @@ export function insertItemOnInventory(itm){
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
     if(itm.weaponType === "sword" || itm.weaponType === "spear") itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
+    // axe AND pickaxe share this ONE icon (axes.webp, not per-weaponType
+    // like sword/spear above) - there's no separate "pickaxe.webp" asset,
+    // just this single shared file for the whole axe family
+    if(itm.weaponType === "axe" || itm.weaponType === "pickaxe") itemImg.src = `./images/items/${itm.itemCateg}/axes.webp`
     if(itm.itemType === "helmet") itemImg.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
 
     // every sword shares the same placeholder icon above, so this is the

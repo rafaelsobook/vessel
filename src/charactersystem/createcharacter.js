@@ -91,7 +91,18 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const auraz = isNpc ? null : createBodyAura(det, scene, body)
 
     if(!isNpc){
-        const auraSkill = det.skills.find(skl => skl.name === "flexaura")
+        // det.skills is normally the player's own array of equipped skills
+        // (flexaura among them) - but createFighterNpc (npc/createnpc.js)
+        // also takes this !isNpc branch for a duel opponent, and
+        // npcDetails.js's own fighter entries (e.g. Renarden) use a
+        // completely different skills shape there: {basic, seriousSkill,
+        // hiddenSkill} keyed by combat tier, not an array. .find() on that
+        // object threw synchronously (no .find method), which silently
+        // killed the whole scene-load promise chain before it ever reached
+        // scene.whenReadyAsync()/hid the loading screen - see duelSystem.js's
+        // own trace logging that caught this. A fighter has no flexaura
+        // concept anyway, so skipping cleanly here is correct, not just safe.
+        const auraSkill = Array.isArray(det.skills) ? det.skills.find(skl => skl.name === "flexaura") : undefined
         if(auraSkill && auraSkill.isActive) auraz.start()
     }
 
@@ -419,7 +430,20 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         bloodps,
         fshadow,
 
-        auraz
+        auraz,
+        // combat stances - per-instance, live-mutable flags (not fixed at
+        // spawn like most of this object) - duelSystem.js's own
+        // applyDamageToOpponent reads opponent.weaponBlocking directly off
+        // this exact object right before applying incoming physical damage,
+        // so flipping it later (an AI stance toggle, a parry window, etc.)
+        // takes effect immediately, same idea magicBlocking/IsInVulnerable
+        // are reserved for once their own damage paths check them. det.X
+        // still seeds the STARTING value the same way enemies already do
+        // (createEnemy.js's own det.weaponBlocking ? ... : false), so a
+        // static npcDetails.js entry can opt a fighter in from the start.
+        weaponBlocking: det.weaponBlocking ? det.weaponBlocking : false,
+        magicBlocking: det.magicBlocking ? det.magicBlocking : false,
+        IsInVulnerable: det.IsInVulnerable ? det.IsInVulnerable : false
     }
 }
 
@@ -697,8 +721,8 @@ function createBodyAura(det, scene, body, auraType = "human"){
             const auraPS = createCustomizedSmoke(scene, auramesh, "smoke2", false, {min:1,max:1.1}, {min:1,max:1}, 1, new Vector3(0,1.2,0), {r:0,g:0.22,b:0.55}, {r:0.32,g:0.55,b:0.89}, false, "sphere", 0.2)
             auraPS.stop()
             auraPS.emitRate = det.maxMp/12
-            auraPS.minScaleY = parseFloat(det.lvl/10)
-            auraPS.maxScaleY = parseFloat(det.lvl/4)
+            auraPS.minScaleY = parseFloat(det.lvl/2)
+            auraPS.maxScaleY = parseFloat(det.lvl)
             auraPS.updateSpeed = 0.01
             auraPS.isLocal = true
             // setTimeout(() => { auraPS.emitRate = 4000 }, 10000)
@@ -707,8 +731,8 @@ function createBodyAura(det, scene, body, auraType = "human"){
             const secAura = createCustomizedSmoke(scene, auramesh, "thin1", {min:1,max:1.5}, {min:1,max:5}, false, 1, new Vector3(0,1.2,0), {r:0.09,g:0.49,b:0.81}, {r:0,g:0.76,b:1}, false, "mesh", .4)
             secAura.stop()
             secAura.emitRate =det.maxMp/15
-            secAura.minScaleY = parseFloat(det.lvl/10)
-            secAura.maxScaleY = parseFloat(det.lvl/4)
+            secAura.minScaleY = parseFloat(det.lvl/4)
+            secAura.maxScaleY = parseFloat(det.lvl/2)
             secAura.isLocal = false
             // setTimeout(() => { secAura.emitRate = 4000 }, 10000)
             auras.push(secAura)

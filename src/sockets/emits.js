@@ -137,6 +137,27 @@ export function emitAttack(attackInfo,attackAnimName) {
 }
 
 // ITEM EQUIP
+// r-click hold-to-block (inputMovement.js's activateMouseControls) - relayed
+// through tcp/index.ts the same way emitMode is (store on the Tplayers
+// entry, rebroadcast to everyone) so every other client's own worldsocket.js
+// "emitted-weaponblock" handler can mirror this player's stance, both for
+// its own createcharacter.js-rig weaponBlocking flag (duelSystem.js-style
+// damage gating, once the real-enemy/other-player damage paths check it)
+// and to play the same "weaponblock" pose loop (animation.js's
+// playBlockingLoop) everyone else sees.
+export function emitWeaponBlock(isBlocking) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("emitWeaponBlock", {
+        ownerId: charState.owner,
+        isBlocking,
+        currentPlaceId: charState.currentPlace.placeId,
+    })
+}
+
 export function emitEquipItem(itemDet, isHiding) {
 
     const charState = getCharState()

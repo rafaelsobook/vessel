@@ -12,7 +12,6 @@ import { createAggregate } from '../tools/physics';
 import { loadModelByIndx, mergeAndLoadModel } from '../tools/loadmodel';
 import { createMat, createMatV2 } from '../tools/materials';
 import { createFireParticles } from '../tools/particlesystem';
-import { spawnMagicCircle } from './magiccircles';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
 import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
 import { exitScene } from '../sockets/exitsocket';
@@ -56,12 +55,15 @@ function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, s
 export async function createRoom(scene, room, characterBody, hasPhysics = true) {
     
     const {
-        name       = 'Room',
-        width      = 7,
-        height     = 10,
-        wallHeight = WALL_HEIGHT,
+        name        = 'Room',
+        width       = 7,
+        height      = 10,
+        wallHeight  = WALL_HEIGHT,
+        wallTexPath = "./images/modeltex/rockTex.jpg",
         bedConfig,
         optionalObjects = [],
+        paintedPlanes   = [],
+        woodboxes       = [],
         spawn,
         exitPlaceDetail
     } = room;
@@ -71,7 +73,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     const wt    = WALL_THICKNESS;
 
     const floorMat = createMat("floorMat", false, "./images/modeltex/planks.jpg", scene, { uScale: 2, vScale: 2});
-    const wallMat  = createMat(`${name}_mat_wall`, false, "./images/modeltex/rockTex.jpg", scene,  { uScale: 0.5, vScale: 0.5 });
+    const wallMat  = createMat(`${name}_mat_wall`, false, wallTexPath, scene,  { uScale: 0.5, vScale: 0.5 });
 
     scene.clearColor = new Color3(0,0,0);
     // ── Ground ────────────────────────────────────────────────────────────────
@@ -119,7 +121,53 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
     buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
 
+    // ── Painted planes — flat textured overlays laid onto the room (rugs,
+    // wall maps, etc). Default rotation lies it flat facing up like a rug;
+    // default size/position fall back to a large centered rug so a minimal
+    // {name, texturePath} entry still renders something sensible.
+    paintedPlanes.forEach(plane => {
+        const {
+            name: planeName,
+            texturePath,
+            position = { x: 0, y: 0.02, z: 0 },
+            rotation = { x: Math.PI/2, y: 0, z: 0 },
+            width: planeWidth   = 1.5,
+            height: planeHeight = 1,
+            uScale = 1,
+            vScale = 1,
+        } = plane;
 
+        const planeMat = createMat(`${name}_${planeName}_mat`, false, texturePath, scene, { uScale, vScale });
+        const planeMesh = MeshBuilder.CreatePlane(planeName, { width: planeWidth, height: planeHeight }, scene);
+        planeMesh.position = new Vector3(position.x, position.y, position.z);
+        planeMesh.rotation = new Vector3(rotation.x, rotation.y, rotation.z);
+        planeMesh.material = planeMat;
+        planeMesh.receiveShadows = true;
+    });
+
+    // ── Wood boxes — plain stackable crates. Same instancing trick buildWall
+    // already uses for bricks: one hidden master mesh + one material, shared
+    // by every crate via createInstance (geometry/material cost stays flat
+    // no matter how many boxes a room stacks up) - only the physics aggregate
+    // is genuinely per-instance, since each crate needs its own collider.
+    // No rotation/texture per entry - crates only ever sit upright and all
+    // share the one woodbox.jpg master.
+    if(woodboxes.length){
+        const woodboxMat = createMat(`${name}_woodbox_mat`, false, "./images/modeltex/woodbox.jpg", scene);
+        const woodboxMaster = MeshBuilder.CreateBox(`${name}_woodbox_master`, { size: 1 }, scene);
+        woodboxMaster.material  = woodboxMat;
+        woodboxMaster.isVisible = false;
+
+        woodboxes.forEach((box, i) => {
+            const { name: boxName = `${name}_woodbox_${i}`, position, scale } = box;
+
+            const instance = woodboxMaster.createInstance(boxName);
+            instance.position = new Vector3(position.x, position.y, position.z);
+            if(scale) instance.scaling = new Vector3(scale.x ?? scale, scale.y ?? scale, scale.z ?? scale);
+
+            if(hasPhysics) createAggregate(instance, { mass: 0 }, "box", scene);
+        });
+    }
 
     // setTimeout(() => {
     //     spawnMagicCircle(new Vector3(spawn.x, spawn.y, spawn.z), scene, "divine1", 0.8)

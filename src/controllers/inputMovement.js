@@ -1,23 +1,25 @@
-import { Quaternion, MeshBuilder, Vector3, FreeCamera } from '@babylonjs/core';
+import { Quaternion, MeshBuilder, Vector3, FreeCamera, PointerEventTypes } from '@babylonjs/core';
 import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim } from '../tools/tools';
-import { ANIM_STATE, playAnim } from '../tools/animation';
-import { emitMove, emitStop, emitMode } from '../sockets/emits';
+import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
+import { emitMove, emitStop, emitMode, emitWeaponBlock } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
 import { giveAllItems, wipeAllItems } from '../charactersystem/inventory';
-import { giveSkill, giveAllSkills, upgradeAllOwnedSkills } from '../components/skillsui';
+import { giveSkill, giveAllSkills, giveRandomSkill, upgradeAllOwnedSkills } from '../components/skillsui';
+import { giveRandomTitle } from '../components/titleUI';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
 import { checkDistance } from '../creations/creationTools';
+import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
 
 
 // the most recent enemy MY OWN melee attack actually landed on (see
@@ -39,12 +41,16 @@ let saveLocTimeout
 // assigned inside setupControls() (see its own comment right where it's
 // set) - forceStopMovement below is the only way anything OUTSIDE this
 // closure (uimanagement.js's startResting) can reach setupControls()'s own
-// private input/isMoving state and its already-battle-tested
-// stopMovementAndSave (zeroes horizontal velocity, clears isMoving,
-// emitStop()s so every other client sees the stop too, schedules the
-// position save) - same function every existing "stop moving" path
-// (joystick release/deadzone) already calls
+// private input state and its already-battle-tested stopMovementAndSave
+// (zeroes horizontal velocity, clears isMoving, emitStop()s so every other
+// client sees the stop too, schedules the position save) - same function
+// every existing "stop moving" path (joystick release/deadzone) already calls
 let forceStopMovementFn = null
+// promoted to module level (was a plain local `let` inside setupControls())
+// so getIsMoving() below can expose it - reset fresh to false inside
+// setupControls() itself (not just declared once here) on every new
+// scene/character setup, same lifecycle aggregate/myPlayer already follow
+let isMoving = false
 let checkFallInVoidTimeout = undefined
 let isGroundedFlag = true
 let modeBeforeAir = null
@@ -101,6 +107,15 @@ const _velocityVec = new Vector3()
 // switch itself now reads player.mode ("inAir" or not) instead
 export function getIsGrounded(){
     return isGroundedFlag
+}
+
+// lets outside code (uimanagement.js's attack handler, for the
+// "running_<weaponType>1" grounded-while-moving attack clip) tell whether a
+// movement key/joystick is actually currently held, distinct from
+// getPlayerMode()'s own "fighting"/"idle"/etc - mode alone can't tell moving
+// apart from standing still in the same mode
+export function getIsMoving(){
+    return isMoving
 }
 
 // same myPlayer reference updateMovement() itself flips to "inAir" on
@@ -227,6 +242,54 @@ export function attachControllerToThisCharacter(_player, scene, allsounds) {
     myPlayer = _player;
     return setupControls(scene, allsounds);
 }
+// right-click hold-to-block - toggles the LOCAL player's own
+// weaponBlocking flag (createcharacter.js's return object, same
+// per-instance stance flag duelSystem.js's applyDamageToOpponent already
+// reads live off an npcFighter opponent) on press, off on release.
+// scene.onPointerObservable, not window.addEventListener("pointerdown"/"up") -
+// stays scoped to babylonjs's own pointer pipeline rather than a second,
+// parallel window-level listener (touchinputmanager.js/the joystick code
+// further down this file already own window-level pointer events for touch
+// drag, no need for a third source of truth on top of that).
+// myPlayer (module-level, set in attachControllerToThisCharacter right
+// before setupControls runs) is the same createCharacter() rig object
+// whatever reads player.weaponBlocking elsewhere expects.
+export function activateMouseControls(scene){
+    scene.onPointerObservable.add((pointerInfo) => {
+        // button 2 is the right mouse button (0 left, 1 middle) - nothing
+        // else in this file reads pointerInfo.event.button at all, so this
+        // can't collide with any existing left-click/touch handling
+        if(pointerInfo.event.button !== 2) return
+        if(!myPlayer) return
+
+        if(pointerInfo.type === PointerEventTypes.POINTERDOWN){
+            if(myPlayer.weaponBlocking) return // already blocking - held button firing repeat down events
+            // stops the browser's own native right-click context menu from
+            // popping up over the canvas - nothing in this codebase
+            // suppresses it globally yet (confirmed: no oncontextmenu/
+            // "contextmenu" listener anywhere), and a context menu eating
+            // focus mid-hold would otherwise strand weaponBlocking stuck on
+            // (no matching POINTERUP ever reaches the canvas once the menu
+            // has focus)
+            pointerInfo.event.preventDefault()
+            myPlayer.weaponBlocking = true
+            // animation.js's playBlockingLoop - keeps replaying the
+            // "weaponblock" pose for as long as the flag stays true, see
+            // its own header comment
+            playBlockingLoop(myPlayer)
+            // multiplayer sync - myPlayer.weaponBlocking above only updates
+            // THIS client's own local rig, nothing about it reaches anyone
+            // else on its own (same "local mutation alone doesn't leave this
+            // client" pattern every other emit* call in this file already
+            // follows, e.g. emitMode/emitStop)
+            emitWeaponBlock(true)
+        } else if(pointerInfo.type === PointerEventTypes.POINTERUP){
+            if(!myPlayer.weaponBlocking) return
+            myPlayer.weaponBlocking = false
+            emitWeaponBlock(false)
+        }
+    })
+}
 
 function setupControls(scene, allsounds) {
     const camera = scene.activeCamera;
@@ -247,10 +310,12 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = 50;
+    let sprintSpeed = 6;
     let currentSpeed = walkSpeed;
-    let isMoving = false;
-    let jumpSpeed = 15;
+    // module-level variable, reset fresh here (not a local `let` anymore -
+    // see its own declaration up top for why)
+    isMoving = false;
+    let jumpSpeed = 5;
     // both tunable to taste - raise either if small bounces/jitter still flip to "inAir" too easily
     const GROUND_CHECK_MARGIN = 0.4; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride or after a small bounce
     const GROUNDED_VELOCITY_TOLERANCE = 5.5; // upward speed still treated as "grounded" (bounce/jitter, not an actual jump - jumpSpeed is 5)
@@ -520,8 +585,11 @@ function setupControls(scene, allsounds) {
             case " ":
                 console.log(getCharState())
                 console.log(checkDistance( new Vector3(0,0,500), myPlayer?.body.position))
-                
+                updateStoryQuestUI()
                     
+            break
+            case "x":
+                changeStory()
             break
             case "r":
                 reCreateMeshesInScene()
@@ -537,6 +605,12 @@ function setupControls(scene, allsounds) {
             break
             case "l":
                 giveAllSkills()
+            break
+            case "t":
+                giveRandomTitle()
+            break
+            case "b":
+                giveRandomSkill()
             break
             case "h":
                 upgradeAllOwnedSkills()
@@ -676,7 +750,7 @@ function setupControls(scene, allsounds) {
         if(myPlayer.body) console.log(myPlayer.body.position)
 
         const charState = getCharState()
-        if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10) return openClosePopup("cannot jump here", true, 1000)
+        if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10 || charState.currentPlace.placeId === 101) return openClosePopup("cannot jump here", true, 1000)
         const vel = aggregate.body.getLinearVelocity();
         aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
         // no animation call here - updateMovement()'s next tick sees vel.y > 0.1,

@@ -18,18 +18,18 @@
 // not a new function here - skill.swordRain (astralrainSkill) is the one
 // exception, an opt-in branch inside fireElementalProjectile's hit handler
 // (its marker doesn't deal damage/explode itself, see that section).
-import { MeshBuilder, TransformNode, Vector3, Quaternion, StandardMaterial, Color3, Color4, Texture, FresnelParameters, NoiseProceduralTexture, ParticleSystem } from "@babylonjs/core"
+import { MeshBuilder, TransformNode, Vector3, Quaternion, Matrix, StandardMaterial, Color3, Color4, Texture, FresnelParameters, NoiseProceduralTexture, ParticleSystem } from "@babylonjs/core"
 import { createMagicCircle } from "./magiccircles.js"
-import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle, createBodyFireParticles } from "../tools/particlesystem.js"
+import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle, createBodyFireParticles, createCometTrailParticles } from "../tools/particlesystem.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
-import { createProjectileModelInstance } from "../assetcreation/createProjectileModel.js"
+import { createProjectileModelInstance, createPlasma } from "../assetcreation/createProjectileModel.js"
 import { spawnProjectile } from "./skills.js"
 import { createGlowingMat, fresnelMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
 import { attachLightning } from "../effects/lightning.js"
 import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
-import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile } from "../sockets/worldsocket.js"
+import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy } from "../sockets/emits.js"
 import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff } from "../charactersystem/characterstate.js"
@@ -43,12 +43,16 @@ import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/consta
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { ATK_COLLIDER_PARKED_Y } from "../charactersystem/createMyCharacter.js"
+import { markDashActive } from "../controllers/inputMovement.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
 // override this directly via magicCircleImg (radiantjudgment uses "divine1"
 // instead of the plain "apt_light" every other light skill gets) - this is
-// only the fallback when it doesn't.
-const ELEMENT_CIRCLES = {
+// only the fallback when it doesn't. Exported so skillAcquiredUI.js's own
+// "Skill Learned" popup can pick the same element-matched circle for its
+// spinning magic-circle backdrop, instead of duplicating this table.
+export const ELEMENT_CIRCLES = {
     normal: "apt_water",
     fire: "apt_fire",
     water: "apt_water",
@@ -156,27 +160,84 @@ export function castOffenseSkill(scene, player, skill, charState){
         createMagicCircle(spawnPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, forward, CIRCLE_SIZE_SCALE)
     }
 
+    const timeoutIds = []
     const timeoutId = setTimeout(() => {
-        pendingCasts.delete(skill.name)
         // skill.groundSpikes (continentalrendSkill) - no projectile at all,
         // just a marching line of ground spikes straight out from the
         // caster - see triggerGroundSpikeLine's own header comment
         if(skill.groundSpikes){
+            pendingCasts.delete(skill.name)
             triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forward, powerScale)
         } else if(skill.groundTrap?.aoe){
             // skill.groundTrap.aoe (massivedisintegrationSkill) - the mass
             // version, see spawnMassGroundTrap's own header comment
+            pendingCasts.delete(skill.name)
             spawnMassGroundTrap(scene, charState, skill, groundTrapPos, powerScale)
         } else if(skill.groundTrap){
             // skill.groundTrap (disintegrationSkill) - also no projectile,
             // see spawnGroundTrap's own header comment
+            pendingCasts.delete(skill.name)
             spawnGroundTrap(scene, charState, skill, groundTrapPos, powerScale)
         } else {
-            fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale)
+            // fireProjectileVolley owns clearing pendingCasts itself here,
+            // once its own LAST scheduled bolt actually fires - a volley
+            // (quakeboltSkill: 5 bolts, 100ms apart) outlives this very
+            // setTimeout's own firing, so deleting the entry right here
+            // (before every bolt has gone out) would let a mid-volley
+            // toggle-off's cancelPendingCast silently stop tracking - and
+            // therefore stop being able to cancel - whichever bolts hadn't
+            // fired yet.
+            fireProjectileVolley(scene, charState, skill, spawnPos, forward, powerScale, timeoutIds)
         }
     }, skill.castDuration * 1000)
+    timeoutIds.push(timeoutId)
 
-    pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
+    pendingCasts.set(skill.name, { skill, timeoutIds })
+}
+
+// skill.projectileVisual.burstCount (quakeboltSkill: 5) - fires this many
+// bolts instead of just one, spaced burstIntervalMs apart (quakeboltSkill:
+// 100ms) and fanned out across spreadDeg (quakeboltSkill: 30deg), evenly
+// split on either side of the caster's actual forward direction, instead of
+// all flying dead straight down the exact same line. Every other skill
+// (burstCount defaulting to 1, or just absent) falls straight through to a
+// single fireElementalProjectile call, identical to before this existed.
+//
+// Each later shot's own setTimeout id gets pushed into the SAME timeoutIds
+// array castOffenseSkill's pendingCasts entry already tracks - so toggling
+// the skill off mid-volley (cancelPendingCast) still stops whichever bolts
+// haven't fired yet, not just the first one.
+function fireProjectileVolley(scene, charState, skill, spawnPos, forward, powerScale, timeoutIds){
+    const burstCount = skill.projectileVisual?.burstCount ?? 1
+    if(burstCount <= 1){
+        fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale)
+        pendingCasts.delete(skill.name)
+        return
+    }
+
+    const burstIntervalMs = skill.projectileVisual?.burstIntervalMs ?? 100
+    const spreadRad = ((skill.projectileVisual?.spreadDeg ?? 0) * Math.PI) / 180
+    // evenly spaced angles across the full spread, centered on 0 (straight
+    // ahead) - e.g. 5 shots across 30deg -> -15,-7.5,0,7.5,15
+    const angleStep = burstCount > 1 ? spreadRad / (burstCount - 1) : 0
+    const startAngle = -spreadRad / 2
+
+    for(let i = 0; i < burstCount; i++){
+        const angle = startAngle + angleStep * i
+        const shotForward = angle
+            ? Vector3.TransformNormal(forward, Matrix.RotationY(angle))
+            : forward
+        const isLastShot = i === burstCount - 1
+
+        const fireId = setTimeout(() => {
+            fireElementalProjectile(scene, charState, skill, spawnPos, shotForward, powerScale)
+            // only the LAST shot clears the pendingCasts entry - see this
+            // function's own header comment for why that has to wait until
+            // every bolt has actually gone out, not fire immediately
+            if(isLastShot) pendingCasts.delete(skill.name)
+        }, burstIntervalMs * i)
+        timeoutIds.push(fireId)
+    }
 }
 
 // multicast's circles don't all bloom from the same fixed spot in front of
@@ -359,6 +420,229 @@ function applyWeaponBuff(scene, player, charState, skill, powerScale){
             removeTempBuff(buffId)
         }, buffDuration)
     }
+}
+
+// skillsData.js's activationSound.soundType convention is a CATEGORY, not a
+// literal getAllSounds() key like launchSound/impactSound elsewhere in this
+// file - resolved here instead of at the data layer. "blade" -> swordWhooshS
+// matches uimanagement.js's own precedent (the normal weapon-swing handler
+// plays that exact sound on every sword attack). Falls back to treating the
+// value as a literal key directly if it's not in this map, so a skill can
+// still just name a real sound key if it wants to.
+const SOUND_TYPE_MAP = {
+    blade: "swordWhooshS",
+}
+
+// how long castDashSkill's own bonus-damage buff stays active - has to
+// comfortably outlast positionAtkCollider's own hit window
+// (ATK_COLLIDER_ACTIVE_MS, 500ms, plus its own 300ms-delayed impulse - see
+// createMyCharacter.js) so the strike this skill actually triggers still
+// sees the bonus, but short enough that it reads as "this one strike hit
+// harder," not a real lingering buff like mjolnirSkill's own
+const DASH_BONUS_DMG_WINDOW_MS = 800
+
+// bound to dashstrikeSkill's own activation (attackingSystem.js's
+// activateSkill, "dash" effectType branch) - a WEAPON skill, not a caster:
+// no magic circle, no castDuration windup at all (skill.castDuration is 0,
+// see skillsData.js's own header comment on this skill) - activating it
+// plays the "dashstrike" clip immediately while physically shoving the
+// caster forward, then reuses the SAME shared atkCollider mesh every normal
+// weapon swing already hits through (see strikeWithHandCollider below,
+// createMyCharacter.js's own createAttackColliderForEnemy). That mesh
+// already has a hit callback registered against every real enemy
+// (createEnemy.js, server-authoritative via emitEnemyIsHit) AND every duel
+// opponent (duelSystem.js's own registerToAtkCollider, fully local) from the
+// moment each one spawned - moving it into a target is all that's needed to
+// actually deal damage, same calcDmg-based weapon damage every other melee
+// swing already uses. No separate hit-detection/damage code needed here.
+//
+// isCaster-gated (charState.owner === getCharState()?.owner) for the actual
+// movement/hit-detection - this function, like every skill effect in this
+// file, runs identically on every client watching the cast via the
+// "skillactivated" relay (see fireElementalProjectile's own isCaster comment
+// for the full reasoning). The shared atkCollider mesh only ever exists once
+// per LOCAL client (createMyCharacter.js builds it once, for the local
+// player only) - so calling strikeWithHandCollider/applying the dash impulse
+// unconditionally here would yank MY OWN local body and hit-check MY OWN
+// atkCollider every time ANY other player on my screen used this skill. The
+// animation still plays for everyone watching (below, unconditional) - only
+// the movement/strike is restricted to the real caster's own client.
+export function castDashSkill(scene, player, skill, charState){
+    if(!player?.body || !scene) return
+
+    // nextState:null - same "falls back to whatever state the animation
+    // system was already in once the clip ends" convention duelSystem.js's
+    // own playFirstAction uses for its hit-reaction clips
+    player.characterAnimations?.playAction(player.anims, skill.animationName, 1, null, false, null)
+
+    if(skill.activationSound){
+        const soundKey = SOUND_TYPE_MAP[skill.activationSound.soundType] || skill.activationSound.soundType
+        setTimeout(() => getAllSounds()[soundKey]?.play(), skill.activationSound.willPlayAfterSeconds ?? 0)
+    }
+
+    if(charState.owner !== getCharState()?.owner) return
+
+    // positionAtkCollider's own hit handlers (createEnemy.js/duelSystem.js)
+    // just call calcDmg(charState) fresh, with no idea a skill triggered
+    // this particular swing - so skill.effects.plusDmg has nowhere to enter
+    // the damage calc on its own. calcDmg already reads
+    // getActiveBuffAdditions().meeleeDmg in though (see attackingSystem.js),
+    // the exact same store mjolnirSkill's own applyWeaponBuff writes to - so
+    // a very short-lived meeleeDmg buff, timed to cover just this one
+    // strike, is what actually gets this skill's bonus damage applied
+    // without touching the shared hit-handler code at all
+    const powerScale = (skill._castPowerScale ?? 1) * (skill.explosionScale ?? 1)
+    if(skill.effects?.plusDmg){
+        const buffId = `skillbuff_${skill.name}`
+        addTempBuff({
+            id: buffId,
+            stat: "meeleeDmg",
+            toAdd: Math.round(skill.effects.plusDmg * powerScale),
+            percent: 0,
+            expiresAt: Date.now() + DASH_BONUS_DMG_WINDOW_MS,
+        })
+        setTimeout(() => removeTempBuff(buffId), DASH_BONUS_DMG_WINDOW_MS)
+    }
+
+    const dash = skill.dash || {}
+    const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
+    console.log("[dashstrike] aggregate present?", !!player.aggregate, "forward:", forward.asArray(), "impulseForce:", dash.impulseForce ?? DASH_STRIKE_DEFAULT_IMPULSE)
+
+    if(player.aggregate){
+        // mirrors positionAtkCollider's own (confirmed-working) normal-attack
+        // dash exactly, not just the applyImpulse call in isolation - the
+        // 300ms setTimeout delay turned out to matter, not just cosmetic
+        // timing: applying the impulse SYNCHRONOUSLY at press time (the
+        // previous version of this code) never produced any visible
+        // movement, while this delayed structure is the one actually proven
+        // to work for every normal weapon swing already. Same `if(player.
+        // aggregate)` check (not `.aggregate?.body`) too, for the same reason.
+        setTimeout(() => {
+            if(!player.body || player.body.isDisposed()) return
+            console.log("[dashstrike] velocity before impulse:", player.aggregate.body.getLinearVelocity()?.asArray())
+            // impulse = mass * deltaV (player mass is 10, see createcharacter.js's
+            // createAggregate call) - bigger than a normal swing's own fixed
+            // DASH_IMPULSE (25, createMyCharacter.js) since this skill is
+            // supposed to read as a real dash, not a small attack-shove
+            
+            player.aggregate.body.applyImpulse(forward.scale(dash.impulseForce), player.body.absolutePosition)
+            console.log("[dashstrike] velocity right after impulse:", player.aggregate.body.getLinearVelocity()?.asArray())
+            // without this, inputMovement.js's own movement loop hard-overwrites
+            // linear velocity every physics tick while a movement key/joystick is
+            // held, stomping this impulse before it ever renders a frame - same
+            // reasoning positionAtkCollider's own call to this already documents
+            markDashActive(dash.durationMs ?? 350)
+        }, 200)
+    } else {
+        console.log("[dashstrike] no player.aggregate - falling back to locallyTranslate ramp")
+        // no physics body - ramp the position forward manually instead over
+        // the same durationMs, covering roughly `distance` units either way
+        // (same intent skillsData.js's own dash field comment describes)
+        const totalDist = dash.distance ?? 6
+        const durationMs = dash.durationMs ?? 350
+        const startTime = performance.now()
+        const translateObserver = scene.onBeforeRenderObservable.add(() => {
+            const elapsed = performance.now() - startTime
+            if(elapsed >= durationMs || !player.body || player.body.isDisposed()){
+                scene.onBeforeRenderObservable.remove(translateObserver)
+                return
+            }
+            const dt = scene.getEngine().getDeltaTime()
+            player.body.locallyTranslate(new Vector3(0, 0, (totalDist / durationMs) * dt))
+        })
+    }
+
+    strikeWithHandCollider(scene, player, skill)
+}
+
+// how forcefully the dash itself shoves the caster when skill.dash.impulseForce
+// isn't set - bigger than positionAtkCollider's own DASH_IMPULSE (25,
+// createMyCharacter.js, a normal swing's small attack-shove) since this is
+// supposed to read as an actual dash, not a regular attack's minor nudge
+const DASH_STRIKE_DEFAULT_IMPULSE = 40
+
+// how long the atkCollider stays parented to the caster's own weapon hand
+// before being detached and parked back out of reach - same order of
+// magnitude as createMyCharacter.js's own ATK_COLLIDER_ACTIVE_MS (500ms),
+// long enough to cover a real swing arc
+const HAND_STRIKE_WINDOW_MS = 500
+
+// Reuses the SAME shared "atkCollider" mesh every normal weapon swing
+// already hits through (see createMyCharacter.js's createAttackColliderForEnemy) -
+// every real enemy (createEnemy.js) and every duel opponent (duelSystem.js)
+// already has a hit callback registered against it from the moment it
+// spawned, so whatever makes this box overlap a target deals damage,
+// regardless of what moved it there. positionAtkCollider's own approach
+// (place it once at a fixed reach in front of the body) assumes the target
+// is standing still directly ahead at roughly that exact distance - fine for
+// a normal swing's short punch/kick range, but a real dash can cover several
+// units and the target may not end up sitting at exactly that spot. Instead,
+// this PARENTS the collider directly onto the caster's own weapon hand
+// (player.rHand, exposed on the player object returned by createCharacter -
+// see equipSword's own `toEquip.mesh.parent = rHand`, the exact same
+// attachment this mirrors for the equipped weapon mesh itself) so it swings
+// through the air along with the actual weapon arc for HAND_STRIKE_WINDOW_MS,
+// then detaches and parks back exactly where a normal swing leaves it
+// between attacks.
+//
+// direct `.parent =` assignment (not `.setParent()`) does NOT preserve world
+// transform - it keeps whatever LOCAL position/rotationQuaternion the mesh
+// already had, now reinterpreted relative to the new parent. Skipping the
+// explicit reset below would carry over atkCollider's stale parked position
+// (y: ATK_COLLIDER_PARKED_Y, -1000) as a LOCAL offset from the hand instead -
+// sending it flying absurdly far away rather than sitting at the weapon.
+function strikeWithHandCollider(scene, player, skill){
+    const atkCollider = scene.getMeshByName("atkCollider")
+    if(!atkCollider || !player.rHand) return console.warn("[dashstrike] no atkCollider or player.rHand to attach to")
+const originalZ = atkCollider.scaling.z
+    const originalParent = atkCollider.parent
+    atkCollider.parent = player.rHand
+    // same local offset createSword's own weapon-in-hand placement uses
+    // (createcharacter.js) - roughly where the equipped weapon itself sits
+    atkCollider.position.set(0.1, 0.5, 0)
+    atkCollider.rotationQuaternion = Quaternion.Identity()
+    atkCollider.scaling.z += 12
+
+    // skill.impactSound (skillsData.js) - now gated to a CONFIRMED
+    // connection instead of playing on the swing itself. atkCollider
+    // already has the REAL, persistent, damage-dealing hit triggers
+    // registered against it by createEnemy.js (real enemies) and
+    // duelSystem.js (duel opponents) at spawn time, but this function has
+    // no way to hook into those to know when one actually fires. Instead,
+    // this registers its OWN temporary, SOUND-ONLY intersection triggers
+    // against every enemy/duel opponent currently on scene, for just this
+    // one swing's window - Babylon allows multiple independent
+    // ActionManager triggers on the same mesh pair, so this runs
+    // completely alongside the real damage triggers without touching or
+    // interfering with them at all, and cleans itself up (win or miss)
+    // once the window closes.
+    if(skill.impactSound){
+        let hasConnected = false
+        const soundTriggerCleanups = []
+        const playImpactOnce = () => {
+            if(hasConnected) return
+            hasConnected = true
+            getAllSounds()[skill.impactSound]?.play()
+        }
+        getEnemiesOnScene().forEach(enemy => {
+            if(!enemy.body) return
+            const action = onIntersecEnterTrig(atkCollider, enemy.body, scene, playImpactOnce)
+            soundTriggerCleanups.push(() => removeIntersecTrig(atkCollider, action))
+        })
+        getDuelOpponentsOnScene().forEach(duelOpp => {
+            if(!duelOpp.body) return
+            const action = onIntersecEnterTrig(atkCollider, duelOpp.body, scene, playImpactOnce)
+            soundTriggerCleanups.push(() => removeIntersecTrig(atkCollider, action))
+        })
+        setTimeout(() => soundTriggerCleanups.forEach(cleanup => cleanup()), HAND_STRIKE_WINDOW_MS)
+    }
+
+    setTimeout(() => {
+        if(atkCollider.isDisposed()) return
+        atkCollider.parent = originalParent
+        atkCollider.position.y = ATK_COLLIDER_PARKED_Y
+        atkCollider.scaling.z = originalZ
+    }, HAND_STRIKE_WINDOW_MS)
 }
 
 // cached template mesh per shape, CLONED (not instanced) per cast - every
@@ -642,6 +926,36 @@ function getGenericIconMat(scene, skill){
     return mat
 }
 
+// same "treat the source image's own black background as transparent"
+// (getAlphaFromRGB) technique getGenericIconMat already uses for its default
+// per-skill-name icon, just keyed by an explicit texture path instead -
+// lets a shape:"plane" skill point at a shared particle-style asset
+// (quakeboltSkill: "./images/particles/thin1.webp") that needs this same
+// alpha-from-black transparency. Deliberately separate from
+// getGenericFlatTextureMat (plain opaque diffuseTexture, no alpha handling
+// at all) - that one's still correct for a genuinely opaque texture like
+// rock1.jpg on a modeled projectile, so it isn't touched here.
+const genTransparentTexMatCache = new Map()
+let genTransparentTexMatCacheScene = null
+function getGenericTransparentTextureMat(scene, texturePath){
+    if(genTransparentTexMatCacheScene !== scene){ genTransparentTexMatCache.clear(); genTransparentTexMatCacheScene = scene }
+    let mat = genTransparentTexMatCache.get(texturePath)
+    if(!mat){
+        mat = new StandardMaterial(`transparent_tex_mat_${texturePath}`, scene)
+        const tex = new Texture(texturePath, scene)
+        tex.getAlphaFromRGB = true
+        mat.diffuseTexture = tex
+        mat.emissiveTexture = tex
+        mat.opacityTexture = tex
+        mat.emissiveColor = new Color3(1, 1, 1)
+        mat.backFaceCulling = false
+        mat.specularColor = new Color3(0, 0, 0)
+        genTransparentTexMatCache.set(texturePath, mat)
+        evictCacheOnDispose(genTransparentTexMatCache, texturePath, mat)
+    }
+    return mat
+}
+
 // beam material - keyed by texturePath (skill.onHitVisual.beam.texturePath)
 // so a future beam-type skill can use its own scrolling texture instead of
 // tidalspikeSkill's watercurrent.webp; each distinct path gets one shared,
@@ -818,7 +1132,17 @@ function renderGenericProjectile(scene, box, skill){
         plane.parent = box
         plane.isPickable = false
         plane.rotation.x = Math.PI / 2
-        plane.material = materialKind === "texture" ? getGenericIconMat(scene, skill) : (materialKind === "fresnel" ? fresnelMat(scene, color) : createGlowingMat(scene, color))
+        // pv.material.texturePath (quakeboltSkill: "./images/particles/thin1.webp")
+        // overrides the default per-skill-name icon lookup (getGenericIconMat,
+        // "./images/projectiles/<skill.name>projectile.webp") - lets any
+        // shape:"plane" skill point at a shared particle-style texture
+        // instead of needing its own dedicated per-skill icon asset. Same
+        // shared/cached-by-path material getGenericFlatTextureMat already
+        // gives every other "texture" material kind (box/sphere/etc, see
+        // applyPlainMaterial above).
+        plane.material = materialKind === "texture"
+            ? (pv.material?.texturePath ? getGenericTransparentTextureMat(scene, pv.material.texturePath) : getGenericIconMat(scene, skill))
+            : (materialKind === "fresnel" ? fresnelMat(scene, color) : createGlowingMat(scene, color))
         plane.scaling = new Vector3(1, 1, 1).scale(scale)
         addGlow(scene, plane, 0.6)
         animatables.push({ node: plane, axes: pv.animation })
@@ -950,6 +1274,31 @@ function renderGenericProjectile(scene, box, skill){
     // no shape at all ("none"/marker/beam-in-flight) - box just stays
     // invisible, nothing built, nothing to dispose beyond the caller's own
     // box.dispose() later
+
+    // pv.trail (pyroclasmSkill) - an optional "shooting star" comet tail
+    // layered on TOP of whatever shape was just built above, not a shape of
+    // its own - independent of pv.shape so any skill (crossed blades, a
+    // sphere, even the invisible "no shape" case) can opt into one. box is
+    // already the correctly-oriented, correctly-moving root every shape
+    // above parents onto, so it's exactly the right emitter regardless of
+    // which shape (if any) this particular skill built.
+    if(pv.trail?.enabled){
+        const trailParticles = createCometTrailParticles(scene, box, pv.trail)
+        disposables.push(() => { trailParticles.stop(); trailParticles.dispose(false) })
+    }
+
+    // pv.plasma (pyroclasmSkill) - qnty small "plasma dot" GLB clones
+    // (models/projectiles/plasma.glb, see assetcreation/createProjectileModel.js's
+    // PROJECTILE_MODEL_PATHS) parented directly onto box, same "layered on
+    // top, independent of pv.shape" reasoning pv.trail above already follows
+    if(pv.plasma?.qnty){
+        const { meshes: plasmaMeshes, material: plasmaMat, animatables: plasmaAnimatables } = createPlasma(pv.plasma.qnty, pv.plasma.texture, box, pv.plasma.rotationX ?? 0, pv.plasma.color, pv.plasma.isEmissive)
+        disposables.push(() => {
+            plasmaAnimatables.forEach(a => a.stop())
+            plasmaMeshes.forEach(m => m.dispose(false, false))
+            plasmaMat.dispose()
+        })
+    }
 
     const spinObserver = animatables.length
         ? scene.onBeforeRenderObservable.add(() => {
@@ -1306,10 +1655,19 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
         itemId,
         body: box,
         targetDirection: { x: dx, y: dy, z: dz },
-        spd: PROJECTILE_SPEED,
+        // skill.projectileVisual.speedMult (quakeboltSkill: 2 = twice as
+        // fast as the shared baseline) - optional per-skill multiplier,
+        // every other skill just gets the plain baseline (?? 1)
+        spd: PROJECTILE_SPEED * (skill.projectileVisual?.speedMult ?? 1),
         placeId: charState.currentPlace.placeId,
         stuck: false,
-        willDetectSurface: false
+        willDetectSurface: false,
+        // who actually fired this - getProjectilesOnScene() is one shared
+        // registry for BOTH this (player-cast) path and fireEnemySkillProjectile's
+        // own enemy-cast one below, with no other way to tell them apart.
+        // duelSystem.js's own dodge AI reads this to avoid treating an
+        // npcFighter's OWN outgoing cast as a threat to itself.
+        casterOwner: charState.owner
     }
     pushProjectile(projectile)
 
@@ -1492,6 +1850,47 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             // so this attaches to the enemy's own whole body); everything
             // else calls finishCleanup immediately, right when it lands
             onHit(enemy, cleanupProjectile, projectile)
+        })
+    })
+
+    // npcFighter duel opponents (npc/duelSystem.js) - never server-tracked
+    // (getEnemiesOnScene above never sees them), so without this a bolt just
+    // passed straight through one. A duel is never multiplayer - no
+    // relay/isCaster gating needed (see the isCaster comment above), this
+    // callback only ever runs on the one real caster's own client, so damage
+    // always applies unconditionally. Damage-only, matching the scope
+    // duelSystem.js's own melee handler already set - no emitEnemyIsHit/
+    // emitEnemyBind/emitEnemyCurse/registerSkillHitTarget, nothing to relay.
+    getDuelOpponentsOnScene().forEach(duelOpp => {
+        if(!duelOpp.body) return
+        const enterAction = onIntersecEnterTrig(box, duelOpp.body, scene, () => {
+            if(hasHit) return
+            hasHit = true
+            clearTimeout(missTimeout)
+            removeIntersecTrig(box, enterAction)
+            envTriggerCleanups.forEach(fn => fn())
+
+            if(skill.swordRain){
+                triggerSwordRain(scene, charState, skill, duelOpp.body.position.clone(), powerScale)
+                stickMarkerToMesh(projectile, box, duelOpp.body, cleanupProjectile)
+                return
+            }
+
+            playImpactSound(skill)
+            if(getOnHitEffects(skill).some(e => e.type === "stickAndGrow" || e.type === "beam")) projectile.stuck = true
+
+            // same magic-damage formula/freshCharState convention the real-
+            // enemy branch above uses
+            const freshCharState = getCharState()
+            const abilityAdditions = getAdditionalsFromAbilities()
+            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+            if(abilityAdditions.additionalMagicDmg.percent){
+                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+            }
+            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+            duelOpp.applyDamage(totalDmg)
+
+            onHit(duelOpp, cleanupProjectile, projectile)
         })
     })
 
@@ -1696,6 +2095,24 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
                     emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
                 }
             })
+
+            // npcFighter duel opponents - never server-tracked, same
+            // damage-only/no-relay-gating rationale as fireElementalProjectile's
+            // own duel-opponent block above
+            getDuelOpponentsOnScene().forEach(duelOpp => {
+                if(!duelOpp.body) return
+                const dx = duelOpp.body.position.x - landingPos.x
+                const dz = duelOpp.body.position.z - landingPos.z
+                if((dx * dx + dz * dz) > IMPACT_RADIUS * IMPACT_RADIUS) return
+
+                const abilityAdditions = getAdditionalsFromAbilities()
+                let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+                if(abilityAdditions.additionalMagicDmg.percent){
+                    magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+                }
+                const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+                duelOpp.applyDamage(totalDmg)
+            })
         }
 
         // fallback cleanup - spawnProjectile's own willDisposeCountDown
@@ -1881,6 +2298,24 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
             })
             registerSkillHitTarget(enemy, freshCharState)
         })
+
+        // npcFighter duel opponents - never server-tracked, same
+        // damage-only/no-relay-gating rationale as fireElementalProjectile's
+        // own duel-opponent block
+        getDuelOpponentsOnScene().forEach(duelOpp => {
+            if(!duelOpp.body) return
+            const dx = duelOpp.body.position.x - groundPos.x
+            const dz = duelOpp.body.position.z - groundPos.z
+            if((dx * dx + dz * dz) > GROUND_SPIKE_IMPACT_RADIUS * GROUND_SPIKE_IMPACT_RADIUS) return
+
+            const abilityAdditions = getAdditionalsFromAbilities()
+            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+            if(abilityAdditions.additionalMagicDmg.percent){
+                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+            }
+            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+            duelOpp.applyDamage(totalDmg)
+        })
     }
 
     // material is NOT disposed here - getGroundSpikeMat's own instance is
@@ -1994,6 +2429,36 @@ function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, dura
     }
 }
 
+// npcFighter duel opponents (spawnGroundTrap/spawnMassGroundTrap below) get
+// the same burst/impact-sound/burning-particles visuals applyDisintegrationHit
+// gives a real enemy, but that function's actual damage is entirely
+// emitEnemyIsHit-driven (server relay) - never functional in a duel's
+// isMultiplayer:false scene, same class of problem every other duel-opponent
+// hit path in this file already solves. No isCaster gate needed (a duel is
+// never multiplayer - this only ever runs on the one real caster's client),
+// no bind/aggro - damage-only, matching the scope every other duel-opponent
+// branch here already sets.
+function applyDisintegrationHitToDuelOpponent(scene, skill, duelOpp, powerScale, durationMs){
+    fireGenericBurst(scene, duelOpp.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
+    playImpactSound(skill)
+
+    const burnMs = (skill.enemyBind?.bindDuration ?? durationMs / 1000) * 1000
+    const burnParticles = createBodyFireParticles(duelOpp.body, scene)
+    setTimeout(() => {
+        burnParticles.stop()
+        burnParticles.dispose(false)
+    }, burnMs)
+
+    const freshCharState = getCharState()
+    const abilityAdditions = getAdditionalsFromAbilities()
+    let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
+    if(abilityAdditions.additionalMagicDmg.percent){
+        magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+    }
+    const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+    duelOpp.applyDamage(totalDmg)
+}
+
 // resolves where the trap actually sits, on the ground - shared between
 // castOffenseSkill's own pre-cast circle (so it blooms flat on the ground
 // in the right spot from the very start of the cast, not the usual upright
@@ -2077,6 +2542,21 @@ function spawnGroundTrap(scene, charState, skill, groundPos, powerScale){
         })
         triggerCleanups.push(() => removeIntersecTrig(box, enterAction))
     })
+
+    // npcFighter duel opponents - never server-tracked, same parallel this
+    // file's other duel-opponent hit paths already add
+    getDuelOpponentsOnScene().forEach(duelOpp => {
+        if(!duelOpp.body) return
+        const enterAction = onIntersecEnterTrig(box, duelOpp.body, scene, () => {
+            if(hasTriggered) return
+            hasTriggered = true
+            clearTimeout(expireTimeout)
+            triggerCleanups.forEach(fn => fn())
+            box.dispose()
+            applyDisintegrationHitToDuelOpponent(scene, skill, duelOpp, powerScale, durationMs)
+        })
+        triggerCleanups.push(() => removeIntersecTrig(box, enterAction))
+    })
 }
 
 // --- massivedisintegrationSkill's mass ground trap (skill.groundTrap.aoe,
@@ -2107,6 +2587,16 @@ function spawnMassGroundTrap(scene, charState, skill, groundPos, powerScale){
             const dz = enemy.body.position.z - groundPos.z
             if((dx * dx + dz * dz) > radius * radius) return
             applyDisintegrationHit(scene, charState, skill, enemy, powerScale, durationMs)
+        })
+
+        // npcFighter duel opponents - never server-tracked, same parallel
+        // this file's other duel-opponent hit paths already add
+        getDuelOpponentsOnScene().forEach(duelOpp => {
+            if(!duelOpp.body) return
+            const dx = duelOpp.body.position.x - groundPos.x
+            const dz = duelOpp.body.position.z - groundPos.z
+            if((dx * dx + dz * dz) > radius * radius) return
+            applyDisintegrationHitToDuelOpponent(scene, skill, duelOpp, powerScale, durationMs)
         })
     }, MASS_TRAP_ACTIVATE_DELAY_MS)
 }
@@ -2228,10 +2718,16 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
     const projectile = {
         itemId, body: box,
         targetDirection: { x: dx, y: dy+0.5, z: dz },
-        spd: PROJECTILE_SPEED,
+        // same skill.projectileVisual.speedMult convention fireElementalProjectile's own spd field uses above
+        spd: PROJECTILE_SPEED * (skill.projectileVisual?.speedMult ?? 1),
         placeId: enemy.det.currentPlaceId,
         stuck: false,
-        willDetectSurface: false
+        willDetectSurface: false,
+        // same casterOwner convention fireElementalProjectile's own push
+        // uses above - `enemy` here is whatever cast this (a real enemy OR
+        // an npcFighter, e.g. duelSystem.js's own opponent object), and
+        // every character built via createCharacter carries its own .owner
+        casterOwner: enemy.owner
     }
     pushProjectile(projectile)
 

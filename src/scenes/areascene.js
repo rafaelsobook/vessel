@@ -1,4 +1,4 @@
-import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight } from "@babylonjs/core"
+import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4 } from "@babylonjs/core"
 import { createMatV2, dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam } from "../tools/camera.js";
@@ -12,10 +12,12 @@ import { getSpawnPos } from "../tools/position.js";
 import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
+import { createDuelArena } from "../creations/createduelarena.js";
+import { startDuel } from "../npc/duelSystem.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
 import { getSocket, joinWorld } from "../sockets/joinsocket.js";
 import { changeScene, getEngine, setGameStatus } from "../main/main.js";
-import { getCharState, initiateCharacter, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate.js";
+import { getCharState, initiateCharacter, setAllowDeath, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
 import { pushPlayer, setSocketContainers, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
@@ -40,6 +42,8 @@ import { capsuleHeight } from "../charactersystem/createcharacter.js";
 import { createOpenWorld, createOpenWorldGrass, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
 import { showGamePerformanceUI } from "babylonstats"
 import { setStartingContainers } from "./containers.js";
+import { registerToAtkCollider } from "../charactersystem/attackingSystem.js";
+import { createWeapon } from "../assetcreation/createweapon.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -58,6 +62,8 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
+    await loadModel("./models/monsters/grim.glb", scene)
+
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()
@@ -68,6 +74,14 @@ export async function areaScene(placeDetail){
     const myCharacter = createMyCharacter(charState, scene, allsounds)
     pushPlayer(myCharacter)
 
+    // default true (normal death) on every scene load - only the "duel" case
+    // below overrides it. This is what makes duelSystem.js's soft-loss
+    // self-correcting on any way out of the arena (win, lose, or just
+    // walking out the exit trigger) instead of needing to remember to flip
+    // it back manually on every one of those paths - see characterstate.js's
+    // own comment on setAllowDeath for the full reasoning.
+    setAllowDeath(true)
+
     switch(placeDetail.areaType){
         case "village":
             createSky(lights[0], scene, false)
@@ -76,6 +90,11 @@ export async function areaScene(placeDetail){
         break;
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
+        break;
+        case "duel":
+            createDuelArena(scene, placeDetail, myCharacter.body);
+            setAllowDeath(false)
+            startDuel(scene, myCharacter.body, placeDetail);
         break;
         case "openworld":
             createSky(lights[0], scene, true)
@@ -176,12 +195,12 @@ export async function areaScene(placeDetail){
             }
         break;
     }
-    scene.meshes.forEach(mesh => {
 
-        if(mesh.getClassName() === "GroundMesh" && mesh.name === "water"){
-
-        }
+    registerToAtkCollider(scene, "tree", () => {
+        console.log("hit tree")
     })
+
+
     if(placeDetail.originalGlbs && placeDetail.originalGlbs.length > 0){
         placeDetail.originalGlbs.forEach( async origin => {
             console.log(origin)
@@ -344,6 +363,19 @@ export async function areaScene(placeDetail){
         })
     }
 
+    // CHOPPABLE TREES - same walk-up/interact-button/looping-anim/loot
+    // interaction as the resources block above, but auto-detected by mesh
+    // name instead of needing an explicit placeDetail.resources entry, since
+    // trees come from procedural village/openworld generation
+    // (createvillage.js/infterrain), not room data. Reuses the same
+    // "minning" animation/mode - there's no separate chopping animation clip.
+    // NOTE: only wires up trees already present in scene.meshes at this
+    // point - fine for the village (built upfront), but the open world's
+    // infterrain chunks stream in as the player walks, so trees in
+    // not-yet-loaded chunks won't get a collider until this runs again on a
+    // fresh scene load.
+    let currentChoppingTree = null
+ 
     placeDetail.roomPaths?.forEach(path => {
         const { name, pos,startingPos, placeId ,areaType } = path
         const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { size: 2 }, scene)
@@ -374,7 +406,92 @@ export async function areaScene(placeDetail){
             openCloseInteractBtn(false, false)
         })
     })
-    // createAllNpcInArea(BABYLON, myHeroDatabase, hero, scene, freeCam, wearableTex, characterRoot, swords, helmets, armors, HairModel.meshes, mainShadow)
+    
+    // GROUND WEAPON LOOT (placeDetail.swordsStrucked, e.g. placeId 200's
+    // duel grounds) - a real weapon mesh (createWeapon, same call convention
+    // equipSword/startMining already use) stuck vertically into the ground
+    // at item.lootPosition, parented to an invisible collider box instead of
+    // a visible one of its own. Same walk-up/interact-button pattern as the
+    // MINEABLE RESOURCES block above, but against myCharacter.body ONLY
+    // (not getPlayersOnScene()) - this is purely a local pickup, no other
+    // client needs to see or race for it, so there's nothing to loop over.
+    //
+    // rotation.x = Math.PI / 2 is a corrected guess, not a verified fact
+    // about the sword asset's own authored orientation - the original guess
+    // here (Math.PI, a 180° flip) came back from an in-game screenshot
+    // showing the blade still lying FLAT on the ground, just mirrored - a
+    // pure 180° rotation on one axis can only ever do that to something
+    // that's already flat (a flat XZ-plane shape stays in the XZ plane
+    // however far you spin it around X), which means the raw unrotated mesh
+    // must rest flat to begin with, not blade-up as first assumed. A 90°
+    // turn on the same axis is what actually tips a flat shape up into
+    // vertical - if this still isn't right (sideways, or blade pointing UP
+    // instead of down into the floor), try z: Math.PI / 2 instead of x, or
+    // flip the sign (-Math.PI / 2).
+    placeDetail.swordsStrucked?.forEach(item => {
+        const { lootPosition } = item
+
+        // shared geometry template, same "build once, reuse via
+        // clone/instance" precedent the MINEABLE RESOURCES block's own
+        // resourceColliderTemplate sets above - kept invisible AND disabled
+        // (setEnabled(false)) so the TEMPLATE itself never renders as its own
+        // extra box sitting at the origin; only instances of it ever appear
+        let templateLootBox = scene.getMeshByName('swordstuckbox')
+        if(!templateLootBox){
+            templateLootBox = MeshBuilder.CreateBox('swordstuckbox', { size: 1.4 }, scene)
+            templateLootBox.isVisible = false
+            templateLootBox.setEnabled(false) // template only - never used directly, just instanced
+        }
+        // createInstance() (unlike clone()) gives the instance its OWN
+        // independent transform - position/rotation/scaling are NOT
+        // inherited from the source mesh at creation time, only geometry/
+        // material are shared - so rotation has to be set on the INSTANCE
+        // itself below, not the template above (setting it on the template
+        // silently did nothing to any of the actual spawned swords)
+        const lootBox = templateLootBox.createInstance(`swordstuck_${item.itemId}`)
+        lootBox.position = new Vector3(lootPosition.x, lootPosition.y, lootPosition.z)
+        // Math.PI/2 got it standing vertically, but tip-up/pommel-down - the
+        // opposite of "stuck in the ground" (tip down, hilt up). Flipping the
+        // sign keeps the same 90° vertical turn but reverses which end faces
+        // down, per the last screenshot.
+        lootBox.rotation.x = -Math.PI / 2
+        lootBox.isVisible = false
+        lootBox.isPickable = false
+
+        // createWeapon() applies no scale of its own - it only looks
+        // correctly sized when parented to a character's hand bone, whose
+        // own tiny bone-space scale implicitly shrinks it down. lootBox is a
+        // plain world-space box (scale 1), so without this the sword renders
+        // at the raw asset's actual huge native size. 0.2 matches
+        // creations/skills.js's own weaponsRoot.scaling - the one other place
+        // in this codebase that also parents createWeapon's output to a
+        // plain world-space box rather than a bone (skillEffects.js's
+        // buildWeaponCopies is the same situation too, defaulting to 0.16).
+        const weaponRoot = createWeapon(scene, item.weaponType, { x: 0, y: 0, z: 0 }, lootBox, item.name, { ...item.parts, metalColor: item.metalColor })
+        weaponRoot.scaling = new Vector3(0.2, 0.2, 0.2)
+
+        let pickedUp = false
+        onIntersecEnterTrig(lootBox, myCharacter.body, scene, () => {
+            if(pickedUp) return
+            openCloseInteractBtn("normal", true, () => {
+                if(pickedUp) return
+                pickedUp = true
+                openCloseInteractBtn(false)
+
+                // lootPosition is ground-placement metadata, not part of the
+                // actual inventory item shape (compare against any equipped
+                // weapon item elsewhere, e.g. npcDetails.js's Renarden) - strip
+                // it before this becomes a real charState.items entry
+                const { lootPosition: _drop, ...itemToObtain } = item
+                obtain(itemToObtain)
+                lootBox.dispose()
+            })
+        })
+        onIntersecExitTrig(lootBox, myCharacter.body, scene, () => {
+            if(pickedUp) return
+            openCloseInteractBtn(false, false)
+        })
+    })
 
     await scene.whenReadyAsync()
 
@@ -410,18 +527,6 @@ export async function areaScene(placeDetail){
         disableEnableAttackButtonsContainer(true)
     }
 
-    // const rod = MeshBuilder.CreateBox("lightningrod", { depth: 2, size: 0.05}, scene)
-    // rod.position.y += 1
-
-    // setTimeout(() => {
-    //     attachLightning(scene, rod, "blue")
-    //     setTimeout(() => {
-    //         attachLightning(scene, rod, "blue", true, {width: 0.001})
-    //         attachLightning(scene, rod, "blue", true, {width: 0.004})
-
-    //     }, 2000)
-
-    // }, 1000)
-
+  
     return {scene, isSocketOn: isMultiplayer }
 }

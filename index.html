@@ -510,17 +510,44 @@
             <button class="chat-sendbtn">Send</button>
         </div>
     </div>
-    <!-- STORY Container Notifs -->
-    <div class="story-notif-container cont">
-        <div class="story-bx">
-            <h4 class="story-title">Destroy Golems</h3>
-            <p class="story-required">6/10</p>
-        </div>
-        <p class="story-desc">Lorem ipsum dolor sit, amet consectetur adipisicing elit. Quaerat deleniti veniam temporibus</p>
-    </div>
+    <!-- STORY Container Notifs - left empty here on purpose: one .story
+         block per active quest gets built and appended by
+         storyQuestSystem.js's own renderStoryQuests(), not hand-authored
+         here, so there's exactly one place that has to agree on this
+         structure -->
+    <div class="story-notif-container cont"></div>
 
     <div class="popup-container popstyle1 popup-close"><p class="pop-up-label"></p></div>
-    
+
+    <!-- Title Acquired popup - components/titleUI.js's popupReceiveTitleUI -->
+    <div class="title-acquired-popup title-popup-hidden">
+        <img src="./images/UI/dragonhead.webp" class="tap-icon" alt="">
+        <p class="tap-caption">Title Acquired</p>
+        <div class="tap-name-row">
+            <img src="./images/UI/titleleftwing.webp" class="tap-wing" alt="">
+            <p class="tap-name"></p>
+            <img src="./images/UI/titlerightwing.webp" class="tap-wing" alt="">
+        </div>
+    </div>
+
+    <!-- Skill Learned popup - components/skillAcquiredUI.js's popupReceiveSkillUI.
+         Plain divs, not <img> - each one's actual picture is applied as a
+         CSS mask-image (JS sets both background-image and mask-image to
+         the same url), so the source art's own brightness becomes real
+         alpha instead of a baked-in black square staying opaque. circle by
+         skill.element (images/circles/*.webp, same table skillEffects.js's
+         own cast-time circles use), frame by skill.skillrank, icon by
+         skill.name -->
+    <div class="skill-acquired-popup skill-popup-hidden">
+        <div class="sap-circle-wrap">
+            <div class="sap-magic-circle"></div>
+            <div class="sap-frame"></div>
+            <div class="sap-skill-icon"></div>
+        </div>
+        <p class="sap-caption">Skill Learned</p>
+        <p class="sap-name"></p>
+    </div>
+
     <!-- answers buttons list -->
     <div class="answers-list">
 

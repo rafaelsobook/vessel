@@ -5,23 +5,30 @@ import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionMan
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { startConv, startQuestionare } from "../components/conversations.js"
-import { createNpc } from "./createnpc.js"
+import { createNpc, createFighterNpc } from "./createnpc.js"
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { faceForward } from "../controllers/inputMovement.js"
 import { getPlayerCoord } from "../charactersystem/createcharacter.js"
 import { setCanPress } from "../charactersystem/characterstate.js"
+import { offerDuel } from "./duelSystem.js"
 
 
 export function createAllNpcInArea(hero, scene){
     const myHeroDatabase = getCharState()
     npcDetails.forEach( async npcdet => {
         if(npcdet.currentPlaceId !== myHeroDatabase.currentPlace.placeId) return
-        let anNpc = await createNpc(scene, npcdet)
+        // npcFighter goes through the fuller createCharacter path (real
+        // characterAnimations/equipSword rig) instead of createNpc()'s
+        // lightweight isNpc:true one - see createFighterNpc's own comment
+        let anNpc = npcdet.characterType === "npcFighter"
+            ? createFighterNpc(scene, npcdet)
+            : await createNpc(scene, npcdet)
         anNpc.canSpeak = true
         // pushed by reference (not a {...anNpc} copy) so the _patrolFrozen/_patrolIndex
         // flags set here and read by updateNpcPatrol() in renderer.js stay in sync
         pushNpc(anNpc)
+
         onIntersecEnterTrig(anNpc.body, hero.body, scene, () => {
             openCloseInteractBtn("normal", true, () => {
                 disableEnableAttackButtonsContainer(false, true)
@@ -41,6 +48,9 @@ export function createAllNpcInArea(hero, scene){
                 })
                 
                 if(!storyInfo) return startConv(anNpc.det.randomSpeech, () => {
+                    // any NPC flagged npcFighter automatically gets the duel
+                    // offer here - no per-NPC dialogue wiring needed, see duelSystem.js
+                    if(anNpc.det.characterType === "npcFighter") return offerDuel(anNpc.det)
                     if(anNpc.det.callbackAfterRandomSpeech) anNpc.det.callbackAfterRandomSpeech()
                 })
                 

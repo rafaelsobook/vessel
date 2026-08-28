@@ -8,7 +8,8 @@ import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction } from "@b
 import { createTransparentMat } from "../tools/materials"
 import { createTextMesh } from "../gui/textmesh"
 import { showGuildQuest, questToItem } from "../charactersystem/guildQuest"
-import { playAnim, ANIM_STATE } from "../tools/animation"
+import { playAnim, ANIM_STATE, playBlockingLoop } from "../tools/animation"
+import { getAllSounds } from "../components/soundSystem"
 import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
@@ -35,6 +36,11 @@ let enemiez = []
 let npcz = []
 let projectilesOnScene = []
 let questsOnScene = []
+// npcFighter duel opponents (npc/duelSystem.js) - purely local combat, never
+// server-tracked (duels are always isMultiplayer:false). Mirrors enemiez so
+// creations/skillEffects.js's hit-registration sites can target duel
+// opponents with player skills the same way they already target real enemies
+let duelOpponentsOnScene = []
 
 // how close (planar, x/z only) the LOCAL player needs to be before an
 // openworld enemy's mesh actually gets created - openworld can have ~500
@@ -114,6 +120,7 @@ export function resetArray(){
     // createQuestPlaneMesh silently skip re-creating them next time you're
     // back in a quest-board place
     questsOnScene = []
+    duelOpponentsOnScene = []
     containers = {
         hairs: null,
         animeBody: null,
@@ -147,6 +154,15 @@ export function getEnemiesOnScene(){
 }
 export function removeEnemyOnScene(enemyId){
     enemiez = enemiez.filter(enmy => enmy._id !== enemyId)
+}
+export function getDuelOpponentsOnScene(){
+    return duelOpponentsOnScene
+}
+export function pushDuelOpponentOnScene(opp){
+    duelOpponentsOnScene.push(opp)
+}
+export function removeDuelOpponentOnScene(body){
+    duelOpponentsOnScene = duelOpponentsOnScene.filter(o => o.body !== body)
 }
 export function setSocketOn(_isOn){
     isSocketOn = _isOn
@@ -379,13 +395,37 @@ export function activateOnSocketListeners(socket){
         // playAnim(victimPlayer.anims, "hit1")
         // victimPlayer.characterAnimations.playAction(victimPlayer.anims, "hit1", 1)
         theEnemyToAttack.attackSound?.play()
+
+        // weaponBlocking (createcharacter.js/inputMovement.js's own r-click
+        // hold-to-block, duelSystem.js's applyDamageToOpponent for the
+        // reverse direction) - a blocking victim gets NO blood and no hit
+        // reaction, just the block sound instead. Read off victimPlayer
+        // itself (playersOnScene's own createCharacter() rig, kept in sync
+        // multiplayer-wide by emits.js's emitWeaponBlock/worldsocket.js's
+        // own "emitted-weaponblock" handler above), not charState - so
+        // EVERY client watching this fight sees the same outcome, not just
+        // the victim's own client.
+        if(victimPlayer.weaponBlocking){
+            getAllSounds().weaponblockS?.play()
+        } else {
+            // bloodps (createcharacter.js's createBloodSplatter, emitter
+            // parented to spineBone) - victimPlayer comes from
+            // playersOnScene, the same createMyCharacter()/createCharacter()
+            // rig object that already carries one. Same one-shot play() call
+            // skillEffects.js's own stickBriefly hit reaction and
+            // duelSystem.js's melee hits use. Unconditional (not gated to
+            // victimPlayer.owner === charState.owner like the deductHp block
+            // below) - purely visual, same as the anim/sound calls right
+            // above it, everyone watching should see it land
+            victimPlayer.bloodps?.play()
+        }
         // playAnim(theEnemyToAttack.anims, data.attackAnimName, false, ()=>{
         //     theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
         //     if(!theEnemyToAttack) return
         //     if(theEnemyToAttack._isMoving) return
         //     playAnim(theEnemyToAttack.anims, "0Idle", true)
         // })
-        if (victimPlayer.owner === charState.owner) {
+        if (victimPlayer.owner === charState.owner && !victimPlayer.weaponBlocking) {
             setTimeout( async () => {
                 // const vPos = victimPlayer.body.position;
                 // const enemPos = theEnemyToAttack.body.position;
@@ -717,9 +757,34 @@ export function activateOnSocketListeners(socket){
         if(!player) return
         const prevMode = player.mode
         if(ownerId === charState.owner) return
-        
+
         console.log(`${player.name} `, mode, weaponName)
         setPlayerMode(ownerId, mode, weaponName)
+    })
+    // r-click hold-to-block, other players' side - inputMovement.js's
+    // activateMouseControls already applied this on the ATTACKER's own
+    // client the instant the button was pressed/released (no round-trip
+    // wait needed for their own rig), so this only needs to mirror it onto
+    // everyone ELSE's copy of that player's mesh - same ownerId===own early-
+    // return every other "emitted-*" handler here already uses to skip
+    // re-applying an echo of this client's own action back onto itself.
+    socket.on("emitted-weaponblock", data => {
+        const { ownerId, isBlocking, currentPlaceId } = data
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (!charState) return
+        if (getGameStatus() === "loading") return
+        if (currentPlaceId !== charState.currentPlace.placeId) return
+        if (ownerId === charState.owner) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if (!player) return
+
+        player.weaponBlocking = isBlocking
+        // only need to KICK OFF the loop on true - animation.js's own
+        // playBlockingLoop re-checks player.weaponBlocking on every replay
+        // and simply stops re-triggering once it sees false, so setting the
+        // flag above is enough for the false case on its own
+        if(isBlocking) playBlockingLoop(player)
     })
     socket.on("emitted-loc", data => {
         const { ownerId, pos, dirTarg, mode, weaponName} = data

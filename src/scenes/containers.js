@@ -59,6 +59,21 @@ export async function setStartingContainers(scene){
             console.warn(`[containers] failed to load weapon parts`, error)
             allweaponParts = []
         }
+        // axe/pickaxe parts (models/axe/axes.glb - axe_blade/axe_guard/
+        // axe_handle, pickaxe_blade/pickaxe_guard, no pickaxe_handle at all,
+        // see createweapon.js's own SHARED_PART_SOURCE for why) - merged
+        // into the SAME flat allweapons object allswords.glb's own parts
+        // already live in, since createweapon.js's createPartsWeapon looks
+        // everything up from that one object regardless of weaponType.
+        // Same "warn and fall back to nothing" resilience as every other
+        // optional asset here - a missing/corrupt axes.glb shouldn't take
+        // sword loading (or the rest of the scene) down with it.
+        try {
+            const axeParts = await loadMeshOnlyParts("./models/axe/axes.glb", scene)
+            allweaponParts = { ...allweaponParts, ...axeParts }
+        } catch (error) {
+            console.warn(`[containers] failed to load axe/pickaxe weapon parts`, error)
+        }
 
         // real GLB projectile models (models/projectiles/*.glb) -
         // createProjectileModel.js's own PROJECTILE_MODEL_PATHS registry;

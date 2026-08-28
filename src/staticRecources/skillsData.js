@@ -359,7 +359,7 @@ export const quakeboltSkill = {
     skillElementType: "na",
     animationLoop: false,
     displayName: "Quakebolt",
-    castDuration: 2.8,
+    castDuration: 0.8,
     returnModeDura: 900,
     skillCoolDown: 2200,
     demand: [{ name: "mp", minCost: 32, cost: 0 }],
@@ -371,8 +371,21 @@ export const quakeboltSkill = {
     particleStyles: [{ name: "tentacles", color: "green" }],
     magicCircleImg: "apt_earth_second",
     onLevelUp: "growParticleAura",
-    projectileVisual: { useProjectile: true, visible: true, shape: "particle", material: { kind: "none" } },
-    onHitVisual: [{ type: "burst", burst: { texture: "rockTex", fireScale: 1.2, smokeScale: 1.3, emberEmitRate: 13, gravitySign: -1, includeSmoke: true } }],
+    // shape:"plane" + material.texturePath - a small textured plane clone
+    // (thin1.webp, a wispy particle-style image, not a per-skill icon) marks
+    // each bolt in flight instead of a full particleStyles system or a bare
+    // box - see renderGenericProjectile's "plane" branch in skillEffects.js
+    // for the texturePath override. projectileScale scales the default
+    // 1-unit-wide plane template - 0.4 read as basically invisible at actual
+    // play distance/speed, bumped up to stay visible without turning into a
+    // full-size banner. speedMult doubles this skill's flight speed off the
+    // shared PROJECTILE_SPEED baseline (fireElementalProjectile reads it).
+    // burstCount/burstIntervalMs/spreadDeg fire 5 bolts, 100ms apart (1
+    // every 100ms, 5 total), fanned out across a 30deg arc instead of one
+    // single shot (see castOffenseSkill's fireProjectileVolley).
+    projectileScale: 1.4,
+    projectileVisual: { useProjectile: true, shape: "plane", material: { kind: "texture", texturePath: "./images/particles/thin1.webp" }, launchSound: "bulletS", speedMult: 2, burstCount: 5, burstIntervalMs: 100, spreadDeg: 30 },
+    onHitVisual: [{ type: "burst", burst: { texture: "rockTex", fireScale: 1.2, smokeScale: 1.3, emberEmitRate: 13, gravitySign: -1, includeSmoke: true }, impactSound: "bulletS" }],
     desc: "Chunks of rock tumble along in the bolt's wake, slamming down in a rockslide on impact.",
 }
 
@@ -643,7 +656,10 @@ export const pyroclasmSkill = {
     explosionColor: "red",
     explosionScale: 1,
     arcCount: 2,
-    onLevelUp: "growArcAura",
+    // growArcAuraAndPlasma (skillUpgrades.js) - grows arc count the same as
+    // every other arced style, AND grows projectileVisual.plasma.qnty
+    // 1-for-1 with level (lvl2 -> qnty:2, lvl3 -> qnty:3, ...)
+    onLevelUp: "growArcAuraAndPlasma",
     // two glowing sword blades crossed into an X, spinning as one unit
     projectileVisual: {
         useProjectile: true, visible: false, shape: "weapon",
@@ -652,6 +668,20 @@ export const pyroclasmSkill = {
         material: { kind: "glow" },
         animation: { z: 0.05 },
         arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        // "shooting star" comet tail streaming behind the crossed blades -
+        // see createCometTrailParticles (tools/particlesystem.js) for what
+        // enabled:true alone defaults to (tight cone, white->orange->red,
+        // diamond size gradient); every field here is just an override of
+        // one of those defaults, not a full re-statement
+        trail: { enabled: true, texture: "explodeTex" },
+        // qnty small "plasma dot" GLB clones (models/projectiles/plasma.glb,
+        // see assetcreation/createProjectileModel.js's createPlasma) parented
+        // directly onto the projectile alongside the crossed blades - texture
+        // is a real image path (not a particles/ name lookup like trail.texture
+        // above), since createPlasma hands it straight to createTransparentMat
+        // (tools/materials.js). rotationX/qnty are a starting guess, not a
+        // confirmed-correct value yet - tune both once this is actually visible in-game.
+        plasma: { qnty: 1, texture: "./images/particles/explodeTex.webp", rotationX: 0, color: {r: 0.8,g:0,b:0 }, isEmissive: true },
         launchSound: "swordS1",
     },
     onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: false }, impactSound: "struckS" }],
@@ -1358,6 +1388,80 @@ export const mjolnirSkill = {
     desc: "Calls down the hammer's own charge into your weapon - your blade crackles with lightning and strikes harder for a short time.",
 }
 
+// --- DASHSTRIKE (Elite Skill) - a WEAPON skill, not a caster or a buff: no
+// magic circle, no cast windup, no requireMode gate at all (omitted, not the
+// literal string "none" - see disintegrationSkill/mjolnirSkill's own
+// comments above for why that distinction matters to skillsui.js's gate:
+// `if(skill.requireMode && ...)` only skips the check when it's falsy).
+// Activating it fires IMMEDIATELY - no castDuration window to sit through
+// like every requireMode:"casting" skill above - the dash itself plays out
+// over dash.durationMs while the "dashstrike" clip plays, instead of a
+// separate windup animation before some other payoff lands later.
+//
+// effects.effectType is "dash", a NEW type - attackingSystem.js's
+// activateSkill will need its own case for it (alongside "offense"/"buff"/
+// "trigger"), and skillEffects.js will need a castDashSkill to actually move
+// the player + apply the strike's damage. NOT implemented yet - this is data
+// only for now, per your request to review the shape before any of that gets
+// wired up.
+//
+// dash - read by the not-yet-written castDashSkill: a physics-enabled
+// character gets a forward applyImpulse of impulseForce; without physics,
+// falls back to a plain forward locallyTranslate ramp over durationMs
+// instead, covering roughly `distance` units either way (both fields kept
+// so whichever path fires has its own tuned number, since an impulse and a
+// manual translate don't cover the same distance for the same input).
+// animationName ("dashstrike") is a bare clip name - same convention every
+// weapon-combo animation already uses (uimanagement.js's punch1/kick1/
+// swordattack1), not a whole visual descriptor like projectileVisual/
+// onHitVisual above.
+//
+// demand still reads "mp" (not "sp") even though this is a physical weapon
+// skill - skillsui.js's mana-slider charging logic (the only demand
+// mechanic actually wired up right now) only ever reads demand.name==="mp";
+// an "sp" demand here would silently never charge or cost anything.
+export const dashstrikeSkill = {
+    slotNumber: 32,
+    equiped: true,
+    isActive: false,
+    name: "dashstrike",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "normal",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Dashstrike",
+    // a WEAPON skill - skillsui.js's own click handler refuses to activate
+    // this at all (popup + no mana charged) unless a weapon is actually
+    // equipped, same rule the npcFighter side of this skill enforces too
+    requiresWeapon: true,
+    // 0, not omitted - activating this skill IS the dash+strike, nothing
+    // plays out after a separate cast bar finishes the way every
+    // requireMode:"casting" skill above works
+    castDuration: 0,
+    returnModeDura: 900,
+    skillCoolDown: 3000,
+    demand: [{ name: "mp", minCost: 25, cost: 0 }],
+    effects: { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+    dash: { distance: 6, impulseForce: 120, durationMs: 350 },
+    animationName: "dashstrike",
+    // played on a timeout after activation (durationMs -> ms, read by the
+    // not-yet-written castDashSkill: setTimeout(..., activationSound.willPlayAfterSeconds)),
+    // not immediately on cast the way launchSound/impactSound above fire -
+    // lets the strike's own sound land in sync with the animation's actual
+    // swing frame instead of right when the button is pressed
+    activationSound: { soundType: "blade", willPlayAfterSeconds: 200 },
+    impactSound: "struckS", // allsounds.struckS.play()
+    skillrank: 1,
+    upgradePlus: 18,
+    explosionColor: "red",
+    explosionScale: 1,
+    // no target circle/projectile at all - a melee weapon skill, not a caster
+    projectileVisual: { useProjectile: false },
+    desc: "Surge forward in an instant and cleave through anything in your path.",
+}
+
 export const skillsData = [
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
@@ -1375,7 +1479,7 @@ export const skillsData = [
     darkorbSkill,
     burstshotsSkill,
     multicastSkill, disintegrationSkill, massivedisintegrationSkill,
-    mjolnirSkill
+    mjolnirSkill, dashstrikeSkill
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an

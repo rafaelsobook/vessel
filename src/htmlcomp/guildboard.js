@@ -1,6 +1,7 @@
 import { checkIfTokenSaved, createElement } from "../tools/tools.js"
 import { getCharState } from "../charactersystem/characterstate.js"
 import { getAllCharacters } from "../serverApiFun/getAllCharacters.js"
+import { TITLES_BY_ID } from "../staticRecources/titlesData.js"
 
 const GUILD_HOUSE_PLACE_ID = 9
 
@@ -59,7 +60,21 @@ async function renderLeaderboard(){
             createElement("p", "lb-race", char.race || "human"),
             createElement("p", "lb-lvl", char.lvl),
             createElement("p", "lb-ranklabel", (char.rank?.rankLabel || "f").toUpperCase()),
-            createElement("p", "lb-title-lbl", char.titles?.[0] || "Rookie"),
+            // char.titles is an array of {titleId, dn} objects (titleUI.js's
+            // own receiveTitle, exclusive npc-defeat titles), not plain
+            // strings - char.titles[0] alone renders as "[object Object]"
+            // once handed to createElement/textContent. Each title gets its
+            // own themed color (TITLES_BY_ID's canonical .color, e.g. Flame
+            // Ward is red) via an inline-styled span - looked up by titleId
+            // rather than trusting whatever .dn/.color the server happens to
+            // have stored, since that's just whatever a claim request's own
+            // body contained, not necessarily this file's own canonical data.
+            createElement("p", "lb-title-lbl", char.titles?.length
+                ? char.titles.map(t => {
+                    const canon = TITLES_BY_ID[t.titleId]
+                    return `<span style="color:${canon?.color ?? "#9fd6ed"}">${canon?.dn ?? t.dn}</span>`
+                }).join(", ")
+                : "Rookie"),
         )
         lbList.append(row)
     })

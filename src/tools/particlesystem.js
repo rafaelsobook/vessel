@@ -1,4 +1,4 @@
-import { ParticleSystem, MeshParticleEmitter, Texture, Vector3, Color4, Color3, PointLight, Attractor } from "@babylonjs/core"
+import { ParticleSystem, MeshParticleEmitter, ConeParticleEmitter, TransformNode, Texture, Vector3, Color4, Color3, PointLight, Attractor } from "@babylonjs/core"
 import { GLOW_COLORS } from "./materials.js"
 import { randNum } from "./random.js"
 
@@ -279,6 +279,101 @@ export function createParticleSystem(scene, emitter, particleStyles = [{ name: "
         particles.start()
         return particles
     })
+}
+
+// "Shooting star" comet tail - a tight cone of particles streaming BEHIND a
+// moving mesh, diamond-shaped size gradient (near-zero at both ends, a hard
+// peak mid-length) so it reads as one continuous bright core rather than a
+// puffy cloud. Generic/reusable (skillEffects.js's pyroclasmSkill is the
+// first caller, via projectileVisual.trail - see renderGenericProjectile),
+// every option below has the same default that skill was designed around,
+// so a future skill can override just the one or two values it cares about
+// (color/texture/size) without having to restate the whole shape.
+//
+// emitterMesh should be the projectile's own invisible root box (already
+// rotated to face its direction of travel every cast - see
+// fireElementalProjectile's box.rotation.x/y). ConeParticleEmitter always
+// emits along its OWN local Y axis, no matter what particleSystem.direction1/
+// direction2 are set to (those are only read by the plain/box emitter's
+// default startDirectionFunction - the shape emitters, cone included,
+// compute direction from their own axis internally and ignore them
+// entirely) - setting direction1/2 here used to do nothing, and the cone's
+// real Y-axis emission lined up with world-up instead of "backward", which
+// is why it shot a column straight into the sky instead of trailing behind
+// the projectile. Fixed by an intermediate TransformNode, parented to
+// emitterMesh and rotated +90deg on X - that maps its own local Y (the
+// cone's fixed emission axis) onto emitterMesh's local Z, i.e. its forward/
+// backward travel axis - and using THAT node as the actual particle emitter
+// instead of emitterMesh directly.
+export function createCometTrailParticles(scene, emitterMesh, options = {}){
+    const {
+        texture = "flare2",
+        capacity = 500,
+        coneRadius = 0.1,
+        coneAngle = Math.PI,     // tight, stays thin - not a wide spray
+        minEmitPower = 10,
+        maxEmitPower = 12,
+        updateSpeed = 0.01,
+        minLifeTime = 0.2,
+        maxLifeTime = 0.45,
+        // way down from an initial 900 - that emitRate combined with up to
+        // 0.75s lifetime kept 600+ particles alive/overlapping at once,
+        // reading as one solid beam instead of a comet tail
+        emitRate = 100,
+        // [gradientPos, r, g, b, a] - default white-hot core fading through
+        // orange to a transparent red tail tip
+        colorStops = [
+            [0,   1, 1,    1,   1],
+            [0.4, 1, 0.85, 0.4, 1],
+            [1,   1, 0.4,  0.1, 0],
+        ],
+        // [gradientPos, size] - sharp diamond: near-zero at both ends, hard
+        // peak mid-length
+        sizeStops = [
+            [0,   0.05],
+            [0.5, 0.9],
+            [1,   0.1],
+        ],
+        // isLocal:true (below) means this is read in the EMITTER'S own local
+        // space, not world space - see the header comment on why. Straight
+        // up (+Y) relative to the emitter's own rotated frame is what
+        // pyroclasmSkill wants here (skillsData.js's projectileVisual.trail
+        // has no override, so this default is what actually applies to it).
+        gravity = new Vector3(0, 0.5, 0),
+    } = options
+
+    const emitterNode = new TransformNode(`comet_trail_node_${Date.now()}`, scene)
+    emitterNode.parent = emitterMesh
+
+
+    const trail = new ParticleSystem(`comet_trail_${Date.now()}`, capacity, scene)
+    trail.particleTexture = getParticleTexture(scene, particleTexturePath(texture))
+    trail.emitter = emitterNode
+    trail.isLocal = true
+    trail.blendMode = ParticleSystem.BLENDMODE_ADD
+
+    trail.particleEmitterType = new ConeParticleEmitter(coneRadius, coneAngle)
+
+    trail.minEmitPower = minEmitPower
+    trail.maxEmitPower = maxEmitPower
+    trail.updateSpeed = updateSpeed
+
+    trail.minLifeTime = minLifeTime
+    trail.maxLifeTime = maxLifeTime
+    trail.emitRate = emitRate
+
+    colorStops.forEach(([g, r, gg, b, a]) => trail.addColorGradient(g, new Color4(r, gg, b, a)))
+    sizeStops.forEach(([g, s]) => trail.addSizeGradient(g, s))
+
+    trail.gravity = gravity
+    // emitterNode isn't tracked/disposed anywhere else - tying its lifetime
+    // to the particle system's own dispose means every existing caller
+    // (skillEffects.js's trailParticles.dispose(false)) already cleans it
+    // up for free, no extra disposal call needed on their end
+    trail.onDisposeObservable.add(() => emitterNode.dispose())
+    trail.start()
+    emitterNode.addRotation(-Math.PI/4,0,0)
+    return trail
 }
 
 // Generic one-off particle system builder - ported from an older build of
