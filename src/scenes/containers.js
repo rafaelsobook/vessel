@@ -1,5 +1,5 @@
 import {SceneLoader} from "@babylonjs/core"
-import { loadAvatarContainer, loadMeshOnlyParts } from "../tools/loadmodel"
+import { loadAvatarContainer, loadMeshOnlyParts, mergeAndLoadModel } from "../tools/loadmodel"
 import { loadProjectileModels } from "../assetcreation/createProjectileModel"
 import { setSocketContainers } from "../sockets/worldsocket"
 
@@ -12,6 +12,24 @@ async function loadMonsterRoot(path, scene){
         return await loadAvatarContainer(path, scene)
     } catch (error) {
         console.warn(`[containers] monster model missing/failed to load: "${path}"`, error)
+        return null
+    }
+}
+
+// non-animated cloneable prop roots (treasure chest etc, same idea as
+// assetregistry.js's village props) - mergeAndLoadModel flattens a
+// multi-part glb into one mesh so callers can just .clone() it wherever a
+// prop needs to spawn later, instead of loadMonsterRoot's rigged/animated
+// loadAvatarContainer path above (wrong tool for a static prop). Same
+// "warn and fall back to null" resilience as every other optional asset
+// here - a missing/corrupt treasure.glb shouldn't take the whole scene down.
+async function loadPropRootSafe(path, scene){
+    try {
+        const mesh = await mergeAndLoadModel(path, scene)
+        if(mesh) mesh.isVisible = false
+        return mesh
+    } catch (error) {
+        console.warn(`[containers] prop model missing/failed to load: "${path}"`, error)
         return null
     }
 }
@@ -37,6 +55,7 @@ export async function setStartingContainers(scene){
         let monolithRoot = await loadMonsterRoot("./models/monsters/monolith.glb", scene)
         let slimeRoot = await loadMonsterRoot("./models/monsters/slime.glb", scene)
         let lesserDemonRoot = await loadMonsterRoot("./models/monsters/lesserdemon.glb", scene)
+        let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
 
         const HairModel = await importMeshSafe("./models/avatar/", "hairModels.glb", scene)
         const helmets = await importMeshSafe("./models/helmets/", "helmets.glb", scene)
@@ -97,7 +116,8 @@ export async function setStartingContainers(scene){
             goblinRoot,
             monolithRoot,
             slimeRoot,
-            lesserDemonRoot
+            lesserDemonRoot,
+            treasureRoot
         })
         return { animeBodyContainer }
     } catch (error) {

@@ -1,5 +1,5 @@
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
-import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
+import { updateStoryQuestUI, prepareGrantedQuest } from "../charactersystem/storyQuestSystem.js"
 import { checkIfTokenSaved } from "./tools.js"
 
 // Bootstraps a brand-new story quest chain from inside a dialogue answer's
@@ -14,7 +14,7 @@ export async function grantStoryQuest(questShortDetail){
     const alreadyHasIt = charState.quests.some(q => q.qName === questShortDetail.qName)
     if(alreadyHasIt) return
 
-    charState.quests.push(questShortDetail)
+    charState.quests.push(prepareGrantedQuest(questShortDetail))
     updateStoryQuestUI(questShortDetail)
     await updateMyDetailsOL(charState, checkIfTokenSaved(), true)
 }

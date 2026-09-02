@@ -1,5 +1,5 @@
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
-import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
+import { updateStoryQuestUI, prepareGrantedQuest } from "../charactersystem/storyQuestSystem.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 
 // npcDetails.js's forQuests chains (see Strong/Vordz/Emry) drive the actual
@@ -22,7 +22,7 @@ export async function offerStarterQuest(starterQuest, finalQName){
     if(charState.clearedQuests.includes(finalQName)) return "cleared"
     if(charState.quests.some(q => q.qName === starterQuest.qName || q.qName === finalQName)) return "already-active"
 
-    charState.quests.push(starterQuest)
+    charState.quests.push(prepareGrantedQuest(starterQuest))
     updateStoryQuestUI(starterQuest)
     await updateMyDetailsOL(charState, checkIfTokenSaved())
     return "granted"

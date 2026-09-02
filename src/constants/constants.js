@@ -5,10 +5,6 @@ export const heroLocalStorageName = "msorHeroDet"
 // "npm run dev" loads localhost, "npm run prod" loads the onrender.com URLs
 export const webSocketURL = import.meta.env.VITE_WS_URL
 export const APIURL = import.meta.env.VITE_API_URL
-// "npm run trial" ( .env.trial ) skips the login/register screen and auto
-// signs into a fixed local test account so the game can be tried without
-// creating a real account
-export const isTrialMode = import.meta.env.VITE_TRIAL_MODE === "true"
 // webSocketURL is a ws(s):// URL meant for socket.io - plain fetch() needs
 // http(s):// instead, so this derives the equivalent for REST calls to the
 // tcp server (e.g. the public /status endpoint)

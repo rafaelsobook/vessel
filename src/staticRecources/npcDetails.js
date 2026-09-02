@@ -5,13 +5,18 @@ import { startQuestionare } from "../components/conversations.js"
 // import { openCloseShop, updateShopItem } from "../charactersystem/shopSystem.js"
 // import { activateCinemaOne } from "../tools/cameraTools.js"
 import { randomNum, getNumUntil, checkIfTokenSaved} from "../tools/tools.js"
-import { SKIN_COLORS } from "../constants/skinColors.js"
 import { METAL_COLOR } from "../tools/metalmat.js"
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { exitScene } from "../sockets/exitsocket.js"
-import { changeScene } from "../main/main.js"
+import { changeScene, getSceneDet } from "../main/main.js"
 import { flameWardTitle } from "./titlesData.js"
+import { getPlayersOnScene, getNpcOnScene } from "../sockets/worldsocket.js"
+import { createMagicCircle } from "../creations/magiccircles.js"
+import { giveSkill } from "../components/skillsui.js"
+import { skillsData } from "./skillsData.js"
+import { APTITUDE_ELEMENT_ALIASES } from "../charactersystem/aptitudeSystem.js"
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 
 const npcEnemySpd = 4
 const npcPatrolSpd = 1
@@ -194,7 +199,7 @@ export default [
         pants: 'style1',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.dark,
+        skinColor: "skin4",
         hairColor: ADVENTURER_COLORS.black,
         clothColor: ADVENTURER_COLORS.black,
         pantsColor: ADVENTURER_COLORS.black,
@@ -246,7 +251,7 @@ export default [
         pants: 'style1',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.dark,
+        skinColor: "skin4",
         hairColor: ADVENTURER_COLORS.black,
         clothColor: ADVENTURER_COLORS.black,
         pantsColor: ADVENTURER_COLORS.black,
@@ -391,7 +396,7 @@ export default [
         ]
     },
     {
-        glbPath: null, // guildavatar.glb turned out to be a fixed female model despite
+        glbPath: "./models/avatar/halric.glb", // guildavatar.glb turned out to be a fixed female model despite
         // the generic name - every other male NPC (Armin, Kraun, Doran, etc.) uses
         // glbPath:null, building from the generic avatar body instead
         currentPlaceId: 101,
@@ -417,7 +422,7 @@ export default [
         pants: 'style2',
         hair: 'style2',
         boots: 'style1',
-        skinColor: SKIN_COLORS.mid,
+        skinColor: "skin2",
         hairColor: ADVENTURER_COLORS.gray,
         clothColor: ADVENTURER_COLORS.darkBrown,
         pantsColor: ADVENTURER_COLORS.charcoal,
@@ -434,7 +439,7 @@ export default [
         race: "human",
         characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
         randomSpeech: [
-            {name: "", message:"Mana's thickenin' by the day. Don't like what that means. *hic*"}
+            {name: "", message: "The mana thickens with each passing day. I have long since stopped pretending I know what that portends."}
         ],
         forQuests: [
             { // storyInfo
@@ -445,57 +450,217 @@ export default [
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
                 speech: [
-                    {name:"", message: "So. *hic* You're the one Emry wouldn't shut up about."},
-                    {name:"", message: "Don't need no crystal to tell me you ain't from this land. I can smell it on you - like somethin' that don't belong anywhere I've drank."},
-                    {name:"", message: "Don't matter none. Not tonight."},
-                    {name:"", message: "Somethin's turned in this world, and it didn't ask nobody's permission. Adventurers go out on routine jobs and just... don't come back. No bodies. No blood. No screamin' anyone heard. Just gone, mid-step, like the world reached out and plucked 'em off the board."},
-                    {name:"", message: "We call 'em Entities. Fancy word for somethin' none of us can rightly describe, showin' up in places that shouldn't exist. Whether they're the cause, or just what's left when the cause walks through... nobody knows."},
-                    {name:"", message: "Here's the part that oughta keep you up tonight - keeps me up plenty too, and I drink for it. The mana in this land's risin'. Fast. And it ain't stayin' in the ground no more. It's gettin' into people."},
-                    {name:"", message: "I've watched ordinary men and women change mid-sentence. No warnin', no ritual, no chosen moment. One breath they're haulin' firewood. Next, they're standin' in a crater they made and can't tell you how."},
-                    {name:"", message: "Power like that don't wait for permission either."},
-                    {name:"", message: "So no - I don't rightly know what you are, or what dropped you into this land. But whatever's comin' for us, somethin' tells me you're gonna matter a whole lot more than either of us understands right now."},
-                    {name:"", message: "If you wanna know more about this land, I got the perfect task for you."},
-                    {name:"", message: "But I want you ready first. This ain't the kinda work where you walk out and swing at whatever crosses your path."},
-                    {name:"", message: "We got two breeds of fighters in this land. Mandirigmas - folk who use raw strength to force their way through anything standin' in front of 'em."},
-                    {name:"", message: "And salamankeros - folk who let their salamanka do the endin', not their fists."},
-                    {name:"", message: "Every so often somebody's exceptional at both. Those are the ones I really worry about, one way or another. *hic*"},
-                    {name:"", message: "For now, I'll give you somethin' simple. Find a mine, cut what timber you can on the way there, and clear out whatever's nestin' in that area. Gather what you can and bring it back to me."},
-                    {name:"", message: "Do that, and I'll show you an idea - how a weapon can be built to break on purpose, and why that ain't the flaw it sounds like."},
+                    {name:"", message: "So. You are the one Emry would not stop speaking of."},
+                    {name:"", message: "I need no crystal to see you do not belong to this land. It is plain enough in the way you carry yourself - like something that has wandered in from outside the whole of my long life."},
+                    {name:"", message: "But that matters little, tonight."},
+                    {name:"", message: "Something has shifted in this world - quietly, without leave asked of anyone. Adventurers set out on the simplest of errands and do not return. No bodies. No blood. No cry heard by any living ear. Simply... absent, as though plucked from the board mid-step."},
+                    {name:"", message: "We have taken to calling them Entities - a word for a thing none of us can rightly name, appearing in places that were never meant to hold anything at all. Whether they are the cause, or merely what is left once the cause has passed through... no one has yet been able to say."},
+                    {name:"", message: "Here is the part that should trouble you more than the rest. The mana in this land is rising, and rising quickly. It no longer stays content beneath the ground. It reaches into people."},
+                    {name:"", message: "I have watched ordinary men and women change mid-sentence. No warning, no ritual, no chosen hour. One breath they are carrying firewood. The next, they stand in a crater of their own making, unable to explain how."},
+                    {name:"", message: "Power such as that does not wait to be granted permission, either."},
+                    {name:"", message: "So no - I cannot tell you with certainty what you are, or what fate delivered you to this land. But something tells this old man you are going to matter a great deal more than either of us yet understands."},
+                    {name:"", message: "We have two breeds of fighters in this land. Mandirigmas - those who use raw strength to force their way through anything standing before them."},
+                    {name:"", message: "And salamankeros - those who let their salamanka do the ending, not their fists."},
+                    {name:"", message: "Every so often, someone is exceptional at both. Those are the ones I worry over most, one way or another."},
+                    {name:"", message: "There is much I could teach you of this land, in time. But first, you will need steel in your hand."},
+                    {name:"", message: "A Hunter without a weapon is little more than a walking corpse - unless, of course, you happen to be an old sage such as myself, who traded his blade for patience many years ago."},
+                    {name:"", message: "Seek out Bram. He keeps the forge and the weapon-house both, and he will teach you what I cannot - the weight of a spear, the reach of a sword, the discipline a staff demands, the honesty of an axe, the patience of a pick."},
+                    {name:"", message: "Go to him first. Everything else this old man has to say will keep."},
                 ],
                 notCompletedSpeech: false,
                 questsToReceive: [
                     {
-                        qName: "proveYourself",
-                        qTtle: "Prove Your Worth",
-                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Halric once it's done.",
-                        questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 5, completed: false }, //reqType'enemy/item/money
+                        qName: "meet-bram",
+                        qTtle: "Steel Before Skill",
+                        desc: "Find Bram at the forge in the village - he'll teach you about weapons before you head out.",
+                        questRequirements: { reqType: false, completed: true }, //reqType'enemy/item/money
                     }
                 ],
-                cbAfterNewQuestReceived: () => {
-                    updateStoryQuestUI({
-                        qName: "proveYourself",
-                        qTtle: "Prove Your Worth",
-                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Halric once it's done.",
-                        questRequirements: { reqType: "enemy", name: "waterslime", current: 0, requiredNum: 5, completed: false },
-                    })
+                cbAfterNewQuestReceived: async () => {
+                    // send the player back down to the village, right by
+                    // Bram's forge (28.4, -42.6 - see the 110_bram entry
+                    // below) - same transition procedure the "Meet the
+                    // Guildmaster" quest above uses to move between placeIds.
+                    // No explicit updateStoryQuestUI() call needed here either,
+                    // same as that quest - changeScene below rebuilds the UI
+                    // fresh once the player lands in the village.
+                    const village = findPlaceMetaData(1)
+                    if(!village) return console.warn("village metadata not found")
+
+                    const charState = getCharState()
+
+                    charState.currentPlace.placeId = village.placeId
+                    charState.currentPlace.name = village.name
+                    charState.currentPlace.areaType = village.areaType
+
+                    charState.x = 27
+                    charState.y = 0.01
+                    charState.z = -42
+
+                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                    exitScene(charState.owner)
+                    await changeScene("whatever")
                 }
             },
             { // storyInfo
-                qName: "proveYourself",
+                qName: "return-to-guildmaster",
                 desc: false,
                 questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
                 //receiveRT: //afterTalk//afterHunt//afterFoundItem
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
                 speech: [
-                    {name:"", message: "Back already, and still standin'. Let's see what you gathered."},
-                    {name:"", message: "Good. Now, the part most guilds won't tell a new recruit on day one. *pours himself another*"},
-                    {name:"", message: "Every weapon we forge here's built to fail eventually - on purpose. A blade that never breaks never warns you when it's about to fail on you, mid-swing, when it matters most."},
-                    {name:"", message: "Durability ain't somethin' we tolerate as a flaw. It's a warnin' system we build in, on purpose."},
-                    {name:"", message: "Learn to read that warnin', and you'll walk away from fights that would've taken an arm off somebody who didn't."},
+                    {name:"", message: "You made good time. Good - there was not much of it to spare."},
+                    {name:"", message: "I have thought a great deal about you these past days. About where it is you actually came from, and why."},
+                    {name:"", message: "I do not think it was chance. I think you were meant to end up here, in this land, at this time - and I think whatever fate delivered you here expects something of you in return."},
+                    {name:"", message: "There is something out there. A Lord - I use the word carefully, because I do not fully know what it rules over, only that everything I have ever heard of it speaks of it as though it stands above every other danger in this land combined."},
+                    {name:"", message: "I believe reaching it - facing it, whatever that ends up meaning for you - is the whole reason you are here at all. Call it instinct, call it an old man's superstition. I have learned not to ignore either."},
+                    {name:"", message: "But you are nowhere near ready for that. Not yet. So here is what I am asking of you instead."},
+                    {name:"", message: "Travel out from the village and speak with Doran. He knows these roads better than anyone left in this guild, and he will point you toward where you are actually needed."},
+                    {name:"", message: "While you are out there, I want you gathering cores. Water, fire, lightning - three of each, taken from the slimes that carry them. Nine in total."},
+                    {name:"", message: "Enjoy the journey while you are at it. You will not get this particular one back."},
+                    {name:"", message: "Power in this land does not come free, and it does not come all at once. What I am about to give you sits at the very bottom of it - Basic Class, they call it. Above that, Elite. Above Elite, High Skill. Past High Skill, Legendary. And past even Legendary..."},
+                    {name:"", message: "...God Tier. A name for something so far above where you stand now that I have only ever heard of it secondhand myself."},
+                    {name:"", message: "Those nine cores will not carry you there alone. But they are where every single person who ever climbed that ladder started. No exceptions I have ever heard of."},
+                    {name:"", message: "Stand a moment, if you would. I am no young man anymore, and what I am about to do, I have not done in some years."},
+                    {name:"", message: "Whatever runs in your blood - I mean to wake it. Properly, this time."},
+                    {name:"", message: "Hold still. This will not hurt as much as it should."},
+                ],
+                // reqType:false above means this "quest" is really just a
+                // one-shot informational beat, already completed the moment
+                // it's granted (same convention as talk-to-guild-master-first
+                // above) - notCompletedSpeech never applies, so this speech
+                // always plays for as long as the quest sits active
+                notCompletedSpeech: false,
+                questsToReceive: [
+                    {
+                        qName: "meet-doran-journey",
+                        qTtle: "Seek Out Doran",
+                        desc: "Travel out and speak with Doran before setting out on your journey.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                // The ritual: a magic circle blooms under Halric AND under
+                // the player (both flat on the floor, facing straight up -
+                // createMagicCircle's default when facingDirection is
+                // omitted), then the player learns one skill matching their
+                // own aptitude.
+                //
+                // charState.aptitude is [{element, level, uses}, ...]
+                // (aptitudeSystem.js), NOT the flat string array NPC .aptitude
+                // fields elsewhere in this file use - a genuinely different
+                // shape, easy to confuse with those. One circle per aptitude
+                // entry, image named directly off apt.element (images/circles/
+                // apt_<element>.webp - "darkness"/"earth"/"fire"/"light"/
+                // "lightning"/"water" all have real art; "wind" doesn't, so
+                // that one's skipped rather than showing a broken texture).
+                //
+                // The skill granted uses aptitude[0] specifically (this
+                // codebase's OTHER skill-reward path, skillWheel.js's
+                // grantSkillReward, instead rolls randomly across every
+                // aptitude combined - deliberately not reused here, since
+                // that's a different reward shape than "your PRIMARY
+                // aptitude wakes up first") - resolved through
+                // APTITUDE_ELEMENT_ALIASES first (server's own "darkness" vs
+                // skillsData.js's "dark" - a real, pre-existing mismatch
+                // between those two data sources, see aptitudeSystem.js's own
+                // comment), then matched against skillsData's element field.
+                // giveSkill (skillsui.js) already no-ops with its own popup
+                // if the skill's somehow already known, and handles slot
+                // assignment/persistence/the "Learned X" celebration UI.
+                //
+                // A character with NO aptitude at all (Emry's own dialogue,
+                // way back: "a rare few have none at all") gets neither
+                // circle nor skill - nothing to wake, so the ritual doesn't
+                // visually happen rather than showing an empty gesture.
+                cbAfterNewQuestReceived: async () => {
+                    const charState = getCharState()
+                    if(!charState) return
+
+                    // ritual (below) is skipped entirely for a zero-aptitude
+                    // character (see its own comment further down), but the
+                    // journey itself - teleporting to Doran - still needs to
+                    // happen regardless, so this only guards the ritual half,
+                    // not the whole callback
+                    const aptitudes = charState.aptitude || []
+
+                    const sceneDet = getSceneDet()
+                    if(aptitudes.length && sceneDet?.scene){
+                        const myPlayer = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+                        const halric = getNpcOnScene().find(npc => npc.det?._id === "111_halric")
+
+                        if(halric?.body) createMagicCircle(halric.body.position, sceneDet.scene, "divine1", 0.5, 8000)
+
+                        if(myPlayer?.body){
+                            // only elements with real art under images/circles -
+                            // "wind" (a real aptitude value elsewhere in this
+                            // file's NPC data) has none, so it's skipped here
+                            // rather than 404ing an apt_wind.webp that doesn't exist
+                            const CIRCLE_ELEMENTS_WITH_ART = new Set(["darkness", "earth", "fire", "light", "lightning", "water"])
+                            const withArt = aptitudes.filter(apt => CIRCLE_ELEMENTS_WITH_ART.has(apt.element))
+
+                            const CIRCLE_SPACING = 1.6
+                            const playerPos = myPlayer.body.position
+                            withArt.forEach((apt, i) => {
+                                const imgName = `apt_${apt.element}`
+                                const offset = (i - (withArt.length - 1) / 2) * CIRCLE_SPACING
+                                createMagicCircle(
+                                    { x: playerPos.x + offset, y: playerPos.y, z: playerPos.z },
+                                    sceneDet.scene, imgName, 0.5, 8000
+                                )
+                            })
+                        }
+
+                        const primaryElement = APTITUDE_ELEMENT_ALIASES[aptitudes[0].element] ?? aptitudes[0].element
+                        const matchingSkill = skillsData.find(sk => sk.element === primaryElement)
+                        if(matchingSkill) giveSkill(matchingSkill)
+                    }
+
+                    // then send the player back down to the village, right by
+                    // Doran (7.56, -2.53 - see the 106_doran entry below) -
+                    // same transition procedure the "meet-bram" quest above
+                    // uses to move between placeIds. Runs regardless of
+                    // whether the ritual above actually did anything - a
+                    // zero-aptitude character still needs to be sent to
+                    // Doran, same as everyone else.
+                    setTimeout(async () => {
+                        const village = findPlaceMetaData(1)
+                        if(!village) return console.warn("village metadata not found")
+
+                        charState.currentPlace.placeId = village.placeId
+                        charState.currentPlace.name = village.name
+                        charState.currentPlace.areaType = village.areaType
+
+                        charState.x = 6
+                        charState.y = 0.01
+                        charState.z = -2
+
+                        await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                        exitScene(charState.owner)
+                        await changeScene("whatever")
+                    }, 10000)
+                }
+            },
+            { // storyInfo
+                qName: "gatherElementalCores",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                // completion here is the reactive itemLists path
+                // (checkStoryQuestIfCompleted, storyQuestSystem.js) - every
+                // obtain() call already checks against this quest's
+                // itemLists automatically, no live-scan needed the way
+                // craftFirstSword's reqType:"craft" required
+                speech: [
+                    {name:"", message: "Nine cores. All three kinds, evenly. You did not cut corners - I can tell, because most don't."},
+                    {name:"", message: "This is Basic Class, what you're standing on right now. The very bottom rung. I want you to remember that, the day you're standing somewhere higher and looking back down at it."},
+                    {name:"", message: "Whatever waits for you at the end of all this - the Lord, or whatever else this land decides to throw at you first - it will not care how far you have already come. Only how far you still have left."},
+                    {name:"", message: "Rest. Then find me again when you are ready for more."},
                 ],
                 notCompletedSpeech: [
-                    {name:"", message: "Still five short, or thereabouts. Come back when the area's clear, eh?"},
+                    {name:"", message: "You are not finished yet. Nine cores, three of each kind. Come back once you have them all."},
                 ],
                 questsToReceive: [
                 ],
@@ -530,7 +695,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.white,
         clothColor: ADVENTURER_COLORS.white,
         pantsColor: ADVENTURER_COLORS.slateBlue,
@@ -815,7 +980,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style2',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.gray,
         clothColor: ADVENTURER_COLORS.brown,
         pantsColor: ADVENTURER_COLORS.charcoal,
@@ -933,7 +1098,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.brown,
         clothColor: ADVENTURER_COLORS.darkTeal,
         pantsColor: ADVENTURER_COLORS.black,
@@ -1034,7 +1199,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.white,
         clothColor: ADVENTURER_COLORS.white,
         pantsColor: ADVENTURER_COLORS.charcoal,
@@ -1287,7 +1452,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.white,
         clothColor: ADVENTURER_COLORS.white,
         pantsColor: ADVENTURER_COLORS.slateBlue,
@@ -1540,7 +1705,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.brown,
         clothColor: ADVENTURER_COLORS.brown,
         pantsColor: ADVENTURER_COLORS.charcoal,
@@ -1652,6 +1817,70 @@ export default [
                 ],
                 questsToReceive: []
             },
+            { // storyInfo
+                qName: "meet-doran-journey",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Halric sent you? Figured as much - you've got that look. The 'just got handed something bigger than me' look. Seen it before."},
+                    {name:"", message: "I've hauled cargo over every road out of this village more times than I care to count. Slimes are the least of what's out there, but they're where everyone starts, and there's no shame in that."},
+                    {name:"", message: "Water, fire, electric - three flavors of the same nuisance, three different temperaments. Water's slow and forgiving. Fire bites back if you linger. Electric's fast enough it'll hit you twice before you've decided to swing once."},
+                    {name:"", message: "Kill enough of each and they'll drop a core. Water slime core, fire slime core, electric slime core - three of each is nine total, same as Halric told you, I'd wager."},
+                    {name:"", message: "Take the roads slow if you want. Or don't. Either way, watch the sky change color out there - that's the one thing I never got tired of, all these years hauling freight."},
+                ],
+                notCompletedSpeech: false,
+                questsToReceive: [
+                    {
+                        qName: "gatherElementalCores",
+                        qTtle: "Three of a Kind",
+                        desc: "Collect 3 each of Water Slime Core, Fire Slime Core, and Electric Slime Core, then return to Halric.",
+                        questRequirements: { reqType: "item", itemLists: [
+                            { name: "waterslimecore", dn: "Water Slime Core", current: 0, total: 3 },
+                            { name: "fireslimecore", dn: "Fire Slime Core", current: 0, total: 3 },
+                            { name: "electricslimecore", dn: "Electric Slime Core", current: 0, total: 3 },
+                        ], completed: false },
+                    }
+                ],
+                cbAfterNewQuestReceived: async () => {
+                    // updateStoryQuestUI({
+                    //     qName: "gatherElementalCores",
+                    //     qTtle: "Three of a Kind",
+                    //     desc: "Collect 3 each of Water Slime Core, Fire Slime Core, and Electric Slime Core, then return to Halric.",
+                    //     questRequirements: { reqType: "item", itemLists: [
+                    //         { name: "waterslimecore", dn: "Water Slime Core", current: 0, total: 3 },
+                    //         { name: "fireslimecore", dn: "Fire Slime Core", current: 0, total: 3 },
+                    //         { name: "electricslimecore", dn: "Electric Slime Core", current: 0, total: 3 },
+                    //     ], completed: false },
+                    // })
+
+                    // send the player out to the openworld (placeId 888) -
+                    // the road out to the border where the three slime types
+                    // actually roam (see tcp/recources/enemyDetails.ts's own
+                    // OPENWORLD_SLIME_TERRITORY) - same transition procedure
+                    // every other quest-driven teleport in this file uses.
+                    // generateArea (localroomdb.js's own placeId:888 entry)
+                    // computes a real .spawn for openworld same as any other
+                    // place, nothing special-cased needed here for it.
+                    const openworld = findPlaceMetaData(OPENWORLD_PLACE_ID)
+                    if(!openworld) return console.warn("openworld metadata not found")
+
+                    const charState = getCharState()
+
+                    charState.currentPlace.placeId = openworld.placeId
+                    charState.currentPlace.name = openworld.name
+                    charState.currentPlace.areaType = openworld.areaType
+
+                    charState.x = openworld.spawn.x
+                    charState.y = openworld.spawn.y
+                    charState.z = openworld.spawn.z
+
+                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                    exitScene(charState.owner)
+                    await changeScene("whatever")
+                }
+            },
         ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(80)
@@ -1682,7 +1911,7 @@ export default [
         pants: 'style1',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1",
         hairColor: ADVENTURER_COLORS.gray,
         clothColor: ADVENTURER_COLORS.slateBlue,
         pantsColor: ADVENTURER_COLORS.charcoal,
@@ -1827,7 +2056,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style2',
-        skinColor: SKIN_COLORS.dark,
+        skinColor: "skin4",
         hairColor: ADVENTURER_COLORS.black,
         clothColor: ADVENTURER_COLORS.maroon,
         pantsColor: ADVENTURER_COLORS.charcoal,
@@ -1972,7 +2201,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.dark,
+        skinColor: "skin4",
         hairColor: ADVENTURER_COLORS.red,
         clothColor: ADVENTURER_COLORS.black,
         pantsColor: ADVENTURER_COLORS.blue,
@@ -2019,7 +2248,7 @@ export default [
         pants: 'style1',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.dark,
+        skinColor: "skin4",
         hairColor: ADVENTURER_COLORS.yellow,
         clothColor: ADVENTURER_COLORS.darkTeal,
         pantsColor: ADVENTURER_COLORS.maroon,
@@ -2071,7 +2300,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style2',
-        skinColor: SKIN_COLORS.mid,
+        skinColor: "skin2",
         hairColor: ADVENTURER_COLORS.gray,
         clothColor: ADVENTURER_COLORS.charcoal,
         pantsColor: ADVENTURER_COLORS.brown,
@@ -2111,7 +2340,235 @@ export default [
         randomSpeech: [
             {name: "", message: "..."}
         ],
-        forQuests: [],
+        forQuests: [
+            { // storyInfo
+                qName: "meet-bram",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: true,
+                reward: {
+                    receiveRewardType: "item",
+                    rewardCoin: 0,
+                    // same shape as toSell.js's minersedge/farmersaxe (weaponType
+                    // "pickaxe"/"axe", parts-rendered like a crafted weapon) -
+                    // fresh itemId per grant so this doesn't share an id with
+                    // the shop copies or across players
+                    rewardItems: [
+                        {
+                            itemId: randomNum(),
+                            name: "minersedge",
+                            dn: "Miner's Edge",
+                            itemCateg: "equipable",
+                            itemType: "weapon",
+                            weaponType: "pickaxe",
+                            equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
+                            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                            equiped: false,
+                            soulFeed: 0,
+                            isEnhanceAble: true,
+                            enhancedLevel: 0,
+                            slots: [],
+                            durability: { current: 100, max: 100 },
+                            price: { coinType: "bronze", pieces: 10 },
+                            qnty: 1,
+                            desc: "A well-balanced pick, equally at home splitting stone or skulls",
+                            rarity: "rare",
+                            parts: {
+                                bladeRarity: "common1", guardRarity: "common1", handleRarity: "common1",
+                                bladeColor: "steel", guardColor: "iron", handleColor: "leather",
+                            }
+                        },
+                        {
+                            itemId: randomNum(),
+                            name: "farmersaxe",
+                            dn: "Farmer's Axe",
+                            itemCateg: "equipable",
+                            itemType: "weapon",
+                            weaponType: "axe",
+                            equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
+                            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                            equiped: false,
+                            soulFeed: 0,
+                            isEnhanceAble: true,
+                            enhancedLevel: 0,
+                            slots: [],
+                            durability: { current: 100, max: 100 },
+                            price: { coinType: "bronze", pieces: 10 },
+                            qnty: 1,
+                            desc: "A well-balanced axe, equally at home cutting trees",
+                            rarity: "rare",
+                            parts: {
+                                bladeRarity: "common1", guardRarity: "common1", handleRarity: "common1",
+                                bladeColor: "steel", guardColor: "iron", handleColor: "wood",
+                            }
+                        },
+                    ],
+                },
+                speech: [
+                    {name:"", message: "So you're the one Halric sent down from his office. Didn't take him long this time."},
+                    {name:"", message: "Word first: quick feet and a clever mouth won't save you out there. Steel will. Or wood, or stone, dependin' on what you're carryin'."},
+                    {name:"", message: "Five kinds of weapon leave this forge, and every one of 'em does a different job. Learn which is which before you pick one, not after somethin's already swingin' at you."},
+                    {name:"", message: "Spear. Reach and speed. Keeps somethin' at a distance before it gets close enough to matter. Favored by them as'd rather not get hit at all."},
+                    {name:"", message: "Sword. Balance, plain and simple. Quick to draw, quick to answer with, forgivin' of mistakes a heavier blade wouldn't let you walk away from."},
+                    {name:"", message: "Staff. Not for swingin' - for channelin'. A salamankero's weapon of choice, more conduit than club. Won't do a hunter of raw strength much good."},
+                    {name:"", message: "Axe. All weight, no apology. Slower than a sword, hits like it means to end the conversation in one go. A mandirigma's tool, through and through."},
+                    {name:"", message: "Pickaxe. Folk forget it's a weapon at all till they've had one swung at 'em. Built first for breakin' rock, second for breakin' whatever's guardin' it."},
+                    {name:"", message: "As for craftin' - bring me ore, bring me timber, bring me whatever you've dug or felled or looted off somethin' that shouldn't have been carryin' it, and I'll show you how it's shaped. Blade, guard, handle, pommel - each piece pulled from a different material, each material worth somethin' different in a fight."},
+                    {name:"", message: "I can walk you through swordwork myself, right now, at that anvil there. The rest - spear, staff, axe, pick - work the same principle. I just haven't the time to teach five trades to every green recruit that walks through that door."},
+                    {name:"", message: "Before any of that, though, you'll want somethin' in hand to start with. Here - a pick and an axe, both plain, both honest. The pick'll open a mine for you, the axe'll drop timber. Neither's much for fightin', but they'll get you started."},
+                    {name:"", message: "Find a mine, cut what timber you find along the way, and clear out whatever's nestin' in that area. Bring back what you gather."},
+                    {name:"", message: "Do that, and we'll talk about what gets built with it."},
+                ],
+                notCompletedSpeech: false,
+                questsToReceive: [
+                    {
+                        qName: "proveYourself",
+                        qTtle: "Prove Your Worth",
+                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Bram once it's done.",
+                        questRequirements: { reqType: "item", itemLists:
+                        [
+                            {
+                                name: "wood",
+                                dn: "Wood",
+                                current: 0,
+                                total: 1
+                            },
+                            {
+                                name: "stone",
+                                dn: "Stone",
+                                current: 0,
+                                total: 1
+                            },
+                            {
+                                name: "bronzeore",
+                                dn: "Bronze Ore",
+                                current: 0,
+                                total: 1
+                            },
+                            {
+                                name: "waterslimecore",
+                                dn: "Water Slime Core",
+                                current: 0,
+                                total: 1
+                            },
+                        ]
+                        , completed: false }, //reqType'enemy/item/money
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    // the pickaxe/axe grant itself happens automatically above
+                    // this callback runs (createAllNpcInArea.js's hasReward
+                    // handling, reused as-is - see reward.rewardItems above)
+                    updateStoryQuestUI({
+                        qName: "proveYourself",
+                        qTtle: "Prove Your Worth",
+                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Bram once it's done.",
+                        questRequirements: { reqType: "item", itemLists: [
+                            { name: "wood", dn: "Wood", current: 0, total: 1 },
+                            { name: "stone", dn: "Stone", current: 0, total: 1 },
+                            { name: "bronzeore", dn: "Bronze Ore", current: 0, total: 1 },
+                            { name: "waterslimecore", dn: "Water Slime Core", current: 0, total: 1 },
+                        ], completed: false },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "proveYourself",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Back already, and still in one piece. Let's see what you've hauled in."},
+                    {name:"", message: "Good. Now, somethin' most smiths won't tell a green recruit on day one."},
+                    {name:"", message: "Every weapon that leaves this forge is built to fail, eventually. On purpose. A blade that never breaks never warns you when it's about to fail on you, mid-swing, when it matters most."},
+                    {name:"", message: "Durability ain't a flaw we put up with. It's a warnin' system, built in on purpose."},
+                    {name:"", message: "Learn to read that warnin', and you'll walk away from fights that'd have taken an arm off somebody who didn't."},
+                    {name:"", message: "Talk's cheap, though. You've watched me work - now let's see you do it."},
+                    {name:"", message: "That anvil's not just for show. Take what you've gathered, pick your materials, and build somethin' with your own two hands. Doesn't have to be pretty. Has to be yours."},
+                    {name:"", message: "Come back and show me what you make."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Still short a few, near as I can tell. Come back when that area's properly cleared."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "craftFirstSword",
+                        qTtle: "Forge Your Own",
+                        desc: "Craft a sword of your own at Bram's forge, then bring it back to show him.",
+                        questRequirements: { reqType: "craft", weaponType: "sword", completed: false },
+                    }
+                ],
+                cbAfterNewQuestReceived: () => {
+                    updateStoryQuestUI({
+                        qName: "craftFirstSword",
+                        qTtle: "Forge Your Own",
+                        desc: "Craft a sword of your own at Bram's forge, then bring it back to show him.",
+                        questRequirements: { reqType: "craft", weaponType: "sword", completed: false },
+                    })
+                }
+            },
+            { // storyInfo
+                qName: "craftFirstSword",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                // completion here is evaluateLiveQuestRequirements
+                // (storyQuestSystem.js) re-scanning charState.items for
+                // weaponType "sword" fresh on THIS talk, not something that
+                // flipped reactively back when the sword was actually
+                // crafted (craftingui.js's own obtain() call has no fixed
+                // item name a quest could react to - every crafted sword's
+                // name is randomly generated per craft)
+                speech: [
+                    {name:"", message: "Well now. Let's have a look."},
+                    {name:"", message: "Not bad. Balance is honest, edge is even - you listened."},
+                    {name:"", message: "That right there is the first of however many you end up makin'. Won't be the last, and it won't be the best, either. That's how it's supposed to go."},
+                    {name:"", message: "You've got the basics now - weapons, materials, what a forge is actually for. Everything past this is just doin' it again, better."},
+                    {name:"", message: "Go on, then - this land won't wait for you."},
+                    {name:"", message: "One more thing, before you run off admirin' your own work."},
+                    {name:"", message: "Halric sent word down not long after you started swingin' that hammer. Wants you back up at his office. Now, not whenever's convenient."},
+                    {name:"", message: "Don't know what's got him rattled this time, but he doesn't send for people twice in one day for nothin'. Best not keep him waitin'."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Well? Where's this sword you're supposed to be buildin'? That anvil's not gonna use itself."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "return-to-guildmaster",
+                        qTtle: "The Guildmaster Calls",
+                        desc: "Halric wants to see you again - urgently. Head back to his office.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                cbAfterNewQuestReceived: async () => {
+                    // send the player back up to the guildmaster's office
+                    // (placeId 101) - same transition procedure the "Meet
+                    // the Guildmaster" quest (this same NPC's own first
+                    // forQuests entry) already uses to move between placeIds
+                    const guildmasterOffice = findPlaceMetaData(101)
+                    if(!guildmasterOffice) return console.warn("guildmaster office metadata not found")
+
+                    const charState = getCharState()
+
+                    charState.currentPlace.placeId = guildmasterOffice.placeId
+                    charState.currentPlace.name = guildmasterOffice.name
+                    charState.currentPlace.areaType = guildmasterOffice.areaType
+
+                    charState.x = guildmasterOffice.spawn.x
+                    charState.y = guildmasterOffice.spawn.y
+                    charState.z = guildmasterOffice.spawn.z
+
+                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
+                    exitScene(charState.owner)
+                    await changeScene("whatever")
+                }
+            },
+        ],
         callbackAfterRandomSpeech: () => {
             startQuestionare(300)
         }
@@ -2152,7 +2609,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.mid,
+        skinColor: "skin2",
         hairColor: ADVENTURER_COLORS.darkBrown,
         clothColor: ADVENTURER_COLORS.tan,
         pantsColor: ADVENTURER_COLORS.brown,
@@ -2364,7 +2821,7 @@ export default [
         pants: 'style2',
         hair: 'style1',
         boots: 'style1',
-        skinColor: SKIN_COLORS.mid,
+        skinColor: "skin2",
         hairColor: ADVENTURER_COLORS.darkBrown,
         clothColor: ADVENTURER_COLORS.tan,
         pantsColor: ADVENTURER_COLORS.brown,

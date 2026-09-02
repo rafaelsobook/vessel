@@ -4,7 +4,7 @@ import { randomNum } from "../tools/tools.js"
 // "resources" -> loots, and areascene.js's mining loop). Each factory
 // returns a fresh instance so repeated pickups never share an itemId.
 const LOOT_TEMPLATES = {
-    ore: () => ({
+    solarore: () => ({
         itemId: randomNum(),
         name: "solarore",
         dn: "Solar Ore",

@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite --host",
     "prod": "vite --host --mode production",
-    "trial": "vite --host --mode trial",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -20,7 +19,7 @@
     "@babylonjs/havok": "^1.3.13",
     "@babylonjs/loaders": "^9.18.1",
     "@babylonjs/materials": "^9.10.1",
-    "babyloncamtricks": "file:c:/web/module/babyloncamtricks",
+    "babyloncamtricks": "^1.0.1",
     "babylonstats": "^1.0.0",
     "infterrain": "^1.0.0",
     "socket.io-client": "^4.8.3"

@@ -557,10 +557,19 @@
     <div class="loading-screen screenFadeOff">
         <img src="./images/loadingscreens/ls1.webp" alt="" class="wallpaper">
         <div class="loading-bx">
-            <img src="./images/items/crafting/bronzecore.webp" alt="" class="lc-img">
+            <!-- lc-img's src/text set live by popupUI.js's openCloseLScreen -
+                 cycles through a random skill (icon + desc) every 6s while
+                 this screen is open, instead of a fixed image/caption.
+                 lc-frame (skillring.webp) is static decoration, has a solid
+                 black interior (not a transparent cutout) so it sits BEHIND
+                 lc-img, which is clipped to a circle to fill that opening -->
+            <div class="lc-img-wrap">
+                <img src="./images/UI/frames/skillring.webp" alt="" class="lc-frame">
+                <img src="" alt="" class="lc-img">
+            </div>
             <p class="lc-cap">Loading ... <span class="ls-percent">0%</span> </p>
             <!-- <p class="ls-percent">0%</p> -->
-            <p class="ls-tips">Always bring pickaxe for dungeons</p>
+            <p class="ls-tips"></p>
         </div>
     </div>
         <!-- THE LIFE AND MANA GUI -->

@@ -118,6 +118,18 @@ export function emitDied() {
     // npcz = []
     // enemiez = []
 }
+// called by createtreasure.js when a server-tracked treasure gets opened -
+// a bare id string, matching tcp/index.ts's "removeTreasure" handler
+// exactly (compare createEnemy.js's own "removeEnemy" emit, which sends
+// {enemyId: targetId} instead of a bare id - the server's matching handler
+// there expects a bare string too, so that one silently never matches
+// anything; deliberately not repeating that mistake here)
+export function emitRemoveTreasure(treasureId){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("removeTreasure", treasureId)
+}
 // Attack Actions
 export function emitSpawnCircle(pos, element){
     const socket = getSocket()
@@ -272,6 +284,27 @@ export function emitRegisterPlayerAsEnemy(data){
     const socket = getSocket()
     if(!socket) return
     socket.emit("registerPlayerAsEnemy", data)
+}
+// tcp/index.ts's enemyWillChase handler - the ONLY thing that ever sets
+// enem._isMoving true for "walk toward my target" purposes. Registering a
+// target (emitRegisterPlayerAsEnemy above) only ever sets _targetId -
+// renderer.js's own movement loop gates actual chase movement on BOTH
+// _isMoving && _targetId together, so a target with no chase call just
+// stands there aggro'd, never actually walking over. createEnemy.js's own
+// melee atkDetection trigger gets this "for free" (its EXIT trigger calls
+// the equivalent local emitChase once you back out of range - no chase
+// needed on ENTER, since you're already adjacent), but a ranged/AOE skill
+// hit lands with no such trigger involved at all, so it has to ask for
+// this explicitly. MUST be called after (never before, and never instead
+// of) a registerPlayerAsEnemy for this same targetId - the server's own
+// handler no-ops on a target mismatch (its `if(enem._targetId !== targetId)
+// return` guard), so calling this alone, or in the other order, silently
+// does nothing.
+export function emitEnemyChase(data){
+    if(!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("enemyWillChase", data)
 }
 export function emitEnemyYCorrection(enemyId, y, x, z){
     if (!getIsSocketOn()) return

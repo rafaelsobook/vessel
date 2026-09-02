@@ -76,7 +76,7 @@ export function createMat(name, color, diffuseTexPath, scene, scale = { uScale: 
     }   
     // Base color (like diffuseColor but PBR)
     if(color){
-        mat.diffuseColor = color;
+        // mat.diffuseColor = color;
     }
     return mat;
 }

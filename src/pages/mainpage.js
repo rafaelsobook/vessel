@@ -2,9 +2,8 @@ import { hideShowAllScreenUI } from "../charactersystem/uimanagement.js"
 import { showLoadingScreen } from "../htmlcomp/loadingscreen.js"
 import { showLoginPage, login, continueSession } from "./loginpage.js"
 import { showRegisterPage, register } from "./registerpage.js"
-import { enterTrialMode } from "./trialpage.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { tcpHttpURL, isTrialMode } from "../constants/constants.js"
+import { tcpHttpURL } from "../constants/constants.js"
 
 const homePage = document.querySelector(".home-page")
 const authFields = document.querySelector(".auth-fields")
@@ -114,11 +113,6 @@ confirmInput.addEventListener("keydown", e => e.key === "Enter" && isRegisterMod
 export function showMainPage() {
     // showLoadingScreen(["Welcome to Vessel", "Loading"])
     hideShowAllScreenUI(false)
-
-    if (isTrialMode) {
-        hideHomePage()
-        return enterTrialMode()
-    }
 
     homePage.classList.remove("hidden")
     siteFooter?.classList.remove("hidden")

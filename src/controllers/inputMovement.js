@@ -310,7 +310,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = 6;
+    let sprintSpeed = 30;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
@@ -562,12 +562,12 @@ function setupControls(scene, allsounds) {
             case "shift": currentSpeed = walkSpeed; break;
             case "c":
                 console.log("players ", getPlayersOnScene())
-                clearLocTimeOut()
-                myPlayer.body.position.x = 0
-                myPlayer.body.position.z = 1100
-                myPlayer.body.position.y = 20
-                hideShowAllScreenUI(hideUIToggle)
-                hideUIToggle = !hideUIToggle
+                // clearLocTimeOut()
+                // myPlayer.body.position.x = 0
+                // myPlayer.body.position.z = 1100
+                // myPlayer.body.position.y = 20
+                // hideShowAllScreenUI(hideUIToggle)
+                // hideUIToggle = !hideUIToggle
             break
             case "e":
                 if(weaponLightning){
@@ -589,7 +589,23 @@ function setupControls(scene, allsounds) {
                     
             break
             case "x":
-                changeStory()
+                // changeStory({
+                //         qName: "meet-bram",
+                //         qTtle: "Steel Before Skill",
+                //         desc: "Find Bram at the forge in the village - he'll teach you about weapons before you head out.",
+                //         questRequirements: { reqType: false, completed: true }, //reqType'enemy/item/money
+                //     })
+                changeStory({
+                        qName: "proveYourself",
+                        qTtle: "Prove Your Worth",
+                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Bram once it's done.",
+                        questRequirements: { reqType: "item", itemLists: [
+                            { name: "wood", dn: "Wood", current: 1, total: 1 },
+                            { name: "stone", dn: "Stone", current: 1, total: 1 },
+                            { name: "bronzeore", dn: "Bronze Ore", current: 1, total: 1 },
+                            { name: "waterslimecore", dn: "Water Slime Core", current: 1, total: 1 },
+                        ], completed: true },
+                    })
             break
             case "r":
                 reCreateMeshesInScene()

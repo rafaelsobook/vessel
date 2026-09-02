@@ -56,15 +56,22 @@ export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyl
         container.style.display = "none"
 
         if (cat === "skin") {
-            const skinColors = meshData?.skinColors ?? []
-            skinColors.forEach(color => {
+            // meshData.skinColors is now a list of {key, path} pairs
+            // (SKIN_TEXTURE_LIST), not {r,g,b} colors - render each as a
+            // thumbnail of the actual texture rather than a flat swatch, but
+            // hand the key (not the path) back to onSkinSelect since that's
+            // what actually gets persisted.
+            const skinTextures = meshData?.skinColors ?? []
+            skinTextures.forEach(({ key, path }) => {
                 const btn = document.createElement("button")
                 btn.className = "cc-style-btn cc-skin-swatch"
-                btn.style.backgroundColor = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`
+                btn.style.backgroundImage = `url(${path})`
+                btn.style.backgroundSize = "cover"
+                btn.style.backgroundPosition = "center"
                 btn.addEventListener("click", () => {
                     container.querySelectorAll(".cc-style-btn").forEach(b => b.classList.remove("active"))
                     btn.classList.add("active")
-                    onSkinSelect?.(color)
+                    onSkinSelect?.(key)
                 })
                 container.appendChild(btn)
             })

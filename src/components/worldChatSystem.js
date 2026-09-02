@@ -14,18 +14,31 @@ const chatToggleBtn = document.querySelector(".chat-toggle-btn")
 let chatSystemInitiated = false
 let isChatOpen = false
 
-// exported for worldsocket.js's "player-death" handler - a synthesized
-// local system line ("PlayerName: died"), not a real chat message, so it
-// deliberately bypasses sendChatMessage entirely (no worldChatMessage
-// socket emit, no /worldmessage/save POST) - every client already receives
-// "player-death" independently and would otherwise each try to persist/
-// re-broadcast the same announcement
 export function appendChatMessage({ name, message }){
     const bx = createElement("div", "chat-bx")
     bx.append(
         createElement("span", "chat-name", `${name}: `),
         createElement("span", "chat-message", message)
     )
+    chatsList.append(bx)
+    chatsList.scrollTop = chatsList.scrollHeight
+}
+
+// one plain line, no "name: " prefix - for announcements that read as a
+// full sentence on their own (worldsocket.js's "player-death" handler:
+// "PlayerName died!") rather than something someone said. appendChatMessage
+// always renders `${name}: ` regardless of what's passed for name, so an
+// empty name there would just leave a stray leading ": " instead of this.
+//
+// Exported for that same "player-death" handler - a synthesized local
+// system line, not a real chat message, so it deliberately bypasses
+// sendChatMessage entirely (no worldChatMessage socket emit, no
+// /worldmessage/save POST) - every client already receives "player-death"
+// independently and would otherwise each try to persist/re-broadcast the
+// same announcement.
+export function appendSystemMessage(text){
+    const bx = createElement("div", "chat-bx chat-system")
+    bx.append(createElement("span", "chat-system-message", text))
     chatsList.append(bx)
     chatsList.scrollTop = chatsList.scrollHeight
 }

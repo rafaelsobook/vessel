@@ -215,44 +215,7 @@ export function createIns(toClone, pos, rotatY, cloneName, willNofFreeze, scaleF
     freeze(cloned)    
     return cloned
 }
-export function createTreasure(scene,heroMidDetection, treasureName, treasureDet, treasureType, treasureRootDetail, pos, rotateY){
-    
-    const treasure = createClone(treasureRootDetail.treasureMesh, pos, rotateY, treasureName, true)
-    treasure.position.y = pos.y
-    // kaya ko nilagay to para madali lang idispose yung actionmanager after
-    treasure.actionManager = new ActionManager(scene)
-    switch(treasureType){
-        case "normal":
-            treasure.material = treasureRootDetail.treasure1Mat
-        break
-    }
-    
-    // regActionEnter(treasure, heroMidDetection, () => {
 
-    //     const existingTreasure = getAllTreasuresOnScene().find(tres => tres.itemId === treasureDet.itemId)
-    //     if(!existingTreasure) return openClosePopup('Treasure Empty')
-    //     // if(getPointerTargetName()){
-    //     //     if(getPointerTargetName().includes('treasure')) emitOpenTreasure(existingTreasure.itemId)
-    //     // }
-        
-    //     // setCallBackForInteractBtn( () => {
-    //     //     // first will send it to the socket io
-    //     //     // when socket IO receives the request the treasure will be none claimable to others
-    //     //     // also when socket IO receives when it will return to the clients it will dispose the and remove action manager of the treasure so 
-    //     //     // do not use your hero body action manager because it will be hard to dispose the action manager
-    //     //     // from the socket io to the client will then process
-    //     //     console.log("receiving ", treasureDet)
-    //     //     emitOpenTreasure(treasureDet.itemId)
-    //     //     openCloseInteractBtn("normal", false)
-    //     // })
-    //     // openCloseInteractBtn("normal", true)
-    // })
-    // regActionExit(treasure, heroMidDetection, () => {
-    //     setCallBackForInteractBtn(false)
-    //     openCloseInteractBtn("normal", false)
-    // })
-    return treasure
-}
 export function putFakeShadow(parentOrPos, fakeShadowRoot, sizeShadow, posY, visibility, localRotateX){
     const newFakeShadow = fakeShadowRoot.createInstance('shadow')
     newFakeShadow.parent = null

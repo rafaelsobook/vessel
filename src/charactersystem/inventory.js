@@ -6,6 +6,7 @@ import { openClosePopup } from "../tools/popupUI.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { createLootItem, lootNames } from "../staticRecources/resourceLoot.js"
 import { activateSkill } from "./attackingSystem.js"
+import { checkStoryQuestIfCompleted } from "./storyQuestSystem.js"
 import { updateSkillListUI } from "../components/skillsui.js"
 import { METAL_COLOR } from "../tools/metalmat.js"
 
@@ -67,11 +68,12 @@ export function insertItemOnInventory(itm){
     }else{
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
-    if(itm.weaponType === "sword" || itm.weaponType === "spear") itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
-    // axe AND pickaxe share this ONE icon (axes.webp, not per-weaponType
-    // like sword/spear above) - there's no separate "pickaxe.webp" asset,
-    // just this single shared file for the whole axe family
-    if(itm.weaponType === "axe" || itm.weaponType === "pickaxe") itemImg.src = `./images/items/${itm.itemCateg}/axes.webp`
+    if(itm.weaponType === "sword" || itm.weaponType === "spear" || itm.weaponType === "pickaxe") itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
+    // axe is still the one weaponType with no singular "axe.webp" of its
+    // own - overridden to the shared "axes.webp" instead of the
+    // per-weaponType line above (which pickaxe now uses, alongside
+    // sword/spear, now that a real pickaxe.webp exists)
+    if(itm.weaponType === "axe") itemImg.src = `./images/items/${itm.itemCateg}/axes.webp`
     if(itm.itemType === "helmet") itemImg.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
 
     // every sword shares the same placeholder icon above, so this is the
@@ -90,6 +92,21 @@ export function closeInventory(){
 
 let timeOutForClearingLists
 
+// staggers only the VISUAL "acquired X" toast, not the actual item grant -
+// obtain() itself stays fully synchronous (state mutation must land
+// immediately; see createAllNpcInArea.js's own comment on why a deferred
+// obtain() corrupted characterState there). .float-up (style.scss) is
+// absolutely positioned at a fixed spot, so several toasts appended in the
+// same tick render stacked unreadably on top of each other (multiple items
+// from one reward, multiple loot drops, etc) - each call within
+// ACQUIRED_POPUP_RESET_MS of the last bumps the stagger forward instead;
+// otherwise it resets to 0, so an unrelated pickup long afterward isn't
+// delayed for no reason.
+const ACQUIRED_POPUP_RESET_MS = 600
+const ACQUIRED_POPUP_STEP_MS = 500
+let acquiredPopupStagger = 0
+let lastAcquiredPopupAt = 0
+
 function addItemToCharState(charState, itemToAdd){
     let hasSameItem = false
     charState.items && charState.items.forEach(itm => {
@@ -106,6 +123,11 @@ export async function obtain(itemToAdd){
     const charState = getCharState()
     if(!charState) return
     addItemToCharState(charState, itemToAdd)
+
+    // every item pickup is a candidate for whatever "gather these items"
+    // story quest (npcDetails.js's proveYourself, etc.) is currently active -
+    // checkStoryQuestIfCompleted no-ops if nothing active cares about this name
+    checkStoryQuestIfCompleted('item', itemToAdd.name)
 
     showItemAcquiredPopUp(itemToAdd.dn, itemToAdd.qnty, () => {
         updateMyDetailsOL(charState, checkIfTokenSaved())
@@ -235,13 +257,18 @@ export function showItemAcquiredPopUp(displayName, acquiredQnty, cb){
     //itemToAdd.itemCateg // consumable // equipable // crafting
     clearTimeout(timeOutForClearingLists)
     acquiredLists.style.display = "block"
+
+    const now = Date.now()
+    acquiredPopupStagger = (now - lastAcquiredPopupAt < ACQUIRED_POPUP_RESET_MS) ? acquiredPopupStagger + 1 : 0
+    lastAcquiredPopupAt = now
+
     setTimeout(() => {
         const pElem = createElement("p", "float-up", `acquired ${displayName}  x${acquiredQnty}`)
         acquiredLists.append(pElem);
         // getAllSounds().itemEquipS.play()
         // if(itemName.includes("coin")) return this._allSounds.coinReceivedS.play()
         // this._allSounds.itemEquipedS.play()
-    }, 100)
+    }, 100 + acquiredPopupStagger * ACQUIRED_POPUP_STEP_MS)
 
     timeOutForClearingLists = setTimeout(() => {
         acquiredLists.innerHTML = ''

@@ -78,10 +78,12 @@ function render(){
         const slot = createElement("button", "bs-item-slot")
         const img = createElement("img", "bs-item-img")
         img.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
-        // axe AND pickaxe share this ONE icon (axes.webp) - same override
-        // inventory.js/itemInfoSystem.js already apply for their own item
-        // icon lookups, there's no per-item-name art for either weaponType
-        if(itm.weaponType === "axe" || itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/axes.webp`
+        // axe/pickaxe each get their own shared icon (axes.webp/pickaxe.webp) -
+        // same override inventory.js/itemInfoSystem.js already apply for
+        // their own item icon lookups, there's no per-item-name art for
+        // either weaponType
+        if(itm.weaponType === "axe") img.src = `./images/items/${itm.itemCateg}/axes.webp`
+        if(itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/pickaxe.webp`
         // some existing item art is .png rather than .webp (see toSell.js weapons) - fall back once
         img.onerror = () => { img.onerror = null; img.src = `./images/items/${itm.itemCateg}/${itm.name}.png` }
         const name = createElement("p", "bs-item-name", itm.dn)

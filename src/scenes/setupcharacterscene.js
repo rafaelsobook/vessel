@@ -1,4 +1,4 @@
-import { Scene, HemisphericLight, Vector3, ArcRotateCamera, SceneLoader, LoadAssetContainerAsync, MeshBuilder, DirectionalLight, Quaternion, Color3, ShadowGenerator } from "@babylonjs/core";
+import { Scene, HemisphericLight, Vector3, ArcRotateCamera, SceneLoader, LoadAssetContainerAsync, MeshBuilder, DirectionalLight, Quaternion, Color3, ShadowGenerator, Texture } from "@babylonjs/core";
 import { getEngine, setGameStatus } from "../main/main";
 import { createArcCam } from "../tools/camera";
 import { avatarGlBpath } from "../constants/constants";
@@ -12,7 +12,7 @@ import { createRoom } from "../creations/createroom.js";
 import { metaDatas } from "../constants/localroomdb.js"
 import { mergeAndLoadModel } from "../tools/loadmodel.js";
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
-import { SKIN_COLORS, SKIN_COLOR_LIST } from "../constants/skinColors.js";
+import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
 
 export async function setupCharacterScene(engine){
@@ -22,7 +22,7 @@ export async function setupCharacterScene(engine){
         hairColor: ADVENTURER_COLORS.black,
         clothColor: ADVENTURER_COLORS.tan,
         pantsColor: ADVENTURER_COLORS.darkBrown,
-        skinColor: SKIN_COLORS.light,
+        skinColor: "skin1", // a SKIN_TEXTURES key - see createcharacter.js's skinTexPath
         cloth: "style1",
         pants: "style1",
         hair: "style1",
@@ -77,7 +77,7 @@ export async function setupCharacterScene(engine){
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     clothMat.diffuseColor = new Color3(0.42, 0.30, 0.16)
     pantsMat.diffuseColor = new Color3(0.22, 0.13, 0.05)
-    const skinMat = createColorMat("skin_mat", toSave.skinColor, scene)
+    const skinMat = createMat("skin_mat", null, SKIN_TEXTURES[toSave.skinColor], scene)
 
     // const clothMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
     // const pantsMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
@@ -174,14 +174,14 @@ export async function setupCharacterScene(engine){
         if (colorPicker) colorPicker.isVisible = category !== "skin"
     }
 
-    const onSkinSelect = (color) => {
-        toSave.skinColor = color
-        skinMat.diffuseColor.set(color.r, color.g, color.b)
+    const onSkinSelect = (key) => {
+        toSave.skinColor = key
+        skinMat.diffuseTexture = new Texture(SKIN_TEXTURES[key], scene)
     }
 
     showCreateCharacterPage(
         (characterNameFromInput) => { toSave.name = characterNameFromInput; return toSave },
-        { hair: hairs, cloth: clothes, pants, skinColors: SKIN_COLOR_LIST },
+        { hair: hairs, cloth: clothes, pants, skinColors: SKIN_TEXTURE_LIST },
         onStyleSelect,
         onCategoryChange,
         onSkinSelect
@@ -208,7 +208,8 @@ export async function setupCharacterScene(engine){
         if (selectedCategory === "hair")  toSave = { ...toSave, hairColor:  { r, g, b } }
         if (selectedCategory === "cloth") toSave = { ...toSave, clothColor: { r, g, b } }
         if (selectedCategory === "pants") toSave = { ...toSave, pantsColor: { r, g, b } }
-        if (selectedCategory === "skin")  toSave = { ...toSave, skinColor:  { r, g, b } }
+        // no "skin" branch: the color picker is hidden for that category
+        // (onCategoryChange above) - skin is swatch-only now, via onSkinSelect.
     })
     disableEnableAttackButtonsContainer(false, true)
     return {scene, isSocketOn: false}

@@ -21,14 +21,16 @@ import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
-import { receiveWorldChatMessage, appendChatMessage } from "../components/worldChatSystem"
+import { receiveWorldChatMessage, appendSystemMessage } from "../components/worldChatSystem"
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
+import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
 let allQuests = []
+let tcpTreasures = []
 
 // In Client
 let playersOnScene = []
@@ -36,6 +38,12 @@ let enemiez = []
 let npcz = []
 let projectilesOnScene = []
 let questsOnScene = []
+// { itemId } entries only - createTreasureMesh already tracks its own
+// mesh/interact state internally, this just needs enough to know which
+// tcpTreasures ids already have a chest spawned (reCreateMeshesInScene's
+// own isAlreadyHere check, same idea as enemiez) and to drop an entry once
+// "treasure-removed" comes in for it
+let treasuresInScene = []
 // npcFighter duel opponents (npc/duelSystem.js) - purely local combat, never
 // server-tracked (duels are always isMultiplayer:false). Mirrors enemiez so
 // creations/skillEffects.js's hit-registration sites can target duel
@@ -205,10 +213,11 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests } = allDataFromServer
+        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests, treasures } = allDataFromServer
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
         allQuests = quests
+        tcpTreasures = treasures ?? []
         
         const characterState = getCharState()
         const gameStat = getGameStatus()
@@ -709,6 +718,29 @@ export function activateOnSocketListeners(socket){
 
         reCreateMeshesInScene()
     })
+    // mirrors "enemy-removed" right above - fires for EVERY client
+    // (including whoever opened it, echoed back), not just everyone else,
+    // so this has to be safe to run against a chest this same client
+    // already disposed itself (createtreasure.js's own interact callback
+    // already emitRemoveTreasure()'d and disposed its local mesh before
+    // this round-trips back) - both the treasuresInScene filter and the
+    // getMeshByName lookup below are no-ops when there's nothing left to
+    // find, so a redundant call here is harmless either way
+    socket.on("treasure-removed", treasureId => {
+        if (!isSocketOn) return
+
+        treasuresInScene = treasuresInScene.filter(trs => trs.itemId !== treasureId)
+        tcpTreasures = tcpTreasures.filter(trs => trs.itemId !== treasureId)
+
+        // NOT dispose(false, true) like the enemy cleanup above - treasure
+        // materials are shared/cached by rarity across every chest of that
+        // rarity (createtreasure.js's getMaterialByName cache), not
+        // per-mesh like enemy materials are. Disposing the material here
+        // would take every OTHER still-alive same-rarity chest's material
+        // down with it. Just the mesh/geometry.
+        const treasureBodyHere = getSceneDet().scene.getMeshByName(`treasure_${treasureId}`)
+        if (treasureBodyHere) treasureBodyHere.dispose()
+    })
 
     // Movement
     socket.on("emitted-moving", data => {
@@ -820,7 +852,7 @@ export function activateOnSocketListeners(socket){
         // scene (playersOnScene), so a death in a place I've never shared
         // with them silently has no name to announce and is skipped
         const diedPlayer = playersOnScene.find(pl => pl.owner === ownerId)
-        if(diedPlayer) appendChatMessage({ name: diedPlayer.name, message: "died" })
+        if(diedPlayer) appendSystemMessage(`${diedPlayer.name} died!`)
 
         playerDied(ownerId, currentPlaceId)
     })
@@ -929,6 +961,22 @@ export function reCreateMeshesInScene() {
 
         const enemy = createEnemy(scene, enemTcpInfo)
         if(enemy) pushEnemyOnScene(enemy)
+    })
+    // same isAlreadyHere + getMeshByName double-check the enemy block above
+    // uses - treasuresInScene alone would already catch a repeat pass, but
+    // the mesh-name check is what catches it even if treasuresInScene ever
+    // got out of sync with what's actually still in the scene
+    tcpTreasures.length && tcpTreasures.forEach(treasureTcpInfo => {
+        if (characterState.currentPlace.placeId !== treasureTcpInfo.currentPlaceId) return
+
+        const isAlreadyHere = treasuresInScene.find(trs => trs.itemId === treasureTcpInfo.itemId)
+        if (isAlreadyHere) return
+
+        const treasureMesh = sceneDet.scene.getMeshByName(`treasure_${treasureTcpInfo.itemId}`)
+        if(treasureMesh) return
+
+        const chest = createTreasureMesh(scene, treasureTcpInfo.pos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId })
+        if(chest) treasuresInScene.push({ itemId: treasureTcpInfo.itemId })
     })
     if(characterState.currentPlace.placeId === 9){
         console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)

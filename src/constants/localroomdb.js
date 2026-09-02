@@ -136,9 +136,9 @@ export const metaDatas = [
                 scale: null,
                 rotation: 0,
                 loots: [
-                    {name: "ore", chance: 0.4},
-                    {name: "crystal", chance: 0.2},
-                    {name: "adamantine", chance: 0.4},
+                    {name: "stone", chance: 0.4},
+                    {name: "solarore", chance: 0.02},
+                    {name: "bronzeore", chance: 0.2},
                 ],
                 physics: {
                     opt: {mass: 0},

@@ -1180,6 +1180,26 @@ canvas {
       font-family: $tipsFont;
       color: rgba(201, 110, 37, 0.849);
     }
+    // multi-item gathering quests (proveYourself etc) - one row per
+    // required item instead of a single wrapped comma-separated line
+    .story-required-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .story-required-item {
+      font-family: $tipsFont;
+      font-size: 12px;
+      color: rgba(201, 110, 37, 0.849);
+
+      &.done {
+        color: rgba(120, 201, 110, 0.85);
+        text-decoration: line-through;
+      }
+    }
   }
   .story-desc {
     pointer-events: none;
@@ -1245,6 +1265,10 @@ canvas {
       }
       .chat-message {
         color: rgba(214, 202, 202, 0.89);
+      }
+      &.chat-system .chat-system-message {
+        color: rgba(235, 16, 16, 0.8);
+        font-style: italic;
       }
     }
   }
@@ -2884,11 +2908,33 @@ canvas {
       margin-top: 10%;
       font-size: 1rem;
       color: #857f7f;
+      transition: opacity 0.3s ease;
     }
-    .lc-img {
-      width: 60px;
-      height: 60px;
+    .lc-img-wrap {
+      position: relative;
+      width: 84px;
+      height: 84px;
       margin-bottom: 10px;
+
+      .lc-frame {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .lc-img {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 64px;
+        height: 64px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        object-fit: cover;
+        transition: opacity 0.3s ease;
+      }
     }
   }
 }

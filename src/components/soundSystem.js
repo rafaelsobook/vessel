@@ -111,6 +111,9 @@ export function initSounds(scene){
     const woodrunS = createSoundSafe("woodrunS", "./sounds/indor/woodrun.mp3", scene,
     {volume: 0.5, autoplay: false, loop: false})
 
+    const woodcuttingS = createSoundSafe("woodcuttingS", "./sounds/effects/woodcuttingS.mp3", scene,
+    {volume: 0.9, autoplay: false, loop: false})
+
     // INDOORS
     const woodCreakS = createSoundSafe("woodCreakS", "./sounds/indor/woodCreakS.mp3", scene,
     {volume: 1, autoplay: false, loop: false});
@@ -147,6 +150,7 @@ export function initSounds(scene){
         minningS,
         // cinema1,cinema2,
         woodCreakS,
+        woodcuttingS,
         keyUnlockingS, normalDoorOC,
         enhanceS,spearS1,demonoidS,
         runningS, woodrunS,

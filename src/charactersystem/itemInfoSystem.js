@@ -223,7 +223,8 @@ export function equipItem(itemDet, updateItemsListUI){
             const eqpdImg = createElement('img', `slot-img slot-${itemDet.rarity ? itemDet.rarity : "normal"}`)
             eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.name}.webp`
             if(itemDet.weaponType === "sword" || itemDet.weaponType === "spear") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.weaponType}.webp`
-            if(itemDet.weaponType === "axe" || itemDet.weaponType === "pickaxe") eqpdImg.src = `./images/items/${itemDet.itemCateg}/axes.webp`
+            if(itemDet.weaponType === "axe") eqpdImg.src = `./images/items/${itemDet.itemCateg}/axes.webp`
+            if(itemDet.weaponType === "pickaxe") eqpdImg.src = `./images/items/${itemDet.itemCateg}/pickaxe.webp`
             if(itemDet.itemType === "helmet") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.modelName}.webp`
             chld.append(eqpdImg)
             const charState = getCharState()
@@ -313,10 +314,12 @@ export function showItemInfo(_itemDet){
             if(hasMagicDmg) itemMagicDmgValue.innerHTML = _itemDet.equipAbilities.magicDmg
             if(hasMagicResistance) itemMagicResistanceValue.innerHTML = _itemDet.equipAbilities.magicResistance
             itemImg.src = `./images/items/${itemCateg}/${weaponType}.webp`
-            // axe AND pickaxe share this ONE icon (axes.webp) instead of the
-            // generic ${weaponType}.webp line above - there's no separate
-            // "axe.webp"/"pickaxe.webp" asset, just this single shared file
-            if(weaponType === "axe" || weaponType === "pickaxe") itemImg.src = `./images/items/${itemCateg}/axes.webp`
+            // axe is the one weaponType that still has no singular
+            // "axe.webp" of its own - overridden to the shared "axes.webp"
+            // instead of the generic ${weaponType}.webp line above. pickaxe
+            // now has its own real pickaxe.webp, so the generic line already
+            // resolves it correctly and needs no override.
+            if(weaponType === "axe") itemImg.src = `./images/items/${itemCateg}/axes.webp`
         }
         if(itemType === "helmet"){
             itemImg.src = `./images/items/${itemCateg}/${_itemDet.modelName}.webp`

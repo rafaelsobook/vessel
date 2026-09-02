@@ -31,7 +31,7 @@ import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
-import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy } from "../sockets/emits.js"
+import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase } from "../sockets/emits.js"
 import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff } from "../charactersystem/characterstate.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
@@ -1516,6 +1516,22 @@ function registerSkillHitTarget(enemy, freshCharState){
         _id: enemy._id,
         targetId: freshCharState.owner,
         dirTarg: { x: pos.x, y: pos.y, z: pos.z },
+    })
+    // registerPlayerAsEnemy alone only sets _targetId server-side -
+    // renderer.js's movement loop also needs _isMoving, which only
+    // enemyWillChase ever sets (see emitEnemyChase's own comment). Without
+    // this, a ranged/AOE skill hit would register the caster as the
+    // enemy's target but leave it standing frozen in place, since it never
+    // walked through the melee atkDetection trigger that would've started
+    // a chase on its own (createEnemy.js's own exit-trigger path). Must
+    // come AFTER the register call above, same order/reasoning as
+    // emitEnemyChase's own comment - actionType passed straight from this
+    // enemy's own det, same as createEnemy.js's local emitChase does.
+    emitEnemyChase({
+        currentPlaceId: freshCharState.currentPlace.placeId,
+        _id: enemy._id,
+        targetId: freshCharState.owner,
+        actionType: enemy.det.actionType,
     })
 }
 

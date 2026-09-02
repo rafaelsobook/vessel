@@ -707,15 +707,15 @@ export async function gameOver(){
     }
 
     const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
-    characterState.deadCount++
-    characterState.isDead=true;
-    setTimeout(() => showLoadingScreen(["I expected more from you", "You Died"]))
-    await updateMyDetailsOL({...characterState,
-        hp: Math.floor(characterState.maxHp*.3),
-        mp: Math.floor(characterState.maxMp*.3),
-        sp: Math.floor(characterState.maxSp*.3),
-        status: []
-    }, checkIfTokenSaved())
+    // characterState.deadCount++
+    // characterState.isDead=true;
+    setTimeout(() => showLoadingScreen(["I expected more from you", "You Died"]), 5000)
+    // await updateMyDetailsOL({...characterState,
+    //     hp: Math.floor(characterState.maxHp*.3),
+    //     mp: Math.floor(characterState.maxMp*.3),
+    //     sp: Math.floor(characterState.maxSp*.3),
+    //     status: []
+    // }, checkIfTokenSaved())
 }
 // Enables disables
 export function setCanPress(_canPress){

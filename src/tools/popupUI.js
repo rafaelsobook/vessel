@@ -1,5 +1,6 @@
 import { clearLocTimeOut } from "../controllers/inputMovement"
 import { createElement } from "./tools"
+import { skillsData } from "../staticRecources/skillsData.js"
 
 const popupStyle1 = document.querySelector(".popstyle1")
 
@@ -70,19 +71,63 @@ export function showAnswerButtons(choices, cb){
     })
 }
 
+// cycles the loading screen's icon+caption through a random skill every 6s
+// so there's actually something to read while a scene loads, instead of the
+// old hardcoded "Creating Environment" caption paired with a hardcoded
+// ./images/items/crafting/bronzecore.webp image (a typo - the real file is
+// bronzeore.webp - that's why it always rendered as a broken image icon).
+// skill.name is the same key skillsui.js's own skill bar icons resolve
+// through (./images/skills/${skill.name}.webp), so this reuses assets that
+// are already known-good rather than pointing at anything new.
+let loadingTipInterval = null
+let lastSkillTipIndex = -1
+
+function showRandomSkillTip(){
+    if(!skillsData.length) return
+
+    // avoid immediately repeating the same skill twice in a row when
+    // there's more than one to pick from
+    let index = Math.floor(Math.random() * skillsData.length)
+    if(skillsData.length > 1 && index === lastSkillTipIndex){
+        index = (index + 1) % skillsData.length
+    }
+    lastSkillTipIndex = index
+
+    const skill = skillsData[index]
+
+    // brief crossfade instead of a hard jump-cut when the tip swaps -
+    // .lc-img/.ls-tips both carry a matching opacity transition (style.css)
+    loadingImg.style.opacity = 0
+    loadingTipsLabel.style.opacity = 0
+    setTimeout(() => {
+        loadingImg.src = `./images/skills/${skill.name}.webp`
+        loadingImg.alt = skill.displayName ?? skill.name
+        loadingTipsLabel.innerHTML = `<strong>${skill.displayName ?? skill.name}</strong> - ${skill.desc ?? ''}`
+        loadingImg.style.opacity = 1
+        loadingTipsLabel.style.opacity = 1
+    }, 300)
+}
+
 export function openCloseLScreen(willOpen, timeOut){
     if(willOpen){
         mainLoadingScreen.style.display="flex"
         mainLoadingScreen.classList.remove("screenFadeOff")
         loadingPercent.innerHTML = "0%"
-        loadingTipsLabel.innerHTML = 'Creating Environment'
+
+        showRandomSkillTip()
+        clearInterval(loadingTipInterval)
+        loadingTipInterval = setInterval(showRandomSkillTip, 6000)
     }else{
         mainLoadingScreen.classList.add("screenFadeOff")
         setTimeout(()=> mainLoadingScreen.style.display="none",800)
+        clearInterval(loadingTipInterval)
+        loadingTipInterval = null
     }
     timeOut && setTimeout(() =>{
         mainLoadingScreen.classList.add("screenFadeOff")
         setTimeout(()=> mainLoadingScreen.style.display="none",1000)
+        clearInterval(loadingTipInterval)
+        loadingTipInterval = null
     }, timeOut)
 }
 export function openCloseMiniLS(label, willOpen, timeOut){

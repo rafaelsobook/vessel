@@ -91,32 +91,81 @@ export function initOnceStorySystem(){
     })
     storySystemInitiated = true
 }
-// Dev-only reset (bound to the "x" key in inputMovement.js): always drops the
-// player back to "just arrived to talk to the guildmaster for the first
-// time", so Halric's speech can be iterated on repeatedly without replaying
-// the whole talk-to-emilia-1 -> touchTheCrystal -> slayFirstSlime chain to
-// get back there. Looked up from npcDetails.js instead of hardcoded here, so
-// it can't drift out of sync if that quest's title/desc changes later.
-export async function changeStory(){
+// Every "grant a quest" call site (createAllNpcInArea.js, questOffer.js,
+// questHelpers.js, changeStory below) used to push the SAME object straight
+// out of npcDetails.js's static forQuests/questsToReceive array onto
+// charState.quests, not a copy - checkStoryQuestIfCompleted then mutates
+// questRequirements.current (or itemLists[].current) in place, so that
+// mutation landed on npcDetails.js's own module-level source object and
+// stuck around for the rest of the page's lifetime (a second grant of the
+// same quest - a new character, or the "x" dev reset - came back already
+// partway done, or even pre-completed). This clones a quest into a private
+// copy for every grant, and - for item-list requirements (proveYourself
+// etc.) - syncs each entry up to whatever's already sitting in the player's
+// inventory before the quest was even received (e.g. stone mined while
+// exploring, before ever meeting Bram), instead of always starting every
+// entry at 0 regardless of what's already owned.
+export function prepareGrantedQuest(quest){
+    const cloned = { ...quest, questRequirements: { ...quest.questRequirements } }
+    const req = cloned.questRequirements
+    if(!req.itemLists) return cloned
+
+    const charState = getCharState()
+    req.itemLists = req.itemLists.map(listEntry => {
+        const owned = charState.items
+            .filter(itm => itm.name === listEntry.name)
+            .reduce((total, itm) => total + (itm.qnty || 0), 0)
+        return { ...listEntry, current: Math.min(listEntry.total, owned) }
+    })
+    if(req.itemLists.every(listEntry => listEntry.current >= listEntry.total)) req.completed = true
+
+    return cloned
+}
+// "Live" requirement types - checked fresh every time the player talks to
+// the NPC holding this quest (createAllNpcInArea.js calls this right
+// before deciding whether to play notCompletedSpeech or the completion
+// speech), instead of reactively via obtain()/checkStoryQuestIfCompleted
+// the way the "enemy" and "item" (itemLists) reqTypes above are. "craft" is
+// the first of these - a crafted sword's name is randomly generated per
+// craft (customsword_${Date.now()}, craftingui.js's buildSwordItem), so
+// there's no fixed item name obtain() could ever match against an
+// itemLists entry the way gathered materials do. Scanning current
+// ownership at interact time is also just the more honest mechanic here -
+// unlike a gather quest, there's no meaningful running count to track
+// along the way ("crafted 1 of however many"), only "do you have one right
+// now". No-ops (returns the quest untouched) for every other reqType.
+export function evaluateLiveQuestRequirements(quest){
+    const req = quest?.questRequirements
+    if(!req || req.completed) return quest
+
+    if(req.reqType === "craft"){
+        const charState = getCharState()
+        const owns = charState.items.some(itm => itm.weaponType === req.weaponType)
+        if(owns) req.completed = true
+    }
+
+    return quest
+}
+// Dev-only reset (bound to the "x" key in inputMovement.js): drops the
+// player straight into whatever story quest is passed in, so that quest's
+// speech/behavior can be iterated on repeatedly without replaying the whole
+// chain of quests that would normally lead up to it. Takes the quest object
+// directly (usually one of npcDetails.js's own questsToReceive entries,
+// pasted at the inputMovement.js call site) instead of hardcoding a lookup
+// for one specific quest, so any quest can be jumped to this way, not just
+// "talk-to-guild-master-first".
+export async function changeStory(quest){
+    if(!quest) return console.warn("changeStory: no quest passed")
+
     const state = getCharState()
-
-    const guildmasterQuest = npcDetails
-        .flatMap(npc => npc.forQuests)
-        .flatMap(stry => stry.questsToReceive)
-        .find(qst => qst.qName === "talk-to-guild-master-first")
- console.log(guildmasterQuest)
-    if(!guildmasterQuest) return console.warn("changeStory: talk-to-guild-master-first quest not found")
-
-    // fresh copies, not references - questRequirements gets mutated elsewhere
-    // (e.g. .completed flips) and we don't want that leaking back into npcDetails.js's source object
-    const resetQuest = { ...guildmasterQuest, questRequirements: { ...guildmasterQuest.questRequirements } }
+    const resetQuest = prepareGrantedQuest(quest)
 
     state.quests = [resetQuest]
     state.clearedQuests = state.clearedQuests.filter(qName => qName !== resetQuest.qName)
 
     await updateMyDetailsOL(state, checkIfTokenSaved())
 
-    openClosePopup('story reset - go talk to the guildmaster', true, 1000)
+    openClosePopup(`story reset - go talk about "${resetQuest.qTtle}"`, true, 1000)
 
     updateStoryQuestUI(resetQuest)
 }
@@ -133,22 +182,49 @@ export function checkStoryQuestIfCompleted(_reqType, itemOrEnemyName){
     const charState = getCharState()
 
     charState.quests.forEach(qst => {
-        if(qst.questRequirements.reqType === _reqType && qst.questRequirements.name === itemOrEnemyName){
-            qst.questRequirements.current++
-            if(qst.questRequirements.current >= qst.questRequirements.requiredNum) {
-                qst.questRequirements.completed = true
-                // storyQst/the banner is a SINGLE slot (one .story-notif-container
-                // in the DOM) - if a single event completes more than one
-                // quest in this same forEach pass, each updateStoryQuestUI
-                // call below overwrites the last, so only the FINAL one
-                // ever actually gets seen in the banner. This popup (same
-                // "notify on completion" convention the contract-quest
-                // branch further down already uses) is what guarantees
-                // every completion still gets seen by the player even when
-                // that happens, not just whichever one "won" the banner.
+        const req = qst.questRequirements
+        if(req.reqType !== _reqType || req.completed) return
+
+        // multi-item requirement (proveYourself-style gathering quests -
+        // npcDetails.js) - several different item names each with their own
+        // current/total, instead of the single name/requiredNum pair below.
+        // Every matching list entry increments (not just the first) so a
+        // single item name appearing twice in itemLists - shouldn't happen,
+        // but nothing here assumes uniqueness - both still get credit.
+        if(req.itemLists){
+            let matched = false
+            req.itemLists.forEach(listEntry => {
+                if(listEntry.name !== itemOrEnemyName || listEntry.current >= listEntry.total) return
+                listEntry.current++
+                matched = true
+            })
+            if(!matched) return
+
+            const allDone = req.itemLists.every(listEntry => listEntry.current >= listEntry.total)
+            if(allDone){
+                req.completed = true
+                // see the popup comment below - same reasoning applies here
                 openClosePopup(`${qst.qTtle} complete!`, true, 2000)
                 updateStoryQuestUI(qst)
             }
+            return
+        }
+
+        if(req.name !== itemOrEnemyName) return
+        req.current++
+        if(req.current >= req.requiredNum) {
+            req.completed = true
+            // storyQst/the banner is a SINGLE slot (one .story-notif-container
+            // in the DOM) - if a single event completes more than one
+            // quest in this same forEach pass, each updateStoryQuestUI
+            // call below overwrites the last, so only the FINAL one
+            // ever actually gets seen in the banner. This popup (same
+            // "notify on completion" convention the contract-quest
+            // branch further down already uses) is what guarantees
+            // every completion still gets seen by the player even when
+            // that happens, not just whichever one "won" the banner.
+            openClosePopup(`${qst.qTtle} complete!`, true, 2000)
+            updateStoryQuestUI(qst)
         }
     })
 
@@ -186,6 +262,35 @@ export function checkStoryQuestIfCompleted(_reqType, itemOrEnemyName){
 // of .story/.story-bx/.story-title/.story-required/.story-desc gets built
 // here instead of hand-authored in the markup, so there's exactly one place
 // that ever has to agree on this structure.
+// questRequirements.itemLists (proveYourself-style gathering quests) has no
+// top-level current/requiredNum to show, unlike the single-name shape - one
+// row per item instead of cramming every item's progress into a single
+// comma-separated line (which just wrapped into an unreadable block once
+// there were more than two or three items).
+function buildRequiredEl(questRequirements){
+    if(!questRequirements.reqType) return createElement("p", "story-required", '')
+
+    if(questRequirements.itemLists){
+        const list = createElement("ul", "story-required-list")
+        questRequirements.itemLists.forEach(listEntry => {
+            const done = listEntry.current >= listEntry.total
+            const row = createElement("li", `story-required-item${done ? ' done' : ''}`,
+                `${listEntry.dn} ${listEntry.current}/${listEntry.total}`)
+            list.append(row)
+        })
+        return list
+    }
+
+    // "craft" (evaluateLiveQuestRequirements above) has no current/total to
+    // count toward - it's a one-shot "do you own one" check, re-evaluated
+    // live rather than incrementally, so there's nothing to show but
+    // whether it's done yet or not.
+    if(questRequirements.reqType === "craft"){
+        return createElement("p", "story-required", questRequirements.completed ? "Crafted!" : "Not yet crafted")
+    }
+
+    return createElement("p", "story-required", `${questRequirements.current}/${questRequirements.requiredNum}`)
+}
 function renderStoryQuests(){
     const charState = getCharState()
     if(!charState) return
@@ -203,7 +308,7 @@ function renderStoryQuests(){
         const storyBx = createElement("div", "story-bx")
         storyBx.append(
             createElement("h4", "story-title", qTtle),
-            createElement("p", "story-required", questRequirements.reqType ? `${questRequirements.current}/${questRequirements.requiredNum}` : '')
+            buildRequiredEl(questRequirements)
         )
 
         const storyBlock = createElement("div", "story")

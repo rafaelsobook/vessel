@@ -44,6 +44,7 @@ import { showGamePerformanceUI } from "babylonstats"
 import { setStartingContainers } from "./containers.js";
 import { registerToAtkCollider } from "../charactersystem/attackingSystem.js";
 import { createWeapon } from "../assetcreation/createweapon.js";
+import { createTreasureMesh } from "../assetcreation/createtreasure.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -196,10 +197,51 @@ export async function areaScene(placeDetail){
         break;
     }
 
+
+    // never declared before this - slashes++ below is strict-mode module
+    // code, so referencing it undeclared threw a ReferenceError on every
+    // single tree hit (not just the ~30% chance one), before the loot roll
+    // ever ran. Nothing reads this counter yet; declared here just to stop
+    // the crash and preserve whatever it was meant to track.
+    let slashes = 0
     registerToAtkCollider(scene, "tree", () => {
         console.log("hit tree")
+        playSound(getAllSounds().woodcuttingS)
+        slashes++
+        if(Math.random() >= 0.7){
+            // same "wood" loot factory the mining loop below already uses for
+            // resources[].loots ("wood" -> LOOT_TEMPLATES.wood, resourceLoot.js)
+            // - woodDetail was never actually defined anywhere, a dormant
+            // ReferenceError that only fires on the ~30% roll that hits it
+            const woodItem = createLootItem("wood")
+            if(woodItem) obtain(woodItem)
+        }
     })
 
+    const bootsItem = {
+        itemId: randomNum(), // should be string also in client
+        name: "leatherboots", // is also the image name
+        dn: "Leather Boots",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "boots", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        equipAbilities: {
+            dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        // if you calc spd(1/10 = .1) mychar.spd += plusSpd/10// it should only be .1 to 1
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: false, // only for weapons
+        enhancedLevel: 0,
+        durability: { current: 100, max: 100},
+        price: { coinType: "bronze", pieces: 9 },
+        qnty: 1,
+        desc: "This Boots is light and useful for first time adventurers",
+        rarity: "common"
+    }
+    // createTreasureMesh(scene, {x:2.20,y:0,z: 0}, bootsItem)
+    // createTreasureMesh(scene, {x:-2.20,y:0,z: 0}, {...bootsItem, rarity: "rare", itemId: randomNum()})
+    // createTreasureMesh(scene, {x:0,y:0,z: -1}, {...bootsItem, rarity: "legendary", itemId: randomNum()})
 
     if(placeDetail.originalGlbs && placeDetail.originalGlbs.length > 0){
         placeDetail.originalGlbs.forEach( async origin => {
@@ -348,7 +390,7 @@ export async function areaScene(placeDetail){
                 }
 
                 openCloseInteractBtn("pickaxe", false)
-                console.log(res.position)
+
                 faceForward(res.position)
                 setCharStateMode("minning")
                 currentMiningResource = res

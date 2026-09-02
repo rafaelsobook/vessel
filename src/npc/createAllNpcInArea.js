@@ -4,6 +4,8 @@ import {pushNpc} from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
+import { obtain } from "../charactersystem/inventory.js"
+import { prepareGrantedQuest, evaluateLiveQuestRequirements, updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
 import { startConv, startQuestionare } from "../components/conversations.js"
 import { createNpc, createFighterNpc } from "./createnpc.js"
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js"
@@ -55,6 +57,13 @@ export function createAllNpcInArea(hero, scene){
                 })
                 
                 if(!myQuestShortDetail) return
+                // re-checks "live" reqTypes (currently just "craft" - see its
+                // own comment) fresh on every talk, in case the condition's
+                // become true since the LAST time this quest was checked (no
+                // obtain()-time event exists to react to for these, unlike
+                // the enemy-kill/item-gathering reqTypes, which flip
+                // .completed reactively as they happen instead)
+                evaluateLiveQuestRequirements(myQuestShortDetail)
                 if(!myQuestShortDetail.questRequirements.completed && storyInfo.notCompletedSpeech) return startConv(storyInfo.notCompletedSpeech)
                 
 
@@ -63,14 +72,36 @@ export function createAllNpcInArea(hero, scene){
                     myState.quests = myState.quests.filter(stry=> stry.qName !== storyInfo.qName)
                     // then add the new questsToReceive
 
-                    storyInfo.questsToReceive.forEach(qstToRec => myState.quests.push(qstToRec))
+                    storyInfo.questsToReceive.forEach(qstToRec => myState.quests.push(prepareGrantedQuest(qstToRec)))
                     
                     if(storyInfo.hasReward){
                         switch(storyInfo.reward.receiveRewardType){
                             case "item":
-                                storyInfo.reward.rewardItems.forEach(rwrdItm => {
-                                    obtain(rwrdItm)
-                                })
+                                // MUST be synchronous, not staggered via
+                                // setTimeout (as this briefly was) - the
+                                // updateMyDetailsOL(myState, ..., true) call
+                                // below saves myState (and, since
+                                // willUpdateCharState is true, REPLACES the
+                                // whole characterState singleton with
+                                // whatever the server echoes back -
+                                // characterstate.js's own updateMyDetailsOL)
+                                // right after this loop returns. A deferred
+                                // obtain() would still be pending when that
+                                // fires, so its items would never make it
+                                // into the saved snapshot - obtain() would
+                                // go on to add them to the OLD, by-then-
+                                // orphaned object a moment later, silently
+                                // wiped from what getCharState() actually
+                                // returns from then on (only reappearing
+                                // after a refresh re-pulls obtain()'s own
+                                // later save from the server). The "acquired
+                                // X" popups rendering stacked on top of each
+                                // other when several fire at once is instead
+                                // handled inside showItemAcquiredPopUp
+                                // itself now (inventory.js) - staggered
+                                // there, without delaying the actual state
+                                // mutation.
+                                storyInfo.reward.rewardItems.forEach(rwrdItm => obtain(rwrdItm))
                             break
                             case "krit":
                                 // myState.assets.krit += storyInfo.reward.rewardCoin
@@ -81,6 +112,7 @@ export function createAllNpcInArea(hero, scene){
                     myState.clearedQuests.push(storyInfo.qName)
                     if(storyInfo.cbAfterNewQuestReceived) storyInfo.cbAfterNewQuestReceived()
                     const updatedState = await updateMyDetailsOL(myState, checkIfTokenSaved(), true)
+                    updateStoryQuestUI()
                 })
                 
                 // returnCam(scene, freecam)

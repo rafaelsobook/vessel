@@ -12,7 +12,8 @@ import {
 import { getGameStatus, getSceneDet } from '../main/main';
 import { createTextMesh } from '../gui/textmesh';
 import { createAggregate } from '../tools/physics';
-import { createColorMat, createMatV2 } from '../tools/materials';
+import { createColorMat, createMat, createMatV2 } from '../tools/materials';
+import { SKIN_TEXTURES } from '../constants/skinColors';
 import { getPlayersOnScene, getSocketContainers } from '../sockets/worldsocket';
 import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
@@ -55,7 +56,13 @@ function createAnimeBodyMaterials(scene, det){
     
     clothMat.diffuseColor = new Color3(clothColor.r, clothColor.g, clothColor.b)
     pantsMat.diffuseColor = new Color3(pantsColor.r, pantsColor.g, pantsColor.b)
-    const skinMat = createColorMat("skin_mat", skinColor, scene)
+
+    // skinColor is a SKIN_TEXTURES key ("skin1" etc, see npcDetails.js and
+    // setupcharacterscene.js) - falls back to skin1 for any character saved
+    // before this switch from flat diffuseColor to textures (those still
+    // carry the old {r,g,b} shape, which won't match a SKIN_TEXTURES key).
+    const skinTexPath = SKIN_TEXTURES[skinColor] ?? SKIN_TEXTURES.skin1
+    const skinMat = createMat("skin_mat", null, skinTexPath, scene)
 
     return {
         hairMat,
