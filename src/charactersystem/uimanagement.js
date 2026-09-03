@@ -14,6 +14,7 @@ import { getIsGrounded, getIsMoving, getPlayerMode, forceStopMovement } from "..
 import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSliders.js"
 import { openCloseChatContainer, hideShowChatToggleBtn } from "../components/worldChatSystem.js"
 import { updateStoryQuestUI } from "./storyQuestSystem.js"
+import { openCloseCampcraftUI } from "../components/campcraft.js"
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -119,6 +120,9 @@ export function activateBtnOnce(){
                 break
                 case 'skills':
                     openCloseSkills()
+                break
+                case 'campcraft':
+                    openCloseCampcraftUI()
                 break
             }
         }) 

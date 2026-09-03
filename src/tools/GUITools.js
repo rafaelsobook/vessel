@@ -143,6 +143,8 @@ export function inputField(GUI, inputFieldDetails, AdvancedDynamicTexture){
     return input
 }
 
+// Crafting GUI
+
 
 // HTML CSS UI TOOL
 export function setLoadingInAList(listElement, caption){

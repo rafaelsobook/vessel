@@ -104,20 +104,41 @@ function closeMaterialPicker(){
 // "material" or "stone" is the same shape createLootItem() in
 // resourceLoot.js hands out (manastone/stone are itemType "stone", the rest
 // are "material"). Only ones with a dictionary entry are pickable.
-function getOwnedMaterials(){
+//
+// Each entry's real inventory .qnty gets a companion .available field: real
+// qty minus however many of that SAME material are already sitting in
+// OTHER part slots for this in-progress craft (selectedMaterials) - nothing
+// is actually deducted from the inventory here, this is purely "how many
+// are left to hand out" for the picker about to render. A material with
+// only 1 in stock, already placed in Blade, would otherwise still show
+// "x1" when opening Guard's own picker and let you place that exact same
+// single item in two slots at once. excludePart is the slot THIS picker is
+// for - its own current pick (if any) is excluded from the committed count,
+// so reopening the same slot to swap materials returns its current one to
+// the pool instead of counting it against itself.
+function getOwnedMaterials(excludePart){
     const charState = getCharState()
     if(!charState) return []
-    return charState.items.filter(itm =>
-        itm.itemCateg === "crafting" &&
-        (itm.itemType === "material" || itm.itemType === "stone") &&
-        itm.qnty > 0 &&
-        ITEM_DICTIONARY[itm.name]
-    )
+
+    const committed = {}
+    Object.entries(selectedMaterials).forEach(([part, material]) => {
+        if(part === excludePart) return
+        committed[material.materialName] = (committed[material.materialName] || 0) + 1
+    })
+
+    return charState.items
+        .filter(itm =>
+            itm.itemCateg === "crafting" &&
+            (itm.itemType === "material" || itm.itemType === "stone") &&
+            itm.qnty > 0 &&
+            ITEM_DICTIONARY[itm.name]
+        )
+        .map(itm => ({ ...itm, available: itm.qnty - (committed[itm.name] || 0) }))
 }
 
 function openMaterialPicker(part, onSelect){
     mpGrid.innerHTML = ""
-    const owned = getOwnedMaterials()
+    const owned = getOwnedMaterials(part)
 
     if(!owned.length){
         mpGrid.append(createElement("p", "mp-empty-msg", "You have no crafting materials"))
@@ -127,17 +148,25 @@ function openMaterialPicker(part, onSelect){
 
     owned.forEach(itm => {
         const tintKey = ITEM_DICTIONARY[itm.name].tintKey
+        const isAvailable = itm.available > 0
         const swatch = createElement("button", "mp-swatch")
         const img = createElement("img", "mp-swatch-img")
         img.src = `./images/items/crafting/${itm.name}.webp`
         img.onerror = () => { img.onerror = null; img.src = `./images/items/crafting/${itm.name}.png` }
         const name = createElement("p", "mp-swatch-name", itm.dn)
-        const qty = createElement("p", "mp-swatch-qty", `x${itm.qnty}`)
+        // shows what's actually still free to place, not the raw
+        // inventory qty - see getOwnedMaterials' own comment
+        const qty = createElement("p", "mp-swatch-qty", `x${Math.max(0, itm.available)}`)
         swatch.append(img, name, qty)
-        swatch.addEventListener("click", () => {
-            onSelect({ materialName: itm.name, materialLabel: itm.dn, tintKey })
-            closeMaterialPicker()
-        })
+        // disabled (native <button disabled>, not just a CSS class) - fully
+        // spoken for by other slots already, nothing left to place here
+        swatch.disabled = !isAvailable
+        if(isAvailable){
+            swatch.addEventListener("click", () => {
+                onSelect({ materialName: itm.name, materialLabel: itm.dn, tintKey })
+                closeMaterialPicker()
+            })
+        }
         mpGrid.append(swatch)
     })
     mpCont.style.display = "flex"
@@ -223,11 +252,36 @@ function buildSwordParts(){
     }
 }
 
+// Actually deducts the 4 materials that went into this sword from the
+// player's inventory - called only from the successful-craft path (finish(),
+// craft-btn handler below), never from the material picker itself (that
+// side only ever reads/hides via getOwnedMaterials' own .available
+// bookkeeping, nothing is spent just by placing a material in a part slot).
+// Removes an item from charState.items entirely once its qnty hits 0,
+// same convention every other "consume an item" flow in this codebase
+// already follows. Reads getCharState() fresh (not a passed-in reference)
+// and runs BEFORE obtain(item) below - obtain() re-fetches getCharState()
+// itself too, so both mutations land on the same object before whichever
+// save obtain() eventually fires, no extra explicit save needed here.
+function deductSelectedMaterials(){
+    const charState = getCharState()
+    if(!charState) return
+    SWORD_PARTS.forEach(part => {
+        const material = selectedMaterials[part]
+        if(!material) return
+        const owned = charState.items.find(itm => itm.name === material.materialName)
+        if(!owned) return
+        owned.qnty -= 1
+        if(owned.qnty <= 0) charState.items = charState.items.filter(itm => itm !== owned)
+    })
+}
+
 // builds a real inventory item, same shape as the hand-authored entries in
 // swordsdata.js, so equipSword/itemInfoSystem.js treat it identically to a
-// shop/loot sword. NOT deducting the budget or the picked materials yet -
-// that's still coming once the pricing rule is settled (see the file-level
-// TODO on the craft-btn handler below).
+// shop/loot sword. NOT deducting the budget yet - that's still coming once
+// the pricing rule is settled (see the file-level TODO on the craft-btn
+// handler below). The 4 picked materials themselves ARE deducted, just not
+// here - see deductSelectedMaterials, called from the successful-craft path.
 //
 // dmg/magicDmg/durability/magicResistance all come from computeCraftedWeaponStats
 // (itemDictionary.js) - purely a function of which 4 materials got picked,
@@ -303,13 +357,17 @@ craftBtn.addEventListener("click", () => {
 
     const rarity = currentRarityBase
 
-    // TODO: budget isn't spent and the picked materials' qnty isn't touched
-    // yet - crafting is currently free. Once the pricing rule is settled,
-    // spendOnPrice()+decrementing selectedMaterials' qnty go here (see
-    // buyorsell.js's actionBtn handler for the spendOnPrice pattern).
+    // TODO: budget still isn't spent - crafting is free of coin cost for
+    // now. Once the pricing rule is settled, spendOnPrice() goes here (see
+    // buyorsell.js's actionBtn handler for that pattern). The 4 picked
+    // materials themselves ARE spent now, though - deductSelectedMaterials
+    // below, only on this successful-craft path (never just from picking a
+    // material into a part slot - the picker only ever hides/disables what's
+    // already spoken for, see getOwnedMaterials' own comment).
     const finish = () => {
         if(isSword){
             const item = buildSwordItem()
+            deductSelectedMaterials()
             obtain(item)
             resetPartSelections()
         } else {

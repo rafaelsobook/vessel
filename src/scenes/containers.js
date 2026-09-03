@@ -56,6 +56,7 @@ export async function setStartingContainers(scene){
         let slimeRoot = await loadMonsterRoot("./models/monsters/slime.glb", scene)
         let lesserDemonRoot = await loadMonsterRoot("./models/monsters/lesserdemon.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
+        let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
 
         const HairModel = await importMeshSafe("./models/avatar/", "hairModels.glb", scene)
         const helmets = await importMeshSafe("./models/helmets/", "helmets.glb", scene)
@@ -117,7 +118,8 @@ export async function setStartingContainers(scene){
             monolithRoot,
             slimeRoot,
             lesserDemonRoot,
-            treasureRoot
+            treasureRoot,
+            bonfireRoot
         })
         return { animeBodyContainer }
     } catch (error) {
