@@ -45,6 +45,7 @@ import { setStartingContainers } from "./containers.js";
 import { registerToAtkCollider } from "../charactersystem/attackingSystem.js";
 import { createWeapon } from "../assetcreation/createweapon.js";
 import { createTreasureMesh } from "../assetcreation/createtreasure.js";
+import { receiveAchievement } from "../charactersystem/achievement.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -98,6 +99,7 @@ export async function areaScene(placeDetail){
             startDuel(scene, myCharacter.body, placeDetail);
         break;
         case "openworld":
+            receiveAchievement("into-the-wild")
             createSky(lights[0], scene, true)
             // real ShadowGenerator didn't work here - infterrain's streaming chunk
             // mesh/material isn't set up to receive a projected shadow map, and a
@@ -215,6 +217,7 @@ export async function areaScene(placeDetail){
             // ReferenceError that only fires on the ~30% roll that hits it
             const woodItem = createLootItem("wood")
             if(woodItem) obtain(woodItem)
+            receiveAchievement("woodcutter")
         }
     })
 
@@ -342,6 +345,7 @@ export async function areaScene(placeDetail){
                     const lootItem = createLootItem(loot.name)
                     if(lootItem) obtain(lootItem)
                 })
+                if(currentMiningResource?.resourceType === "ore") receiveAchievement("miner")
             })
             miningAnim._hookedMiningSound = true
         }

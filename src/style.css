@@ -2397,6 +2397,61 @@ canvas {
   transform: translate(-50%, 0);
 }
 
+.achievement-acquired-popup {
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  transform: translate(-50%, -20px);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.achievement-acquired-popup .aap-icon {
+  width: 70px;
+  height: 70px;
+  -o-object-fit: contain;
+     object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(94, 209, 178, 0.8)) drop-shadow(0 0 18px rgba(94, 209, 178, 0.5));
+}
+.achievement-acquired-popup .aap-caption {
+  font-family: "Bellefair", serif;
+  color: rgba(245, 245, 245, 0.75);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  margin: 2px 0;
+}
+.achievement-acquired-popup .aap-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.achievement-acquired-popup .aap-wing {
+  width: 40px;
+  height: auto;
+  filter: drop-shadow(0 0 6px rgba(94, 209, 178, 0.6));
+}
+.achievement-acquired-popup .aap-name {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.8rem;
+  color: rgb(94, 209, 178);
+  text-shadow: 0 0 12px rgba(94, 209, 178, 0.6);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.achievement-popup-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .skill-acquired-popup {
   position: fixed;
   top: 8%;
@@ -4734,5 +4789,9 @@ canvas {
 }
 
 .title-popup-hidden {
+  display: none;
+}
+
+.achievement-popup-hidden {
   display: none;
 }/*# sourceMappingURL=style.css.map */

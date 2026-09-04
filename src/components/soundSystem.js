@@ -105,6 +105,9 @@ export function initSounds(scene){
     const titleAcquiredS = createSoundSafe("titleAcquiredS", "./sounds/notifs/titleacquired.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    const achievementUnlockS = createSoundSafe("achievementUnlockS", "./sounds/notifs/achievementunlock.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const runningS = createSoundSafe("runningS", "./sounds/indor/running.mp3", scene,
     {volume: 0.5, autoplay: false, loop: false})
 
@@ -158,7 +161,7 @@ export function initSounds(scene){
         bulletS,
         pickItemS,
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
-        staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,
+        staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
         weaponblockS
     }
     return allSounds;

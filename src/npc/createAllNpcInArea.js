@@ -10,10 +10,11 @@ import { startConv, startQuestionare } from "../components/conversations.js"
 import { createNpc, createFighterNpc } from "./createnpc.js"
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { faceForward } from "../controllers/inputMovement.js"
+import { clearLocTimeOut, faceForward } from "../controllers/inputMovement.js"
 import { getPlayerCoord } from "../charactersystem/createcharacter.js"
 import { setCanPress } from "../charactersystem/characterstate.js"
 import { offerDuel } from "./duelSystem.js"
+import { receiveAchievement } from "../charactersystem/achievement.js"
 
 
 export function createAllNpcInArea(hero, scene){
@@ -36,7 +37,7 @@ export function createAllNpcInArea(hero, scene){
                 disableEnableAttackButtonsContainer(false, true)
                 openCloseInteractBtn("normal", false)
                 setCanPress(false)
-
+                clearLocTimeOut()
                 anNpc._patrolFrozen = true
                 faceForward(hero.body.position.clone(), anNpc.body)
 
@@ -45,6 +46,7 @@ export function createAllNpcInArea(hero, scene){
                 let storyInfo = false // the long forquest that has a speech property
                 let myQuestShortDetail = false // the short quest info// has the questRequirements.completed = false|true property
                 myState.quests.forEach(myqst => {
+
                     storyInfo = anNpc.det.forQuests.find(qst => qst.qName ===myqst.qName)
                     if(storyInfo) myQuestShortDetail = myqst
                 })
@@ -73,7 +75,18 @@ export function createAllNpcInArea(hero, scene){
                     // then add the new questsToReceive
 
                     storyInfo.questsToReceive.forEach(qstToRec => myState.quests.push(prepareGrantedQuest(qstToRec)))
-                    
+
+                    // story-quest achievements - qName here is the quest
+                    // being turned in RIGHT NOW (npcDetails.js's own forQuests
+                    // entries), matched against achievement.js's own data.
+                    // the-guildmaster-calls is different: that achievement is
+                    // about being SUMMONED (i.e. the moment Halric's own
+                    // "return-to-guildmaster" quest gets granted as a reward
+                    // here), not about turning anything in.
+                    if(storyInfo.qName === "proveYourself") receiveAchievement("proven-hunter")
+                    if(storyInfo.qName === "gatherElementalCores") receiveAchievement("three-of-a-kind")
+                    if(storyInfo.questsToReceive.some(q => q.qName === "return-to-guildmaster")) receiveAchievement("the-guildmaster-calls")
+
                     if(storyInfo.hasReward){
                         switch(storyInfo.reward.receiveRewardType){
                             case "item":

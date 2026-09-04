@@ -3,11 +3,13 @@ import { Vector3 } from "@babylonjs/core"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { getSceneDet } from "../main/main.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
-import { checkIfTokenSaved } from "../tools/tools.js"
+import { checkIfTokenSaved, randomNum } from "../tools/tools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import { hideShowAllScreenUI } from "../charactersystem/uimanagement.js"
 import { findGroundY } from "../tools/position.js"
+import { emitCraftBonfire } from "../sockets/emits.js"
+import { receiveAchievement } from "../charactersystem/achievement.js"
 
 // Data for every camp-craftable thing. Only "bonfire" has a real
 // CRAFT_HANDLERS entry (below) for now - anything added here without one
@@ -243,9 +245,25 @@ function deductCraftCost(charState, craft){
 // leaving it out, which now cleanly tells the player it's not built yet
 // instead of silently consuming materials for nothing)
 // ============================================================
+// (scene, position, craftId, placeId) - craftId/placeId only matter for
+// structures that need multiplayer sync (bonfire does, via emitCraftBonfire
+// below); a handler that doesn't care about either is free to ignore them
 const CRAFT_HANDLERS = {
-    bonfire(scene, position){
-        return createBonfireMesh(scene, position)
+    bonfire(scene, position, craftId, placeId){
+        const bonfire = createBonfireMesh(scene, position, craftId)
+        // emitCraftBonfire already no-ops in single-player places
+        // (getIsSocketOn() check lives inside it, same as every other
+        // emit* in sockets/emits.js) - only sync it if it actually built,
+        // same "don't tell the server about something that didn't happen"
+        // logic buildSwordItem/deductSelectedMaterials already follow
+        if(bonfire){
+            emitCraftBonfire({
+                craftId,
+                position: { x: position.x, y: position.y, z: position.z },
+                placeId
+            })
+        }
+        return bonfire
     }
 }
 
@@ -287,7 +305,14 @@ function handleCraftClick(craft, refreshCard){
     // is found at all, so this still never leaves pos.y undefined.
     pos.y = findGroundY(sceneDet.scene, pos.x, pos.z, myPlayer.body.position.y)
 
-    const built = handler(sceneDet.scene, pos)
+    // generated here (not inside a handler) so it's the SAME id used both
+    // for this mesh's own name (createBonfireMesh's craftId param) and for
+    // whatever gets synced to other players - keeping those two in lockstep
+    // is what lets reCreateMeshesInScene's getMeshByName check recognize
+    // this exact craft again later (the server's own echo of this same
+    // event coming back to THIS client included) instead of double-spawning
+    const craftId = randomNum()
+    const built = handler(sceneDet.scene, pos, craftId, charState.currentPlace.placeId)
     if(!built){
         // handler itself already warned (e.g. containers.js's own
         // "prop model missing/failed to load" log) - just tell the player
@@ -299,6 +324,7 @@ function handleCraftClick(craft, refreshCard){
     deductCraftCost(charState, craft)
     updateMyDetailsOL(charState, checkIfTokenSaved())
     openClosePopup(`${craft.dn} built!`, true, 1500)
+    if(craft.name === "bonfire") receiveAchievement("camp-builder")
     refreshCard()
 }
 

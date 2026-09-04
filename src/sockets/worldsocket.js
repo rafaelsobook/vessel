@@ -26,11 +26,13 @@ import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/consta
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
+import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
 let allQuests = []
 let tcpTreasures = []
+let tcpBonfires = []
 
 // In Client
 let playersOnScene = []
@@ -44,6 +46,10 @@ let questsOnScene = []
 // own isAlreadyHere check, same idea as enemiez) and to drop an entry once
 // "treasure-removed" comes in for it
 let treasuresInScene = []
+// { craftId } entries - same idea as treasuresInScene above, but bonfires
+// are never removed once placed (no "bonfire-removed" counterpart to
+// treasure-removed), so this only ever grows, never gets spliced
+let bonfiresInScene = []
 // npcFighter duel opponents (npc/duelSystem.js) - purely local combat, never
 // server-tracked (duels are always isMultiplayer:false). Mirrors enemiez so
 // creations/skillEffects.js's hit-registration sites can target duel
@@ -213,11 +219,12 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests, treasures } = allDataFromServer
+        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests, treasures, bonfires } = allDataFromServer
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
         allQuests = quests
         tcpTreasures = treasures ?? []
+        tcpBonfires = bonfires ?? []
         
         const characterState = getCharState()
         const gameStat = getGameStatus()
@@ -742,6 +749,21 @@ export function activateOnSocketListeners(socket){
         if (treasureBodyHere) treasureBodyHere.dispose()
     })
 
+    // tcp/index.ts's own "craft-bonfire" handler echoes this to EVERY
+    // connected client, including whoever actually crafted it (bare
+    // io.emit there, not socket.broadcast.emit) - reCreateMeshesInScene's
+    // own tcpBonfires loop already no-ops on a craftId it's seen before
+    // (bonfiresInScene / getMeshByName double-check, same shape as
+    // tcpTreasures), so pushing this in and just re-running that loop
+    // (same pattern "enemy-respawned" above already uses) is safe for the
+    // crafter's own echo too, not just everyone else.
+    socket.on("bonfire-crafted", bonfire => {
+        if (!isSocketOn) return
+        if (tcpBonfires.some(bf => bf.craftId === bonfire.craftId)) return
+        tcpBonfires.push(bonfire)
+        reCreateMeshesInScene()
+    })
+
     // Movement
     socket.on("emitted-moving", data => {
         const { ownerId, pos, dirTarg, mode} = data
@@ -977,6 +999,23 @@ export function reCreateMeshesInScene() {
 
         const chest = createTreasureMesh(scene, treasureTcpInfo.pos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId })
         if(chest) treasuresInScene.push({ itemId: treasureTcpInfo.itemId })
+    })
+    // same three-guard shape as tcpTreasures right above (place filter,
+    // local tracking array, getMeshByName fallback) - createBonfireMesh's
+    // own mesh naming (bonfire_${craftId}) has to actually receive craftId
+    // for that fallback check to find the right mesh, same reason
+    // createTreasureMesh takes an explicit treasureId
+    tcpBonfires.length && tcpBonfires.forEach(bonfireTcpInfo => {
+        if (characterState.currentPlace.placeId !== bonfireTcpInfo.currentPlaceId) return
+
+        const isAlreadyHere = bonfiresInScene.find(bf => bf.craftId === bonfireTcpInfo.craftId)
+        if (isAlreadyHere) return
+
+        const bonfireMesh = sceneDet.scene.getMeshByName(`bonfire_${bonfireTcpInfo.craftId}`)
+        if(bonfireMesh) return
+
+        const bonfire = createBonfireMesh(scene, bonfireTcpInfo.pos, bonfireTcpInfo.craftId)
+        if(bonfire) bonfiresInScene.push({ craftId: bonfireTcpInfo.craftId })
     })
     if(characterState.currentPlace.placeId === 9){
         console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)

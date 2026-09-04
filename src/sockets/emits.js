@@ -130,6 +130,19 @@ export function emitRemoveTreasure(treasureId){
     if(!socket) return
     socket.emit("removeTreasure", treasureId)
 }
+// tcp/index.ts's "craft-bonfire" handler - tells every OTHER connected
+// client (and any future joiner, via userJoined's own bonfires array) that
+// a bonfire now exists here too. campcraft.js's own craft flow already
+// spawned it LOCALLY before this ever gets called - this is only what
+// syncs it to everyone else, same "act locally first, relay after" trust
+// level every other action in this game already gets. No-ops in
+// single-player places the same way every other emit* here does.
+export function emitCraftBonfire({ craftId, position, placeId }){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("craft-bonfire", { craftId, position, placeId })
+}
 // Attack Actions
 export function emitSpawnCircle(pos, element){
     const socket = getSocket()

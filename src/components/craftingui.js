@@ -26,6 +26,7 @@ import { getSocketContainers } from "../sockets/worldsocket"
 import { obtain } from "../charactersystem/inventory"
 import { randomNum } from "../tools/tools"
 import { ITEM_DICTIONARY, computeCraftedWeaponStats } from "../staticRecources/itemDictionary"
+import { receiveAchievement } from "../charactersystem/achievement"
 
 const craftCont     = document.querySelector(".craft-container")
 const craftTitle    = document.querySelector(".craft-title")
@@ -370,6 +371,7 @@ craftBtn.addEventListener("click", () => {
             deductSelectedMaterials()
             obtain(item)
             resetPartSelections()
+            receiveAchievement("first-forge")
         } else {
             // armor/helmet/pauldron still aren't real items yet - see
             // buildSwordItem's comment; those need a modelName that

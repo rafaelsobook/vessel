@@ -533,6 +533,23 @@
         </div>
     </div>
 
+    <!-- Achievement Unlocked popup - components/achievementAcquiredUI.js's
+         popupReceiveAchievementUI. Same structure/assets as the Title
+         Acquired popup right above (title-popup-hidden/-show are shared,
+         generic fade+scale transition classes, not title-specific despite
+         the name - reused rather than duplicating a third near-identical
+         pair) - only the caption text and class prefix (aap- vs tap-)
+         differ, so the two never fight over the same DOM node/selector. -->
+    <div class="achievement-acquired-popup achievement-popup-hidden">
+        <img src="./images/UI/dragonhead.webp" class="aap-icon" alt="">
+        <p class="aap-caption">Achievement Unlocked</p>
+        <div class="aap-name-row">
+            <img src="./images/UI/titleleftwing.webp" class="aap-wing" alt="">
+            <p class="aap-name"></p>
+            <img src="./images/UI/titlerightwing.webp" class="aap-wing" alt="">
+        </div>
+    </div>
+
     <!-- Skill Learned popup - components/skillAcquiredUI.js's popupReceiveSkillUI.
          Plain divs, not <img> - each one's actual picture is applied as a
          CSS mask-image (JS sets both background-image and mask-image to

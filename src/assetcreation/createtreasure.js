@@ -6,6 +6,7 @@ import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { randomNum } from "../tools/tools.js"
 import { emitRemoveTreasure } from "../sockets/emits.js"
+import { receiveAchievement } from "../charactersystem/achievement.js"
 
 // rarity -> chest skin (client/public/images/modeltex/treasure{0,1,2}.jpg) -
 // only 3 chest textures exist for the game's 5-tier rarity scale
@@ -106,6 +107,7 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
             // obtain() already pops its own "acquired X" toast - no need to
             // layer a second "you found a treasure!" popup on top of it
             obtain(itemDetail)
+            receiveAchievement("treasure-hunter")
             // tell the server FIRST, before disposing locally - a
             // server-tracked treasure (treasureId set) needs every other
             // client to also drop this chest, so no one else can loot the

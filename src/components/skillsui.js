@@ -8,6 +8,7 @@ import { popStatusEffect, openClosePopup } from "../tools/popupUI.js";
 import { getManaOutputPercent } from "../charactersystem/outputSliders.js";
 import { skillsData } from "../staticRecources/skillsData.js";
 import { popupReceiveSkillUI } from "./skillAcquiredUI.js";
+import { receiveAchievement } from "../charactersystem/achievement.js";
 const skillCont = document.querySelector(".skill-container");
 
 
@@ -87,6 +88,12 @@ export function giveSkill(skillDetail){
     // rank-framed celebration popup (skillAcquiredUI.js) instead of the old
     // plain text toast - same upgrade titleUI.js's own popup already got
     popupReceiveSkillUI(skillDetail)
+    // "awakened" fires for literally any first skill; "elite-skill" only for
+    // skillrank >= 1 (skillsData.js's own header comment: 0 is "Basic Class",
+    // 1+ is "Elite Skill" and up) - receiveAchievement no-ops on repeats, so
+    // no extra bookkeeping needed here to only fire elite-skill once
+    receiveAchievement("awakened")
+    if(skillDetail.skillrank >= 1) receiveAchievement("elite-skill")
 }
 
 // DEBUG CHEAT - bound to the "l" key in controllers/inputMovement.js. Grants

@@ -32,6 +32,7 @@ import { startConv } from "../components/conversations.js"
 import { showAnswerButtons } from "../tools/popupUI.js"
 import { giveSkill } from "../components/skillsui.js"
 import { receiveTitle } from "../components/titleUI.js"
+import { receiveAchievement } from "../charactersystem/achievement.js"
 
 const DUEL_PLACE_ID     = 200
 const ATTACK_INTERVAL_MS = 1500
@@ -685,6 +686,8 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         if(!charState.defeatedMonsters.includes(npcDet._id)){
             charState.defeatedMonsters.push(npcDet._id)
         }
+
+        receiveAchievement("first-duel")
 
         updateMyDetailsOL(charState, checkIfTokenSaved())
     }

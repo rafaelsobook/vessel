@@ -19,6 +19,7 @@ import { createMagicCircle } from "../creations/magiccircles.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
+import { receiveAchievement } from "../charactersystem/achievement.js"
 import { createSlimeMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
@@ -820,7 +821,7 @@ export function enemyIsHit(data){
     }
 }
 export function defeatedAmonster(data){
-    const {name,dn, monsSoul,skills,effects,effectsWhenHit, loots, expToGain} = data
+    const {name,dn, monsSoul,skills,effects,effectsWhenHit, loots, expToGain, modelStyle} = data
 
     const characterState = getCharState()
     characterState.monsSoul += monsSoul
@@ -828,6 +829,19 @@ export function defeatedAmonster(data){
     const defeatedMonster = characterState.defeatedMonsters.find(monsName => monsName === name)
 
     checkStoryQuestIfCompleted('enemy', name)
+
+    // combat achievements - receiveAchievement no-ops on its own if any of
+    // these are already earned, so no need to gate these behind
+    // `!defeatedMonster` (that flag is per-SPECIES, e.g. would skip
+    // first-blood entirely if the player's first-ever kill happened to be a
+    // second goblin after already killing a slime earlier). name/modelStyle
+    // values matched here are real tcp/recources/genenemy.ts + enemyData.ts
+    // monster ids, not guessed ones - see achievement.js's own entries for
+    // what each of these actually requires.
+    receiveAchievement("first-blood")
+    if(modelStyle === "monolith") receiveAchievement("monolith-breaker")
+    if(name === "darkslime") receiveAchievement("into-the-dark")
+    if(name === "lesserdemon") receiveAchievement("demons-bane")
 
     if(loots.length){
         let obtainTimeOutCount=0

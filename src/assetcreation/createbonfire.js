@@ -10,7 +10,16 @@ import { randomNum } from "../tools/tools.js"
 // ember particles every other fire effect in this game already uses
 // (tools/particlesystem.js's createFireParticles), instead of hand-rolling
 // a new light/particle rig just for this.
-export function createBonfireMesh(scene, position){
+//
+// craftId, when passed, is the SAME id worldsocket.js's "bonfire-crafted"
+// sync uses (tcp/index.ts's own Tbonfire.craftId) - it becomes this mesh's
+// own name (bonfire_${craftId}), so reCreateMeshesInScene's getMeshByName
+// dedup check can find THIS exact bonfire again and never spawn a second
+// one for the same craft, whether that's the crafter's own client (already
+// has it) or another player's (doesn't yet). Left undefined falls back to
+// a fresh randomNum() - fine for one-off local/scripted placements that
+// have no server-tracked craftId to stay in sync with at all.
+export function createBonfireMesh(scene, position, craftId){
     const bonfireRoot = getSocketContainers()?.bonfireRoot
     if(!bonfireRoot){
         // missing/failed-to-load bonfire.glb already warned about once in
@@ -19,7 +28,7 @@ export function createBonfireMesh(scene, position){
         return null
     }
 
-    const bonfire = bonfireRoot.clone(`bonfire_${randomNum()}`)
+    const bonfire = bonfireRoot.clone(`bonfire_${craftId ?? randomNum()}`)
     bonfire.isVisible = true
     bonfire.setEnabled(true)
     bonfire.isPickable = false
