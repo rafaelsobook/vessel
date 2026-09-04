@@ -57,6 +57,19 @@ function createAnimeBodyMaterials(scene, det){
     clothMat.diffuseColor = new Color3(clothColor.r, clothColor.g, clothColor.b)
     pantsMat.diffuseColor = new Color3(pantsColor.r, pantsColor.g, pantsColor.b)
 
+    // the shirt hem and pants waistband are two separate meshes sitting
+    // almost exactly coincident at the waist/lower back (see the source
+    // rig - cloth.X and pants.X below) - close enough that the depth
+    // buffer can't reliably tell which one is actually in front, so the
+    // pants texture randomly wins and shows through the shirt there
+    // (classic z-fighting, not an actual clipping/scale problem). zOffset
+    // is Babylon's standard fix for exactly this: it biases the DEPTH TEST
+    // only, not the mesh's real position, so the shirt wins every depth
+    // comparison against the pants without visually moving either mesh.
+    // Negative pushes toward the camera; cloth gets a small bias so it
+    // always wins, pants gets none.
+    clothMat.zOffset = -2
+
     // skinColor is a SKIN_TEXTURES key ("skin1" etc, see npcDetails.js and
     // setupcharacterscene.js) - falls back to skin1 for any character saved
     // before this switch from flat diffuseColor to textures (those still
@@ -254,6 +267,12 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             if(arm.name === itemName){
                 arm.mesh.isVisible = true
                 const armorMat = createMetalMat(scene, metalColor)
+                // armor sits worn OVER the shirt at the torso, same
+                // coincident-geometry z-fight clothMat.zOffset already fixes
+                // for cloth vs pants (createAnimeBodyMaterials' own comment)
+                // - more negative than clothMat's -2 so armor reliably wins
+                // the depth tie against cloth too, not just pants against cloth
+                armorMat.zOffset = -4
                 arm.mesh.material = armorMat
                 arm.mesh.getChildMeshes().forEach(mesh => mesh.material = armorMat)
             } else arm.mesh.isVisible = false
@@ -266,6 +285,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         if(!shoulderL || !shoulderR) return console.warn(`createPauldron: missing shoulder bone(s), cannot equip "${pauldronName}"`)
 
         const pauldronMat = createMetalMat(scene, metalColor)
+        // same reasoning as equipArmor's own armorMat.zOffset just above -
+        // a shoulder pauldron sits worn over the shirt too
+        pauldronMat.zOffset = -4
 
         const rightPauldron = template.clone(`pauldron.${pauldronName}.R.${det._id}`)
         rightPauldron.parent = shoulderR

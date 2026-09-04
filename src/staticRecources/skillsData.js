@@ -552,7 +552,7 @@ export const shadowboltSkill = {
     returnModeDura: 900,
     skillCoolDown: 1500,
     demand: [{ name: "mp", minCost: 15, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+    effects: { effectType: "offense", dmgPm: 0, plusDmg: 170, chance: 1, bashPower: 0.3 },
     skillrank: 2,
     upgradePlus: 15,
     explosionColor: "violet",

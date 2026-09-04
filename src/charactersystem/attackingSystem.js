@@ -338,7 +338,16 @@ export function registerToAtkCollider(scene, meshName, cb){
             
             if(mesh.name && mesh.name.toLocaleLowerCase().includes(meshName)){
                 console.log("hello tree")
-                onIntersecEnterTrig(atkCollider, mesh, scene, cb)
+                // precise:true - this is a swing landing damage/loot, not a
+                // walk-up proximity check, so it needs real mesh-level
+                // contact. Without it, Babylon's default bounding-box-only
+                // intersection check let atkCollider's swing hitbox trigger
+                // this against any tree just standing nearby (a big leafy
+                // tree's bounding box reaches well past its visible trunk),
+                // which is exactly how attacking a slime standing near a
+                // tree could also grant wood - the tree was never actually
+                // hit, only "bounding-box adjacent" to the swing.
+                onIntersecEnterTrig(atkCollider, mesh, scene, cb, true)
             }
         }
         // if(mesh.name.includes("tree")) console.log(mesh.name)

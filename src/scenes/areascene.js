@@ -205,11 +205,11 @@ export async function areaScene(placeDetail){
     // single tree hit (not just the ~30% chance one), before the loot roll
     // ever ran. Nothing reads this counter yet; declared here just to stop
     // the crash and preserve whatever it was meant to track.
-    let slashes = 0
+
     registerToAtkCollider(scene, "tree", () => {
         console.log("hit tree")
         playSound(getAllSounds().woodcuttingS)
-        slashes++
+
         if(Math.random() >= 0.7){
             // same "wood" loot factory the mining loop below already uses for
             // resources[].loots ("wood" -> LOOT_TEMPLATES.wood, resourceLoot.js)

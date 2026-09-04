@@ -77,6 +77,10 @@ export async function setupCharacterScene(engine){
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     clothMat.diffuseColor = new Color3(0.42, 0.30, 0.16)
     pantsMat.diffuseColor = new Color3(0.22, 0.13, 0.05)
+    // same coincident-geometry z-fight fix as createcharacter.js's own
+    // createAnimeBodyMaterials (shirt hem vs pants waistband depth-testing
+    // as a tie and letting pants win at random) - see that file's comment
+    clothMat.zOffset = -2
     const skinMat = createMat("skin_mat", null, SKIN_TEXTURES[toSave.skinColor], scene)
 
     // const clothMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })

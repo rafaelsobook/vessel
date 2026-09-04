@@ -1215,7 +1215,15 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             duelOpponents.forEach(o => o.stopFight())
             // assistants don't speak, per spec - see the identical gate in
             // performOpponentDashStrike above
-            if(isMainOpponent) startConv(toLines(npcDet.name, ["Ha! Down you go. Good bout though."]), () => {})
+            // was () => {} - the same dead-end returnToExitPlace's own
+            // header comment describes (dialogue closes, nothing happens,
+            // player stuck in placeId 200 with no way out). This is the
+            // REGULAR melee-attack loss path (the other two call sites,
+            // above and in applyDamageToOpponent, already got fixed) - the
+            // most common way to actually lose a duel, since most opponents
+            // (Renarden included) whittle the player down with plain swings
+            // long before ever landing a skill hit.
+            if(isMainOpponent) startConv(toLines(npcDet.name, ["Ha! Down you go. Good bout though."]), returnToExitPlace)
         }
     }, ATTACK_INTERVAL_MS)
     console.log("[duel] spawnDuelOpponent: attackInterval set")
