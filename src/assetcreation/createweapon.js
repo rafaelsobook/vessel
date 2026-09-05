@@ -1,7 +1,7 @@
 import { MeshBuilder, TransformNode, Vector3 } from "@babylonjs/core"
 import { getSocketContainers } from "../sockets/worldsocket"
 import { createGlowingMat } from "../tools/materials"
-import { createBladeMat, createGuardMat, createHandleMat, createPommelMat } from "../tools/weaponmat"
+import { createBladeMat, createGuardMat, createHandleMat, createPommelMat, SELF_GLOW } from "../tools/weaponmat"
 import { createMetalMat } from "../tools/metalmat"
 import { addGlow } from "../tools/glow"
 import { getSceneDet } from "../main/main"
@@ -71,6 +71,26 @@ const SHARED_PART_SOURCE = {
     pickaxe: { handle: "axe" },
 }
 
+// Epic recipe accent sub-meshes (staticRecources/epiccrafts.js,
+// craftingui.js's own matchEpicRecipe) - allswords.glb's epic1 tier adds
+// EXTRA sibling meshes alongside some parts' own main mesh (Blender
+// outliner: sword_blade_epic1_outer, sword_guard_epic1_cores/_outer -
+// handle/pommel's own epic1 mesh has no accent siblings at all), named
+// "<mainKey>_<suffix>". Keyed by the GLB's own suffix spelling (note
+// "cores" is plural in the mesh name but the matching epiccrafts.js color
+// field is singular - "guardCoreColor", not "guardCoresColor") -
+// colorField is what actually gets concatenated onto the part name
+// ("blade"+"Outer"+"Color" -> options.epicAccents.bladeOuterColor).
+// matType picks which material treatment this accent gets: "glow" for the
+// gem-like glowing core (createGlowingMat, a GLOW_COLORS key like "red"),
+// "metal" for the outer shell (createMetalMat, a METAL_TINTS key like
+// "gold"/"silver") - only the core was ever meant to glow, the outer shell
+// is a normal metal trim around it.
+const EPIC_ACCENT_SUFFIXES = {
+    outer: { colorField: "Outer", matType: "metal" },
+    cores: { colorField: "Core", matType: "glow" },
+}
+
 function createPartsWeapon(scene, weaponType, root, options, glowingColor) {
     const { allweapons } = getSocketContainers()
     if (!allweapons) return console.warn("allweapons not yet imported")
@@ -80,6 +100,13 @@ function createPartsWeapon(scene, weaponType, root, options, glowingColor) {
         // defaults match the old hardcoded per-part looks, so weapon data
         // that predates *Color (npcDetails.js, skills.js) renders unchanged
         bladeColor = "steel", guardColor = "bronze", handleColor = "leather", pommelColor = "gold",
+        // only ever set by an epic-recipe craft (craftingui.js's
+        // buildSwordParts) - {bladeOuterColor, guardCoreColor,
+        // guardOuterColor} today, see EPIC_ACCENT_SUFFIXES above. {} default
+        // so every non-epic weapon (the vast majority) skips the accent
+        // lookup below entirely, same "not every option is always present"
+        // convention this whole options bag already follows.
+        epicAccents = {},
     } = options
 
     const PART_RARITY = { blade: bladeRarity, guard: guardRarity, handle: handleRarity, pommel: pommelRarity }
@@ -111,7 +138,44 @@ function createPartsWeapon(scene, weaponType, root, options, glowingColor) {
             addGlow(scene, inst, 0.4)
         } else {
             inst.material = getPartMat(scene, part, rarity, materialName, inst.name)
+            // SELF_GLOW (weaponmat.js) - firecrystal/frostshard/stormcrystal
+            // already carry a faint emissive floor baked into the material
+            // itself, but phoenixore specifically asked to genuinely "be
+            // glowing" - a real GlowLayer bloom (tools/glow.js), same
+            // mechanism the epic accent core just below and the whole-
+            // weapon glowingColor path above both already use, not just an
+            // emissive tint with no actual bleed/halo. Applies to whichever
+            // PART actually got a self-glow material, not just one fixed
+            // slot - phoenixore could end up on any of the 4 in a non-epic
+            // craft, not only the handle the majesticsword recipe uses it for.
+            if(SELF_GLOW.has((materialName || "").toLowerCase())) addGlow(scene, inst, 0.4)
         }
+
+        // epic accent sub-meshes, if this exact (part, rarity) has any and
+        // the recipe actually supplied a color for it - scanned by real key
+        // existence in allweapons (same "ground truth from the glb, not a
+        // hardcoded list" approach getAvailableRarityVariants already uses),
+        // not hardcoded to which parts happen to have one today, so a future
+        // epic tier/part combination just works without touching this file
+        Object.entries(EPIC_ACCENT_SUFFIXES).forEach(([meshSuffix, { colorField, matType }]) => {
+            const accentKey = `${key}_${meshSuffix}`
+            const accentTemplate = allweapons[accentKey]
+            if(!accentTemplate) return
+            const accentColor = epicAccents[`${part}${colorField}Color`]
+            if(!accentColor) return
+
+            const accentInst = accentTemplate.clone(`${accentKey}_${root.name}`)
+            accentInst.addRotation(Math.PI/2,0,0)
+            accentInst.isVisible = true
+            accentInst.parent = root
+            accentInst.position = Vector3.Zero()
+            if(matType === "glow"){
+                accentInst.material = createGlowingMat(scene, accentColor)
+                addGlow(scene, accentInst, 0.4)
+            } else {
+                accentInst.material = createMetalMat(scene, accentColor)
+            }
+        })
     }
 }
 

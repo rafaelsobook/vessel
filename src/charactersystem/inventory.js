@@ -18,6 +18,27 @@ const acquiredLists  = document.querySelector(".acquired-lists")
 
 
 let isInventoryLoading = false
+
+// insertItemOnInventory's own slot-border used to be hardcoded to
+// border3.webp for EVERY item regardless of rarity - the same "one look for
+// everything" gap style.scss's own .rare/.epic/.legendary background
+// gradients just got fixed for. This maps each of the 5 real border images
+// in ./images/UI to a rarity tier, ascending from plainest to most ornate:
+// border4 (thin, minimal wrought-iron) -> common, border3 (plain dark
+// frame, the old fixed default) -> uncommon, border (bronze ornate corners)
+// -> rare, border5 (dark angular runic corners, fits the same "scary" read
+// epic's red background gradient goes for) -> epic, border2 (brightest,
+// gold, gem/coin corner accents) -> legendary, the most opulent-looking one
+// for the top tier. "normal" (toSell.js's own common-tier spelling, see
+// style.scss's own .common/.normal split) falls back to the common border
+// via the same ?? default as an unrecognized rarity.
+const RARITY_BORDERS = {
+    common: "./images/UI/border4.png",
+    uncommon: "./images/UI/border3.webp",
+    rare: "./images/UI/border.png",
+    epic: "./images/UI/border5.png",
+    legendary: "./images/UI/border2.png",
+}
 let buttonsActivated   = false
 
 // INVENTORY
@@ -54,7 +75,7 @@ export function insertItemOnInventory(itm){
     const itemImg = createElement("img", `slot-img ${itm.rarity}`)
 
     const slotBrder = createElement("img", 'slot-border')
-    slotBrder.src = './images/UI/border3.webp'
+    slotBrder.src = RARITY_BORDERS[itm.rarity] ?? RARITY_BORDERS.common
 
     if(itm.itemCateg !== "equipable" || itm.itemCateg !== "quest"){
         const itmQntyBorder = createElement('p', 'itm-qnty-border', itm.qnty)

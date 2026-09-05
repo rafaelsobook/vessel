@@ -49,6 +49,21 @@ export const ITEM_DICTIONARY = {
     },
 
     // --- gems/crystals (see weaponmat.js's GEM_TINTS) ---
+    // dragonscale is the first genuinely BLACK tint in weaponmat.js's whole
+    // palette (added alongside this entry) - every metal before it topped
+    // out at iron's dull grey. Priced above every other material in
+    // resourceLoot.js (150, vs unobtanium's own 100) - deliberately NOT
+    // given a flat stat edge over unobtanium though (that material's own
+    // comment: "stats should say this is the best material in the game
+    // unambiguously"). Instead it's the specialist pick for raw toughness -
+    // durability ties adamantine's own max (10, "near-indestructible"),
+    // physicalDamage matches unobtanium's 9, but magicDamage/magicResistance
+    // sit a notch below it - a dragon's hide reads as legendarily tough
+    // before it reads as magical.
+    blackdragon: {
+        dn: "Black Dragon Scale", category: "gem", tintKey: "dragonscale",
+        statWeights: { physicalDamage: 9, magicDamage: 6, durability: 10, magicResistance: 7 },
+    },
     celestineore: {
         dn: "Celestine Ore", category: "gem", tintKey: "frostshard",
         // "prized by enchanters" - magic specialist, fragile

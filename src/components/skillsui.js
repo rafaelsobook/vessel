@@ -6,7 +6,7 @@ import { activateSkill, upgradeSkill } from "../charactersystem/attackingSystem.
 import { MULTICAST_MAX_STAGGER_MS } from "../creations/skillEffects.js";
 import { popStatusEffect, openClosePopup } from "../tools/popupUI.js";
 import { getManaOutputPercent } from "../charactersystem/outputSliders.js";
-import { skillsData } from "../staticRecources/skillsData.js";
+import { skillsData, getSkillEffect } from "../staticRecources/skillsData.js";
 import { popupReceiveSkillUI } from "./skillAcquiredUI.js";
 import { receiveAchievement } from "../charactersystem/achievement.js";
 const skillCont = document.querySelector(".skill-container");
@@ -284,7 +284,10 @@ function renderSkillInfo(skill){
     skillInfoStatus.innerText = skill.isActive ? "Active" : "Inactive"
     skillInfoStatus.classList.toggle("active", skill.isActive)
 
-    skillInfoType.innerText = capitalize(skill.effects?.effectType)
+    // effects is an array now - every skill still only ever carries one
+    // entry today, so its [0] is still "the" type for this one-line label.
+    // A future multi-effect skill would just show its primary/first one here.
+    skillInfoType.innerText = capitalize(skill.effects?.[0]?.effectType)
     skillInfoRank.innerText = SKILL_RANK_LABELS[skill.skillrank] ?? "—"
     // drives style.scss's [data-rank="N"] theming on the rank value + desc -
     // see skillInfoPanel's own comment above
@@ -435,19 +438,19 @@ slotbuttons.forEach(btn => {
             activateSkill(charState.owner, skill, charState.stats)
         }
 
-        // skill.effects.effectType === "trigger" (multicast - see its own
-        // header comment in skillsData.js) - fires no projectile of its
-        // own; instead, now that its own mode/mana gate above already
-        // passed, it programmatically .click()s every OTHER assigned
-        // skill-slot-button, running each one through this EXACT same
-        // handler (mana check, requireMode gate, multiplayer relay, its own
-        // reset timer below) as if the player had pressed all of them.
-        // Only cascades on activation (willActivate), never on the press
-        // that turns multicast back off, and each triggered skill can still
-        // independently fail its OWN mana/mode check (that skill just won't
-        // fire, the others still will) - same graceful behavior a real
-        // manual press of each button would have.
-        if(willActivate && skill.effects?.effectType === "trigger"){
+        // getSkillEffect(skill, "trigger") (multicast - see its own header
+        // comment in skillsData.js) - fires no projectile of its own;
+        // instead, now that its own mode/mana gate above already passed, it
+        // programmatically .click()s every OTHER assigned skill-slot-button,
+        // running each one through this EXACT same handler (mana check,
+        // requireMode gate, multiplayer relay, its own reset timer below) as
+        // if the player had pressed all of them. Only cascades on activation
+        // (willActivate), never on the press that turns multicast back off,
+        // and each triggered skill can still independently fail its OWN
+        // mana/mode check (that skill just won't fire, the others still
+        // will) - same graceful behavior a real manual press of each button
+        // would have.
+        if(willActivate && getSkillEffect(skill, "trigger")){
             cascadeActive = true
             slotbuttons.forEach(otherBtn => {
                 if(otherBtn === btn) return
@@ -472,7 +475,7 @@ slotbuttons.forEach(btn => {
         clearTimeout(activeSkillResetTimers.get(skill.name))
         activeSkillResetTimers.delete(skill.name)
 
-        if(willActivate && (skill.effects?.effectType === "offense" || skill.effects?.effectType === "trigger" || skill.effects?.effectType === "buff" || skill.effects?.effectType === "dash")){
+        if(willActivate && (getSkillEffect(skill, "offense") || getSkillEffect(skill, "trigger") || getSkillEffect(skill, "buff") || getSkillEffect(skill, "dash"))){
             // burstshots (formerly named "multicast") is the only skill
             // whose own cast sequence outlives its nominal castDuration -
             // its circles keep staggering out for up to MULTICAST_MAX_STAGGER_MS

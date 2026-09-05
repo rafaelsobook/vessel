@@ -78,11 +78,26 @@ function render(){
         const slot = createElement("button", "bs-item-slot")
         const img = createElement("img", "bs-item-img")
         img.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
-        // axe/pickaxe each get their own shared icon (axes.webp/pickaxe.webp) -
-        // same override inventory.js/itemInfoSystem.js already apply for
-        // their own item icon lookups, there's no per-item-name art for
-        // either weaponType
+        // sword/spear/axe/pickaxe each get their own shared icon (sword.webp/
+        // spear.webp/axes.webp/pickaxe.webp) - same override inventory.js
+        // already applies for its own item icon lookup. Sword/spear matter
+        // even more here than axe/pickaxe: a CRAFTED sword/spear
+        // (craftingui.js's buildSwordItem) gets a randomly-generated unique
+        // name (`customsword_${Date.now()}`) that can never match a real
+        // per-item icon file - without this override every crafted weapon
+        // in the sell list rendered a permanently broken image (itm.name.webp
+        // 404s, the onerror .png retry 404s too, same broken name).
+        if(itm.weaponType === "sword" || itm.weaponType === "spear") img.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
         if(itm.weaponType === "axe") img.src = `./images/items/${itm.itemCateg}/axes.webp`
+        // helmets key their own icon off modelName, not name - same override
+        // inventory.js already applies. Every helmet item's own name is a
+        // flavor/save-key string, separate from modelName (the real art
+        // file) - e.g. laurietsHatItem: name "lauriethat", dn "Lauriet's
+        // Hat", modelName "magicianhat" (questions.js), matching the actual
+        // magicianhat.webp on disk. Without this override, itm.name.webp
+        // (here, "lauriethat.webp") was requested instead - a file that was
+        // never meant to exist.
+        if(itm.itemType === "helmet") img.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
         if(itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/pickaxe.webp`
         // some existing item art is .png rather than .webp (see toSell.js weapons) - fall back once
         img.onerror = () => { img.onerror = null; img.src = `./images/items/${itm.itemCateg}/${itm.name}.png` }

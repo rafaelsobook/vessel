@@ -16,7 +16,7 @@
 // needed here for this file itself - only attackingSystem.js's upgradeSkill()
 // actually looks the key up against the UPGRADE_TEMPLATES registry.
 //
-// Every offense skill here (effects.effectType === "offense") runs through
+// Every offense skill here (getSkillEffect(skill, "offense") truthy) runs through
 // ONE generic engine - skillEffects.js's castOffenseSkill/fireElementalProjectile/
 // renderGenericProjectile/runOnHitVisual - driven entirely by these fields,
 // so adding another skill later is just adding another object below, not
@@ -137,7 +137,23 @@ export const singlecastSkill = {
     returnModeDura: 900,
     skillCoolDown: 2000,
     demand: [{ name: "mp", minCost: 20, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.5 },
+    // plusCasterMagicDmg (skillEffects.js's computeCasterMagicDmg) - this
+    // skill's own desc below already promised "deals damage based on your
+    // magic power" even before plusCasterMagicDmg existed as a real field,
+    // so it leans the heaviest into magic (0.6) of every skill in the game.
+    // Every other offense-type skill has one too now, tiered by skillrank:
+    // water/normal (the first family to get a real rule) sits highest -
+    // tidalspike/maelstrombolt 0.5 (rank 1), tsunamiwrath/abyssalcurrent 0.7
+    // (rank 2) - every other element got a flatter, lower 0.1-0.3 pass
+    // instead (rank 1: 0.1, rank 2: 0.2, rank 3: 0.25, rank 4: 0.3), until
+    // each of THOSE gets its own real per-element rule the same way
+    // water/normal did. burstshots (a real caster despite the "multicast"-
+    // sounding name - see its own header comment) still got one (0.25,
+    // skillrank 3) since it genuinely deals damage - only multicast (the
+    // actual pure trigger)/dashstrike/mjolnir have no "offense" effect
+    // entry at all (trigger/dash/buff instead), so there's nothing for this
+    // field to attach to on those.
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.6, plusDmg: 100, chance: 1, bashPower: 0.5 }],
     skillrank: 0,
     upgradePlus: 60,
     explosionColor: "blue",
@@ -169,7 +185,14 @@ export const flamebrandSkill = {
     returnModeDura: 900,
     skillCoolDown: 1500,
     demand: [{ name: "mp", minCost: 15, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+    // burn (characterstate.js's startBurnDamage) - dmgPm ticks off hp every
+    // 1000ms for `duration` ms total, self-expiring, no status entry/cure
+    // needed. skillrank-1 tier, lower half of the two rank-1 fire skills
+    // (infernorush gets the stronger tick, see its own comment)
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.1, plusDmg: 70, chance: 1, bashPower: 0.3 },
+        { effectType: "burn", dmgPm: 30, duration: 4000, soundPlayPerDmg: "dmgpm" },
+    ],
     skillrank: 1,
     upgradePlus: 15,
     explosionColor: "red",
@@ -206,7 +229,12 @@ export const infernorushSkill = {
     returnModeDura: 900,
     skillCoolDown: 2200,
     demand: [{ name: "mp", minCost: 32, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+    // burn (characterstate.js's startBurnDamage) - stronger tick than
+    // flamebrand (both rank 1, this one's the heavier of the two)
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.1, plusDmg: 140, chance: 1, bashPower: 0.4 },
+        { effectType: "burn", dmgPm: 50, duration: 5000, soundPlayPerDmg: "dmgpm" },
+    ],
     skillrank: 1,
     upgradePlus: 28,
     explosionColor: "red",
@@ -236,7 +264,9 @@ export const tidalspikeSkill = {
     returnModeDura: 900,
     skillCoolDown: 1500,
     demand: [{ name: "mp", minCost: 15, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.5, plusDmg: 70, chance: 1, bashPower: 0.3 }
+    ],
     skillrank: 1,
     upgradePlus: 15,
     explosionColor: "blue",
@@ -278,7 +308,9 @@ export const maelstromboltSkill = {
     returnModeDura: 900,
     skillCoolDown: 2200,
     demand: [{ name: "mp", minCost: 32, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+    // plusCasterMagicDmg: 0.5 - same skillrank-1 tier/coefficient as
+    // tidalspikeSkill (see singlecastSkill's own comment for the full ladder)
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.5, plusDmg: 140, chance: 1, bashPower: 0.4 }],
     skillrank: 1,
     upgradePlus: 28,
     explosionColor: "blue",
@@ -291,7 +323,7 @@ export const maelstromboltSkill = {
     arcCount: 2,
     onHitVisual: [
         // { type: "burst", burst: { texture: "drunkBubble", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: true }, impactSound: "electricHitS" }
-        { type: "burst", burst: { texture: "splash", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: false } }, 
+        { type: "burst",impactSound: "waterHitS", burst: { texture: "splash", fireScale: 0.9, smokeScale: 0.7, emberEmitRate: 11, gravitySign: 1, includeSmoke: false } }, 
     ],
     desc: "Writhing tendrils of water coil around the bolt, crashing outward in a wide burst on impact.",
 }
@@ -314,7 +346,7 @@ export const stoneshardSkill = {
     returnModeDura: 900,
     skillCoolDown: 1500,
     demand: [{ name: "mp", minCost: 15, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 75, chance: 1, bashPower: 0.35 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.1, plusDmg: 75, chance: 1, bashPower: 0.35 }],
     skillrank: 1,
     upgradePlus: 15,
     explosionColor: "green",
@@ -363,7 +395,7 @@ export const quakeboltSkill = {
     returnModeDura: 900,
     skillCoolDown: 2200,
     demand: [{ name: "mp", minCost: 32, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 145, chance: 1, bashPower: 0.45 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.1, plusDmg: 145, chance: 1, bashPower: 0.45 }],
     skillrank: 1,
     upgradePlus: 28,
     explosionColor: "green",
@@ -411,13 +443,17 @@ export const lightningboltSkill = {
     returnModeDura: 900,
     skillCoolDown: 1500,
     demand: [{ name: "mp", minCost: 15, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.1, plusDmg: 70, chance: 1, bashPower: 0.3 }],
     skillrank: 1,
     upgradePlus: 15,
     explosionColor: "yellow",
     explosionScale: 1,
     arcCount: 0,
     onLevelUp: "growArcAura",
+    // speedMult: 2 - lightning family flies twice as fast (see
+    // fireElementalProjectile's own spd field: PROJECTILE_SPEED *
+    // speedMult, same mechanism quakeboltSkill already uses for its own
+    // earth-quake speed bump), matching lightning actually reading as fast
     projectileVisual: {
         useProjectile: true, visible: false, shape: "weapon",
         weapon: { type: "sword", rarities: { bladeRarity: "rare2", guardRarity: "rare1", handleRarity: "common1", pommelRarity: "common1" }, scale: 0.12 },
@@ -425,6 +461,7 @@ export const lightningboltSkill = {
         material: { kind: "glow" },
         arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
         launchSound: "spearS1",
+        speedMult: 2,
     },
     // "lightning" onHitVisual burst is ALWAYS includeSmoke:false, regardless
     // of weapon-shape - its own distinct texture (flare3) so it doesn't read
@@ -449,7 +486,7 @@ export const stormsurgeSkill = {
     returnModeDura: 900,
     skillCoolDown: 2200,
     demand: [{ name: "mp", minCost: 32, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.1, plusDmg: 140, chance: 1, bashPower: 0.4 }],
     skillrank: 1,
     upgradePlus: 28,
     explosionColor: "yellow",
@@ -457,8 +494,10 @@ export const stormsurgeSkill = {
     arcCount: 2,
     onLevelUp: "growArcAura",
     // a plain glowing sphere with a Fresnel "hollow shell" material, wrapped
-    // in crackling arcs - this is the FLIGHT look only
-    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 } },
+    // in crackling arcs - this is the FLIGHT look only. speedMult: 2 -
+    // lightning family flies twice as fast (see lightningboltSkill's own
+    // comment for the full reasoning)
+    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 }, speedMult: 2 },
     // skips the usual burst entirely: on hit the sphere itself sticks to
     // whatever it struck, swells to 5x over half a second, then fades out
     // over the next ~0.7s instead of just disappearing - same "stick and
@@ -486,7 +525,7 @@ export const lightpierceSkill = {
     returnModeDura: 900,
     skillCoolDown: 1800,
     demand: [{ name: "mp", minCost: 22, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.4 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 100, chance: 1, bashPower: 0.4 }],
     skillrank: 2,
     upgradePlus: 20,
     explosionColor: "white",
@@ -495,8 +534,12 @@ export const lightpierceSkill = {
     arcCount: 3,
     onLevelUp: "growArcAura",
     // reuses the shared projectile box itself (kept visible, scaled to 0.4x)
-    // wrapped in crackling arcs - a small glowing core, not a shaped mesh
-    projectileVisual: { useProjectile: true, visible: true, shape: "box", shapeParams: { boxScale: 0.4 }, material: { kind: "glow" }, arcs: { enabled: true, weaponGlow: true, width: 0.025, updateInterval: 60 } },
+    // wrapped in crackling arcs - a small glowing core, not a shaped mesh.
+    // speedMult: 0.8 - light family flies slower across the board (see
+    // lightningboltSkill's own speedMult:2 comment for the mechanism) -
+    // these are binding/judgment spells, meant to read as deliberate and
+    // weighty rather than a quick snap-shot
+    projectileVisual: { useProjectile: true, visible: true, shape: "box", shapeParams: { boxScale: 0.4 }, material: { kind: "glow" }, arcs: { enabled: true, weaponGlow: true, width: 0.025, updateInterval: 60 }, speedMult: 0.8 },
     onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A radiant orb crackling with light lances forward, flashing into a bright burst on impact.",
 }
@@ -517,7 +560,7 @@ export const radiantjudgmentSkill = {
     returnModeDura: 900,
     skillCoolDown: 3000,
     demand: [{ name: "mp", minCost: 45, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 190, chance: 1, bashPower: 0.55 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 190, chance: 1, bashPower: 0.55 }],
     skillrank: 2,
     upgradePlus: 38,
     explosionColor: "white",
@@ -528,8 +571,9 @@ export const radiantjudgmentSkill = {
     onLevelUp: "growArcAuraAndBind",
     // a spinning glowing torus instead of the shared box - "divine judgment
     // descending" carried into the projectile itself, matching its own
-    // fancier "divine1" magic circle
-    projectileVisual: { useProjectile: true, visible: false, shape: "torus", shapeParams: { diameter: 0.55, thickness: 0.09, tessellation: 24 }, material: { kind: "glow" }, animation: { z: 0.12 }, arcs: { enabled: true, weaponGlow: true, width: 0.02, updateInterval: 60 } },
+    // fancier "divine1" magic circle. speedMult: 0.8 - light family (see
+    // lightpierceSkill's own comment)
+    projectileVisual: { useProjectile: true, visible: false, shape: "torus", shapeParams: { diameter: 0.55, thickness: 0.09, tessellation: 24 }, material: { kind: "glow" }, animation: { z: 0.12 }, arcs: { enabled: true, weaponGlow: true, width: 0.02, updateInterval: 60 }, speedMult: 0.8 },
     onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A divine circle blooms and calls down a lance of pure light, erupting in a blinding flash.",
 }
@@ -552,7 +596,15 @@ export const shadowboltSkill = {
     returnModeDura: 900,
     skillCoolDown: 1500,
     demand: [{ name: "mp", minCost: 15, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 170, chance: 1, bashPower: 0.3 },
+    // curse chance:1 (always curses) - preserves this skill's EXISTING
+    // behavior from before the effects-array migration (every dark-element
+    // hit unconditionally cursed via skillEffects.js's old element === "dark"
+    // rule); now expressed as explicit data instead of an implicit engine
+    // rule, same shape voidrendSkill's own hand-added curse entry uses
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 170, chance: 1, bashPower: 0.3 },
+        { effectType: "curse", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    ],
     skillrank: 2,
     upgradePlus: 15,
     explosionColor: "violet",
@@ -593,7 +645,10 @@ export const voidrendSkill = {
     returnModeDura: 900,
     skillCoolDown: 3000,
     demand: [{ name: "mp", minCost: 45, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 195, chance: 1, bashPower: 0.5 },
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 195, chance: 1, bashPower: 0.5 },
+        { effectType: "curse", dmgPm: 0, plusDmg: 0, chance: 0.2, bashPower: 0 },
+    ],
     skillrank: 2,
     upgradePlus: 38,
     explosionColor: "violet",
@@ -650,7 +705,11 @@ export const pyroclasmSkill = {
     returnModeDura: 900,
     skillCoolDown: 3500,
     demand: [{ name: "mp", minCost: 58, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 225, chance: 1, bashPower: 0.6 },
+    // burn (characterstate.js's startBurnDamage) - skillrank-2 tier
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 225, chance: 1, bashPower: 0.6 },
+        { effectType: "burn", dmgPm: 70, duration: 5000, soundPlayPerDmg: "dmgpm" },
+    ],
     skillrank: 2,
     upgradePlus: 45,
     explosionColor: "red",
@@ -704,7 +763,12 @@ export const solarcataclysmSkill = {
     returnModeDura: 900,
     skillCoolDown: 4200,
     demand: [{ name: "mp", minCost: 68, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 270, chance: 1, bashPower: 0.68 },
+    // burn (characterstate.js's startBurnDamage) - skillrank-2 tier,
+    // stronger of the two rank-2 fire skills
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 270, chance: 1, bashPower: 0.68 },
+        { effectType: "burn", dmgPm: 85, duration: 5000, soundPlayPerDmg: "dmgpm" },
+    ],
     skillrank: 2,
     upgradePlus: 52,
     explosionColor: "red",
@@ -741,7 +805,9 @@ export const tsunamiwrathSkill = {
     returnModeDura: 900,
     skillCoolDown: 3500,
     demand: [{ name: "mp", minCost: 58, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 225, chance: 1, bashPower: 0.6 },
+    // plusCasterMagicDmg: 0.7 - skillrank-2 tier (see singlecastSkill's own
+    // comment for the full ladder)
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.7, plusDmg: 225, chance: 1, bashPower: 0.6 }],
     skillrank: 2,
     upgradePlus: 45,
     explosionColor: "blue",
@@ -778,7 +844,9 @@ export const abyssalcurrentSkill = {
     returnModeDura: 900,
     skillCoolDown: 4200,
     demand: [{ name: "mp", minCost: 68, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 270, chance: 1, bashPower: 0.68 },
+    // plusCasterMagicDmg: 0.7 - skillrank-2 tier (see singlecastSkill's own
+    // comment for the full ladder)
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.7, plusDmg: 270, chance: 1, bashPower: 0.68 }],
     skillrank: 2,
     upgradePlus: 52,
     explosionColor: "blue",
@@ -822,7 +890,7 @@ export const continentalrendSkill = {
     returnModeDura: 900,
     skillCoolDown: 3500,
     demand: [{ name: "mp", minCost: 58, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 110, chance: 1, bashPower: 0.6 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 110, chance: 1, bashPower: 0.6 }],
     skillrank: 2,
     upgradePlus: 22,
     explosionColor: "green",
@@ -852,7 +920,7 @@ export const seismicjudgmentSkill = {
     returnModeDura: 900,
     skillCoolDown: 4200,
     demand: [{ name: "mp", minCost: 68, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 270, chance: 1, bashPower: 0.68 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 270, chance: 1, bashPower: 0.68 }],
     skillrank: 2,
     upgradePlus: 52,
     explosionColor: "green",
@@ -885,7 +953,7 @@ export const celestialverdictSkill = {
     returnModeDura: 900,
     skillCoolDown: 3500,
     demand: [{ name: "mp", minCost: 58, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 225, chance: 1, bashPower: 0.6 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 225, chance: 1, bashPower: 0.6 }],
     skillrank: 2,
     upgradePlus: 45,
     explosionColor: "white",
@@ -896,8 +964,9 @@ export const celestialverdictSkill = {
     // a plain radiant glowing sphere with a Fresnel "hollow shell" material -
     // its own distinct look (used to share "twinhalo" with seraphicascension,
     // pulled into its own shape so the two no longer look identical), same
-    // shape stormsurge/abyssalcurrent reuse, just its own color
-    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 } },
+    // shape stormsurge/abyssalcurrent reuse, just its own color. speedMult:
+    // 0.8 - light family (see lightpierceSkill's own comment)
+    projectileVisual: { useProjectile: true, visible: true, shape: "sphere", shapeParams: { diameter: 0.4, segments: 16 }, material: { kind: "fresnel" }, arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 }, speedMult: 0.8 },
     onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A verdict passed by the heavens themselves descends through the divine circle, wreathed in crackling light.",
 }
@@ -918,7 +987,7 @@ export const seraphicascensionSkill = {
     returnModeDura: 900,
     skillCoolDown: 4200,
     demand: [{ name: "mp", minCost: 68, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 270, chance: 1, bashPower: 0.68 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 270, chance: 1, bashPower: 0.68 }],
     skillrank: 2,
     upgradePlus: 52,
     explosionColor: "white",
@@ -929,19 +998,23 @@ export const seraphicascensionSkill = {
     // two tori crossed perpendicular (a gyroscope/aegis read), each spinning
     // on its own independent axis - no shared root spin at all, distinct
     // from "halo" (radiantjudgment's single flat ring)
+    // speedMult: 0.8 - light family (see lightpierceSkill's own comment)
     projectileVisual: {
         useProjectile: true, visible: false, shape: "torus",
         shapeParams: { diameter: 0.45, thickness: 0.05, tessellation: 24 },
         copies: [{ rotation: { x: 0, y: 0, z: 0 }, animation: { z: 0.03 } }, { rotation: { x: 0, y: Math.PI / 2, z: 0 }, animation: { x: 0.045 } }],
         material: { kind: "glow" },
         arcs: { enabled: true, weaponGlow: false, width: 0.015, updateInterval: 90 },
+        speedMult: 0.8,
     },
     onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.8, smokeScale: 0.5, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A seraph's own ascending light given form, a lance of pure judgment erupting in a blinding heavenly flash.",
 }
 
-// dark - both curse on hit (see the header comment above; this is an
-// element rule in skillEffects.js, not something read off these objects)
+// dark - both carry an explicit "curse" effects entry (getSkillEffect,
+// skillEffects.js's hit handler rolls its chance) - voidcurse's own chance
+// is 1 (always curses, matching its name/desc below); abyssaldamnation's is
+// set on ITS OWN effects array further down.
 export const voidcurseSkill = {
     slotNumber: 22,
     equiped: true,
@@ -959,7 +1032,10 @@ export const voidcurseSkill = {
     returnModeDura: 900,
     skillCoolDown: 3500,
     demand: [{ name: "mp", minCost: 58, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 225, chance: 1, bashPower: 0.6 },
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 225, chance: 1, bashPower: 0.6 },
+        { effectType: "curse", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    ],
     skillrank: 2,
     upgradePlus: 45,
     explosionColor: "violet",
@@ -998,7 +1074,10 @@ export const abyssaldamnationSkill = {
     returnModeDura: 900,
     skillCoolDown: 4200,
     demand: [{ name: "mp", minCost: 68, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 270, chance: 1, bashPower: 0.68 },
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 270, chance: 1, bashPower: 0.68 },
+        { effectType: "curse", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    ],
     additionalEffects:[{ effectType: "absorb", effectiveOnDeath: true, absorbStats: ["hp", "mp", "sp", "skill"] ,absorbPercent: 1, chance: 1}],
     skillrank: 2,
     upgradePlus: 52,
@@ -1051,7 +1130,7 @@ export const astralrainSkill = {
     // landing for this much adds up to noticeably more than a single-bolt
     // skill of similar mana cost, same reasoning multicast's own (lower)
     // per-shot plusDmg already follows
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.4 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.3, plusDmg: 90, chance: 1, bashPower: 0.4 }],
     skillrank: 4,
     upgradePlus: 18,
     explosionColor: "white",
@@ -1059,8 +1138,11 @@ export const astralrainSkill = {
     swordRain: { min: 2, max: 3, spread: 4.5 },
     onLevelUp: "growSwordRain",
     // invisible+silent targeting marker only - a stealthy targeting box
-    // firing off a fireball whoosh would undercut the whole point of it
-    projectileVisual: { useProjectile: true, visible: false, material: { kind: "none" }, silentLaunch: true },
+    // firing off a fireball whoosh would undercut the whole point of it.
+    // speedMult: 0.8 - light family (see lightpierceSkill's own comment) -
+    // still applies to the invisible marker's OWN flight even though the
+    // real visual payoff (the falling sword rain) is separate
+    projectileVisual: { useProjectile: true, visible: false, material: { kind: "none" }, silentLaunch: true, speedMult: 0.8 },
     // "none" - the marker's own hit never actually reaches onHitVisual
     // dispatch at all (its swordRain branch in fireElementalProjectile
     // returns before onHit ever runs) - the real visual is the falling
@@ -1102,7 +1184,10 @@ export const darkorbSkill = {
     returnModeDura: 900,
     skillCoolDown: 4500,
     demand: [{ name: "mp", minCost: 65, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 260, chance: 1, bashPower: 0.62 },
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.3, plusDmg: 260, chance: 1, bashPower: 0.62 },
+        { effectType: "curse", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    ],
     skillrank: 4,
     upgradePlus: 50,
     explosionColor: "violet",
@@ -1167,7 +1252,7 @@ export const burstshotsSkill = {
     returnModeDura: 900,
     skillCoolDown: 4000,
     demand: [{ name: "mp", minCost: 40, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 55, chance: 1, bashPower: 0.25 },
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.25, plusDmg: 55, chance: 1, bashPower: 0.25 }],
     skillrank: 3,
     upgradePlus: 20,
     explosionColor: "blue",
@@ -1180,8 +1265,8 @@ export const burstshotsSkill = {
 }
 
 // --- MULTICAST - a pure TRIGGER, not a caster ---
-// Activating this fires NO projectile/damage of its own. effects.effectType
-// is "trigger" (not "offense"), so attackingSystem.js's activateSkill switch
+// Activating this fires NO projectile/damage of its own. Its effects entry's
+// effectType is "trigger" (not "offense"), so attackingSystem.js's activateSkill switch
 // explicitly no-ops for it instead of routing it through castOffenseSkill -
 // see that case's own comment. All the REAL behavior lives in skillsui.js's
 // slotbuttons click handler: once this skill's own mode/mana gate passes,
@@ -1190,7 +1275,7 @@ export const burstshotsSkill = {
 // charge, requireMode gate, multiplayer relay) a real manual press would -
 // so pressing this ONE button can trigger up to 4 other skills at once (5
 // total including this one, though this one deals no damage itself).
-// effects.effectType === "trigger" is also what that same click handler
+// getSkillEffect(skill, "trigger") is also what that same click handler
 // checks to (a) know to run the cascade and (b) auto-reset isActive shortly
 // after, alongside "offense" skills, rather than staying stuck active like
 // a toggle.
@@ -1211,7 +1296,7 @@ export const multicastSkill = {
     returnModeDura: 900,
     skillCoolDown: 6000,
     demand: [{ name: "mp", minCost: 20, cost: 0 }],
-    effects: { effectType: "trigger", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    effects: [{ effectType: "trigger", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 }],
     skillrank: 4,
     upgradePlus: 0,
     // no damage/projectile to scale, so leveling makes it cheaper and
@@ -1219,9 +1304,9 @@ export const multicastSkill = {
     onLevelUp: "growMulticastEfficiency",
     // trigger skill - fires no projectile of its own, clicks other skill
     // slots instead. Never actually reaches fireElementalProjectile/
-    // renderGenericProjectile at all (activateSkill's own switch no-ops for
-    // effects.effectType === "trigger"), these are here only so scanning the
-    // file top-to-bottom stays uniform.
+    // renderGenericProjectile at all (activateSkill's own switch no-ops when
+    // getSkillEffect(skill, "trigger") is truthy), these are here only so
+    // scanning the file top-to-bottom stays uniform.
     projectileVisual: { useProjectile: false },
     desc: "Channels no power of its own - instead, it triggers every other skill currently in your bar, all at once.",
 }
@@ -1269,7 +1354,15 @@ export const disintegrationSkill = {
     returnModeDura: 900,
     skillCoolDown: 4000,
     demand: [{ name: "mp", minCost: 40, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.25 },
+    // burn (characterstate.js's startBurnDamage) - this skill's own desc
+    // below already said "burn them until they disintegrate" before burn
+    // was a real mechanic; duration matches enemyBind's own bindDuration
+    // (6s) below so the actual damage-over-time lasts exactly as long as
+    // the bound/burning-body visual already does
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.25, plusDmg: 100, chance: 1, bashPower: 0.25 },
+        { effectType: "burn", dmgPm: 60, duration: 6000, soundPlayPerDmg: "dmgpm" },
+    ],
     skillrank: 3,
     upgradePlus: 20,
     explosionColor: "fire",
@@ -1317,11 +1410,22 @@ export const massivedisintegrationSkill = {
     returnModeDura: 900,
     skillCoolDown: 14000,
     demand: [{ name: "mp", minCost: 140, cost: 0 }],
-    effects: { effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 },
+    // burn (characterstate.js's startBurnDamage) - AOE version of
+    // disintegrationSkill, same 6s duration as that skill's own burn
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.3, plusDmg: 220, chance: 1, bashPower: 0.55 },
+        { effectType: "burn", dmgPm: 90, duration: 6000, soundPlayPerDmg: "dmgpm" },
+    ],
     skillrank: 4,
     upgradePlus: 40,
     explosionColor: "fire",
     explosionScale: 1,
+    // explosionScaleGrowth: 0.3 (attackingSystem.js's upgradeSkill) - this
+    // skill's own base AOE circle (groundTrap.radius: 10 below) is already
+    // huge, so the normal 10%-per-level growth every other skill gets
+    // compounded into a comically wide burst by higher levels - cut to 30%
+    // of that rate (a 70% reduction) instead
+    explosionScaleGrowth: 0.3,
     // distance omitted - defaults to 0, centered on the caster's own body,
     // same as disintegrationSkill's own trap
     groundTrap: { radius: 10, duration: 8000, aoe: true },
@@ -1352,8 +1456,8 @@ export const massivedisintegrationSkill = {
 // powerScale (mana-output-slider * lvl-based explosionScale) at cast time,
 // same convention every other skill's plusDmg already follows, so upgrading
 // mjolnir's level (which bumps explosionScale automatically, see
-// upgradeSkill) makes the buff itself stronger even though
-// effects.plusDmg/dmgPm stay 0 here (there's no direct damage to bump).
+// upgradeSkill) makes the buff itself stronger even though this skill's own
+// effects entry's plusDmg/dmgPm stay 0 here (there's no direct damage to bump).
 // buffDuration is independent of skillCoolDown - some overlap window (buff
 // still has 5s left when it comes off cooldown) is intentional, not a bug.
 export const mjolnirSkill = {
@@ -1372,7 +1476,7 @@ export const mjolnirSkill = {
     returnModeDura: 900,
     skillCoolDown: 15000,
     demand: [{ name: "mp", minCost: 35, cost: 0 }],
-    effects: { effectType: "buff", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 },
+    effects: [{ effectType: "buff", dmgPm: 0, plusDmg: 0, chance: 1, bashPower: 0 }],
     buff: { stat: "meeleeDmg", toAdd: 60, percent: 0, buffDuration: 20000 },
     skillrank: 3,
     // no plusDmg/dmgPm to bump per level (same reasoning multicastSkill's
@@ -1398,12 +1502,10 @@ export const mjolnirSkill = {
 // over dash.durationMs while the "dashstrike" clip plays, instead of a
 // separate windup animation before some other payoff lands later.
 //
-// effects.effectType is "dash", a NEW type - attackingSystem.js's
-// activateSkill will need its own case for it (alongside "offense"/"buff"/
-// "trigger"), and skillEffects.js will need a castDashSkill to actually move
-// the player + apply the strike's damage. NOT implemented yet - this is data
-// only for now, per your request to review the shape before any of that gets
-// wired up.
+// this skill's own effects entry has effectType "dash" - attackingSystem.js's
+// activateSkill has its own case for it (alongside "offense"/"buff"/
+// "trigger"), and skillEffects.js's castDashSkill actually moves the player
+// + applies the strike's damage.
 //
 // dash - read by the not-yet-written castDashSkill: a physics-enabled
 // character gets a forward applyImpulse of impulseForce; without physics,
@@ -1443,7 +1545,10 @@ export const dashstrikeSkill = {
     returnModeDura: 900,
     skillCoolDown: 3000,
     demand: [{ name: "mp", minCost: 25, cost: 0 }],
-    effects: { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+    effects: [
+        { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+        { effectType: "critical", criticalPercent: 0.4},
+    ],
     dash: { distance: 6, impulseForce: 120, durationMs: 350 },
     animationName: "dashstrike",
     // played on a timeout after activation (durationMs -> ms, read by the
@@ -1460,6 +1565,99 @@ export const dashstrikeSkill = {
     // no target circle/projectile at all - a melee weapon skill, not a caster
     projectileVisual: { useProjectile: false },
     desc: "Surge forward in an instant and cleave through anything in your path.",
+}
+
+// --- METEOR (God Tier) ---
+// astralrainSkill's own "sword rain" mechanic (skill.swordRain, see that
+// skill's header comment), generalized to a shared skill.swordRain/
+// meteorRain marker-touch dispatch (skillEffects.js's triggerSkillRain) -
+// showers meteors instead of swords. Kept as its OWN dedicated
+// skill.meteorRain property + dedicated trigger/spawn functions
+// (triggerMeteorRain/spawnFallingMeteor) rather than reusing swordRain's
+// own internals - astralrainSkill's falling sword is a hardcoded mesh
+// (creations/skills.js's spawnProjectile always builds a real sword via
+// createWeapon), so there's no shared "rain of X" engine to hand a
+// different mesh to without forking that function; this mirrors the same
+// shape/pattern instead (marker -> stagger -> scatter -> impact) with its
+// own falling body.
+//
+// meteorVisual (NOT projectileVisual - that below is the invisible
+// targeting marker, exactly like astralrainSkill's own) describes the
+// FALLING METEOR itself, entirely property-driven same as every other
+// skill's own look: model.name "stoneshard" reuses that skill's own real
+// modeled shard (assetcreation/createProjectileModel.js already has it
+// loaded, no new glb needed), material recolors its surface with a
+// scorched-smoke texture tinted black-red instead of stoneshard's own
+// plain grey rock1.jpg, and trailTexture wraps it in
+// createCometTrailParticles' own "shooting star" streak (already generic/
+// reusable - pyroclasmSkill's own comet tail is the other user) using
+// smoke2.webp instead of that skill's default flare2, for a billowing
+// burning-smoke trail as it falls.
+//
+// element: "fire" - not specified in the request, my own call: a burning
+// sky-rock reads as fire before any other element (dark already has its
+// own God Tier entry, darkorb; light has astralrain) - one-line change if
+// that wasn't the intent.
+export const meteorSkill = {
+    slotNumber: 33,
+    equiped: true,
+    isActive: false,
+    name: "meteor",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "fire",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Meteor",
+    castDuration: 2.2,
+    returnModeDura: 900,
+    skillCoolDown: 5500,
+    demand: [{ name: "mp", minCost: 72, cost: 0 }],
+    // plusDmg here is PER METEOR, not a one-shot total - same "several
+    // smaller hits add up" reasoning astralrainSkill's own plusDmg comment
+    // gives. plusCasterMagicDmg: 0.3 matches the other rank-4 fire skill's
+    // own tier (massivedisintegration)
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.3, plusDmg: 110, chance: 1, bashPower: 0.5 }],
+    skillrank: 4,
+    upgradePlus: 22,
+    explosionColor: "red",
+    explosionScale: 1,
+    // minDistance/maxDistance: 12-20 (was 5-10 - "on second thought make it
+    // 12-20 distance away"). Used by castOffenseSkill's own
+    // computeGroundAOEPos (skillEffects.js), rolled fresh each cast - no
+    // fixed spot, no target-seeking marker at all anymore (this used to
+    // work exactly like astralrainSkill's own swordRain, an invisible
+    // projectile that waited to touch something first - gone now).
+    meteorRain: { min: 2, max: 3, spread: 4.5, minDistance: 12, maxDistance: 20 },
+    onLevelUp: "growMeteorRain",
+    meteorVisual: {
+        model: { name: "stoneshard", scale: 1.4 },
+        // tintColor - pure red, no black mixed in (was {0.35,0.06,0.04}, a
+        // near-black with only a faint red tinge - this reads as an actual
+        // red rock instead of a dark charred one)
+        material: { texturePath: "./images/particles/smoke2.webp", tintColor: { r: 0.9, g: 0.12, b: 0.08 } },
+        trailTexture: "smoke2",
+    },
+    // no projectile at all now - same shape disintegrationSkill's own
+    // groundTrap skills use (castOffenseSkill's dispatch treats
+    // skill.meteorRain exactly like skill.groundTrap: a flat ground circle
+    // during the cast, then fires directly at the computed spot once
+    // castDuration elapses, no marker/hit-detection involved)
+    projectileVisual: { useProjectile: false },
+    // the marker's own hit used to never actually reach onHitVisual dispatch
+    // at all - moot now (no marker exists), but this onHitVisual entry is
+    // still what spawnFallingMeteor's own explosion burst (fireGenericBurst)
+    // reads for EACH meteor's own impact, entirely separate from this
+    // impactSound: "fireHitS" - was "struckS" (copied from astralrainSkill's
+    // own falling-sword pattern, a PHYSICAL blade-landing sound - wrong
+    // here). fireHitS is actually playImpactSound's own DEFAULT (skillEffects.js)
+    // when no impactSound is set at all, same one flamebrand/pyroclasm/etc
+    // already fall back to - stated explicitly here instead of just omitting
+    // it, so it's clear this was a deliberate pick, not an oversight
+    onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1.3, smokeScale: 1.4, emberEmitRate: 20, gravitySign: 1, includeSmoke: true }, impactSound: "fireHitS" }],
+    desc: "An invisible mark burns into the target - moments later, blazing meteors rain down from the sky, each erupting into a fiery crater on impact.",
 }
 
 export const skillsData = [
@@ -1479,7 +1677,8 @@ export const skillsData = [
     darkorbSkill,
     burstshotsSkill,
     multicastSkill, disintegrationSkill, massivedisintegrationSkill,
-    mjolnirSkill, dashstrikeSkill
+    mjolnirSkill, dashstrikeSkill,
+    meteorSkill,
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an
@@ -1489,3 +1688,16 @@ export const skillsData = [
 // resolve the real object through this map). Built once here instead of at
 // each call site.
 export const SKILLS_BY_NAME = Object.fromEntries(skillsData.map(skill => [skill.name, skill]))
+
+// effects is an ARRAY now (was a single object) - every skill above still
+// only carries one entry in it today, but the shape now allows a skill to
+// carry several (e.g. its damage-dealing "offense" entry PLUS a separate
+// "curse"/"dot"/whatever entry later) without a breaking reshape when that
+// day comes. Every existing call site that used to read
+// skill.effects.plusDmg / skill.effects?.effectType directly goes through
+// this instead, so "the offense entry on this skill" (or buff/dash/trigger)
+// keeps resolving correctly no matter how many OTHER entries end up
+// sitting alongside it in the array.
+export function getSkillEffect(skill, effectType){
+    return skill?.effects?.find(effect => effect.effectType === effectType)
+}

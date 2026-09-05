@@ -51,6 +51,24 @@ const LOOT_TEMPLATES = {
         desc: "A dark, blood-red mineral said to sharpen the wielder's aggression.",
         rarity: "rare"
     }),
+    // no ./images/items/crafting/blackdragon.webp yet either (unlike the
+    // rest of this "newly added" block above, which all already have their
+    // icon sitting in that folder) - will 404 until that art exists.
+    // Priced above every other material here (even unobtanium/phoenixore) -
+    // a dragon scale should read as the single most prized material in the
+    // game, matching how dragonSlayerTitle sits near the top of
+    // titlesData.js's own tier (only godslayerTitle outranks it).
+    blackdragon: () => ({
+        itemId: randomNum(),
+        name: "blackdragon",
+        dn: "Black Dragon Scale",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 150 },
+        desc: "A scale torn from a black dragon's hide, still cold as void and harder than any forged steel.",
+        rarity: "legendary"
+    }),
     bronzeore: () => ({
         itemId: randomNum(),
         name: "bronzeore",
@@ -91,9 +109,9 @@ const LOOT_TEMPLATES = {
         itemCateg: "crafting",
         itemType: "material",
         qnty: 1,
-        price: { coinType: "bronze", pieces: 35 },
+        price: { coinType: "bronze", pieces: 135 },
         desc: "Ore said to have cooled in phoenix-fire - it's still warm to the touch.",
-        rarity: "rare"
+        rarity: "epic"
     }),
     rubyore: () => ({
         itemId: randomNum(),

@@ -16,7 +16,7 @@ import { Vector3, Quaternion } from "@babylonjs/core"
 import npcDetails from "../staticRecources/npcDetails.js"
 import { createFighterNpc } from "./createnpc.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
-import { getCharState, updateMyDetailsOL, deductHp } from "../charactersystem/characterstate.js"
+import { getCharState, updateMyDetailsOL, deductHp, isPlayerCursed, curseStatusEffect } from "../charactersystem/characterstate.js"
 import { calcDmg, registerToAtkCollider } from "../charactersystem/attackingSystem.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { ANIM_STATE, findAnimVariants } from "../tools/animation.js"
@@ -33,6 +33,7 @@ import { showAnswerButtons } from "../tools/popupUI.js"
 import { giveSkill } from "../components/skillsui.js"
 import { receiveTitle } from "../components/titleUI.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
+import { getSkillEffect } from "../staticRecources/skillsData.js"
 
 const DUEL_PLACE_ID     = 200
 const ATTACK_INTERVAL_MS = 1500
@@ -425,6 +426,13 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // opponent the same way they already target real, server-tracked
     // enemies. applyDamage below is the same local damage path melee uses.
     pushDuelOpponentOnScene({ body: opponent.body, applyDamage: applyDamageToOpponent })
+    // also exposed directly on the raw opponent object (not just the
+    // registry wrapper above) - skillEffects.js's castEnemySkill is called
+    // with THIS object as its own `enemy` param (this file's own
+    // castEnemySkill(scene, opponent, skill, targetPlayer) call below), and
+    // needs enemy.applyDamage to redirect a CURSED opponent's own skill-cast
+    // damage back onto itself the same way a real wild enemy's redirect does
+    opponent.applyDamage = applyDamageToOpponent
 
     let hp = npcDet.hp
     const maxHp = npcDet.maxHp
@@ -546,7 +554,19 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // "weapon blocking" shouldn't stop a fireball.
     function applyDamageToOpponent(dmgToApply, hitDetails = {}){
         if(opponentDefeated || duelState.playerDefeated) return
-        const { weaponType, hitSound, isPhysical } = hitDetails
+
+        // cursed player - "when you attack, your own damage backfires on
+        // you" (skillsData.js's curse effect entries) - the player's own
+        // mirror of createEnemy.js/worldsocket.js's cursed-ENEMY redirect
+        // (characterstate.js's isPlayerCursed/curseStatusEffect). Bypasses
+        // opponent.weaponBlocking entirely below - the swing never actually
+        // reaches the opponent in this case, nothing for a block to stop.
+        if(isPlayerCursed()){
+            deductHp(dmgToApply, [])
+            return
+        }
+
+        const { weaponType, hitSound, isPhysical, skill } = hitDetails
 
         if(isPhysical && opponent.weaponBlocking){
             // read live off opponent.weaponBlocking (createcharacter.js),
@@ -582,6 +602,24 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // same call skillEffects.js's own stickBriefly hit reaction already
         // uses for a player getting hit by a skill
         opponent.bloodps?.play()
+
+        // this skill's own curse effect (skillsData.js) - if it lands,
+        // curses THIS opponent (mirrors a player's dark skill cursing a
+        // wild enemy, skillEffects.js). Local flag only (no server relay -
+        // duels are never multiplayer, same reasoning
+        // duelOpponentsOnScene's own comment gives for skipping
+        // emitEnemyIsHit/emitEnemyCurse entirely in this file) - read by
+        // castEnemySkill (enemy._cursed, shared with real wild enemies) and
+        // the melee/dash attack loops below (opponent._cursed) to redirect
+        // this opponent's own future damage back onto itself. skill is
+        // undefined for a plain melee swing - getSkillEffect(undefined, ...)
+        // just resolves to undefined, no curse roll happens
+        if(!opponent._cursed){
+            const curseEffect = getSkillEffect(skill, "curse")
+            if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
+                opponent._cursed = true
+            }
+        }
 
         if(hp <= 0){
             opponentDefeated = true
@@ -757,14 +795,26 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
 
         // damage lands once the dash has had time to actually close the gap -
         // same calcOpponentDmg formula every other swing below already uses,
-        // with this skill's own effects.plusDmg layered flat on top as the
-        // bonus (the player's own dashstrikeSkill gets its bonus via a short-
-        // lived meeleeDmg buff feeding into calcDmg - not applicable here,
-        // there's no calcDmg/atkCollider pipeline on the opponent's attack
-        // side at all, just this flat formula, so the bonus just adds directly)
+        // with this skill's own offense-effect plusDmg layered flat on top
+        // as the bonus (the player's own dashstrikeSkill gets its bonus via
+        // a short-lived meeleeDmg buff feeding into calcDmg - not applicable
+        // here, there's no calcDmg/atkCollider pipeline on the opponent's
+        // attack side at all, just this flat formula, so the bonus just
+        // adds directly)
         setTimeout(async () => {
             if(opponentDefeated || duelState.playerDefeated) return
-            const dmgToPlayer = calcOpponentDmg(npcDet) + (skill.effects?.plusDmg || 0)
+            const dmgToPlayer = calcOpponentDmg(npcDet) + (getSkillEffect(skill, "offense")?.plusDmg || 0)
+
+            // cursed opponent - this dash's own damage backfires onto the
+            // opponent itself instead of the player, same rule
+            // applyDamageToOpponent's own isPlayerCursed() branch follows
+            // for the reverse direction. applyDamageToOpponent (not
+            // applyDamageToPlayer) - self-hit, no hitDetails needed
+            if(opponent._cursed){
+                applyDamageToOpponent(dmgToPlayer)
+                return
+            }
+
             await applyDamageToPlayer(dmgToPlayer)
 
             if(getCharState().hp <= 1 && !duelState.playerDefeated){
@@ -1204,6 +1254,15 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // Ignored entirely if the player is currently blocking - see
         // applyDamageToPlayer's own header comment.
         const dmgToPlayer = calcOpponentDmg(npcDet)
+
+        // cursed opponent - this swing's own damage backfires onto the
+        // opponent itself instead of the player, same rule
+        // performOpponentDashStrike's own identical check follows above
+        if(opponent._cursed){
+            applyDamageToOpponent(dmgToPlayer)
+            return
+        }
+
         await applyDamageToPlayer(dmgToPlayer)
 
         if(getCharState().hp <= 1 && !duelState.playerDefeated){

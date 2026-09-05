@@ -8,13 +8,13 @@ import { getEnemiesOnScene, getIsSocketOn, getPlayersOnScene, getProjectilesOnSc
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
-import { getCharState, gainExp } from "../charactersystem/characterstate.js"
+import { getCharState, gainExp, dealDamageToEnemy } from "../charactersystem/characterstate.js"
 import { getGameStatus, getSceneDet } from "../main/main.js"
 import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
-import { emitEnemyIsHit, emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget } from "../sockets/emits.js"
+import { emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget } from "../sockets/emits.js"
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
@@ -525,11 +525,20 @@ export default function createEnemy(scene, det) {
             // Handle attack collision logic
             const charState = getCharState()
             // playAnim(entries.animationGroups, `hit1`)
-            emitEnemyIsHit({
+            // dealDamageToEnemy (characterstate.js), not a direct
+            // emitEnemyIsHit - redirects onto the player's own hp instead if
+            // the player is currently cursed, same rule skillEffects.js's
+            // own skill-hit handlers already follow. isPhysical:true - this
+            // IS a real weapon/fist swing (the only such call site in the
+            // whole game), what actually drives enemyIsHit's own
+            // swordS1/punchedS sound decision - see dealDamageToEnemy's own
+            // comment for the full reasoning
+            dealDamageToEnemy({
                 playerId: charState.owner,
                 dmgDetails: calcDmg(charState),
                 targetId: det._id,
                 currentPlaceId: det.currentPlaceId,
+                isPhysical: true,
             })
             // no notPlayerBody arg - faceForward targets the LOCAL PLAYER's
             // own body (see its own comment on why it can't just reuse the
@@ -779,7 +788,15 @@ export function enemyIsHit(data){
     // console.log(`my own ID: ${getCharState().owner}`)
 
 
-    if (playerId === getCharState().owner){
+    // data.isPhysical (characterstate.js's dealDamageToEnemy) - only a real
+    // melee swing sets this, so only a real melee swing plays this "you hit
+    // something with your weapon/fist" sound. Used to fire on EVERY hit
+    // regardless of source - a skill cast landing already plays its own
+    // impact sound (skillEffects.js's playImpactSound), and fire's own burn
+    // tick (startTargetBurn) has no sound of its own at all - both were
+    // getting this exact swordS1/punchedS on top, which is what made every
+    // burn tick sound like a fresh sword swing landing once a second.
+    if (playerId === getCharState().owner && data.isPhysical){
         const { hasWeapon } = getAttackInfo()
         if(hasWeapon) {
             playSound(getAllSounds().swordS1)

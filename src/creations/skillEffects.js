@@ -32,7 +32,7 @@ import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff } from "../charactersystem/characterstate.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect } from "../charactersystem/characterstate.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
@@ -40,7 +40,7 @@ import { camShake } from "../tools/camera.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
-import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
+import { SKILLS_BY_NAME, getSkillEffect } from "../staticRecources/skillsData.js"
 import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { ATK_COLLIDER_PARKED_Y } from "../charactersystem/createMyCharacter.js"
@@ -66,7 +66,7 @@ export const ELEMENT_CIRCLES = {
 // not a single shared one. This used to be a single module-level variable,
 // which was fine as long as only one skill could ever be mid-cast at a
 // time - but multicastSkill's cascade (skillsui.js's slotbuttons click
-// handler, skill.effects.effectType === "trigger") activates several other
+// handler, getSkillEffect(skill, "trigger") truthy) activates several other
 // skills in the same synchronous tick now. With a single shared slot, each
 // new cast's own cancelPendingCast() call at the top of castOffenseSkill/
 // castMulticast was cancelling the PREVIOUS skill's still-charging cast
@@ -101,6 +101,87 @@ const CAST_SPAWN_OFFSET = 1
 // when several of them can otherwise land in the same instant and stack.
 const CAST_SPAWN_JITTER = 0.35
 const CIRCLE_SIZE_SCALE = 0.5
+
+// Per-element magic-scaling rule (skillsData.js's own plusCasterMagicDmg
+// field on a skill's "offense" effect entry, e.g. tidalspikeSkill's 0.5) -
+// each offense skill now OPTS IN to drawing bonus damage from the caster's
+// own magic stat, rather than every single skill getting the same flat
+// stats.magic*16 bonus regardless of element the way this used to work. A
+// skill with no plusCasterMagicDmg contributes NO magic-stat bonus at all -
+// element rules for fire/light/earth/dark/lightning are still TBD (per the
+// user's own "I will tell you the rule for other elements later"), so
+// until each of THOSE gets its own rule, those skills only ever deal their
+// own flat plusDmg, no stats.magic scaling whatsoever. water/normal are the
+// first element family to get a rule: plusCasterMagicDmg is a COEFFICIENT
+// (tidalspike's own 0.5), not a plain on/off flag - it scales how much of
+// magic*10 actually applies to THIS skill, so two different water-family
+// skills can draw a different share of the same stat as they're tuned.
+// abilityAdditions.additionalMagicDmg (getAdditionalsFromAbilities) is
+// still added in on top either way, same "plus if there's more that will
+// add into our magic" the user described - this is the "more" slot.
+function computeCasterMagicDmg(skill, charState, abilityAdditions){
+    const offenseEffect = getSkillEffect(skill, "offense")
+    if(!offenseEffect?.plusCasterMagicDmg) return 0
+
+    let magicDmg = (charState.stats.magic * 10 * offenseEffect.plusCasterMagicDmg) + abilityAdditions.additionalMagicDmg.toAdd
+    if(abilityAdditions.additionalMagicDmg.percent){
+        magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+    }
+    return magicDmg
+}
+
+// Per-element flat damage multiplier - dark deals 2.5x everyone else's
+// baseline (curse's own backfire-on-self mechanic means this also scales up
+// how much a cursed DARK caster takes when it hits themselves - the
+// intended high-risk/high-reward trade for the element, not an oversight).
+// Every other element sits at the implicit 1x default for now, same "not
+// every element has its own rule yet" spirit plusCasterMagicDmg's own
+// header comment describes - add another entry here the same way if/when
+// another element gets one.
+const ELEMENT_DAMAGE_MULTIPLIER = { dark: 2.5 }
+function getElementDamageMultiplier(skill){
+    return ELEMENT_DAMAGE_MULTIPLIER[skill?.element] ?? 1
+}
+
+// FIRE'S BURN, for a target that ISN'T the local player (a real wild enemy
+// or an npcFighter duel opponent) - characterstate.js's own startBurnDamage
+// is the player-side mirror of this exact same idea, just ticking
+// characterState.hp directly instead of needing a dealTick callback (the
+// player has no "how do I damage this" indirection to route through the
+// way an enemy/duel-opponent target does). Both halves share the identical
+// visual: createBodyFireParticles' "wreathed in flame" look (already used,
+// undamaging, by disintegrationSkill's own applyDisintegrationHit before
+// burn was a real mechanic) parented to the target's own body for the
+// burn's whole duration, plus a tick every 1000ms for burnEffect.duration
+// ms total, dealt however THIS target's own damage actually applies -
+// dealDamageToEnemy for a real wild enemy, opponent.applyDamage for a duel
+// opponent (same split every other hit-application path in this file
+// already makes). existingParticles, when passed, reuses a fire visual a
+// caller already spawned for its OWN reasons (disintegrationSkill's own
+// bind-visual particles) instead of stacking a second overlapping one on
+// the same body - only spawns its own when omitted.
+function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyWidenes, dealTick, existingParticles){
+    const totalTicks = Math.max(1, Math.round(burnEffect.duration / 1000))
+    let ticksDone = 0
+
+    const burnParticles = existingParticles ?? createBodyFireParticles(targetBody, scene, bodyHeight, bodyWidenes)
+    const burnInterval = setInterval(() => {
+        ticksDone++
+        dealTick(burnEffect.dmgPm)
+        if(ticksDone >= totalTicks) clearInterval(burnInterval)
+    }, 1000)
+
+    // only stop/dispose particles THIS call spawned - a reused
+    // existingParticles instance stays owned (and cleaned up) by whoever
+    // actually created it
+    setTimeout(() => {
+        clearInterval(burnInterval)
+        if(!existingParticles){
+            burnParticles.stop()
+            burnParticles.dispose(false)
+        }
+    }, burnEffect.duration)
+}
 
 function computeCastOrigin(player, skill){
     // "in front of my right hand" - rHand's world position if the bone's
@@ -149,11 +230,26 @@ export function castOffenseSkill(scene, player, skill, charState){
     // trap will actually deploy (facingDirection omitted - see
     // createMagicCircle's own comment) instead of standing upright in front
     // of the caster's hand like every other offense skill's does.
-    // computeGroundTrapPos resolved once here so this circle and the trap
+    // computeGroundAOEPos resolved once here so this circle and the trap
     // itself (spawnGroundTrap below) land on the exact same spot.
-    const groundTrapPos = skill.groundTrap ? computeGroundTrapPos(charState, player, skill, forward) : null
-    if(groundTrapPos){
-        createMagicCircle(groundTrapPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(getGroundTrapRadius(skill)))
+    const groundTrapPos = skill.groundTrap ? computeGroundAOEPos(charState, player, skill.groundTrap.distance ?? GROUND_TRAP_DEFAULT_DISTANCE, forward) : null
+    // skill.meteorRain (meteorSkill) - same "no target to aim at, just drop
+    // an AOE on the ground in front of the caster" shape groundTrap already
+    // has ("it does not need a projectile to hit an enemy... after the
+    // casting duration spawn the meteors in front of the caster", verbatim -
+    // this USED to fire an invisible marker projectile and wait for it to
+    // touch something, same as astralrainSkill's own swordRain, but that's
+    // gone now). Distance is RANDOM per cast (meteorRain.minDistance/
+    // maxDistance, default 5-10) rather than groundTrap's one fixed value -
+    // a meteor shower reads more natural landing somewhere in a rough band
+    // ahead of the caster than always the exact same spot.
+    const meteorGroundPos = skill.meteorRain
+        ? computeGroundAOEPos(charState, player, randNum(skill.meteorRain.minDistance ?? 5, skill.meteorRain.maxDistance ?? 10), forward)
+        : null
+    const aoeGroundPos = groundTrapPos ?? meteorGroundPos
+    if(aoeGroundPos){
+        const circleRadius = skill.groundTrap ? getGroundTrapRadius(skill) : (skill.meteorRain?.spread ?? 4)
+        createMagicCircle(aoeGroundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(circleRadius))
     } else {
         // circle stays up roughly through the cast window plus a beat after
         // the projectile launches, instead of despawning the instant it fires
@@ -178,6 +274,16 @@ export function castOffenseSkill(scene, player, skill, charState){
             // see spawnGroundTrap's own header comment
             pendingCasts.delete(skill.name)
             spawnGroundTrap(scene, charState, skill, groundTrapPos, powerScale)
+        } else if(skill.meteorRain){
+            // meteorSkill - fires immediately at the ground spot computed
+            // above, no marker/hit-detection step at all. triggerMeteorRain
+            // itself already does its own per-meteor AOE damage check
+            // (METEOR_IMPACT_RADIUS around each one's own landing point) once
+            // each meteor actually lands, so whoever's standing near
+            // meteorGroundPos when the rain arrives still takes the hit -
+            // this just controls WHERE that spot is, not who's targeted.
+            pendingCasts.delete(skill.name)
+            triggerMeteorRain(scene, charState, skill, meteorGroundPos, powerScale)
         } else {
             // fireProjectileVolley owns clearing pendingCasts itself here,
             // once its own LAST scheduled bolt actually fires - a volley
@@ -321,7 +427,7 @@ export function castMulticast(scene, player, skill, charState){
 }
 
 // "below my feet" ground position for a self-cast skill - same ground-height
-// resolution computeGroundTrapPos already uses (flat-ground fallback vs
+// resolution computeGroundAOEPos already uses (flat-ground fallback vs
 // per-point terrain sampling for openworld's uneven ground), just centered
 // exactly on the caster's own body with no forward offset at all (a buff
 // has no direction to aim, unlike a ground trap which can be thrown some
@@ -484,24 +590,51 @@ export function castDashSkill(scene, player, skill, charState){
 
     // positionAtkCollider's own hit handlers (createEnemy.js/duelSystem.js)
     // just call calcDmg(charState) fresh, with no idea a skill triggered
-    // this particular swing - so skill.effects.plusDmg has nowhere to enter
-    // the damage calc on its own. calcDmg already reads
-    // getActiveBuffAdditions().meeleeDmg in though (see attackingSystem.js),
-    // the exact same store mjolnirSkill's own applyWeaponBuff writes to - so
-    // a very short-lived meeleeDmg buff, timed to cover just this one
-    // strike, is what actually gets this skill's bonus damage applied
-    // without touching the shared hit-handler code at all
+    // this particular swing - so this skill's own "dash" effect entry's
+    // plusDmg has nowhere to enter the damage calc on its own. calcDmg
+    // already reads getActiveBuffAdditions().meeleeDmg in though (see
+    // attackingSystem.js), the exact same store mjolnirSkill's own
+    // applyWeaponBuff writes to - so a very short-lived meeleeDmg buff,
+    // timed to cover just this one strike, is what actually gets this
+    // skill's bonus damage applied without touching the shared hit-handler
+    // code at all
     const powerScale = (skill._castPowerScale ?? 1) * (skill.explosionScale ?? 1)
-    if(skill.effects?.plusDmg){
+    const dashEffect = getSkillEffect(skill, "dash")
+    if(dashEffect?.plusDmg){
         const buffId = `skillbuff_${skill.name}`
         addTempBuff({
             id: buffId,
             stat: "meeleeDmg",
-            toAdd: Math.round(skill.effects.plusDmg * powerScale),
+            toAdd: Math.round(dashEffect.plusDmg * powerScale),
             percent: 0,
             expiresAt: Date.now() + DASH_BONUS_DMG_WINDOW_MS,
         })
         setTimeout(() => removeTempBuff(buffId), DASH_BONUS_DMG_WINDOW_MS)
+    }
+
+    // skillsData.js's own "critical" effect entry (dashstrikeSkill's new
+    // criticalPercent) - same short-lived temp-buff trick as the meeleeDmg
+    // bonus just above, just a different stat key. calcDmg (attackingSystem.js)
+    // reads getActiveBuffAdditions().critChance and adds its toAdd straight
+    // onto critChancePercent BEFORE the crit roll, uncapped by
+    // CRIT_CHANCE_CAP (that cap only applies to the base accuracy-driven
+    // chance) - so this genuinely pushes an already-high-accuracy character
+    // toward a near-guaranteed crit on this one strike, not just a wasted
+    // bonus swallowed by the cap. criticalPercent follows the same 0-1
+    // fraction convention every other effect's own "chance" field uses
+    // (curse's 0.2 = 20%, etc) - ×100 to land in critChancePercent's own
+    // 0-100 scale.
+    const criticalEffect = getSkillEffect(skill, "critical")
+    if(criticalEffect?.criticalPercent){
+        const critBuffId = `skillcrit_${skill.name}`
+        addTempBuff({
+            id: critBuffId,
+            stat: "critChance",
+            toAdd: criticalEffect.criticalPercent * 100,
+            percent: 0,
+            expiresAt: Date.now() + DASH_BONUS_DMG_WINDOW_MS,
+        })
+        setTimeout(() => removeTempBuff(critBuffId), DASH_BONUS_DMG_WINDOW_MS)
     }
 
     const dash = skill.dash || {}
@@ -1743,7 +1876,10 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             // above at that spot. Sticks to whatever it hit instead of
             // disposing right away (stickMarkerToMesh) and bails out before
             // any of the standard damage/explosion/bind/curse flow below,
-            // which doesn't apply to the marker itself.
+            // which doesn't apply to the marker itself. meteorSkill (own
+            // meteorRain) no longer uses a marker at all - see
+            // castOffenseSkill's own dispatch, it fires straight off the
+            // caster's position once the cast duration elapses instead.
             if(skill.swordRain){
                 triggerSwordRain(scene, charState, skill, enemy.body.position.clone(), powerScale)
                 stickMarkerToMesh(projectile, box, enemy.body, cleanupProjectile)
@@ -1802,19 +1938,22 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 // plain number - see calcDmg's own comment on this same
                 // formula.
                 const abilityAdditions = getAdditionalsFromAbilities()
-                let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-                if(abilityAdditions.additionalMagicDmg.percent){
-                    magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-                }
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
                 // scaled by how much mana was actually committed at cast time,
                 // same ratio the mp cost itself was charged at (see castOffenseSkill)
-                const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
 
                 // server's enemyIsHit handler only ever reads weaponDmg (if
                 // truthy) or physicalDmg - there's no separate magic-damage
                 // field anywhere in the existing damage pipeline, so this rides
-                // through physicalDmg rather than needing a server change
-                emitEnemyIsHit({
+                // through physicalDmg rather than needing a server change.
+                // dealDamageToEnemy (characterstate.js), not a direct
+                // emitEnemyIsHit - redirects onto the PLAYER's own hp instead
+                // if the player is currently cursed (isPlayerCursed()), same
+                // "your own damage backfires on you" rule a cursed enemy's
+                // own attack already follows (worldsocket.js's "enemy-attacked"
+                // handler)
+                dealDamageToEnemy({
                     playerId: freshCharState.owner,
                     dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
                     targetId: enemy._id,
@@ -1838,16 +1977,31 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                     })
                 }
 
-                // dark magic curses on hit - an ELEMENT rule (every dark skill,
-                // not a per-skill flag), unconditional/no chance roll unlike
-                // enemyBind above. See skillsData.js's header comment and
+                // dark magic curses on hit - now a per-skill DATA rule
+                // (getSkillEffect(skill, "curse"), skillsData.js) with its own
+                // chance roll, not the old unconditional "element === dark"
+                // engine rule. See skillsData.js's header comment and
                 // worldsocket.js's "enemy-attacked" handler for the actual
                 // damage-reflection this curse causes.
-                if(skill.element === "dark"){
+                const curseEffect = getSkillEffect(skill, "curse")
+                if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
                     emitEnemyCurse({
                         targetId: enemy._id,
                         currentPlaceId: freshCharState.currentPlace.placeId,
                     })
+                }
+
+                // fire's burn (skillsData.js's fire family, startTargetBurn
+                // above) - "wreathed in flame" visual + a real damage tick,
+                // same idea as curse just above but for the fire element
+                const burnEffect = getSkillEffect(skill, "burn")
+                if(burnEffect){
+                    startTargetBurn(burnEffect, enemy.body, scene, enemy.det?.bodyHeight, enemy.det?.bodyWidenes, dmg => dealDamageToEnemy({
+                        playerId: freshCharState.owner,
+                        dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                        targetId: enemy._id,
+                        currentPlaceId: freshCharState.currentPlace.placeId,
+                    }))
                 }
 
                 // skill.additionalEffects (abyssaldamnationSkill's own "absorb"
@@ -1899,12 +2053,20 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             // enemy branch above uses
             const freshCharState = getCharState()
             const abilityAdditions = getAdditionalsFromAbilities()
-            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-            if(abilityAdditions.additionalMagicDmg.percent){
-                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-            }
-            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
-            duelOpp.applyDamage(totalDmg)
+            const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+            duelOpp.applyDamage(totalDmg, { skill })
+
+            // fire's burn (skillsData.js's fire family, startTargetBurn
+            // above) - own local tick, NOT routed through
+            // applyDamageToOpponent (that's where curse's OWN roll already
+            // lives, hitDetails-driven, but centralizing burn there too
+            // would double-tick disintegrationSkill's duel-opponent hit,
+            // which ALSO calls duelOpp.applyDamage(totalDmg, { skill }) from
+            // its own dedicated handler further down that already ticks
+            // burn itself against its own pre-existing bind-visual particles)
+            const burnEffect = getSkillEffect(skill, "burn")
+            if(burnEffect) startTargetBurn(burnEffect, duelOpp.body, scene, undefined, undefined, dmg => duelOpp.applyDamage(dmg))
 
             onHit(duelOpp, cleanupProjectile, projectile)
         })
@@ -2075,7 +2237,7 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
         // whatever's there when it arrives, not track a target that's since
         // moved off. Same magic-damage formula as fireElementalProjectile's
         // own hit handler, at this sword's own (usually lower per-sword)
-        // skill.effects.plusDmg.
+        // getSkillEffect(skill, "offense")?.plusDmg.
         //
         // this whole setTimeout, like the falling sword's flight itself,
         // runs identically on every client watching the cast - see
@@ -2093,13 +2255,10 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
                 if((dx * dx + dz * dz) > IMPACT_RADIUS * IMPACT_RADIUS) return
 
                 const abilityAdditions = getAdditionalsFromAbilities()
-                let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-                if(abilityAdditions.additionalMagicDmg.percent){
-                    magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-                }
-                const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
 
-                emitEnemyIsHit({
+                dealDamageToEnemy({
                     playerId: freshCharState.owner,
                     dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
                     targetId: enemy._id,
@@ -2107,7 +2266,8 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
                 })
                 registerSkillHitTarget(enemy, freshCharState)
 
-                if(skill.element === "dark"){
+                const curseEffect = getSkillEffect(skill, "curse")
+                if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
                     emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
                 }
             })
@@ -2122,12 +2282,12 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
                 if((dx * dx + dz * dz) > IMPACT_RADIUS * IMPACT_RADIUS) return
 
                 const abilityAdditions = getAdditionalsFromAbilities()
-                let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-                if(abilityAdditions.additionalMagicDmg.percent){
-                    magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-                }
-                const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
-                duelOpp.applyDamage(totalDmg)
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                // { skill } passed through now - duelSystem.js's own
+                // applyDamageToOpponent needs it to know whether THIS hit
+                // carries a curse effect to roll against the opponent
+                duelOpp.applyDamage(totalDmg, { skill })
             })
         }
 
@@ -2142,6 +2302,209 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
         // SWORD_DISPOSE_MS), and safely no-ops via removeProjectile's own
         // "already gone" guard if the real hit path already disposed it.
         setTimeout(() => removeProjectile(swordItemId), SWORD_DISPOSE_MS)
+    }, travelMs)
+}
+
+// meteorSkill's own tinted rock material - createProjectileModelInstance
+// below clones the SAME real stoneshard.glb model stoneshardSkill uses (its
+// own glb import already strips any baked-in material to null on load, same
+// as every other loaded model this game clones - see stoneshardSkill's own
+// comment), then this applies a flat image texture
+// (skill.meteorVisual.material.texturePath, e.g. smoke2.webp) tinted by
+// diffuseColor - StandardMaterial multiplies the two together, giving a
+// scorched black-red look on top of the raw texture instead of that
+// texture's own plain colors. Cached per texturePath+tint pair, same "one
+// shared material, never rebuilt per cast" reasoning every other material
+// cache in this file already follows.
+const meteorMatCache = new Map()
+let meteorMatCacheScene = null
+function getMeteorRockMat(scene, texturePath, tintColor){
+    if(meteorMatCacheScene !== scene){ meteorMatCache.clear(); meteorMatCacheScene = scene }
+    const key = `${texturePath}_${tintColor?.r}_${tintColor?.g}_${tintColor?.b}`
+    let mat = meteorMatCache.get(key)
+    if(!mat){
+        mat = new StandardMaterial(`meteor_rock_mat_${key}`, scene)
+        mat.diffuseTexture = new Texture(texturePath, scene)
+        if(tintColor) mat.diffuseColor = new Color3(tintColor.r, tintColor.g, tintColor.b)
+        mat.specularColor = Color3.Black()
+        meteorMatCache.set(key, mat)
+        evictCacheOnDispose(meteorMatCache, key, mat)
+    }
+    return mat
+}
+
+// --- meteorSkill's meteor rain (skill.meteorRain, see skillsData.js and
+// the "marker" branch in fireElementalProjectile above) ---
+// Same invisible-marker-then-shower shape triggerSwordRain/spawnFallingSword
+// above already established for astralrainSkill - kept as its own dedicated
+// pair instead of folding into those, since the falling body itself is a
+// completely different mesh (astralrainSkill's swords are hardcoded inside
+// creations/skills.js's own spawnProjectile - there's no shared "rain of X"
+// engine to hand a different mesh to without forking that function).
+// Meteors fall from directly above each one's OWN landing spot instead of
+// astralrain's shared above-and-to-the-caster's-right origin - a meteor
+// shower reads as descending from the sky onto the target, not conjured
+// near the caster and thrown.
+const METEOR_RAIN_HEIGHT = 14 // how far above its own landing spot each meteor starts
+const METEOR_RAIN_ORIGIN_JITTER = 1.2 // per-meteor scatter around its own start point
+const METEOR_RAIN_STAGGER_MS = 220 // gap between each meteor's own spawn
+const METEOR_FALL_SPEED = 14
+const METEOR_IMPACT_RADIUS = 2.2
+
+function triggerMeteorRain(scene, charState, skill, groundPos, powerScale){
+    const meteorRain = skill.meteorRain
+    const count = randBetween(meteorRain.min ?? 2, meteorRain.max ?? 3)
+
+    for(let i = 0; i < count; i++){
+        setTimeout(() => spawnFallingMeteor(scene, charState, skill, groundPos, powerScale), i * METEOR_RAIN_STAGGER_MS)
+    }
+}
+
+function spawnFallingMeteor(scene, charState, skill, groundPos, powerScale){
+    const spread = skill.meteorRain.spread ?? 4
+    const landingPos = {
+        x: groundPos.x + randNum(-spread, spread),
+        y: groundPos.y,
+        z: groundPos.z + randNum(-spread, spread),
+    }
+    // origin sits high directly above THIS meteor's own landing spot (not
+    // the shared marked point) with a little jitter, so several meteors
+    // don't all start from the exact same point in the sky
+    const startPos = {
+        x: landingPos.x + randNum(-METEOR_RAIN_ORIGIN_JITTER, METEOR_RAIN_ORIGIN_JITTER),
+        y: landingPos.y + METEOR_RAIN_HEIGHT + randNum(0, METEOR_RAIN_ORIGIN_JITTER),
+        z: landingPos.z + randNum(-METEOR_RAIN_ORIGIN_JITTER, METEOR_RAIN_ORIGIN_JITTER),
+    }
+
+    const mv = skill.meteorVisual || {}
+
+    // invisible carrier box - same role spawnProjectile's own "projectile"
+    // template box plays (a plain positioned/rotated anchor the real mesh
+    // parents onto), just built directly here instead of going through that
+    // sword-hardcoded function
+    const carrier = MeshBuilder.CreateBox(`meteor_carrier_${Date.now()}_${Math.round(Math.random() * 9999)}`, { size: 0.1 }, scene)
+    carrier.isVisible = false
+    carrier.isPickable = false
+    carrier.position = new Vector3(startPos.x, startPos.y, startPos.z)
+
+    // face the direction of travel - same atan2 pattern fireEnemySkillProjectile's
+    // own box rotation uses, needed for createCometTrailParticles' trail
+    // below (its cone emits along the emitter's own local Z/forward axis)
+    const dx = landingPos.x - startPos.x
+    const dy = landingPos.y - startPos.y
+    const dz = landingPos.z - startPos.z
+    carrier.rotation.y = Math.atan2(dx, dz)
+    carrier.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
+
+    // the real modeled shard (assetcreation/createProjectileModel.js) -
+    // stoneshardSkill's own mesh, reused as-is, just retextured/tinted per
+    // this skill's own meteorVisual data instead of stoneshard's plain grey
+    const meteorMesh = createProjectileModelInstance(scene, mv.model?.name || "stoneshard", carrier)
+    if(meteorMesh){
+        const scale = mv.model?.scale ?? 1
+        meteorMesh.scaling = new Vector3(scale, scale, scale)
+        // GLB-imported meshes come with rotationQuaternion already set
+        // (glTF stores rotation as quaternions) - Babylon computes the
+        // world transform from THAT when it's non-null and silently ignores
+        // a plain .rotation assignment entirely. Null it first, same trap
+        // stoneshardSkill's own copies[0].rotation correction (skillsData.js,
+        // renderGenericProjectile's glbModel branch) already works around -
+        // mv.model.rotation defaults to that exact same value since this is
+        // the same stoneshard.glb model, likely needing the same correction
+        const rot = mv.model?.rotation ?? { x: Math.PI / 2, y: 0, z: 0 }
+        meteorMesh.rotationQuaternion = null
+        meteorMesh.rotation = new Vector3(rot.x, rot.y, rot.z)
+        const rockMat = getMeteorRockMat(scene, mv.material?.texturePath, mv.material?.tintColor)
+        meteorMesh.material = rockMat
+        meteorMesh.getChildMeshes?.().forEach(child => child.material = rockMat)
+    }
+
+    // burning trail - createCometTrailParticles' own "shooting star" streak
+    // (pyroclasmSkill's own projectileVisual.trail is the other user, see
+    // that function's own header comment), texture swapped for a smokier
+    // look to match the meteor's own scorched rock rather than a clean fire streak
+    const trailParticles = createCometTrailParticles(scene, carrier, { texture: mv.trailTexture || "smoke2" })
+
+    const travelDistance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    const travelMs = (travelDistance / METEOR_FALL_SPEED) * 1000
+    const startTime = performance.now()
+
+    // simple per-frame Lerp - not routed through the shared
+    // pushProjectile/renderer.js movement registry the way spawnProjectile's
+    // own swords are, since this carrier mesh isn't built by that function
+    // at all; self-contained instead, same "own onBeforeRenderObservable
+    // hook" shape attachLightning's own crackling-arc update already uses
+    const moveObserver = scene.onBeforeRenderObservable.add(() => {
+        const t = Math.min(1, (performance.now() - startTime) / travelMs)
+        carrier.position.x = startPos.x + dx * t
+        carrier.position.y = startPos.y + dy * t
+        carrier.position.z = startPos.z + dz * t
+        if(t >= 1) scene.onBeforeRenderObservable.remove(moveObserver)
+    })
+
+    setTimeout(() => {
+        playImpactSound(skill)
+        fireGenericBurst(scene, new Vector3(landingPos.x, landingPos.y, landingPos.z), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
+
+        scene.onBeforeRenderObservable.remove(moveObserver)
+        trailParticles.stop()
+        trailParticles.dispose(false)
+        carrier.dispose()
+
+        // same "only the real caster's own client emits the actual hit"
+        // gate, and same enemy/duel-opponent damage+curse+burn application,
+        // spawnFallingSword's own identical block above already follows
+        if(charState.owner === getCharState()?.owner){
+            const freshCharState = getCharState()
+            getEnemiesOnScene().forEach(enemy => {
+                if(!enemy.body) return
+                const edx = enemy.body.position.x - landingPos.x
+                const edz = enemy.body.position.z - landingPos.z
+                if((edx * edx + edz * edz) > METEOR_IMPACT_RADIUS * METEOR_IMPACT_RADIUS) return
+
+                const abilityAdditions = getAdditionalsFromAbilities()
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+
+                dealDamageToEnemy({
+                    playerId: freshCharState.owner,
+                    dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                    targetId: enemy._id,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
+                })
+                registerSkillHitTarget(enemy, freshCharState)
+
+                const curseEffect = getSkillEffect(skill, "curse")
+                if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
+                    emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
+                }
+
+                const burnEffect = getSkillEffect(skill, "burn")
+                if(burnEffect){
+                    startTargetBurn(burnEffect, enemy.body, scene, enemy.det?.bodyHeight, enemy.det?.bodyWidenes, dmg => dealDamageToEnemy({
+                        playerId: freshCharState.owner,
+                        dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                        targetId: enemy._id,
+                        currentPlaceId: freshCharState.currentPlace.placeId,
+                    }))
+                }
+            })
+
+            getDuelOpponentsOnScene().forEach(duelOpp => {
+                if(!duelOpp.body) return
+                const ddx = duelOpp.body.position.x - landingPos.x
+                const ddz = duelOpp.body.position.z - landingPos.z
+                if((ddx * ddx + ddz * ddz) > METEOR_IMPACT_RADIUS * METEOR_IMPACT_RADIUS) return
+
+                const abilityAdditions = getAdditionalsFromAbilities()
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                duelOpp.applyDamage(totalDmg, { skill })
+
+                const burnEffect = getSkillEffect(skill, "burn")
+                if(burnEffect) startTargetBurn(burnEffect, duelOpp.body, scene, undefined, undefined, dmg => duelOpp.applyDamage(dmg))
+            })
+        }
     }, travelMs)
 }
 
@@ -2300,19 +2663,24 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
             if((dx * dx + dz * dz) > GROUND_SPIKE_IMPACT_RADIUS * GROUND_SPIKE_IMPACT_RADIUS) return
 
             const abilityAdditions = getAdditionalsFromAbilities()
-            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-            if(abilityAdditions.additionalMagicDmg.percent){
-                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-            }
-            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+            const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
 
-            emitEnemyIsHit({
+            dealDamageToEnemy({
                 playerId: freshCharState.owner,
                 dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
                 targetId: enemy._id,
                 currentPlaceId: freshCharState.currentPlace.placeId,
             })
             registerSkillHitTarget(enemy, freshCharState)
+
+            // no earth/groundSpikes skill carries a curse effect today, but
+            // this stays consistent with every other hit-application branch
+            // (getSkillEffect just resolves undefined and no-ops otherwise)
+            const curseEffect = getSkillEffect(skill, "curse")
+            if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
+                emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
+            }
         })
 
         // npcFighter duel opponents - never server-tracked, same
@@ -2325,12 +2693,9 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
             if((dx * dx + dz * dz) > GROUND_SPIKE_IMPACT_RADIUS * GROUND_SPIKE_IMPACT_RADIUS) return
 
             const abilityAdditions = getAdditionalsFromAbilities()
-            let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-            if(abilityAdditions.additionalMagicDmg.percent){
-                magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-            }
-            const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
-            duelOpp.applyDamage(totalDmg)
+            const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+            duelOpp.applyDamage(totalDmg, { skill })
         })
     }
 
@@ -2420,19 +2785,32 @@ function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, dura
     if(charState.owner === getCharState()?.owner){
         const freshCharState = getCharState()
         const abilityAdditions = getAdditionalsFromAbilities()
-        let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-        if(abilityAdditions.additionalMagicDmg.percent){
-            magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-        }
-        const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
+        const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+        const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
 
-        emitEnemyIsHit({
+        dealDamageToEnemy({
             playerId: freshCharState.owner,
             dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
             targetId: enemy._id,
             currentPlaceId: freshCharState.currentPlace.placeId,
         })
         registerSkillHitTarget(enemy, freshCharState)
+
+        // fire's burn (skillsData.js's disintegration/massivedisintegration -
+        // their own duration:6000 is deliberately set to match this skill's
+        // enemyBind.bindDuration above, i.e. burnMs) - reuses the
+        // burnParticles already spawned above instead of stacking a second
+        // one (startTargetBurn's own existingParticles param), just adds the
+        // actual damage tick this skill's own burning-body visual never had
+        const burnEffect = getSkillEffect(skill, "burn")
+        if(burnEffect){
+            startTargetBurn(burnEffect, enemy.body, scene, undefined, undefined, dmg => dealDamageToEnemy({
+                playerId: freshCharState.owner,
+                dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                targetId: enemy._id,
+                currentPlaceId: freshCharState.currentPlace.placeId,
+            }), burnParticles)
+        }
 
         if(skill.enemyBind){
             emitEnemyBind({
@@ -2467,12 +2845,18 @@ function applyDisintegrationHitToDuelOpponent(scene, skill, duelOpp, powerScale,
 
     const freshCharState = getCharState()
     const abilityAdditions = getAdditionalsFromAbilities()
-    let magicDmg = abilityAdditions.additionalMagicDmg.toAdd + freshCharState.stats.magic * 16
-    if(abilityAdditions.additionalMagicDmg.percent){
-        magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
-    }
-    const totalDmg = Math.round(((skill.effects?.plusDmg || 0) + magicDmg) * powerScale)
-    duelOpp.applyDamage(totalDmg)
+    const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+    const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+    duelOpp.applyDamage(totalDmg, { skill })
+
+    // fire's burn - reuses the burnParticles already spawned above (same
+    // reasoning applyDisintegrationHit's own identical block gives), just
+    // adds the actual damage tick. Local direct tick, not routed through
+    // applyDamageToOpponent's own hitDetails-driven curse roll - see
+    // fireElementalProjectile's own duel-opponent branch for why burn stays
+    // its own explicit call instead of living there too
+    const burnEffect = getSkillEffect(skill, "burn")
+    if(burnEffect) startTargetBurn(burnEffect, duelOpp.body, scene, undefined, undefined, dmg => duelOpp.applyDamage(dmg), burnParticles)
 }
 
 // resolves where the trap actually sits, on the ground - shared between
@@ -2482,9 +2866,13 @@ function applyDisintegrationHitToDuelOpponent(scene, skill, duelOpp, powerScale,
 // spawnGroundTrap itself once the trap actually deploys, so both land on
 // the exact same spot instead of each computing it independently and
 // risking a slight drift if the caster turns mid-cast.
-function computeGroundTrapPos(charState, player, skill, forward){
-    const distance = skill.groundTrap?.distance ?? GROUND_TRAP_DEFAULT_DISTANCE
-
+// distance is passed in explicitly now (was read internally off
+// skill.groundTrap?.distance) - meteorSkill's own AOE ground-target
+// (castOffenseSkill's dispatch below) needed this exact same "flat ground
+// spot N units in front of the caster" math but has no groundTrap of its
+// own to pull a distance from, so this is genuinely shared now, not just
+// disintegration/massivedisintegration's own helper.
+function computeGroundAOEPos(charState, player, distance, forward){
     // horizontal-only direction, same reasoning triggerGroundSpikeLine's own
     // flatForward has - the trap sits ON the ground straight out from the
     // caster, shouldn't drift because their hand happened to be aimed
@@ -2837,8 +3225,57 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         // small bump from the enemy's own magDmg stat, matching how
         // emitAttack's melee damage reads straight off detail.stats.dmg
         // with no separate scaling layer either
-        const totalDmg = Math.round((skill.effects?.plusDmg || 0) + (enemy.det.stats?.magDmg || 0) * 20)
-        const isDead = await deductHp(totalDmg, enemy.det.effects || [])
+        const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + (enemy.det.stats?.magDmg || 0) * 20) * getElementDamageMultiplier(skill))
+
+        // mirrors createEnemy.js/worldsocket.js's own "a cursed enemy's own
+        // attack backfires on itself" rule - previously only ever checked
+        // for a plain melee swing (worldsocket.js's "enemy-attacked"
+        // handler), never for a SKILL cast landing, so a cursed enemy's
+        // lightningbolt/shadowbolt etc still hurt the player same as always
+        // before this. `enemy` here is whoever cast this - a real wild
+        // enemy OR an npcFighter duel opponent (both share this exact
+        // function, see duelSystem.js's own castEnemySkill call) -
+        // enemy.applyDamage only exists on a duel opponent (set alongside
+        // pushDuelOpponentOnScene's own wrapper, duelSystem.js), a real
+        // wild enemy has no local method like that and goes through the
+        // same emitEnemyIsHit-to-self relay worldsocket.js's own redirect
+        // already uses. Returns immediately after - a cursed caster's own
+        // curse-effect (below) never reaches the player either, same as a
+        // redirected melee attack does nothing else to the player.
+        if(enemy._cursed){
+            if(enemy.applyDamage) enemy.applyDamage(totalDmg)
+            else emitEnemyIsHit({
+                playerId: charState.owner,
+                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                targetId: enemy._id,
+                currentPlaceId: charState.currentPlace.placeId,
+            })
+            return
+        }
+
+        // this skill's own curse effect (skillsData.js) - if it lands,
+        // curses the PLAYER (characterstate.js's curseStatusEffect/
+        // isPlayerCursed), the mirror of a player's own dark skill cursing
+        // a wild enemy above. Handed straight into deductHp's own `effects`
+        // array param alongside the enemy's regular status effects
+        // (poison/spdrain etc, enemy.det.effects) - deductHp already rolls
+        // each entry's own chance and pushes permanent ones onto
+        // characterState.status, so this doesn't need its own separate
+        // chance roll here.
+        const curseEffect = getSkillEffect(skill, "curse")
+        // this skill's own burn effect (skillsData.js's fire family,
+        // characterstate.js's startBurnDamage) - no `chance` field on burn's
+        // own data shape, so it just always applies whenever this hit lands
+        // (deductHp's own per-effect roll treats a missing chance as 100%),
+        // same as how it always applies for an enemy the PLAYER burns
+        const burnEffect = getSkillEffect(skill, "burn")
+        const incomingEffects = [
+            ...(enemy.det.effects || []),
+            ...(curseEffect ? [curseStatusEffect(curseEffect.chance)] : []),
+            ...(burnEffect ? [burnEffect] : []),
+        ]
+
+        const isDead = await deductHp(totalDmg, incomingEffects)
         if(isDead) emitDied()
     })
 }

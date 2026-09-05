@@ -80,6 +80,13 @@ export function initSounds(scene){
     const poisonS = createSoundSafe("poisonS", "./sounds/effects/poisonS.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    // generic "a periodic-damage effect just ticked" sound - not tied to one
+    // specific effect (poisoned/burn/spdrain/etc), read off whichever
+    // effect's own soundPlayPerDmg field names it (characterstate.js's
+    // deductHp/startBurnDamage, skillEffects.js's startTargetBurn)
+    const dmgpmS = createSoundSafe("dmgpmS", "./sounds/effects/dmgpm.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const struckS = createSoundSafe("struckS", "./sounds/effects/struckS.mp3", scene,
     {volume: 1, spatialSound: true, maxDistance: 50, autoplay: false, loop: false})
 
@@ -158,6 +165,7 @@ export function initSounds(scene){
         enhanceS,spearS1,demonoidS,
         runningS, woodrunS,
         poisonS,
+        dmgpmS,
         bulletS,
         pickItemS,
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,

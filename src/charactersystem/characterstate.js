@@ -10,11 +10,12 @@ import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
 import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worldsocket.js";
-import { emitMode, emitWeaponBlock } from "../sockets/emits.js";
+import { emitMode, emitWeaponBlock, emitEnemyIsHit } from "../sockets/emits.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
-import { getPlayerCoord } from "./createcharacter.js";
+import { getPlayerCoord, capsuleHeight } from "./createcharacter.js";
 import { getAllSounds } from "../components/soundSystem.js";
-import { getGameStatus, setGameStatus } from "../main/main.js";
+import { getGameStatus, setGameStatus, getSceneDet } from "../main/main.js";
+import { createBodyFireParticles } from "../tools/particlesystem.js";
 import { updateSkillListUI } from "../components/skillsui.js";
 import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 import { triggerSkillWheel } from "./skillWheel.js";
@@ -611,6 +612,21 @@ export async function deductHp(dmg, effects, enemyStats){
             // matching effects being a per-effect array in the first place.
             if(Math.random() * 100 > (effect.chance ?? 100)) return
 
+            // FIRE'S BURN - a genuine damage-OVER-TIME, unlike poisoned/
+            // cursed above (both apply their cost ONCE right here in this
+            // same tick, then just sit as a persistent characterState.status
+            // flag until cured - see addEffectsOnStat's own comment). Burn
+            // has no hpcost/mpcost/spcost/hungercost/energycost of its own
+            // at all (would NaN straight into characterState.hp/mp/sp below
+            // if it fell through to those lines) - it's its own dedicated
+            // repeating tick instead (startBurnDamage below), self-expiring
+            // after effect.duration ms with no status entry/cure needed,
+            // since it clears itself.
+            if(effect.effectType === "burn"){
+                startBurnDamage(effect)
+                return
+            }
+
             // characterState.hp -= // wag muna to sa dulo na to
             characterState.hp -= effect.hpcost
             characterState.mp -= effect.mpcost
@@ -664,6 +680,70 @@ export async function deductHp(dmg, effects, enemyStats){
     updateSurvival_UI()
     return false
 }
+
+// FIRE'S BURN (skillsData.js's own "burn" effect entries, e.g.
+// { effectType: "burn", dmgPm: 50, duration: 5000 }) - ticks dmgPm off hp
+// every BURN_TICK_MS, for effect.duration ms total (duration/BURN_TICK_MS
+// ticks, rounded), then stops on its own. Deliberately NOT routed back
+// through deductHp/getTotalDefense - same flat, undefended-by-armor
+// treatment poisoned/spdrain's own hpcost already gets above, just spread
+// out over time instead of applied in one lump. Respects the same soft-loss
+// allowDeath clamp deductHp itself does (a duel/whatever else sets
+// allowDeath:false shouldn't let a burn tick kill outright either) - see
+// setAllowDeath's own comment for the full reasoning on that flag.
+const BURN_TICK_MS = 1000
+function startBurnDamage(effect){
+    const totalTicks = Math.max(1, Math.round(effect.duration / BURN_TICK_MS))
+    let ticksDone = 0
+
+    // "wreathed in flame" visual, parented to my OWN body - the exact same
+    // createBodyFireParticles skillEffects.js's startTargetBurn already
+    // spawns for a burning enemy/duel opponent (see that function's own
+    // comment), just for the local player instead. Gracefully skipped (no
+    // crash, no visual) if the player's own mesh/scene aren't resolvable
+    // right this instant - a burn tick landing mid scene-transition
+    // shouldn't be able to break the damage half over a missing mesh.
+    const myOwnPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+    const sceneDet = getSceneDet()
+    const burnParticles = (myOwnPlayer?.body && sceneDet?.scene)
+        ? createBodyFireParticles(myOwnPlayer.body, sceneDet.scene, capsuleHeight, 0.6)
+        : null
+
+    const burnInterval = setInterval(() => {
+        ticksDone++
+        characterState.hp -= effect.dmgPm
+        characterState.hp = Math.floor(characterState.hp)
+
+        popStatusEffect(`${effect.dn ?? "Burn"} -${effect.dmgPm}`, '#ff6a00')
+        // effect.soundPlayPerDmg (skillsData.js's fire family) - a plain
+        // key name ("dmgpm"), not the "S"-suffixed key soundSystem.js's own
+        // allSounds object actually stores it under (dmgpmS) - same
+        // convention every other *S-suffixed sound already follows
+        if(effect.soundPlayPerDmg) getAllSounds()[`${effect.soundPlayPerDmg}S`]?.play()
+        updateHpMpSp_UI()
+
+        if(characterState.hp+addStats.additionalHp <= 0){
+            clearInterval(burnInterval)
+            if(!allowDeath){
+                characterState.hp = Math.max(1, characterState.hp)
+                updateHpMpSp_UI()
+                return
+            }
+            gameOver()
+            return
+        }
+
+        if(ticksDone >= totalTicks) clearInterval(burnInterval)
+    }, BURN_TICK_MS)
+
+    setTimeout(() => {
+        if(!burnParticles) return
+        burnParticles.stop()
+        // (false) - particleTexture is particlesystem.js's own
+        // shared/persistent texture cache, not owned by this one system
+        burnParticles.dispose(false)
+    }, effect.duration)
+}
 export function addEffectsOnStat(effect){
     if(!effect.permanent) return //log(`${effect.effectType} is not permanent will not add on my sickness status`)
     const effectAlreadyInMyStatus = characterState.status.some(status => status.effectType === effect.effectType)
@@ -676,6 +756,62 @@ export function addEffectsOnStat(effect){
     }
     characterState.status.push(effect)
     updateStatUI()
+}
+
+// PLAYER-SIDE CURSE - the mirror of createEnemy.js's own enemy._cursed
+// (skillsData.js's header comment: "when you attack, your own damage
+// backfires on you" - enemy, player, or npcFighter, whichever got cursed).
+// Modeled as a plain permanent status effect (same characterState.status
+// array poisoned/spdrain already live in), NOT a bespoke flag, specifically
+// so it rides the EXISTING cure infrastructure for free: itemInfoSystem.js's
+// consumeItemFunc already removes any status entry named in a consumable's
+// own consumeAbilities.cure list - an "antidote" item with cure: ["cursed"]
+// is all a new item needs to lift this, no new cure-handling code required.
+// Unlike a wild enemy's curse (permanent until it dies/respawns, no un-curse
+// exists), the player's own curse only ever clears by drinking that antidote.
+//
+// chance here is the SKILL's own 0-1 fraction (skillsData.js's effects[].chance
+// convention, e.g. voidrendSkill's 0.2) - converted to deductHp's own 0-100
+// percent scale, since this object is meant to be handed straight into
+// deductHp's `effects` array param and let its EXISTING per-effect chance
+// roll (+ addEffectsOnStat call) do the rest, rather than rolling twice.
+// hpcost/mpcost/spcost/hungercost/energycost all 0 - curse is a pure status
+// flag, no direct drain of its own the way poison/spdrain have.
+export function curseStatusEffect(chance){
+    return { effectType: "cursed", dn: "Cursed", chance: (chance ?? 1) * 100, permanent: true, hpcost: 0, mpcost: 0, spcost: 0, hungercost: 0, energycost: 0 }
+}
+export function isPlayerCursed(){
+    return characterState.status.some(status => status.effectType === "cursed")
+}
+
+// Single choke point for "the player just landed a hit on a REAL (server-
+// tracked) enemy" - every call site that used to call emitEnemyIsHit
+// directly for a PLAYER-initiated hit (createEnemy.js's melee handler,
+// skillEffects.js's several skill-hit handlers) goes through this instead,
+// so a cursed player's damage backfires onto themselves everywhere at once
+// instead of needing the same isPlayerCursed() check copy-pasted at every
+// one of those sites. NOT used for worldsocket.js's own existing "redirect a
+// CURSED ENEMY's own attack back onto itself" call (that's the enemy's
+// damage, not the player's - stays a direct emitEnemyIsHit call there).
+// isPhysical (default false) - true ONLY for a real melee weapon/fist swing
+// (createEnemy.js's own atkCollider hit handler is the one caller that sets
+// it). tcp/index.ts's own "enemyIsHit" handler spreads the WHOLE incoming
+// data object straight into its "enemy-is-hit" broadcast
+// (io.emit("enemy-is-hit", {...data, ...})), so this rides all the way back
+// to createEnemy.js's own enemyIsHit() on every client for free - that's
+// what it reads to decide whether to play the swordS1/punchedS "you swung a
+// weapon" sound. Every OTHER caller (every skill hit in skillEffects.js,
+// fire's own burn tick in startTargetBurn) never set this at all, so it
+// silently defaulted to playing that same melee sound on every skill cast
+// and every single burn tick too - "why do I hear my slash sound when
+// they're just burning" was that exact bug.
+export async function dealDamageToEnemy({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical = false }){
+    if(isPlayerCursed()){
+        const selfDmg = dmgDetails.weaponDmg || dmgDetails.physicalDmg || 0
+        await deductHp(selfDmg, [])
+        return
+    }
+    emitEnemyIsHit({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical })
 }
 export async function gameOver(){
     hideShowAllScreenUI(false)

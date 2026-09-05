@@ -90,6 +90,16 @@ export function growSwordRain(skillDetail){
     skillDetail.swordRain.min = Math.min(7, 2 + (lvl - 1))
 }
 
+// meteor only - same exact shape/reasoning as growSwordRain above, just
+// meteors instead of swords ("when you upgrade the skill similar to
+// astralrain it adds more falling projectiles", verbatim)
+export function growMeteorRain(skillDetail){
+    if(!skillDetail.meteorRain) return
+    const lvl = skillDetail.lvl
+    skillDetail.meteorRain.max = Math.min(10, 3 + (lvl - 1) * 2)
+    skillDetail.meteorRain.min = Math.min(7, 2 + (lvl - 1))
+}
+
 // continentalrend only - one more spike per level, capped so the line
 // doesn't grow absurdly long. _baseGroundSpikeCount remembers the
 // ORIGINAL count (same "remembered once" pattern every other grow* template
@@ -166,6 +176,7 @@ export const UPGRADE_TEMPLATES = {
     growArcAuraAndBind,
     growArcAuraAndPlasma,
     growSwordRain,
+    growMeteorRain,
     growGroundSpikes,
     growDarkOrb,
     growMulticastEfficiency,

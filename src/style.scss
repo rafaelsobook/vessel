@@ -43,6 +43,37 @@ $raregrad: linear-gradient(
   rgba(4, 42, 99, 0.8),
   transparent
 );
+// same dark->bright->dark structure $raregrad already uses, just blood-red
+// instead of blue - a "scary" epic-tier slot background
+$epicgrad: linear-gradient(
+  45deg,
+  transparent,
+  rgba(71, 9, 9, 0.8),
+  rgba(185, 20, 6, 0.5),
+  rgba(50, 4, 4, 0.8),
+  transparent
+);
+// same structure again, gold instead - matches this game's own existing
+// divine/legendary gold accent (rgb(202,165,1), the Title Acquired popup/
+// UI border color) rather than inventing a new palette for the top tier
+$legendarygrad: linear-gradient(
+  45deg,
+  transparent,
+  rgba(74, 56, 4, 0.8),
+  rgba(202, 165, 1, 0.5),
+  rgba(74, 56, 4, 0.8),
+  transparent
+);
+// green, one tier below rare's blue - resourceLoot.js's manastone/silverore
+// both actually use rarity:"uncommon" already, this had no styling either
+$uncommongrad: linear-gradient(
+  45deg,
+  transparent,
+  rgba(11, 61, 20, 0.8),
+  rgba(35, 148, 61, 0.5),
+  rgba(8, 46, 15, 0.8),
+  transparent
+);
 $btnGrad: linear-gradient(
   0,
   transparent,
@@ -3286,6 +3317,30 @@ canvas {
 }
 .normal {
   background: $normalgrad;
+}
+// inventory.js's own createElement("img", `slot-img ${itm.rarity}`) - the
+// item's raw itm.rarity string becomes a bare class alongside slot-img, same
+// convention .rare/.normal above already rely on. Closes the gap for every
+// rarity resourceLoot.js/toSell.js actually hand out that had no rule at
+// all before this (uncommon/epic/legendary - only rare/"normal" had one)
+.uncommon {
+  background: $uncommongrad;
+}
+// resourceLoot.js's own crafting materials (wood/leather/stone/bronzeore
+// etc) use rarity:"common" exclusively, never "normal" - toSell.js's items
+// mostly use "normal" instead (which IS what .normal above matches), so
+// every common-tier MATERIAL specifically had this exact same "no matching
+// class" gap epic/legendary/uncommon just had. Same background as .normal
+// rather than inventing a third grey - "common" and "normal" are the same
+// tier under two different spellings that this codebase never reconciled.
+.common {
+  background: $normalgrad;
+}
+.epic {
+  background: $epicgrad;
+}
+.legendary {
+  background: $legendarygrad;
 }
 // .wallpaper {
 //   @include fitToScreen(-1);

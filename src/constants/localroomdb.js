@@ -323,13 +323,45 @@ export const metaDatas = [
                 areaType: "room",
                 pos: {x: 6, y: 0.5, z: 5.25},
                 startingPos: {x: 0, y: 1, z: -2}
-            }
+            },
+            {
+                placeId: 101,
+                name: "Guildmaster's Office",
+                areaType: "room",
+                pos: {x: 0.9, y: 0.5, z: 5.25},
+                startingPos: {x: 0, y: 1, z: -3}
+            },
+            // placeId 101 (Guildmaster's Office) already exists fully built
+            // (desk/chair/shelves) and already has its OWN way back out
+            // (exitPlaceDetail: placeId 9, createroom.js's south-wall exit
+            // trigger) - but nothing here ever led INTO it, a one-way dead
+            // end. Anchored on "guildgate" below (optionalObjects) - its own
+            // dedicated guilddoor.glb (every other door mesh here just uses
+            // the generic door.glb), sitting unused with no roomPaths entry
+            // of its own, is the obvious intended front door for this exact
+            // destination. startingPos is a guess (just inside 101's own
+            // south wall, clear of both that room's own exit trigger and
+            // its desk/chair cluster further north) - adjust in-game if it
+            // doesn't land cleanly.
         ],
         optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
                 name: "roomdoor",
                 position: {x: 6, y: 0, z: 6.1},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/door.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "roomdoor",
+                position: {x: 0.9, y: 0, z: 6.1},
                 scale: null,
                 rotation: 0,
                 glbPath: "./models/indors/door.glb",

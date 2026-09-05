@@ -6,6 +6,7 @@ import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, cancelPe
 import { UPGRADE_TEMPLATES } from "../staticRecources/skillUpgrades"
 import { onIntersecEnterTrig } from "../components/actionManager"
 import { trackAptitudeUsage } from "./aptitudeSystem"
+import { getSkillEffect } from "../staticRecources/skillsData"
 
 // CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
 // stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
@@ -121,9 +122,9 @@ export function activateSkill(ownerId, skillDetail, casterStats){
         break
         case "multicast":
             // a pure TRIGGER, not a caster - deals no damage and spawns no
-            // projectile/circle of its own (effects.effectType is "trigger",
-            // not "offense", so the default branch below wouldn't touch it
-            // even without this explicit no-op case). Its entire real
+            // projectile/circle of its own (its effects entry's effectType
+            // is "trigger", not "offense", so the default branch below
+            // wouldn't touch it even without this explicit no-op case). Its entire real
             // behavior - programmatically clicking every OTHER assigned
             // skill-slot-button - lives in skillsui.js's slotbuttons click
             // handler, not here, since mana-charging for those other skills
@@ -132,8 +133,13 @@ export function activateSkill(ownerId, skillDetail, casterStats){
         default:
             // any offense-type skill (singlecast + the 10 elemental skills,
             // see skillsData.js) rides the same generic cast engine - a new
-            // skill needs a skillsData.js entry, not a new case here
-            if(skillDetail.effects?.effectType === "offense"){
+            // skill needs a skillsData.js entry, not a new case here.
+            // effects is an array now (getSkillEffect, skillsData.js), but
+            // every skill still only carries exactly one entry today, so
+            // this stays an else-if chain (first matching effectType wins)
+            // same as before - revisit if a skill ever actually ships with
+            // BOTH an offense and a buff entry at once
+            if(getSkillEffect(skillDetail, "offense")){
                 if(skillDetail.isActive){
                     castOffenseSkill(getSceneDet().scene, player, skillDetail, casterState)
                 } else {
@@ -141,7 +147,7 @@ export function activateSkill(ownerId, skillDetail, casterStats){
                     // don't fire late
                     cancelPendingCast(skillDetail.name)
                 }
-            } else if(skillDetail.effects?.effectType === "buff"){
+            } else if(getSkillEffect(skillDetail, "buff")){
                 // any self-buff skill (mjolnirSkill and any future one,
                 // see skillsData.js) rides the same generic buff-cast
                 // engine, same "one skillsData.js entry, not a new case
@@ -151,7 +157,7 @@ export function activateSkill(ownerId, skillDetail, casterStats){
                 } else {
                     cancelPendingCast(skillDetail.name)
                 }
-            } else if(skillDetail.effects?.effectType === "dash"){
+            } else if(getSkillEffect(skillDetail, "dash")){
                 // dashstrikeSkill and any future weapon skill like it - no
                 // cast window to cancel (castDuration is 0, see skillsData.js's
                 // own comment), so there's nothing to do on the isActive:false
@@ -189,17 +195,31 @@ export function activateSkill(ownerId, skillDetail, casterStats){
 export function upgradeSkill(skillDetail){
     skillDetail.lvl += 1
 
-    if(skillDetail.effects){
+    // effects is an array now - bump plusDmg/dmgPm on every entry that has
+    // one instead of assuming a single object, so a future skill carrying
+    // more than one damage-bearing entry (offense + dash, say) still gets
+    // both scaled on level-up, not just whichever used to be there
+    if(skillDetail.effects?.length){
         const bump = skillDetail.upgradePlus || 0
-        if(skillDetail.effects.plusDmg) skillDetail.effects.plusDmg += bump
-        if(skillDetail.effects.dmgPm)   skillDetail.effects.dmgPm   += bump
+        skillDetail.effects.forEach(effect => {
+            if(effect.plusDmg) effect.plusDmg += bump
+            if(effect.dmgPm)   effect.dmgPm   += bump
+        })
     }
 
     // createExplosionBurst's powerScale/fireScale/smokeScale/emberEmitRate
     // (particlesystem.js) all get multiplied by this at cast time (see
-    // skillEffects.js) - the whole particle system scales up 10% per level,
-    // so a higher-level cast visibly looks stronger, not just hits harder
-    skillDetail.explosionScale = 1 + (skillDetail.lvl - 1) * 0.1
+    // skillEffects.js) - the whole particle system scales up 10% per level
+    // by default, so a higher-level cast visibly looks stronger, not just
+    // hits harder. skillDetail.explosionScaleGrowth (optional, defaults to
+    // 1 = unchanged) lets one skill's own growth RATE be tuned down without
+    // touching this generic formula for every other skill -
+    // massivedisintegrationSkill's own 0.3 is the first user: its base AOE
+    // circle (groundTrap.radius: 10) is already huge, so the same 10%/level
+    // everyone else gets compounded into a comically wide burst at higher
+    // levels; 0.3 cuts that growth rate to 30% of normal (a 70% reduction)
+    const explosionGrowthRate = 0.1 * (skillDetail.explosionScaleGrowth ?? 1)
+    skillDetail.explosionScale = 1 + (skillDetail.lvl - 1) * explosionGrowthRate
 
     // the projectile mesh itself, not just what happens when it lands -
     // capped at lvl 10's worth of growth so it doesn't become a comically
@@ -303,7 +323,14 @@ export function calcDmg(charState){
     // (genenemy.ts) as pure flavor data for now - "enemy-attacked"'s own
     // damage-to-player path never calls calcDmg at all, so this can't
     // reach it by accident.
-    const critChancePercent = Math.min(CRIT_CHANCE_CAP, accuracy * CRIT_CHANCE_PER_ACCURACY)
+    // critChance temp buff (skillEffects.js's castDashSkill, dashstrikeSkill's
+    // own "critical" effect entry, e.g. criticalPercent: 0.4) - added AFTER
+    // the accuracy-based chance is already capped at CRIT_CHANCE_CAP, not
+    // folded into the min() above, so a skill's own crit bonus can genuinely
+    // push an already-high-accuracy character toward a near-guaranteed crit
+    // on that one empowered strike instead of being swallowed by the cap.
+    const critChanceBuff = getActiveBuffAdditions().critChance || { toAdd: 0 }
+    const critChancePercent = Math.min(CRIT_CHANCE_CAP, accuracy * CRIT_CHANCE_PER_ACCURACY) + critChanceBuff.toAdd
     const isCritical = Math.random() * 100 < critChancePercent
     if(isCritical){
         const critMultiplier = 1 + charState.stats.critical * CRIT_DMG_PER_CRITICAL

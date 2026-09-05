@@ -18,6 +18,18 @@
 // (getAvailableRarityVariants/pickRarityVariant below), so two rare swords
 // don't come out looking identical. Which MATERIALS get picked, separately,
 // drives the actual stats - see buildSwordItem()/computeCraftedWeaponStats.
+//
+// EPIC is a third tier that overrides both of the above (matchEpicRecipe
+// below, staticRecources/epiccrafts.js) - not budget-driven at all ("for
+// epic rarity the money is not involved here it is the combination",
+// verbatim) and not randomized either: it's a fixed, named recipe (e.g.
+// "Majestic Sword") that only unlocks when every one of the 4 picked
+// materials is in that recipe's own allowed list for its slot. allswords.glb's
+// epic1 tier also adds EXTRA accent sub-meshes some parts don't have at the
+// common/rare tiers (sword_guard_epic1_cores/_outer, sword_blade_epic1_outer -
+// see createweapon.js's own EPIC_ACCENT_SUFFIXES), coloring them from the
+// recipe's own fixed guardCoreColor/guardOuterColor/bladeOuterColor fields
+// rather than whichever material was actually used.
 
 import { createElement } from "../tools/GUITools"
 import { openClosePopup } from "../tools/popupUI"
@@ -27,6 +39,7 @@ import { obtain } from "../charactersystem/inventory"
 import { randomNum } from "../tools/tools"
 import { ITEM_DICTIONARY, computeCraftedWeaponStats } from "../staticRecources/itemDictionary"
 import { receiveAchievement } from "../charactersystem/achievement"
+import { epicSwordCraftDetails } from "../staticRecources/epiccrafts"
 
 const craftCont     = document.querySelector(".craft-container")
 const craftTitle    = document.querySelector(".craft-title")
@@ -73,6 +86,10 @@ function resetPartSelections(){
         const materialLabel = box.parentElement.querySelector(".part-slot-material")
         if(materialLabel) materialLabel.textContent = ""
     })
+    // clears any leftover epic-recipe label (e.g. "Majestic Sword") from the
+    // readout - with every part now empty, matchEpicRecipe() itself would
+    // already return null, but rarityValueEl won't know that until told
+    if(rarityValueEl) updateRarityReadout()
 }
 
 function selectCategory(categ){
@@ -193,6 +210,7 @@ partBoxes.forEach(box => {
         openMaterialPicker(part, material => {
             selectedMaterials[part] = material
             applyMaterialToBox(box, material)
+            updateRarityReadout()
         })
     })
 })
@@ -203,10 +221,36 @@ function getRarityBase(budget){
     return budget >= RARITY_BUDGET_THRESHOLD ? "rare" : "common"
 }
 
+// Epic recipes (staticRecources/epiccrafts.js) are a COMBINATION rule, not
+// a budget one - "for epic rarity the money is not involved here it is the
+// combination" (verbatim). A recipe matches when every one of the 4 picked
+// materials is IN that part's own allowed list (requiredItems.bladeItems
+// etc - an OR set per part, not "use every material listed"). Checked
+// fresh off the live selectedMaterials every time a part changes (see the
+// partBoxes click handler below), never cached - swapping even one part's
+// material can make or break a match.
+function matchEpicRecipe(){
+    if(SWORD_PARTS.some(part => !selectedMaterials[part])) return null
+    return epicSwordCraftDetails.find(recipe => {
+        const req = recipe.requiredItems
+        return SWORD_PARTS.every(part => req[`${part}Items`]?.includes(selectedMaterials[part].materialName))
+    }) ?? null
+}
+
+// Reflects whichever rule actually governs the CURRENT selection - an epic
+// match always wins over the budget-derived tier, same precedence
+// buildSwordParts/buildSwordItem below give it. Called both when a part's
+// material changes and when the budget itself changes, since either one
+// can flip what's currently showing.
+function updateRarityReadout(){
+    const epicRecipe = matchEpicRecipe()
+    rarityValueEl.textContent = epicRecipe ? epicRecipe.dn : (currentRarityBase === "rare" ? "Rare" : "Common")
+}
+
 budgetInput.addEventListener("input", () => {
     const budget = Number(budgetInput.value) || 0
     currentRarityBase = getRarityBase(budget)
-    rarityValueEl.textContent = currentRarityBase === "rare" ? "Rare" : "Common"
+    updateRarityReadout()
 })
 
 // --- craft ---
@@ -237,7 +281,37 @@ function pickRarityVariant(part){
     return variants[Math.floor(Math.random() * variants.length)]
 }
 
-function buildSwordParts(){
+// epicRecipe passed in from buildSwordItem (which already looked it up
+// once via matchEpicRecipe) rather than re-matching here - keeps this
+// function and buildSwordItem looking at the exact same recipe instead of
+// each independently re-deriving it from selectedMaterials.
+function buildSwordParts(epicRecipe){
+    if(epicRecipe){
+        // NOT pickRarityVariant - an epic recipe is one specific, named
+        // mesh set (allswords.glb's own sword_<part>_epic1 etc), not a
+        // random pick among several numbered variants the way common/rare
+        // tiers work, so every part uses the recipe's own rarityName as-is
+        return {
+            bladeRarity: epicRecipe.rarityName,
+            guardRarity: epicRecipe.rarityName,
+            handleRarity: epicRecipe.rarityName,
+            pommelRarity: epicRecipe.rarityName,
+            bladeColor: selectedMaterials.blade.tintKey,
+            guardColor: selectedMaterials.guard.tintKey,
+            handleColor: selectedMaterials.handle.tintKey,
+            pommelColor: selectedMaterials.pommel.tintKey,
+            // createweapon.js's own EPIC_ACCENT_SUFFIXES reads these by
+            // this exact naming (${part}${Outer|Core}Color) - only the
+            // fields the recipe actually set come through, a part/accent
+            // combination with no matching key just renders without one
+            epicAccents: {
+                bladeOuterColor: epicRecipe.bladeOuterColor,
+                guardCoreColor: epicRecipe.guardCoreColor,
+                guardOuterColor: epicRecipe.guardOuterColor,
+            },
+        }
+    }
+
     // every part shares the same TIER (currentRarityBase) - that's the
     // whole point, see the file-level comment - but which numbered mesh
     // within that tier is randomized independently per part
@@ -290,23 +364,27 @@ function deductSelectedMaterials(){
 // variant, see buildSwordParts). Two swords built from identical materials
 // always come out with identical stats regardless of budget/rarity tier.
 function buildSwordItem(){
-    const rarity = currentRarityBase
+    const epicRecipe = matchEpicRecipe()
+    const rarity = epicRecipe ? epicRecipe.rarityName : currentRarityBase
     const bladeLabel  = selectedMaterials.blade.materialLabel
     const guardLabel  = selectedMaterials.guard.materialLabel
     const handleLabel = selectedMaterials.handle.materialLabel
     const pommelLabel = selectedMaterials.pommel.materialLabel
-    const dn = `${bladeLabel} Blade`
+    const dn = epicRecipe ? epicRecipe.dn : `${bladeLabel} Blade`
 
     const { dmg, magicDmg, durabilityMax, magicResistance } = computeCraftedWeaponStats(selectedMaterials)
 
     return {
         itemId: randomNum(),
-        // timestamped so it's unique from every other crafted sword AND
-        // from the static swordsdata.js catalog - createcharacter.js's
-        // swordMeshes cache is keyed by name, so two different recipes
-        // sharing a name would render whichever one built its mesh first
-        // for both, regardless of which item is actually equipped
-        name: `customsword_${Date.now()}`,
+        // an epic recipe uses its OWN fixed name, not a timestamp - every
+        // "majesticsword" craft is visually identical by definition (same
+        // required combination -> same exact mesh/accent set), so sharing
+        // one createcharacter.js swordMeshes cache entry across every copy
+        // is correct here, unlike a random common/rare craft (see that
+        // cache's own comment on why THOSE need a unique name each time -
+        // two different random recipes sharing a name would render
+        // whichever one built its mesh first for both)
+        name: epicRecipe ? epicRecipe.name : `customsword_${Date.now()}`,
         dn,
         itemCateg: "equipable",
         itemType: "weapon",
@@ -323,9 +401,11 @@ function buildSwordItem(){
         durability: { current: durabilityMax, max: durabilityMax },
         price: { coinType: "bronze", pieces: Math.max(1, Number(budgetInput.value) || 0) },
         qnty: 1,
-        desc: `${dn}, a ${rarity} blade forged with a ${guardLabel.toLowerCase()} guard, a ${handleLabel.toLowerCase()} grip, and a ${pommelLabel.toLowerCase()} pommel.`,
+        desc: epicRecipe
+            ? `${epicRecipe.dn}, a legendary blade forged from ${bladeLabel}, ${guardLabel}, ${handleLabel}, and ${pommelLabel}.`
+            : `${dn}, a ${rarity} blade forged with a ${guardLabel.toLowerCase()} guard, a ${handleLabel.toLowerCase()} grip, and a ${pommelLabel.toLowerCase()} pommel.`,
         rarity,
-        parts: buildSwordParts(),
+        parts: buildSwordParts(epicRecipe),
     }
 }
 
@@ -348,15 +428,20 @@ function playForgingAnimation(cb){
 craftBtn.addEventListener("click", () => {
     if(isForging) return
 
-    const budget = Number(budgetInput.value) || 0
-    if(budget <= 0) return openClosePopup("Enter a budget first", true, 1500)
-
     const isSword = activeCategory === "sword"
     const requiredParts = isSword ? SWORD_PARTS : ["item"]
     const missingParts = requiredParts.filter(part => !selectedMaterials[part])
     if(missingParts.length) return openClosePopup("Pick a material for every part first", true, 1500)
 
-    const rarity = currentRarityBase
+    // epic recipes bypass the budget gate entirely - "for epic rarity the
+    // money is not involved here it is the combination" (verbatim). Every
+    // other path (including non-sword categories, which have no epic
+    // recipe concept at all) still needs a real budget entered.
+    const epicRecipe = isSword ? matchEpicRecipe() : null
+    const budget = Number(budgetInput.value) || 0
+    if(!epicRecipe && budget <= 0) return openClosePopup("Enter a budget first", true, 1500)
+
+    const rarity = epicRecipe ? epicRecipe.rarityName : currentRarityBase
 
     // TODO: budget still isn't spent - crafting is free of coin cost for
     // now. Once the pricing rule is settled, spendOnPrice() goes here (see

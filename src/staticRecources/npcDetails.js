@@ -53,7 +53,7 @@ const renardenSkills = {
         returnModeDura: 900,
         skillCoolDown: 3000,
         demand: [{ name: "mp", minCost: 25, cost: 0 }],
-        effects: { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+        effects: [{ effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 }],
         // durationMs: 1000 (not the player's own dashstrikeSkill
         // default of 350) - this npc opponent has no physics
         // aggregate at all, so its own dash is a plain locallyTranslate
@@ -93,7 +93,7 @@ const renardenSkills = {
         returnModeDura: 900,
         skillCoolDown: 1500,
         demand: [{ name: "mp", minCost: 15, cost: 0 }],
-        effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+        effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 }],
         skillrank: 1,
         upgradePlus: 15,
         explosionColor: "red",
@@ -129,7 +129,7 @@ const renardenSkills = {
         returnModeDura: 900,
         skillCoolDown: 2200,
         demand: [{ name: "mp", minCost: 32, cost: 0 }],
-        effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+        effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 }],
         skillrank: 1,
         upgradePlus: 28,
         explosionColor: "red",
@@ -155,7 +155,7 @@ const renardenSkills = {
         returnModeDura: 900,
         skillCoolDown: 14000,
         demand: [{ name: "mp", minCost: 140, cost: 0 }],
-        effects: { effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 },
+        effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 }],
         skillrank: 4,
         upgradePlus: 40,
         explosionColor: "fire",
@@ -2892,7 +2892,7 @@ export default [
                 returnModeDura: 900,
                 skillCoolDown: 3000,
                 demand: [{ name: "mp", minCost: 25, cost: 0 }],
-                effects: { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+                effects: [{ effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 }],
                 // durationMs: 1000 (not the player's own dashstrikeSkill
                 // default of 350) - this npc opponent has no physics
                 // aggregate at all, so its own dash is a plain locallyTranslate
@@ -2932,7 +2932,7 @@ export default [
                 returnModeDura: 900,
                 skillCoolDown: 1500,
                 demand: [{ name: "mp", minCost: 15, cost: 0 }],
-                effects: { effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 },
+                effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 70, chance: 1, bashPower: 0.3 }],
                 skillrank: 1,
                 upgradePlus: 15,
                 explosionColor: "red",
@@ -2968,7 +2968,7 @@ export default [
                 returnModeDura: 900,
                 skillCoolDown: 2200,
                 demand: [{ name: "mp", minCost: 32, cost: 0 }],
-                effects: { effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 },
+                effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 140, chance: 1, bashPower: 0.4 }],
                 skillrank: 1,
                 upgradePlus: 28,
                 explosionColor: "red",
@@ -2994,7 +2994,7 @@ export default [
                 returnModeDura: 900,
                 skillCoolDown: 14000,
                 demand: [{ name: "mp", minCost: 140, cost: 0 }],
-                effects: { effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 },
+                effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 }],
                 skillrank: 4,
                 upgradePlus: 40,
                 explosionColor: "fire",

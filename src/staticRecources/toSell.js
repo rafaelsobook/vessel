@@ -116,6 +116,29 @@ export default  [
         desc: "A striking fruit with a deep crimson skin that glimmers like molten metal under moonlight. Its content can even cure poisons",
         rarity: "normal"
     },
+    // cures "cursed" (charactersystem/characterstate.js's curseStatusEffect/
+    // isPlayerCursed - dark magic's "your own damage backfires on you"
+    // debuff, skillsData.js's own curse effect entries) - same cure:[]
+    // mechanism lunaraqum's own poison-cure above already uses
+    // (itemInfoSystem.js's consumeItemFunc), just naming "cursed" instead of
+    // "poisoned". Priced above every fruit above it and sold no cheaper than
+    // that - curing a PERMANENT debuff (unlike poison, which also just wears
+    // off a status tick at a time) needs a reliably purchasable source, not
+    // a rare drop, so it's here in the same vendor stock rather than gated
+    // behind loot RNG.
+    {
+        sellerId: "sellerSylvan123",
+        itemId: randomNum(), // should be string also in client
+        name: "antidote", // is also the image name
+        dn: "Antidote",
+        itemCateg: "consumable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "potion", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff/cores
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 0, fillTireness: 0, cure: ["cursed"]}, //for buffs foods potions
+        price: { coinType: "bronze", pieces: 5 },
+        qnty: 1,
+        desc: "A bitter, silver-blue tonic brewed to burn a curse out of the blood. Does nothing for wounds, hunger, or poison - only for the mark dark magic leaves behind.",
+        rarity: "normal"
+    },
     {
         sellerId: "sellerSylvan123",
         itemId: randomNum(), // should be string also in client

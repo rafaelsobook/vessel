@@ -1,4 +1,4 @@
-import { PBRMaterial, Color3 } from "@babylonjs/core"
+import { PBRMaterial, Color3, Texture } from "@babylonjs/core"
 
 export const METAL_TINTS = {
     iron:       new Color3(0.56, 0.57, 0.58),
@@ -9,6 +9,17 @@ export const METAL_TINTS = {
     mythril:    new Color3(0.55, 0.85, 0.9),
     adamantine: new Color3(0.2, 0.55, 0.7),
     ruby:       new Color3(0.55, 0.08, 0.1),
+    // near-black with a faint cold undertone - moved here from weaponmat.js's
+    // own GEM_TINTS (which used to be dragonscale's only home) so armor/
+    // pauldrons/helmets/gauntlets (createMetalMat below is the ONLY material
+    // function those go through - createcharacter.js's equipArmor/
+    // createHelmet/createGauntlet/createPauldron, none of them touch
+    // weaponmat.js's own resolveMaterialTint at all) recognize "dragonscale"
+    // too, not just weapon parts. resolveMaterialTint checks METAL_TINTS
+    // before GEM_TINTS, so weapon parts still resolve it fine from here -
+    // nothing else needed on that side. See MATERIAL_TEXTURES below for the
+    // real scale-pattern image this material now also carries.
+    dragonscale: new Color3(0.05, 0.05, 0.07),
 }
 
 export const METAL_ROUGHNESS = {
@@ -20,6 +31,23 @@ export const METAL_ROUGHNESS = {
     mythril: 0.15,
     adamantine: 0.2,
     ruby: 0.25,
+    dragonscale: 0.18, // hard, glossy scale
+}
+
+// A real image texture some materials carry ON TOP of their flat tint above
+// (most materials here are tint-only, no entry needed) - applied as
+// albedoTexture (PBRMaterial - armor/weapon hard parts) or diffuseTexture
+// (StandardMaterial - the handle) UNDERNEATH the tint's own albedoColor/
+// diffuseColor, which still multiplies over it same as always - a textured-
+// but-untinted material would just look washed out grey. Keyed by the same
+// tint-key METAL_TINTS/weaponmat.js's GEM_TINTS use, so any consumer (armor
+// via createMetalMat below, weapon parts via weaponmat.js) picks it up for
+// free just by recognizing the material name - nothing per-consumer to wire.
+export const MATERIAL_TEXTURES = {
+    dragonscale: "./images/modeltex/items/blackdragonscale.webp",
+    // phoenixore's own tintKey (itemDictionary.js) - reuses the existing
+    // particle sprite rather than a new dedicated surface image, per request
+    firecrystal: "./images/particles/smoke2.webp",
 }
 
 // Name-safe keys into METAL_TINTS/METAL_ROUGHNESS (derived, not hand-copied,
@@ -39,5 +67,10 @@ export function createMetalMat(scene, metalColor = "iron") {
     mat.roughness = roughness
     mat.environmentIntensity = 0.7
     mat.emissiveColor = tint.scale(0.05)
+    // MATERIAL_TEXTURES - only materials that actually have a real surface
+    // image set one (dragonscale so far); everything else stays flat-tinted
+    // exactly as before, this doesn't touch them
+    const texturePath = MATERIAL_TEXTURES[metalColor]
+    if(texturePath) mat.albedoTexture = new Texture(texturePath, scene)
     return mat
 }
