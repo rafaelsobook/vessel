@@ -392,7 +392,44 @@ canvas{
     .cc-skin-swatch{
         height: 30px;
         border-radius: 4px;
-        
+
+    }
+}
+// the "hair" category container holds two of these (male/female) instead of
+// its buttons directly now - only one visible at a time, toggled by the
+// gender buttons below - so it needs .cc-style-container's own flex/gap
+// layout repeated one level deeper
+.cc-hair-group{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.cc-gender-btns{
+    position: fixed;
+    top: 66%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    gap: 12px;
+    z-index: 101;
+    .cc-gender-btn{
+        cursor: pointer;
+        background: rgb(15, 17, 17);
+        color: rgb(202, 165, 1);
+        border: 1px solid rgba(121, 92, 92, 0.54);
+        border-radius: 4px;
+        padding: 6px 28px;
+        font-family: $scrollfont;
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+        font-weight: 500;
+    }
+    .cc-gender-btn:hover{
+        opacity: 0.8;
+    }
+    .cc-gender-btn.active{
+        background: rgb(202, 165, 1);
+        color: rgb(15, 17, 17);
     }
 }
 // setup character creation page styles here

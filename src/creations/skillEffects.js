@@ -168,6 +168,10 @@ function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyWidenes,
     const burnInterval = setInterval(() => {
         ticksDone++
         dealTick(burnEffect.dmgPm)
+        // burnEffect.soundPlayPerDmg (skillsData.js's fire family) - same
+        // plain-key-plus-"S" convention characterstate.js's own startBurnDamage
+        // (the player's own burn) already follows
+        if(burnEffect.soundPlayPerDmg) getAllSounds()[`${burnEffect.soundPlayPerDmg}S`]?.play()
         if(ticksDone >= totalTicks) clearInterval(burnInterval)
     }, 1000)
 
@@ -729,6 +733,11 @@ function strikeWithHandCollider(scene, player, skill){
     if(!atkCollider || !player.rHand) return console.warn("[dashstrike] no atkCollider or player.rHand to attach to")
 const originalZ = atkCollider.scaling.z
     const originalParent = atkCollider.parent
+    // createMyCharacter.js's own isSkillHijacked comment - lets
+    // registerToAtkCollider("tree", ...) tell this window apart from a real
+    // attack swing, so sweeping through/near a tree during this strike
+    // doesn't also chop it
+    atkCollider.isSkillHijacked = true
     atkCollider.parent = player.rHand
     // same local offset createSword's own weapon-in-hand placement uses
     // (createcharacter.js) - roughly where the equipped weapon itself sits
@@ -775,6 +784,7 @@ const originalZ = atkCollider.scaling.z
         atkCollider.parent = originalParent
         atkCollider.position.y = ATK_COLLIDER_PARKED_Y
         atkCollider.scaling.z = originalZ
+        atkCollider.isSkillHijacked = false
     }, HAND_STRIKE_WINDOW_MS)
 }
 

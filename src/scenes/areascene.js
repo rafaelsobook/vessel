@@ -64,8 +64,7 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    await loadModel("./models/monsters/grim.glb", scene)
-
+    //await SceneLoader.ImportMeshAsync("", "", "./models/avatar/alisa.glb", scene);
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()
@@ -207,7 +206,7 @@ export async function areaScene(placeDetail){
     // the crash and preserve whatever it was meant to track.
 
     registerToAtkCollider(scene, "tree", () => {
-        console.log("hit tree")
+        // console.log("hit tree")
         playSound(getAllSounds().woodcuttingS)
 
         if(Math.random() >= 0.7){
@@ -219,7 +218,7 @@ export async function areaScene(placeDetail){
             if(woodItem) obtain(woodItem)
             receiveAchievement("woodcutter")
         }
-    })
+    }, true) // excludeSkillStrikes - see registerToAtkCollider's own comment: without this, casting dashstrike anywhere near a tree chopped it too, since it rides the same shared atkCollider
 
     const bootsItem = {
         itemId: randomNum(), // should be string also in client
@@ -248,7 +247,6 @@ export async function areaScene(placeDetail){
 
     if(placeDetail.originalGlbs && placeDetail.originalGlbs.length > 0){
         placeDetail.originalGlbs.forEach( async origin => {
-            console.log(origin)
             await createOriginal(scene, origin.pos, origin.rot, origin.textures, origin.glbPath)
         })
     }

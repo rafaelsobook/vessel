@@ -276,7 +276,7 @@ function createDetailedMaterial(scene, wallDet){
     return wallMat
 }
 export async function createOriginal(scene, pos, rotationY, textureDets, glbPath, willHide){
-    console.log(glbPath)
+
     let meshes
     try {
         ;({ meshes } = await SceneLoader.ImportMeshAsync("", glbPath, null, scene))

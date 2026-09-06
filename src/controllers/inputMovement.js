@@ -541,7 +541,30 @@ function setupControls(scene, allsounds) {
             case "a": input.right   = -1; isMoving = true; break;
             case "d": input.right   =  1; isMoving = true; break;
             case "shift": currentSpeed = sprintSpeed; break;
-            case " ": if (!e.repeat) performJump(); break;
+            case " ": {
+                // index.html's attack/cast/walk/etc buttons are real <button>
+                // elements (uimanagement.js's walkRunBtns) - clicking one with
+                // the mouse leaves it holding DOM focus, and a browser's
+                // default behavior for a focused <button> is to fire its own
+                // "click" the moment Space is pressed, regardless of what
+                // else Space is bound to on the page. Without this, pressing
+                // jump right after clicking attack re-fired the still-focused
+                // attack button's click handler - reading as "jump triggers
+                // attack". preventDefault() here stops that default
+                // activation (and the page-scroll Space would otherwise
+                // cause).
+                //
+                // Skipped while actually typing into a real text field
+                // (worldChatSystem.js's chat input has no stopPropagation on
+                // its own keydown, so this handler still sees every
+                // keystroke typed into it) - preventDefault on keydown is
+                // what stops the character from being inserted at all, and a
+                // chat message needs to allow spaces.
+                const target = document.activeElement
+                const isTypingInField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+                if(!isTypingInField) e.preventDefault()
+                if (!e.repeat) performJump()
+            } break;
         }
 
         if (isMoving) {

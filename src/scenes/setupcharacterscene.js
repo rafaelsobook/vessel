@@ -14,11 +14,13 @@ import { mergeAndLoadModel } from "../tools/loadmodel.js";
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
 import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
+import { FEMALE_ONLY_NAMES, findDeepByName } from "../charactersystem/createcharacter.js";
 
 export async function setupCharacterScene(engine){
     let toSave = {
         owner: undefined,
         name: "",
+        gender: "male",
         hairColor: ADVENTURER_COLORS.black,
         clothColor: ADVENTURER_COLORS.tan,
         pantsColor: ADVENTURER_COLORS.darkBrown,
@@ -32,6 +34,13 @@ export async function setupCharacterScene(engine){
     let hairs = []
     let clothes = []
     let pants = []
+    // female has no cloth/pants/skinColor style choices yet (createcharacter.js's
+    // own isFemale comment) - just a body, 2 hairstyles, and one fixed
+    // default outfit (belt.style1/blindfold/mask.style.1/skirt.style1/bag/
+    // silverine, always on, no picker)
+    let femaleHairs = []
+    let femaleAccessories = []
+    let mainBodyMesh, scalpMesh, femaleBodyMesh
 
     const spawnPos = new Vector3(0,0,0)
     const scene = new Scene(engine)
@@ -65,14 +74,23 @@ export async function setupCharacterScene(engine){
     container.addAllToScene()
     const { meshes, animationGroups } = container
     meshes[0].position.y += 0.05
-    meshes[0].getChildren()[0].getChildren().forEach(bne => {
-        if(bne.name === "pelvis"){
-            headBone = bne.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
-            // console.log("head bone found", headBone.name)
-        }
-    })
+    // createcharacter.js's own findDeepByName comment - starting from a
+    // fixed getChildren()[0] assumed that's always the Armature, which broke
+    // once avatar.glb gained new top-level siblings (femalebody etc) that
+    // can sort before it in export order
+    let pelvisBoneForPreview = findDeepByName(meshes[0], bne => bne.name === "pelvis")
+    if(pelvisBoneForPreview){
+        headBone = pelvisBoneForPreview.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
+        // console.log("head bone found", headBone.name)
+    } else {
+        console.warn('[setupCharacterScene] pelvis bone not found - hair placement will be broken')
+    }
 
     const hairMat = createColorMat("hair_mat", toSave.hairColor , scene)
+    // createcharacter.js's own femaleHair2Mat comment - female's "hair2"
+    // style only, separate material so the bump map doesn't also apply to
+    // hair1/male hair/scalp, which all still use the plain hairMat above
+    const femaleHair2Mat = createColorMat("hair_mat_f2", toSave.hairColor, scene, "./images/textures/girlhair/hairstyle2.webp")
     const clothMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     clothMat.diffuseColor = new Color3(0.42, 0.30, 0.16)
@@ -91,36 +109,85 @@ export async function setupCharacterScene(engine){
 
     meshes[0].getChildren().forEach(mesh => {
         const meshPartName = mesh.name.toLowerCase()
-        if(meshPartName.includes("ref")) return mesh.dispose();
-        if(meshPartName.includes("hiddenbody")) return mesh.dispose();
-        if(meshPartName.includes("cloak.")) return mesh.dispose();
-        if(meshPartName.includes("belt.")) return mesh.dispose();
-        if(meshPartName.includes("scalp")) return mesh.material = hairMat
+        // dispose(true) = doNotRecurse - see createcharacter.js's own
+        // comment on this: Babylon's dispose() recursively disposes every
+        // child of a node by default, and both bodies share ONE Armature,
+        // not a copy each - a plain dispose() on any of these mesh nodes
+        // would silently take shared bones down with it if any turn out to
+        // be nested underneath one instead of sitting as a plain sibling.
+        if(meshPartName.includes("ref")) return mesh.dispose(true);
+        if(meshPartName.includes("hiddenbody")) return mesh.dispose(true);
+        // tripo_node_<uuid> - leftover Tripo3D import artifact bundled
+        // alongside the new female body parts, same category as ref/hiddenbody
+        if(meshPartName.includes("tripo_node")) return mesh.dispose(true);
+        if(meshPartName.includes("cloak.")) return mesh.dispose(true);
+        if(meshPartName.includes("belt.") && !meshPartName.includes("belt.style1")) return mesh.dispose(true);
+        if(meshPartName.includes("boots")) return mesh.dispose(true)
+        if(meshPartName.includes("armor")) return mesh.dispose(true)
+        if(meshPartName.includes("gear")) return mesh.dispose(true)
+
+        // createcharacter.js's own FEMALE_ONLY_NAMES/isFemale comment -
+        // avatar.glb bundles both genders' meshes together now, hidden
+        // (not disposed - the gender toggle below needs to swap back and
+        // forth live) instead of shown/dispose like createcharacter.js does,
+        // since this preview scene never reloads the glb on a gender switch
+        const isFemaleNode = FEMALE_ONLY_NAMES.some(n => meshPartName.includes(n))
+
+        if(isFemaleNode){
+            if(meshPartName.includes("femalebody")){
+                // skin color is a male-only option for now (createcharacter.js's
+                // own createAnimeBody has the matching change) - femalebody
+                // keeps whatever material it already ships with, untouched
+                femaleBodyMesh = mesh
+                mesh.isVisible = toSave.gender === "female"
+                return
+            }
+            if(meshPartName.includes("femaile.hair") || meshPartName.includes("female.hair")){
+                const hairStyleName = mesh.name.split(".")[1]
+                // createcharacter.js's own femaleHair2Mat comment - hair2
+                // gets the bump-mapped material, hair1 stays plain
+                mesh.material = hairStyleName === "hair2" ? femaleHair2Mat : hairMat
+                femaleHairs.push(mesh)
+                mesh.isVisible = toSave.gender === "female" && hairStyleName === toSave.hair
+                return
+            }
+            // belt.style1/blindfold/mask.style.1/skirt.style1/bag/silverine -
+            // her one fixed default look, no picker
+            femaleAccessories.push(mesh)
+            mesh.isVisible = toSave.gender === "female"
+            return
+        }
+
+        if(meshPartName.includes("scalp")){
+            mesh.material = hairMat
+            scalpMesh = mesh
+            mesh.isVisible = toSave.gender !== "female"
+            return
+        }
 
         const toPush = mesh.name.split(".")[1]
-               
+
         if(meshPartName.includes("mainbody")){
-            mesh.material = skinMat      
+            mesh.material = skinMat
+            mainBodyMesh = mesh
+            mesh.isVisible = toSave.gender !== "female"
         }
         if(toPush === undefined) return
         if(meshPartName.includes("cloth")) {
             mesh.material = clothMat
             clothes.push(mesh)
-            meshPartName.includes(toSave.cloth) ? mesh.isVisible = true : mesh.isVisible = false
+            mesh.isVisible = toSave.gender !== "female" && toPush === toSave.cloth
         }
         if(meshPartName.includes("hair")){
             mesh.material = hairMat
             hairs.push(mesh)
-            meshPartName.includes(toSave.hair) ? mesh.isVisible = true : mesh.isVisible = false
+            mesh.isVisible = toSave.gender !== "female" && toPush === toSave.hair
         }
         if(meshPartName.includes("pants")){
             mesh.material = pantsMat
             pants.push(mesh)
-            meshPartName.includes(toSave.pants) ? mesh.isVisible = true : mesh.isVisible = false
+            mesh.isVisible = toSave.gender !== "female" && toPush === toSave.pants
         }
-        if(meshPartName.includes("boots")) return mesh.dispose()
-        if(meshPartName.includes("armor")) mesh.dispose()
-        if(meshPartName.includes("gear")) mesh.dispose()
     })
     let HairModel
     try {
@@ -136,7 +203,7 @@ export async function setupCharacterScene(engine){
         hairMsh.rotationQuaternion = null
         hairMsh.position = new Vector3(0,.45,-.1)
         hairMsh.scaling = new Vector3(8,8,8)
-        hairMsh.isVisible = hairMsh.name.split(".")[1] === toSave.hair
+        hairMsh.isVisible = toSave.gender !== "female" && hairMsh.name.split(".")[1] === toSave.hair
         hairs.push(hairMsh)
     })
     HairModel.meshes[0]?.dispose()
@@ -165,7 +232,20 @@ export async function setupCharacterScene(engine){
 
     const onStyleSelect = (category, styleName) => {
         toSave[category] = styleName
-        const arrMap = { hair: hairs, cloth: clothes, pants }
+        // hair is the one category that exists for both genders, split
+        // across two different mesh sources (hairModels.glb for male,
+        // femaile.hair1/female.hair2 living directly in avatar.glb for
+        // female) - only the current gender's own list should ever end up
+        // visible, createcharacterpage.js's own hair buttons only ever offer
+        // the current gender's styles anyway, but this keeps the 3D preview
+        // correct even if called with a stale/wrong-gender styleName
+        if(category === "hair"){
+            const isFemale = toSave.gender === "female"
+            hairs.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === styleName)
+            femaleHairs.forEach(mesh => mesh.isVisible = isFemale && mesh.name.split(".")[1] === styleName)
+            return
+        }
+        const arrMap = { cloth: clothes, pants }
         const arr = arrMap[category]
         if (!arr) return
         arr.forEach(mesh => {
@@ -173,11 +253,46 @@ export async function setupCharacterScene(engine){
         })
     }
 
+    // switches which body/hair/outfit set is showing - see this file's own
+    // FEMALE_ONLY_NAMES-driven mesh split above. Cloth/pants/skinColor have
+    // no female styles yet (createcharacter.js's own isFemale comment), so
+    // those stay untouched here - createcharacterpage.js's own gender
+    // buttons are what hides those two category icons for female instead
+    const onGenderSelect = (gender) => {
+        toSave.gender = gender
+        const isFemale = gender === "female"
+
+        if(mainBodyMesh) mainBodyMesh.isVisible = !isFemale
+        if(scalpMesh) scalpMesh.isVisible = !isFemale
+        clothes.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.cloth)
+        pants.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.pants)
+
+        if(femaleBodyMesh) femaleBodyMesh.isVisible = isFemale
+        femaleAccessories.forEach(mesh => mesh.isVisible = isFemale)
+
+        // a hair style picked under the OTHER gender never matches this
+        // one's own mesh suffixes (style1/2 vs hair1/2) - fall back to this
+        // gender's first available style so switching never leaves the
+        // character bald
+        const ownHairList = isFemale ? femaleHairs : hairs
+        if(!ownHairList.some(mesh => mesh.name.split(".")[1] === toSave.hair)){
+            toSave.hair = ownHairList[0]?.name.split(".")[1]
+        }
+        hairs.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.hair)
+        femaleHairs.forEach(mesh => mesh.isVisible = isFemale && mesh.name.split(".")[1] === toSave.hair)
+
+        return toSave.hair
+    }
+
     const onCategoryChange = (category) => {
         selectedCategory = category
         if (colorPicker) colorPicker.isVisible = category !== "skin"
     }
 
+    // male-only for now (createcharacter.js's own createAnimeBody has the
+    // matching change) - femalebody no longer uses skinMat at all, and
+    // createcharacterpage.js's own gender buttons hide the "skin" category
+    // icon entirely for female so this never even gets a chance to fire for her
     const onSkinSelect = (key) => {
         toSave.skinColor = key
         skinMat.diffuseTexture = new Texture(SKIN_TEXTURES[key], scene)
@@ -185,10 +300,11 @@ export async function setupCharacterScene(engine){
 
     showCreateCharacterPage(
         (characterNameFromInput) => { toSave.name = characterNameFromInput; return toSave },
-        { hair: hairs, cloth: clothes, pants, skinColors: SKIN_TEXTURE_LIST },
+        { hair: { male: hairs, female: femaleHairs }, cloth: clothes, pants, skinColors: SKIN_TEXTURE_LIST },
         onStyleSelect,
         onCategoryChange,
-        onSkinSelect
+        onSkinSelect,
+        onGenderSelect
     )
     
 
@@ -196,11 +312,10 @@ export async function setupCharacterScene(engine){
     // overlay.style.display ="none"   
 
     setGameStatus("running")
-    meshes[0].getChildren()[0].getChildren().forEach(bne => {
-        if(bne.name === "pelvis"){
-            headBone = bne.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
-        }
-    })
+    const pelvisBoneForPreview2 = findDeepByName(meshes[0], bne => bne.name === "pelvis")
+    if(pelvisBoneForPreview2){
+        headBone = pelvisBoneForPreview2.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
+    }
     const UITexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene)
 
     const matMap = { hair: hairMat, cloth: clothMat, pants: pantsMat, skin: skinMat }

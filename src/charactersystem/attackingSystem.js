@@ -350,7 +350,16 @@ export function clearAttackingIntervals(){
     // clearInterval(detectingInterval)
 }
 
-export function registerToAtkCollider(scene, meshName, cb){
+// excludeSkillStrikes:true skips cb while atkCollider.isSkillHijacked is set
+// (createMyCharacter.js's own comment on that flag) - opt-in, not the
+// default, since duelSystem.js's own registration against an opponent's
+// body WANTS dashstrike's hand-parented window to still count as a hit
+// (that's the entire point of strikeWithHandCollider reusing this same
+// collider). Only registerToAtkCollider(scene, "tree", ...) below passes
+// true: chopping wood should require an actual swing, never just
+// dashstrike's own reach happening to sweep past a tree on the way to a
+// real target.
+export function registerToAtkCollider(scene, meshName, cb, excludeSkillStrikes = false){
     const atkCollider = scene.getMeshByName(`atkCollider`)
     scene.meshes.forEach(mesh => {
 
@@ -364,7 +373,6 @@ export function registerToAtkCollider(scene, meshName, cb){
         if(mesh.getClassName() === "Mesh" || mesh.getClassName() === "InstancedMesh"){
             
             if(mesh.name && mesh.name.toLocaleLowerCase().includes(meshName)){
-                console.log("hello tree")
                 // precise:true - this is a swing landing damage/loot, not a
                 // walk-up proximity check, so it needs real mesh-level
                 // contact. Without it, Babylon's default bounding-box-only
@@ -374,7 +382,16 @@ export function registerToAtkCollider(scene, meshName, cb){
                 // which is exactly how attacking a slime standing near a
                 // tree could also grant wood - the tree was never actually
                 // hit, only "bounding-box adjacent" to the swing.
-                onIntersecEnterTrig(atkCollider, mesh, scene, cb, true)
+                onIntersecEnterTrig(atkCollider, mesh, scene, () => {
+                    if(excludeSkillStrikes && atkCollider.isSkillHijacked) return
+                    // names the actual mesh that matched meshName (e.g.
+                    // "tree") - if wood keeps coming from a spot with no
+                    // visible tree, this is what pins down which real mesh
+                    // (wrong name, oversized hidden instance, stray leftover
+                    // from a previous area load, etc) is responsible
+                    console.log(`[registerToAtkCollider] "${meshName}" hit: ${mesh.name}`)
+                    cb()
+                }, true)
             }
         }
         // if(mesh.name.includes("tree")) console.log(mesh.name)

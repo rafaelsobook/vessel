@@ -6,11 +6,13 @@ export function closeCharacterPage(){
     const overlay = document.getElementById("create-char-overlay")
     const categoryIcons = document.querySelector(".cc-category-icons")
     const listbox = document.querySelector(".list-box-right")
+    const genderBtns = document.querySelector(".cc-gender-btns")
     if(overlay) overlay.style.display = "none"
     if(categoryIcons) categoryIcons.style.display = "none"
     if(listbox) listbox.style.display = "none"
+    if(genderBtns) genderBtns.style.display = "none"
 }
-export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyleSelect, onCategoryChange, onSkinSelect) {
+export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyleSelect, onCategoryChange, onSkinSelect, onGenderSelect) {
     const overlay = document.createElement("div")
     overlay.id = "create-char-overlay"
     overlay.className = "page-overlay"
@@ -21,6 +23,15 @@ export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyl
             <input id="cc-name" type="text" maxlength="24" placeholder="Enter character name" class="page-input" />
             <img src="./images/UI/begin.png" id="cc-btn" class="createpage-btn"></img>
         </div>
+    `
+
+    // gender toggle - lower-middle of the screen, above the name/begin
+    // controls. Default is male (setupcharacterscene.js's own toSave.gender)
+    const genderBtns = document.createElement("div")
+    genderBtns.className = "cc-gender-btns"
+    genderBtns.innerHTML = `
+        <button class="cc-gender-btn active" data-gender="male">Male</button>
+        <button class="cc-gender-btn" data-gender="female">Female</button>
     `
 
     const categoryIcons = document.createElement("div")
@@ -48,6 +59,26 @@ export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyl
 
     const categories = ["hair", "cloth", "pants", "skin"]
     const categoryContainers = {}
+    // only "hair" exists for both genders (as two separate style lists -
+    // see setupcharacterscene.js's own meshData.hair = {male, female}) -
+    // cloth/pants have no female styles yet, so those two icons just get
+    // hidden entirely for female (below) instead of needing a second list
+    let hairGenderGroups
+
+    const buildStyleButtons = (container, meshArr, cat) => {
+        const styles = [...new Set(meshArr.map(m => m.name.split(".")[1]).filter(Boolean))]
+        styles.forEach(style => {
+            const btn = document.createElement("button")
+            btn.className = "cc-style-btn"
+            btn.textContent = style
+            btn.addEventListener("click", () => {
+                container.querySelectorAll(".cc-style-btn").forEach(b => b.classList.remove("active"))
+                btn.classList.add("active")
+                onStyleSelect?.(cat, style)
+            })
+            container.appendChild(btn)
+        })
+    }
 
     categories.forEach(cat => {
         const container = document.createElement("div")
@@ -75,41 +106,89 @@ export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyl
                 })
                 container.appendChild(btn)
             })
+        } else if (cat === "hair") {
+            // two independent button groups, one per gender's own mesh
+            // list - only the current gender's group is ever visible
+            // (toggled by the gender buttons below), so the style names
+            // shown always match what's actually on the body right now
+            const maleGroup = document.createElement("div")
+            maleGroup.className = "cc-hair-group cc-hair-group-male"
+            buildStyleButtons(maleGroup, meshData?.hair?.male ?? [], "hair")
+
+            const femaleGroup = document.createElement("div")
+            femaleGroup.className = "cc-hair-group cc-hair-group-female"
+            femaleGroup.style.display = "none"
+            buildStyleButtons(femaleGroup, meshData?.hair?.female ?? [], "hair")
+
+            container.appendChild(maleGroup)
+            container.appendChild(femaleGroup)
+            hairGenderGroups = { male: maleGroup, female: femaleGroup }
         } else {
-            const meshArr = meshData?.[cat] ?? []
-            const styles = [...new Set(meshArr.map(m => m.name.split(".")[1]).filter(Boolean))]
-            styles.forEach(style => {
-                const btn = document.createElement("button")
-                btn.className = "cc-style-btn"
-                btn.textContent = style
-                btn.addEventListener("click", () => {
-                    container.querySelectorAll(".cc-style-btn").forEach(b => b.classList.remove("active"))
-                    btn.classList.add("active")
-                    onStyleSelect?.(cat, style)
-                })
-                container.appendChild(btn)
-            })
+            buildStyleButtons(container, meshData?.[cat] ?? [], cat)
         }
 
         listbox.appendChild(container)
         categoryContainers[cat] = container
     })
 
+    let activeCategory = "hair"
+    const showCategory = (cat) => {
+        activeCategory = cat
+        categories.forEach(c => {
+            categoryContainers[c].style.display = c === cat ? "flex" : "none"
+        })
+        categoryIcons.querySelectorAll(".cc-cat-icon").forEach(b => {
+            b.classList.toggle("active", b.dataset.category === cat)
+        })
+    }
+
     categoryIcons.querySelectorAll(".cc-cat-icon").forEach(iconBtn => {
         iconBtn.addEventListener("click", () => {
             const cat = iconBtn.dataset.category
             onCategoryChange?.(cat)
-            categories.forEach(c => {
-                categoryContainers[c].style.display = c === cat ? "flex" : "none"
-            })
-            categoryIcons.querySelectorAll(".cc-cat-icon").forEach(b => b.classList.remove("active"))
-            iconBtn.classList.add("active")
+            showCategory(cat)
+        })
+    })
+
+    const clothIcon = categoryIcons.querySelector('[data-category="cloth"]')
+    const pantsIcon = categoryIcons.querySelector('[data-category="pants"]')
+    const skinIcon = categoryIcons.querySelector('[data-category="skin"]')
+
+    genderBtns.querySelectorAll(".cc-gender-btn").forEach(genderBtn => {
+        genderBtn.addEventListener("click", () => {
+            const gender = genderBtn.dataset.gender
+            genderBtns.querySelectorAll(".cc-gender-btn").forEach(b => b.classList.remove("active"))
+            genderBtn.classList.add("active")
+
+            onGenderSelect?.(gender)
+
+            const isFemale = gender === "female"
+            // cloth/pants have no female styles yet, and skin color is a
+            // male-only option for now (createcharacter.js/setupcharacterscene.js
+            // no longer touch femalebody's material at all) - hide all three
+            // icons entirely for female rather than show an empty/dead panel.
+            // style.css's own ".hidden" utility class (display:none!important),
+            // not the native `hidden` DOM property - .cc-category-icons
+            // .cc-cat-icon's own "display:flex" rule is MORE specific than the
+            // browser's default [hidden] rule and would silently win over it
+            if(clothIcon) clothIcon.classList.toggle("hidden", isFemale)
+            if(pantsIcon) pantsIcon.classList.toggle("hidden", isFemale)
+            if(skinIcon) skinIcon.classList.toggle("hidden", isFemale)
+            if(hairGenderGroups){
+                hairGenderGroups.male.style.display = isFemale ? "none" : "flex"
+                hairGenderGroups.female.style.display = isFemale ? "flex" : "none"
+            }
+            // currently viewing a category that just got hidden - fall back
+            // to hair (the only category female actually has) rather than
+            // leave an empty panel showing
+            if(isFemale && activeCategory !== "hair") showCategory("hair")
         })
     })
 
     document.body.appendChild(overlay)
     document.body.appendChild(categoryIcons)
     document.body.appendChild(listbox)
+    document.body.appendChild(genderBtns)
 
     const input = overlay.querySelector("#cc-name")
     const btn = overlay.querySelector(".createpage-btn")

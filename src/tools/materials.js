@@ -70,10 +70,10 @@ export function createMat(name, color, diffuseTexPath, scene, scale = { uScale: 
         const diffTex = new Texture(diffuseTexPath, scene);
         diffTex.uScale = scale.uScale;
         diffTex.vScale = scale.vScale;
-        
+
         mat.diffuseTexture = diffTex;
         mat.specularColor = new Color3(0,0,0);
-    }   
+    }
     // Base color (like diffuseColor but PBR)
     if(color){
         // mat.diffuseColor = color;

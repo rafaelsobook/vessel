@@ -244,6 +244,12 @@ export function getCharSocket(){
         owner: characterState.owner,
         name: characterState.name,
         lvl: characterState.lvl,
+        // createcharacter.js's createAnimeBody branches its entire body/hair/
+        // outfit mesh selection on this - without it here, every OTHER
+        // client would render me on the default (male) body regardless of
+        // what I actually picked, since worldsocket.js builds their view of
+        // me from exactly this payload
+        gender: characterState.gender,
         cloth: characterState.cloth,
         pants: characterState.pants,
         hair: characterState.hair,
@@ -657,6 +663,13 @@ export async function deductHp(dmg, effects, enemyStats){
                 }
                 const labelColor = labelColors.find(clr=>clr.name===effect.effectType)
                 popStatusEffect(`${effect.dn} ${labelToDisplay}`, labelColor ? labelColor:'#f5f5f5')
+                // effect.soundPlayPerDmg - same property/lookup convention
+                // startBurnDamage's own burn tick uses. Nothing sets this on
+                // poisoned/spdrain's own data yet (tcp's enemyData.ts/
+                // genenemy.ts, where those effects are actually defined) -
+                // wired here so it does something the moment either one
+                // gets the property added, same as burn already has
+                if(effect.soundPlayPerDmg) getAllSounds()[`${effect.soundPlayPerDmg}S`]?.play()
             }, timeOutCount)
             timeOutCount+=600
         })

@@ -12,7 +12,7 @@ import {
 import { getGameStatus, getSceneDet } from '../main/main';
 import { createTextMesh } from '../gui/textmesh';
 import { createAggregate } from '../tools/physics';
-import { createColorMat, createMat, createMatV2 } from '../tools/materials';
+import { createColorMat, createMatV2 } from '../tools/materials';
 import { SKIN_TEXTURES } from '../constants/skinColors';
 import { getPlayersOnScene, getSocketContainers } from '../sockets/worldsocket';
 import { createWeapon } from '../assetcreation/createweapon';
@@ -50,6 +50,13 @@ function createAnimeBodyMaterials(scene, det){
     const { hairColor, clothColor, pantsColor, skinColor } = det
     
     const hairMat = createColorMat("hair_mat", hairColor , scene)
+    // female's "hair2" style only (femaile.hair1/female.hair2 - see
+    // createAnimeBody's own FEMALE_ONLY_NAMES comment) - a separate material
+    // from the shared hairMat above since createColorMat's own bumpTexture
+    // param would otherwise apply this same strand texture to every mesh
+    // using hairMat (male hair, scalp, female's hair1 too), not just this
+    // one style
+    const femaleHair2Mat = createColorMat("hair_mat_f2", hairColor, scene, "./images/textures/girlhair/hairstyle2.webp")
     const clothMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const bootsMat = createMatV2(scene, "./images/fabrics/leather1.jpg", "./images/fabrics/leather1.jpg")
@@ -75,10 +82,31 @@ function createAnimeBodyMaterials(scene, det){
     // before this switch from flat diffuseColor to textures (those still
     // carry the old {r,g,b} shape, which won't match a SKIN_TEXTURES key).
     const skinTexPath = SKIN_TEXTURES[skinColor] ?? SKIN_TEXTURES.skin1
-    const skinMat = createMat("skin_mat", null, skinTexPath, scene)
+    // PBRMaterial here, not createMat's plain StandardMaterial - createnpc.js's
+    // own NPCs render their skin through a PBRMaterial straight off their glb
+    // (metallic-roughness workflow, tuned with environmentIntensity/
+    // directIntensity below), and a StandardMaterial is a genuinely different
+    // shader/lighting model, not just a different color setting - the same
+    // exact skin texture visibly mismatches an NPC's skin under identical
+    // scene lighting no matter how its diffuseColor/emissiveColor is tuned.
+    // Building this one material the same way NPCs' skin already is removes
+    // that mismatch at the source instead of chasing it with color hacks.
+    const skinMat = new PBRMaterial("skin_mat", scene)
+    skinMat.albedoTexture = new Texture(skinTexPath, scene)
+    // skin is a non-metal, mostly-matte surface - no metallic sheen, no sharp
+    // specular highlight
+    skinMat.metallic = 0
+    skinMat.roughness = 1
+    // same three knobs createnpc.js sets on every NPC's own PBRMaterial -
+    // keeping these identical is what actually makes the two match under the
+    // same scene lighting, not just "using PBRMaterial" in isolation
+    skinMat.environmentIntensity = 0.3
+    skinMat.directIntensity = 1
+    skinMat.emissiveIntensity = 0
 
     return {
         hairMat,
+        femaleHair2Mat,
         clothMat,
         pantsMat,
         skinMat,
@@ -128,7 +156,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const containers = getSocketContainers()
 
-    const {root, animationGroups, rHand, belts, cloaks, armors, boots, spineBone, headBone, lowerArmL, lowerArmR, shoulderL, shoulderR, characterHair} = createAnimeBody(containers, body, bodytarget, det, scene)
+    const {root, animationGroups, rHand, belts, cloaks, 
+        armors, boots, spineBone, headBone, lowerArmL, lowerArmR, 
+        shoulderL, shoulderR, characterHair} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
@@ -190,6 +220,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     // hairVisible: true (a mask/half-helm with a gap the hair should still
     // poke through) leaves it showing.
     function equipHelmet(helmetToEquipName, metalColor, itemName, hairVisible) {
+        // male-fitted armor/gear meshes don't fit the new female rig yet
+        // (see this file's own createAnimeBody/isFemale comment) - equipping
+        // still updates det.items normally, it just doesn't render until
+        // female-fitted meshes exist
+        if(det.gender === "female") return
         if(!helmetToEquipName) return
         let toEquip = false
         if(!helmetMeshes.length) {
@@ -244,6 +279,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     }
 
     function equipGauntlet(gauntletToEquipName, metalColor) {
+        // see equipHelmet's own comment
+        if(det.gender === "female") return
         if(!gauntletToEquipName) return
         let toEquip = false
         if(!gauntletMeshes.length) {
@@ -262,6 +299,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     }
 
     function equipArmor(itemName, metalColor){
+        // see equipHelmet's own comment
+        if(det.gender === "female") return
         if(!itemName) return
         armors.forEach(arm => {
             if(arm.name === itemName){
@@ -316,6 +355,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     }
 
     function equipPauldron(pauldronToEquipName, metalColor) {
+        // see equipHelmet's own comment
+        if(det.gender === "female") return
         if(!pauldronToEquipName) return
         let toEquip = false
         if(!pauldronMeshes.length) {
@@ -502,16 +543,59 @@ function createMainBodyTargetToClone(scene){
     bodytarget.isPickable  =false
     return bodytarget
 }
+// FEMALE_ONLY_NAMES - the new body/hair/outfit nodes added straight into the
+// same avatar.glb the male body already lives in (not a separate file), so
+// instantiateModelsToScene() below always brings in BOTH genders' meshes for
+// every single character regardless of det.gender - createAnimeBody has to
+// explicitly dispose whichever set doesn't match, or both bodies render
+// stacked on top of each other. Checked with .includes(), not ===, since the
+// hair entries carry a ".style" suffix (femaile.hair1/female.hair2 - yes,
+// "femaile" is a real typo in the source glb, handled here rather than
+// fixed at the asset level to avoid a re-export.
+// exported - setupcharacterscene.js's character-creation preview loads the
+// exact same avatar.glb and needs the identical gender split, not a
+// hand-copied second list that could drift out of sync with this one
+export const FEMALE_ONLY_NAMES = ["femalebody", "female.hair", "belt.style1", "mask.style", "skirt.style"]
+
+// finds a bone/node anywhere under root whose name matches, instead of
+// assuming it sits at a fixed getChildren()[0] position - the pelvis search
+// right below this used to start from `mainBodyMeshes.getChildren()[0]`
+// specifically (assuming that's always the Armature), which broke the
+// instant avatar.glb gained a new top-level sibling (femalebody and the
+// rest) that could sort before the Armature in export order: the male
+// bone NAMES/hierarchy under pelvis are still exactly what they always
+// were (confirmed against the actual rig), it was only WHICH top-level
+// child the search started digging from that came loose. Depth-first, and
+// stops at the first match, so avatar.glb having exactly one "pelvis"
+// bone shared by both bodies' skinning (not a separate one per body) is
+// what keeps this from ever ambiguously matching a female-side node instead.
+// exported - setupcharacterscene.js's creation-preview scene has the exact
+// same fragile positional pelvis/head-bone lookup on the same avatar.glb
+export function findDeepByName(root, predicate){
+    for(const child of root.getChildren()){
+        if(predicate(child)) return child
+        const found = findDeepByName(child, predicate)
+        if(found) return found
+    }
+    return null
+}
+
 function createAnimeBody(containers, body, bodytarget, det, scene){
     const { animeBody, hairs } = containers
     let headBone, spineBone, rHand, lowerArmL, lowerArmR, shoulderL, shoulderR
+
+    // female has no pants/cloth/skinColor style choices yet (only a body +
+    // 2 hairstyles + one fixed default outfit: belt.style1/blindfold/
+    // mask.style.1/skirt.style1/bag/silverine, always on, no equip system
+    // behind them) - see this function's own gender branch below
+    const isFemale = det.gender === "female"
 
     let belts = []
     let cloaks = []
     let armors = []
     let boots = []
     let characterHair = undefined
-    const {hairMat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
+    const {hairMat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
 
     const entries = animeBody.instantiateModelsToScene()
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
@@ -520,40 +604,193 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     mainBodyMeshes.position.y -= .74
     mainBodyMeshes.rotationQuaternion = Quaternion.Identity()
 
+    const pelvisBone = findDeepByName(mainBodyMeshes, bne => bne.name.includes("pelvis"))
+    console.log(det.name, pelvisBone.getChildren().length)
+    if(pelvisBone){
+        console.log(pelvisBone.getChildren())
+        // optional chaining all the way down - female's own skeleton (see
+        // this function's own isFemale comment) doesn't have a full
+        // neck/shoulder/arm chain under upperSpine at all right now, so a
+        // plain `.getChildren()[0].getChildren()[0]` chain threw the instant
+        // it hit that gap. That was an UNCAUGHT exception partway through
+        // this function - it silently skipped everything after it (the
+        // entire mesh dispose/material/hair loop below, for EVERY
+        // character, not just her), same class of bug as this function's
+        // own auraSkill.find comment. `?.` just leaves the missing bone
+        // `undefined` (same as this function already declared it) instead
+        // of crashing, so a rig with a real gap degrades to "no
+        // sword/pauldron/gauntlet placement for this one character"
+        // instead of "nothing after this point works for anyone".
+        const lowerSpine = pelvisBone.getChildren()[0]
+        spineBone = lowerSpine?.getChildren()[0]
+        rHand = spineBone?.getChildren()[2]?.getChildren()[0]?.getChildren()[0]?.getChildren()[1]
+        headBone = spineBone?.getChildren()[0]?.getChildren()[0]
 
-    mainBodyMeshes.getChildren()[0].getChildren().forEach(bne => {
-        if(bne.name.includes("pelvis")){
-            spineBone = bne.getChildren()[0].getChildren()[0]
-            rHand = bne.getChildren()[0].getChildren()[0].getChildren()[2].getChildren()[0].getChildren()[0].getChildren()[1]
-            headBone = bne.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
+        shoulderL = spineBone?.getChildren()[1]
+        shoulderR = spineBone?.getChildren()[2]
+        lowerArmL = shoulderL?.getChildren()[0]?.getChildren()[0]
+        lowerArmR = shoulderR?.getChildren()[0]?.getChildren()[0]
 
-            shoulderL = spineBone.getChildren()[1]
-            shoulderR = spineBone.getChildren()[2]
-            lowerArmL = shoulderL.getChildren()[0].getChildren()[0]
-            lowerArmR = shoulderR.getChildren()[0].getChildren()[0]
-            
-            if(!lowerArmR) console.warn('[createAnimeBody] bone "lowerArm.R" not found')
-            if(!lowerArmL) console.warn('[createAnimeBody] bone "lowerArm.L" not found')
-        }
+        if(!headBone) console.warn(`[createAnimeBody] head bone not found for "${det.name}" (gender: ${det.gender}) - her/his skeleton is missing the neck/shoulder chain under upperSpine`)
+
+            // console.log(spineBone)
+            // console.log(rHand)
+            // console.log(headBone)
+            // console.log(shoulderL)
+            // console.log(shoulderR)
+            // console.log(lowerArmL)
+            // console.log(lowerArmR)
+
+            // the leading `;` matters here - without it, this line has no
+            // semicolon separating it from `console.log(lowerArmR)` above,
+            // and a `[` right after an expression with no semicolon is
+            // parsed as INDEXING that expression's result, not a new array
+            // statement. That parsed as `console.log(lowerArmR)[lowerArmR]`
+            // (console.log returns undefined, so this threw "Cannot read
+            // properties of undefined"), a synchronous throw partway through
+            // the scene's async load chain - which is exactly why the
+            // loading screen never went away (same class of bug as this
+            // function's own auraSkill.find comment above).
+            // ;[
+            //     spineBone,
+            //     rHand,
+            //     headBone,
+            //     shoulderL,
+            //     shoulderR,
+            //     lowerArmL,
+            //     lowerArmR
+            // ].forEach(bone => {
+            //     // console.log(bone)
+            //     const box = bodytarget.clone(`debug`)
+            //     box.parent = bone
+            //     box.position = Vector3.Zero()
+            //     box.scaling  = new Vector3(10,10,10)
+            //     box.isPickable = false
+
+            // })
+        
+
+
+        if(!lowerArmR) console.warn('[createAnimeBody] bone "lowerArm.R" not found')
+        if(!lowerArmL) console.warn('[createAnimeBody] bone "lowerArm.L" not found')
+    } else {
+        console.warn('[createAnimeBody] pelvis bone not found - hair/weapon/pauldron/gauntlet placement will be broken')
+    }
+    // TEMP DIAGNOSTIC - sword renders huge/on the ground instead of in-hand,
+    // even though hair (headBone, same skeleton, shallower chain) now
+    // resolves correctly. Prints every resolved bone's actual name (so we
+    // can see if rHand's deeper index chain landed on the wrong node) plus
+    // how many "pelvis"-matching nodes exist at all (rules out
+    // findDeepByName grabbing an ambiguous/wrong match). Remove once resolved.
+    console.log("[createAnimeBody bone debug]", {
+        // name/owner - so a log line can be matched to an actual character
+        // by name instead of guessed from console ordering (the two clients'
+        // logs interleave with each other and with enemy-spawn/join noise)
+        name: det.name,
+        owner: det.owner,
+        gender: det.gender,
+        pelvisName: pelvisBone?.name,
+        pelvisMatchCount: (function countMatches(node, pred, n = 0){
+            if(pred(node)) n++
+            node.getChildren().forEach(c => n = countMatches(c, pred, n))
+            return n
+        })(mainBodyMeshes, bne => bne.name.includes("pelvis")),
+        spineBoneName: spineBone?.name,
+        headBoneName: headBone?.name,
+        rHandName: rHand?.name,
+        rHandClass: rHand?.getClassName?.(),
+        rHandWorldPos: rHand?.getAbsolutePosition?.()?.asArray(),
+        shoulderLName: shoulderL?.name,
+        shoulderRName: shoulderR?.name,
+        lowerArmLName: lowerArmL?.name,
+        lowerArmRName: lowerArmR?.name,
     })
     bodytarget.parent = spineBone
 
     mainBodyMeshes.getChildren().forEach(mes => {
         mes.isPickable = false
         mes.name = mes.name.split(" ")[2].toLowerCase()
-        if(mes.name.includes("ref")) return mes.dispose()
-        if(mes.name==="hiddenbody") return mes.dispose()
+        // dispose(true) = doNotRecurse - Babylon's dispose() recursively
+        // disposes every CHILD of the node by default. Both bodies share
+        // ONE Armature (confirmed against the actual rig, not per-gender
+        // copies) - if any bone ends up nested under a mesh node instead of
+        // as a plain sibling, a recursive dispose() on that mesh silently
+        // takes the shared skeleton down with it. This is exactly why
+        // spineBone/shoulderL/etc resolved correctly the instant they were
+        // computed above, then looked broken/missing when inspected
+        // afterward - the recursive dispose() below ran in between and
+        // deleted them out from under those already-resolved variables.
+        // Passing true here means disposing a mesh only ever removes that
+        // one mesh, never anything living underneath it.
+        if(mes.name.includes("ref")) return mes.dispose(true)
+        if(mes.name==="hiddenbody") return mes.dispose(true)
+        // tripo_node_<uuid> - a leftover Tripo3D import-artifact node bundled
+        // alongside the new female body parts in avatar.glb, same "generated
+        // junk, not a real body part" category as ref/hiddenbody above
+        if(mes.name.includes("tripo_node")) return mes.dispose(true)
         // log(mes.name)
-        
+
+        // "eyes" is shared by both bodies (parented under the common head
+        // bone, not part of either body's own node group) - handle it before
+        // the gender-exclusivity dispose below so it survives for both
+        if(mes.name === "eyes") {
+            // instantiateModelsToScene() above doesn't clone materials, so every
+            // character shares this mesh's original material - mutating it in
+            // place would make the last-created character's race win for everyone
+            // falls back to "human" (the common case, see npcDetails.js) instead
+            // of trying to load "undefinedeye.jpg" - det.race can be missing for
+            // synced players (getCharSocket()'s payload didn't use to include it)
+            // or any NPC entry that forgot to set one
+            const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
+            const eyeMat = mes.material.clone(`eye_mat_${det._id}`)
+            eyeMat.emissiveTexture = eyeTexture
+            mes.material = eyeMat
+            return
+        }
+
+        // this function's own FEMALE_ONLY_NAMES comment - dispose whichever
+        // gender's set doesn't match det.gender before either body's own
+        // logic below ever runs
+        const isFemaleNode = FEMALE_ONLY_NAMES.some(n => mes.name.includes(n))
+        if(isFemaleNode !== isFemale) return mes.isVisible = false
+
+        if(isFemale){
+            if(mes.name.includes("femalebody")){
+                // mes.material = skinMat
+                // // see setupcharacterscene.js's own comment on this exact
+                // // line - femalebody may have the real skin geometry on
+                // // child submeshes, which don't inherit a parent's material
+                // mes.getChildMeshes().forEach(child => child.material = skinMat)
+                return
+            }
+            if(mes.name.includes("femaile.hair") || mes.name.includes("female.hair")){
+                const hairStyleName = mes.name.split(".")[1]
+                if(hairStyleName !== det.hair) return mes.isVisible = false
+                // hair2 gets its own strand-texture bump map (this function's
+                // own femaleHair2Mat comment) - hair1 stays the plain color
+                // material every other hair mesh already uses
+                mes.material = hairStyleName === "hair2" ? femaleHair2Mat : hairMat
+                characterHair = mes
+                return
+            }
+            // belt.style1/blindfold/mask.style.1/skirt.style1/bag/silverine -
+            // her one fixed default look (no style/equip system behind any
+            // of these yet, see this function's own isFemale comment above) -
+            // always on
+            mes.isVisible = true
+            return
+        }
+
         if(mes.name.includes("mainbody")){
             mes.material = skinMat
+
         }
         if(mes.name.includes("cloth")){
-            mes.name.split(".")[1] !== det.cloth && mes.dispose()
+            mes.name.split(".")[1] !== det.cloth && mes.dispose(true)
             mes.material = clothMat
         }
         if(mes.name.includes("pants")){
-            mes.name.split(".")[1] !== det.pants && mes.dispose()
+            mes.name.split(".")[1] !== det.pants && mes.dispose(true)
             mes.material = pantsMat
         }
         if(mes.name.includes("boots")){
@@ -568,7 +805,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(mes.name.includes("belt.")){
             const beltName = mes.name.split(".")[1]
             if(!beltName) return
-            
+
             // const designatedMat = createEquipMat()
             // mes.material = beltMat
             mes.isVisible = false
@@ -577,7 +814,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(mes.name.includes("cloak.")){
             const cloakName = mes.name.split(".")[1]
             if(!cloakName) return
-            
+
             // const designatedMat = createEquipMat()
             // mes.material = cloakMat
             mes.isVisible = false
@@ -586,24 +823,11 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(mes.name.includes("armor.")){
             const armorName = mes.name.split(".")[1]
             if(!armorName) return
-            
+
             // const designatedMat = createEquipMat()
             // mes.material = cloakMat
             mes.isVisible = false
             armors.push({name: armorName, mesh:mes, isUsed: false})
-        }
-        if(mes.name === "eyes") {
-            // instantiateModelsToScene() above doesn't clone materials, so every
-            // character shares this mesh's original material - mutating it in
-            // place would make the last-created character's race win for everyone
-            // falls back to "human" (the common case, see npcDetails.js) instead
-            // of trying to load "undefinedeye.jpg" - det.race can be missing for
-            // synced players (getCharSocket()'s payload didn't use to include it)
-            // or any NPC entry that forgot to set one
-            const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
-            const eyeMat = mes.material.clone(`eye_mat_${det._id}`)
-            eyeMat.emissiveTexture = eyeTexture
-            mes.material = eyeMat
         }
     })
     hairs.forEach(hairMsh => {

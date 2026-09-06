@@ -199,7 +199,6 @@ function spawnProps(scene, items, mainMesh, addPhysics, shapeType) {
 
     items.forEach(item => {
         const inst = mainMesh.createInstance(`${mainMesh.name}_${item.id}`);
-            console.log(mainMesh.name)
         inst.position   = new Vector3(item.x, item.y, item.z);
         inst.rotation   = new Vector3(0, (item.rotation * Math.PI) / 180, 0);
         inst.scaling    = new Vector3(item.scale.x, item.scale.y, item.scale.z);

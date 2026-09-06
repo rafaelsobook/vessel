@@ -86,6 +86,15 @@ function createAttackColliderForEnemy(scene, body){
     atkCollider.parent = body
     atkCollider.position = new Vector3(0, ATK_COLLIDER_PARKED_Y, 0)
     atkCollider.isVisible = false
+    // flipped true only for skillEffects.js's own strikeWithHandCollider
+    // window (dashstrike) - see that function's own comment. Lets
+    // attackingSystem.js's registerToAtkCollider tell "this overlap is a
+    // real melee swing/skill-strike against an enemy" apart from "this
+    // overlap is just the same shared box passing through whatever happens
+    // to be standing in its temporarily-hijacked, hand-parented, 12-units-
+    // longer path" for callbacks (like tree-chopping) that should only ever
+    // fire off an intentional attack, not a skill's incidental sweep.
+    atkCollider.isSkillHijacked = false
     atkCollider.actionManager = new ActionManager(scene)
     // parked far out of reach of anything at rest - see positionAtkCollider's
     // own comment. No more perpetual registerBeforeRender climb here: that

@@ -109,6 +109,15 @@ export function activateBtnOnce(){
     if(buttonsActivated) return
     menuBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
+            // these are real <button> elements (index.html) - a mouse click
+            // leaves them holding DOM focus, and a focused <button>'s native
+            // browser behavior is to re-fire its own click the next time
+            // Space/Enter is pressed anywhere, regardless of what else that
+            // key is bound to (inputMovement.js's own jump-key comment has
+            // the full story). Blurring right after handling this click
+            // means nothing is left focused for a later keypress to
+            // accidentally reactivate.
+            e.target.blur()
             const btnName = e.target.className.split(" ")[3]
             
             switch(btnName){
@@ -131,6 +140,13 @@ export function activateBtnOnce(){
     let swordAnimNum = 1
     walkRunBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
+            // same reasoning as menuBtns' own blur() above - this is the
+            // attack/cast/walk/running/rest group specifically, so this is
+            // the fix for "pressing jump [Space] right after attack
+            // re-triggers attack": the attack <button> was still focused
+            // from the mouse click, and Space's default browser behavior
+            // re-clicks whatever <button> currently has focus.
+            e.target.blur()
             if(getGameStatus() === "gameover" || getGameStatus() === "loading") return
             // resting (see startResting/stopResting above) - canPress is
             // already what every raw movement input path gates on

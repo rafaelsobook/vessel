@@ -951,6 +951,12 @@ export function reCreateMeshesInScene() {
         // const tcpCharPlaceMD = findPlaceMetaData(tcpCharDet.currentPlace.placeId)
         const spawnPos = {x: tcpCharDet.pos.x, y: 0.01, z: tcpCharDet.pos.z }
 
+        // TEMP DIAGNOSTIC - checkpoint BEFORE createCharacter even runs, so
+        // we can tell whether a wrong gender already arrived over the socket
+        // relay (server/getCharSocket() issue) vs. something going wrong
+        // inside createCharacter itself. Remove once resolved.
+        console.log("[reCreateMeshesInScene relay debug]", { name: tcpCharDet.name, owner: tcpCharDet.owner, gender: tcpCharDet.gender })
+
         let player = createCharacter(sceneDet.scene, spawnPos, tcpCharDet, false)
         if(!player) return
         pushPlayer(player, tcpCharDet.owner)
