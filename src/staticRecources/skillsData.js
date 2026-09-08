@@ -469,6 +469,52 @@ export const lightningboltSkill = {
     onHitVisual: [{ type: "burst", burst: { texture: "flare3", fireScale: 0.85, smokeScale: 0.6, emberEmitRate: 10, gravitySign: 1, includeSmoke: false }, stickBriefly: true, impactSound: "electricHitS" }],
     desc: "A short blade of crackling electricity is hurled forward, arcing into a bright flash on impact.",
 }
+export const thunderstrikeSkill = {
+    slotNumber: 34,
+    equiped: true,
+    isActive: false,
+    name: "thunderstrike",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "lightning",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Thunderstrike",
+    // 1.4, same as continentalrendSkill's own castDuration - the other
+    // "marches a line out from the caster" skill, not the 3.5 the rest of
+    // this rank-2 tier uses
+    castDuration: 1.4,
+    returnModeDura: 900,
+    skillCoolDown: 3500,
+    demand: [{ name: "mp", minCost: 58, cost: 0 }],
+    // plusCasterMagicDmg: 0.2 - lightning's own rank-2 tier, same flatter
+    // 0.1(rank1)->0.2(rank2) pass every non-water element got (see
+    // singlecastSkill's own comment for the full ladder)
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 225, chance: 1, bashPower: 0.6 }],
+    skillrank: 2,
+    upgradePlus: 22,
+    explosionColor: "yellow",
+    explosionScale: 1,
+    // 8 evenly-spaced "stacked plane" check points reaching exactly 10
+    // units out from the caster - see skillEffects.js's
+    // triggerLightningStrike. No projectile to aim at a target with, same
+    // shape continentalrendSkill's own groundSpikes takes (marches
+    // straight out along facing direction instead) - just one
+    // instantaneous line strike rather than staggered spikes over time.
+    lightningLine: { maxDistance: 10, segments: 8, hitRadius: 1.2 },
+    onLevelUp: "growLightningLine",
+    // no projectile fires for this one either (matches groundSpikes/
+    // groundTrap) - the real visual is createLightningBoltLine
+    // (effects/lightning.js), a reshaping jagged bolt from the caster
+    // straight out to lightningLine.maxDistance, built directly inside
+    // triggerLightningStrike rather than through the generic projectile
+    // pipeline this field would otherwise drive
+    projectileVisual: { useProjectile: false },
+    onHitVisual: [{ type: "burst", burst: { texture: "flare3", fireScale: 1, smokeScale: 0.7, emberEmitRate: 12, gravitySign: 1, includeSmoke: false }, impactSound: "electricHitS" }],
+    desc: "A crackling bolt of lightning tears forward in a jagged, ever-shifting line, scorching anything caught in its path.",
+}
 export const stormsurgeSkill = {
     slotNumber: 28,
     equiped: true,
@@ -1665,7 +1711,7 @@ export const skillsData = [
     flamebrandSkill, infernorushSkill,
     tidalspikeSkill, maelstromboltSkill,
     stoneshardSkill, quakeboltSkill,
-    lightningboltSkill, stormsurgeSkill,
+    lightningboltSkill, stormsurgeSkill, thunderstrikeSkill,
     lightpierceSkill, radiantjudgmentSkill,
     shadowboltSkill, voidrendSkill,
     pyroclasmSkill, solarcataclysmSkill,

@@ -46,7 +46,11 @@ const SKILL_SLOT_COUNT = slotbuttons.length
 // skill.skillrank -> display label (see skillsData.js for which skill gets
 // which rank) - purely cosmetic, no mechanical effect, just how impressive
 // the skill reads in the info panel
-const SKILL_RANK_LABELS = {
+// exported - chooseskillui.js's own skill-picker cards show the same rank
+// label, reused here instead of a third hand-copied table (skillWheel.js's
+// eligibleSkillsFor sits right alongside skillsData's own skillrank field,
+// but the DISPLAY string mapping only ever lived here)
+export const SKILL_RANK_LABELS = {
     0: "Basic Class",
     1: "Elite Skill",
     2: "High Skill",

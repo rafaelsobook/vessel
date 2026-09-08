@@ -13,9 +13,10 @@ import { travelToPlace } from "../tools/travel.js"
 import { flameWardTitle } from "./titlesData.js"
 import { getPlayersOnScene, getNpcOnScene } from "../sockets/worldsocket.js"
 import { createMagicCircle } from "../creations/magiccircles.js"
-import { giveSkill } from "../components/skillsui.js"
-import { skillsData } from "./skillsData.js"
-import { APTITUDE_ELEMENT_ALIASES } from "../charactersystem/aptitudeSystem.js"
+import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
+import { resolveGuildmasterRitualSkill } from "../charactersystem/aptitudeSystem.js"
+import { eligibleSkillsFor } from "../charactersystem/skillWheel.js"
+import { chooseASkill } from "../components/chooseskillui.js"
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 
 const npcEnemySpd = 4
@@ -493,6 +494,22 @@ export default [
                 //receiveRT: //afterTalk//afterHunt//afterFoundItem
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                // resolveGuildmasterRitualSkill (aptitudeSystem.js) resolves
+                // "high" for every real rollable aptitude today (see that
+                // function's own comment - light/dark/fire/water/earth all
+                // have a genuine High Skill entry), so this is the only
+                // speech that ever actually plays - no speechBasic fallback
+                // text kept alongside it (that used to exist here, but two
+                // near-identical arrays that have to be hand-kept in sync
+                // for a branch that can't currently be reached is exactly
+                // the kind of duplication that silently drifts - see
+                // gatherElementalCores' own git history for a real instance
+                // of that happening). If the aptitude pool ever grows an
+                // element with no High Skill entry, the resolver itself
+                // still works correctly (falls back to giving a real Basic
+                // Class skill) - only this flavor text would read oddly for
+                // that one rare case, which is the right tradeoff over
+                // maintaining a whole second array for it today.
                 speech: [
                     {name:"", message: "You made good time. Good - there was not much of it to spare."},
                     {name:"", message: "I have thought a great deal about you these past days. About where it is you actually came from, and why."},
@@ -503,9 +520,11 @@ export default [
                     {name:"", message: "Travel out from the village and speak with Doran. He knows these roads better than anyone left in this guild, and he will point you toward where you are actually needed."},
                     {name:"", message: "While you are out there, I want you gathering cores. Water, fire, lightning - three of each, taken from the slimes that carry them. Nine in total."},
                     {name:"", message: "Enjoy the journey while you are at it. You will not get this particular one back."},
-                    {name:"", message: "Power in this land does not come free, and it does not come all at once. What I am about to give you sits at the very bottom of it - Basic Class, they call it. Above that, Elite. Above Elite, High Skill. Past High Skill, Legendary. And past even Legendary..."},
+                    {name:"", message: "Most who hear what I am about to ask of them find a reason to be elsewhere rather quickly. I will not pretend three of those cores are gentle to come by - electricslime does not sit still for it, and that hunt is usually handed to E-Rank adventurers and above, not someone still finding their footing. You did not so much as blink."},
+                    {name:"", message: "That tells me something. Enough that I see no reason to start you at the very bottom of what I am about to explain."},
+                    {name:"", message: "Power in this land does not come free, and it does not come all at once. Basic Class sits at the very bottom of it, they call it - I am setting that one aside for you. Above it, Elite. Above Elite, High Skill - which is where your feet are about to land. Past High Skill, Legendary. And past even Legendary..."},
                     {name:"", message: "...God Tier. A name for something so far above where you stand now that I have only ever heard of it secondhand myself."},
-                    {name:"", message: "Those nine cores will not carry you there alone. But they are where every single person who ever climbed that ladder started. No exceptions I have ever heard of."},
+                    {name:"", message: "Those nine cores will still carry you further than what I am about to give you alone ever could. A head start is not the whole climb - no one gets up that ladder without doing the walking themselves."},
                     {name:"", message: "Stand a moment, if you would. I am no young man anymore, and what I am about to do, I have not done in some years."},
                     {name:"", message: "Whatever runs in your blood - I mean to wake it. Properly, this time."},
                     {name:"", message: "Hold still. This will not hurt as much as it should."},
@@ -544,11 +563,16 @@ export default [
                 // grantSkillReward, instead rolls randomly across every
                 // aptitude combined - deliberately not reused here, since
                 // that's a different reward shape than "your PRIMARY
-                // aptitude wakes up first") - resolved through
-                // APTITUDE_ELEMENT_ALIASES first (server's own "darkness" vs
-                // skillsData.js's "dark" - a real, pre-existing mismatch
-                // between those two data sources, see aptitudeSystem.js's own
-                // comment), then matched against skillsData's element field.
+                // aptitude wakes up first") - resolved via
+                // resolveGuildmasterRitualSkill (aptitudeSystem.js), which
+                // handles the APTITUDE_ELEMENT_ALIASES lookup (server's own
+                // "darkness" vs skillsData.js's "dark") internally and grants
+                // a genuine High Skill-tier match when that element has one,
+                // Basic Class otherwise - see that function's own comment for
+                // why this always resolves "high" in practice today (every
+                // real rollable aptitude already has one). The speech above
+                // is written assuming that outcome rather than branching
+                // text on it - see this quest's own speech comment for why.
                 // giveSkill (skillsui.js) already no-ops with its own popup
                 // if the skill's somehow already known, and handles slot
                 // assignment/persistence/the "Learned X" celebration UI.
@@ -595,8 +619,14 @@ export default [
                             })
                         }
 
-                        const primaryElement = APTITUDE_ELEMENT_ALIASES[aptitudes[0].element] ?? aptitudes[0].element
-                        const matchingSkill = skillsData.find(sk => sk.element === primaryElement)
+                        // resolveGuildmasterRitualSkill (aptitudeSystem.js) -
+                        // grants a genuine High Skill-tier match for the
+                        // player's primary aptitude when one exists, Basic
+                        // Class otherwise. Always resolves "high" in
+                        // practice today (see that function's own comment),
+                        // which is why the speech above is written assuming
+                        // that outcome instead of branching on it.
+                        const { skill: matchingSkill } = resolveGuildmasterRitualSkill(charState)
                         if(matchingSkill) giveSkill(matchingSkill)
                     }
 
@@ -627,19 +657,54 @@ export default [
                 // obtain() call already checks against this quest's
                 // itemLists automatically, no live-scan needed the way
                 // craftFirstSword's reqType:"craft" required
+                // one array only, matching return-to-guildmaster's own
+                // choice above - no speechBasic duplicate kept alongside it
                 speech: [
-                    {name:"", message: "Nine cores. All three kinds, evenly. You did not cut corners - I can tell, because most don't."},
-                    {name:"", message: "This is Basic Class, what you're standing on right now. The very bottom rung. I want you to remember that, the day you're standing somewhere higher and looking back down at it."},
-                    {name:"", message: "Whatever waits for you at the end of all this - the Lord, or whatever else this land decides to throw at you first - it will not care how far you have already come. Only how far you still have left."},
-                    {name:"", message: "Rest. Then find me again when you are ready for more."},
+                    {name:"", message: "I did not expect you to be back, I had thought you would be gone for a while longer"},
+                    {name:"", message: " I am glad to see you, Not only you have returned, but you have returned with the cores I asked for."},
+                    {name:"", message: "I know this is my personal request and most adventurers would not have taken it on."},
+                    {name:"", message: "Fire and lightning cores are not easy to come by, and I am impressed you have managed to gather them all."},
+                    {name:"", message: "You made this old hag so happy ..."},
+                    {name:"", message: "In return let me grant you one more skill that will help you on your journey."},
+                    {name:"", message: "I wish I could just grant all adventurers the skills they need, but that is not how my magic works, It consumesmy lifetime"},
+                    {name:"", message: "But for you, I know it will be worth it."},
+                    {name:"", message: "Choose a skill that you think will help you the most for your goal."},
                 ],
                 notCompletedSpeech: [
                     {name:"", message: "You are not finished yet. Nine cores, three of each kind. Come back once you have them all."},
                 ],
                 questsToReceive: [
                 ],
+                // "Choose a skill that you think will help you the most for
+                // your goal" (this quest's own speech, above) - a real
+                // choice this time, unlike return-to-guildmaster's own
+                // auto-granted primary-aptitude skill. eligibleSkillsFor
+                // (skillWheel.js) is the SAME aptitude/lightning-unlock
+                // eligibility rule grantSkillReward's random roll already
+                // uses - reused here, not reimplemented, so "what am I
+                // allowed to learn" only has one real definition in the
+                // codebase. Only unowned skills are offered (chooseskillui.js's
+                // chooseASkill grants whichever card gets clicked) - if
+                // there's genuinely nothing left to offer (every eligible
+                // skill already known), falls back to upgrading a random
+                // owned-eligible one instead, same two-tier fallback
+                // grantSkillReward itself uses, rather than opening a picker
+                // with nothing new in it.
                 cbAfterNewQuestReceived: () => {
+                    const charState = getCharState()
+                    if(!charState) return
 
+                    const eligible = eligibleSkillsFor(charState)
+                    const owned = new Set((charState.skills || []).map(sk => sk.name))
+                    const unowned = eligible.filter(sk => !owned.has(sk.name))
+
+                    // const dashstrike, singlecast
+
+                    if(unowned.length) return chooseASkill(unowned)
+
+                    const eligibleNames = new Set(eligible.map(sk => sk.name))
+                    const ownedEligible = (charState.skills || []).filter(sk => eligibleNames.has(sk.name))
+                    if(ownedEligible.length) upgradeOwnedSkill(ownedEligible[Math.floor(Math.random() * ownedEligible.length)])
                 }
             },
         ]
@@ -2510,7 +2575,7 @@ export default [
                     {
                         qName: "return-to-guildmaster",
                         qTtle: "The Guildmaster Calls",
-                        desc: "Halric wants to see you again - urgently. Head back to his office.",
+                        desc: "Halric wants to see you again, Head back to his office.",
                         questRequirements: { reqType: false, completed: true },
                     }
                 ],

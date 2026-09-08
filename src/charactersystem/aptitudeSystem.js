@@ -15,6 +15,7 @@
 import { getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { openClosePopup } from "../tools/popupUI.js"
+import { skillsData } from "../staticRecources/skillsData.js"
 
 // skillsData.js element -> server aptitude element name. Exported -
 // skillWheel.js's own eligibleSkillsFor reuses this exact table instead of
@@ -43,6 +44,38 @@ const USAGE_ELEMENT_ALIASES = { lightning: "fire" }
 
 function capitalize(str){
     return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
+// Halric's guildmaster ritual (npcDetails.js's own return-to-guildmaster
+// quest, cbAfterNewQuestReceived) grants one skill matching the player's
+// own PRIMARY aptitude (aptitude[0]) - a genuine High Skill-tier one
+// (skillsData.js's own skillrank 2) when their element actually has one,
+// Basic Class (skillrank 0, the starter skill for that element) otherwise.
+// Shared here - not computed separately in npcDetails.js's own grant code
+// and createAllNpcInArea.js's own speech-selection code - so both always
+// agree on which tier actually landed, since they're deriving it from the
+// exact same charState.aptitude rather than each re-deriving their own
+// answer that could drift apart.
+//
+// In PRACTICE this always resolves "high": generateAptitudes
+// (server/routes/characterR.js) only ever rolls fire/water/earth/light/
+// darkness as a real aptitude slot - lightning is never one (it unlocks
+// off fire aptitude level instead, see LIGHTNING_UNLOCK_FIRE_LEVEL above),
+// and light/dark/fire/water/earth ALL already have a skillrank:2 entry in
+// skillsData.js. The "basic" fallback below is real, working code - not
+// dead - it just isn't reachable through this specific ritual today unless
+// that element pool changes later (e.g. a rollable element gets added
+// without its own High Skill entry yet).
+export function resolveGuildmasterRitualSkill(charState){
+    const aptitudes = charState?.aptitude || []
+    if(!aptitudes.length) return { skill: null, tier: "none" }
+
+    const primaryElement = APTITUDE_ELEMENT_ALIASES[aptitudes[0].element] ?? aptitudes[0].element
+    const highSkill = skillsData.find(sk => sk.element === primaryElement && sk.skillrank === 2)
+    if(highSkill) return { skill: highSkill, tier: "high" }
+
+    const basicSkill = skillsData.find(sk => sk.element === primaryElement)
+    return { skill: basicSkill ?? null, tier: basicSkill ? "basic" : "none" }
 }
 
 // Call once per successful skill activation - attackingSystem.js's

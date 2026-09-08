@@ -13,6 +13,9 @@
 //   - bolt-style (particleStyles array) -> growParticleAura: literally
 //     layers an ADDITIONAL particle system onto the trail at higher levels
 //   - astralrain -> growSwordRain: more swords, not bigger/more-arc'd ones
+//   - continentalrend -> growGroundSpikes: one more spike in the line
+//   - thunderstrike -> growLightningLine: one more "stacked plane" check
+//     point along the line (its own maxDistance stays fixed)
 //   - darkorb -> growDarkOrb: its own onHit stick-and-swell sequence itself
 //     gets more extreme
 //   - radiantjudgment additionally -> growBindPower: its enemyBind gets
@@ -112,6 +115,20 @@ export function growGroundSpikes(skillDetail){
     skillDetail.groundSpikes.count = Math.min(12, base + (skillDetail.lvl - 1))
 }
 
+// thunderstrike only - one more "stacked plane" check point per level
+// (skillEffects.js's triggerLightningStrike derives spacing from
+// segments/maxDistance itself, so the line still always reaches exactly
+// maxDistance - this only makes it denser/more forgiving to stand in, not
+// longer). Same "remembered base, capped growth" shape as
+// growGroundSpikes above - maxDistance is deliberately NOT grown here, it
+// stays fixed at whatever the skill data itself set.
+export function growLightningLine(skillDetail){
+    if(!skillDetail.lightningLine) return
+    const base = skillDetail._baseLightningSegments ?? skillDetail.lightningLine.segments
+    skillDetail._baseLightningSegments = base
+    skillDetail.lightningLine.segments = Math.min(16, base + (skillDetail.lvl - 1))
+}
+
 // darkorb only - skillEffects.js's runSingleOnHitEffect (the generic
 // "stickAndGrow" onHitVisual.type handler) reads ohv.stickAndGrow.growScale/
 // intensityRamp (falling back to its own defaults, 5x/1x, if absent) - so the
@@ -178,6 +195,7 @@ export const UPGRADE_TEMPLATES = {
     growSwordRain,
     growMeteorRain,
     growGroundSpikes,
+    growLightningLine,
     growDarkOrb,
     growMulticastEfficiency,
 }

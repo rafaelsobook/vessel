@@ -225,3 +225,82 @@ export function attachLightning(scene, mesh, color = "yellow", weaponGlow = fals
 
     return { root, arcs, light, dispose }
 }
+
+// A single jagged bolt spanning two fixed WORLD-space points - not parented
+// to/wrapping a mesh's own surface the way attachLightning's arcs are
+// (those pick two random points off a mesh's own local bounding box every
+// reshape; this always reshapes between the same two endpoints handed in).
+// Reuses the exact same buildBoltPath/makeRadiusFunction jitter math -
+// pinned ends, whipping middle - just anchored explicitly instead of
+// sampled off a mesh. skillEffects.js's thunderstrikeSkill (skill.lightningLine)
+// is the first caller: a ground-level strike from the caster out to their
+// own max range, reshaping every 20ms (options.updateInterval) so it reads
+// as a continuous live strike rather than one static jagged line.
+export function createLightningBoltLine(scene, start, end, color = "yellow", options = {}) {
+    if (!scene) return null
+
+    const {
+        segments = 10,
+        width = 0.06,
+        maxWidth = width * 1.8,
+        tessellation = 6,
+        updateInterval = 20,
+        glowIntensity = 1.4,
+        lifetimeMs = 350,
+        withLight = true,
+    } = options
+
+    const lightningColor = resolveLightningColor(color)
+    // scaled off the bolt's own length (same "size-relative jitter" idea
+    // attachLightning uses off a mesh's bounding box), not a flat constant -
+    // a 10-unit strike whips noticeably more than a short one would with the
+    // same absolute jitter amount
+    const jitterAmount = Vector3.Distance(start, end) * 0.06
+    const radiusFunction = makeRadiusFunction(segments, width, maxWidth)
+
+    const boltName = `lightningbolt_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+    const mat = new StandardMaterial(`${boltName}_mat`, scene)
+    mat.diffuseColor = Color3.Black()
+    mat.specularColor = Color3.Black()
+    applyLightningGlow(mat, lightningColor)
+
+    const path = buildBoltPath(start, end, segments, jitterAmount)
+    const tube = MeshBuilder.CreateTube(boltName, {
+        path, radiusFunction, tessellation, cap: Mesh.CAP_ALL, updatable: true,
+    }, scene)
+    tube.isPickable = false
+    tube.material = mat
+    addGlow(scene, tube, glowIntensity)
+
+    let light = null
+    if (withLight) {
+        light = new PointLight(`${boltName}_light`, start.add(end).scale(0.5), scene)
+        light.parent = tube
+        light.diffuse = lightningColor
+        light.specular = Color3.Black()
+        light.range = Math.max(Vector3.Distance(start, end), 1)
+        light.intensity = 0.7
+    }
+
+    let acc = 0
+    const observer = scene.onBeforeRenderObservable.add(() => {
+        acc += scene.getEngine().getDeltaTime()
+        if (acc < updateInterval) return
+        acc = 0
+        const freshPath = buildBoltPath(start, end, segments, jitterAmount)
+        MeshBuilder.CreateTube(tube.name, { path: freshPath, radiusFunction, instance: tube }, scene)
+        if (light) light.intensity = 0.5 + Math.random() * 0.5
+    })
+
+    function dispose() {
+        scene.onBeforeRenderObservable.remove(observer)
+        if (tube._glowLayer) tube._glowLayer.removeIncludedOnlyMesh(tube)
+        tube.dispose()
+        mat.dispose()
+        if (light) light.dispose()
+    }
+
+    setTimeout(dispose, lifetimeMs)
+
+    return { tube, light, dispose }
+}

@@ -4,7 +4,7 @@ import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn } from '../sockets/worldsocket';
-import { checkIfTokenSaved, stopAnim } from '../tools/tools';
+import { checkIfTokenSaved, stopAnim, randomNum } from '../tools/tools';
 import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
 import { emitMove, emitStop, emitMode, emitWeaponBlock } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
@@ -12,7 +12,7 @@ import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
-import { giveAllItems, wipeAllItems } from '../charactersystem/inventory';
+import { giveAllItems, wipeAllItems, obtainAll } from '../charactersystem/inventory';
 import { giveSkill, giveAllSkills, giveRandomSkill, upgradeAllOwnedSkills } from '../components/skillsui';
 import { displaySpeech } from '../tools/speechgui';
 import { giveRandomTitle } from '../components/titleUI';
@@ -624,17 +624,65 @@ function setupControls(scene, allsounds) {
                 //         desc: "Find Bram at the forge in the village - he'll teach you about weapons before you head out.",
                 //         questRequirements: { reqType: false, completed: true }, //reqType'enemy/item/money
                 //     })
-                changeStory({
-                        qName: "proveYourself",
-                        qTtle: "Prove Your Worth",
-                        desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Bram once it's done.",
+                // changeStory({
+                //     qName: "proveYourself",
+                //     qTtle: "Prove Your Worth",
+                //     desc: "Find a mine, cut what timber you can find along the way, and clear out whatever's nesting in the area. Return to Bram once it's done.",
+                //     questRequirements: { reqType: "item", itemLists: [
+                //         { name: "wood", dn: "Wood", current: 1, total: 1 },
+                //         { name: "stone", dn: "Stone", current: 1, total: 1 },
+                //         { name: "bronzeore", dn: "Bronze Ore", current: 1, total: 1 },
+                //         { name: "waterslimecore", dn: "Water Slime Core", current: 1, total: 1 },
+                //     ], completed: true },
+                // })
+
+
+                // No, it would NOT actually reflect real inventory on its own -
+                // changeStory (storyQuestSystem.js) runs this quest through
+                // prepareGrantedQuest, which DOES recompute itemLists[].current
+                // from real charState.items counts... but only ever SETS
+                // completed to true when that check passes, it never resets an
+                // already-true completed back to false when it doesn't. Since
+                // completed:true is hardcoded above, the quest would show as
+                // done at Halric even with zero real cores owned. Granting the
+                // actual 9 cores here makes that flag true for real instead of
+                // just cosmetically true - same item shape tcp/recources/
+                // coreDetails.ts's own waterslimeCoreLoot/fireslimeCoreLoot/
+                // electricslimeCoreLoot use for a real slime kill's drop,
+                // pushed 3-of-each via obtainAll (inventory.js - same helper
+                // giveAllItems/"i" key already uses, stacks same-name items
+                // and saves once at the end instead of a raw items.push per item).
+                const CORE_DEBUG_ITEMS = [
+                    { name: "waterslimecore", dn: "Water Slime Core", desc: "a gelatinous core taken from a water slime, useful for enhancing items" },
+                    { name: "fireslimecore", dn: "Fire Slime Core", desc: "a smoldering core taken from a fire slime, useful for enhancing items" },
+                    { name: "electricslimecore", dn: "Electric Slime Core", desc: "a crackling core taken from an electric slime, useful for enhancing items" },
+                ]
+                obtainAll(CORE_DEBUG_ITEMS.flatMap(core => Array.from({ length: 3 }, () => ({
+                    itemId: randomNum(),
+                    name: core.name,
+                    dn: core.dn,
+                    itemCateg: "crafting",
+                    itemType: "core",
+                    weaponType: false,
+                    equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0, plusDurability: 30 },
+                    equiped: false,
+                    price: { coinType: "bronze", pieces: 50 },
+                    qnty: 1,
+                    desc: core.desc,
+                    rarity: "normal",
+                })))).then(() => {
+                    changeStory({
+                        qName: "gatherElementalCores",
+                        qTtle: "Three of a Kind",
+                        desc: "Collect 3 each of Water Slime Core, Fire Slime Core, and Electric Slime Core, then return to Halric.",
                         questRequirements: { reqType: "item", itemLists: [
-                            { name: "wood", dn: "Wood", current: 1, total: 1 },
-                            { name: "stone", dn: "Stone", current: 1, total: 1 },
-                            { name: "bronzeore", dn: "Bronze Ore", current: 1, total: 1 },
-                            { name: "waterslimecore", dn: "Water Slime Core", current: 1, total: 1 },
+                            { name: "waterslimecore", dn: "Water Slime Core", current: 3, total: 3 },
+                            { name: "fireslimecore", dn: "Fire Slime Core", current: 3, total: 3 },
+                            { name: "electricslimecore", dn: "Electric Slime Core", current: 3, total: 3 },
                         ], completed: true },
                     })
+                })
+
             break
             case "r":
                 reCreateMeshesInScene()

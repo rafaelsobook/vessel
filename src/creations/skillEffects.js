@@ -26,7 +26,7 @@ import { createProjectileModelInstance, createPlasma } from "../assetcreation/cr
 import { spawnProjectile } from "./skills.js"
 import { createGlowingMat, fresnelMat } from "../tools/materials.js"
 import { addGlow } from "../tools/glow.js"
-import { attachLightning } from "../effects/lightning.js"
+import { attachLightning, createLightningBoltLine } from "../effects/lightning.js"
 import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
@@ -268,6 +268,12 @@ export function castOffenseSkill(scene, player, skill, charState){
         if(skill.groundSpikes){
             pendingCasts.delete(skill.name)
             triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forward, powerScale)
+        } else if(skill.lightningLine){
+            // skill.lightningLine (thunderstrikeSkill) - no projectile, a
+            // single reshaping bolt straight out from the caster - see
+            // triggerLightningStrike's own header comment
+            pendingCasts.delete(skill.name)
+            triggerLightningStrike(scene, charState, skill, player, spawnPos, forward, powerScale)
         } else if(skill.groundTrap?.aoe){
             // skill.groundTrap.aoe (massivedisintegrationSkill) - the mass
             // version, see spawnMassGroundTrap's own header comment
@@ -2715,6 +2721,106 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
     setTimeout(() => {
         spike.dispose()
     }, GROUND_SPIKE_LIFETIME_MS)
+}
+
+// --- thunderstrikeSkill's lightning strike (skill.lightningLine, see
+// skillsData.js and the branch in castOffenseSkill above) ---
+// No projectile, no marker - one continuous bolt from the caster straight
+// out along their own facing direction to skill.lightningLine.maxDistance
+// (createLightningBoltLine, effects/lightning.js), reshaping into a fresh
+// jagged path every ~20ms for its short lifetime so it reads as a live
+// strike rather than one static jagged line - same buildBoltPath jitter
+// math attachLightning already uses for weapon arcs, just anchored to two
+// fixed world points instead of sampled off a mesh's own surface.
+//
+// Hit-detection is a straight line, not a single point the way most
+// skills work: skill.lightningLine.segments evenly-spaced check points
+// ("stacked planes") march from the caster out to maxDistance, and any
+// enemy/duelOpponent within hitRadius of ANY of them is hit - but only
+// ONCE per target for this whole cast (unlike groundSpikes, whose spikes
+// are deliberately staggered over time so standing in the path can mean
+// several separate hits - this is one instantaneous strike, so a target
+// near two overlapping check points must not take double damage from it).
+const LIGHTNING_LINE_SEGMENTS = 8
+const LIGHTNING_LINE_MAX_DISTANCE = 10
+const LIGHTNING_LINE_HIT_RADIUS = 1.2
+const LIGHTNING_LINE_VISUAL_LIFETIME_MS = 350
+
+function triggerLightningStrike(scene, charState, skill, player, spawnPos, forward, powerScale){
+    const cfg = skill.lightningLine
+    const segments = cfg.segments ?? LIGHTNING_LINE_SEGMENTS
+    const maxDistance = cfg.maxDistance ?? LIGHTNING_LINE_MAX_DISTANCE
+    const hitRadius = cfg.hitRadius ?? LIGHTNING_LINE_HIT_RADIUS
+
+    // horizontal-only direction, same reasoning as triggerGroundSpikeLine's
+    // own flatForward - a strike shouldn't drift up/down because the
+    // caster's hand happened to be aimed slightly off level at cast time
+    const flatForward = new Vector3(forward.x, 0, forward.z)
+    if(flatForward.lengthSquared() < 0.0001) flatForward.set(0, 0, 1)
+    flatForward.normalize()
+
+    const endPos = spawnPos.add(flatForward.scale(maxDistance))
+    getAllSounds().electricHitS?.play()
+    createLightningBoltLine(scene, spawnPos.clone(), endPos, "yellow", {
+        updateInterval: 20,
+        lifetimeMs: LIGHTNING_LINE_VISUAL_LIFETIME_MS,
+    })
+
+    // spacing derived from segments/maxDistance (not a fixed spacing value,
+    // unlike groundSpikes) so the check points always reach exactly
+    // maxDistance regardless of how many segments a level-up grows this to
+    // (see growLightningLine, skillUpgrades.js)
+    const spacing = maxDistance / segments
+    const checkPoints = []
+    for(let i = 1; i <= segments; i++) checkPoints.push(spacing * i)
+
+    if(charState.owner !== getCharState()?.owner) return
+    const freshCharState = getCharState()
+    const abilityAdditions = getAdditionalsFromAbilities()
+    const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+    const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+    const curseEffect = getSkillEffect(skill, "curse")
+
+    const isWithinLine = (targetPos) => {
+        const dx = targetPos.x - spawnPos.x
+        const dz = targetPos.z - spawnPos.z
+        return checkPoints.some(dist => {
+            const px = spawnPos.x + flatForward.x * dist
+            const pz = spawnPos.z + flatForward.z * dist
+            const ddx = targetPos.x - px
+            const ddz = targetPos.z - pz
+            return (ddx * ddx + ddz * ddz) <= hitRadius * hitRadius
+        })
+    }
+
+    getEnemiesOnScene().forEach(enemy => {
+        if(!enemy.body) return
+        if(!isWithinLine(enemy.body.position)) return
+
+        fireGenericBurst(scene, enemy.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
+        dealDamageToEnemy({
+            playerId: freshCharState.owner,
+            dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+            targetId: enemy._id,
+            currentPlaceId: freshCharState.currentPlace.placeId,
+        })
+        registerSkillHitTarget(enemy, freshCharState)
+
+        if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
+            emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
+        }
+    })
+
+    // npcFighter duel opponents - never server-tracked, same
+    // damage-only/no-relay-gating rationale as triggerGroundSpikeLine's own
+    // duel-opponent block
+    getDuelOpponentsOnScene().forEach(duelOpp => {
+        if(!duelOpp.body) return
+        if(!isWithinLine(duelOpp.body.position)) return
+
+        fireGenericBurst(scene, duelOpp.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
+        duelOpp.applyDamage(totalDmg, { skill })
+    })
 }
 
 // --- disintegrationSkill's ground trap (skill.groundTrap, see skillsData.js

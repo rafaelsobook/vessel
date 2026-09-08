@@ -204,7 +204,7 @@ function grantBlessingReward(){
 // own trackAptitudeUsage already feeds lightning-skill casts into that same
 // fire usage count, so casting lightning skills (once unlocked) keeps
 // pushing fire's own level further, not a separate lightning count.
-function eligibleSkillsFor(charState){
+export function eligibleSkillsFor(charState){
     const aptitudes = charState.aptitude || []
     const myElements = new Set(
         aptitudes.map(apt => APTITUDE_ELEMENT_ALIASES[apt.element] ?? apt.element)

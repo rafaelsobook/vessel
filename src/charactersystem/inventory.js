@@ -155,7 +155,7 @@ export async function obtain(itemToAdd){
     })
 
 }
-export function obtainAll(itemsArray){
+export async function obtainAll(itemsArray){
     const charState = getCharState()
     if(!charState) return
 
@@ -164,7 +164,7 @@ export function obtainAll(itemsArray){
         setTimeout(() => showItemAcquiredPopUp(itemToAdd.dn, itemToAdd.qnty, null), i * 500)
     })
 
-    updateMyDetailsOL(charState, checkIfTokenSaved())
+    await updateMyDetailsOL(charState, checkIfTokenSaved())
 }
 // DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Drops
 // one of every craftable material (resourceLoot.js's lootNames - ores, gems,
