@@ -57,6 +57,17 @@ function createAnimeBodyMaterials(scene, det){
     // using hairMat (male hair, scalp, female's hair1 too), not just this
     // one style
     const femaleHair2Mat = createColorMat("hair_mat_f2", hairColor, scene, "./images/textures/girlhair/hairstyle2.webp")
+    // female's "hair1" style only - same reasoning as femaleHair2Mat above,
+    // its own material (not the shared hairMat) so backFaceCulling:false
+    // stays scoped to her own hairstyles and doesn't also affect male
+    // hair/scalp, which still use hairMat
+    const femaleHair1Mat = createColorMat("hair_mat_f1", hairColor, scene)
+    // both female hairstyles are thin, plane-based hair-card geometry -
+    // without this, the back side of each strand plane is invisible from
+    // certain angles (Babylon culls back faces by default), showing gaps/
+    // see-through hair instead of a solid-looking style
+    femaleHair1Mat.backFaceCulling = false
+    femaleHair2Mat.backFaceCulling = false
     const clothMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const bootsMat = createMatV2(scene, "./images/fabrics/leather1.jpg", "./images/fabrics/leather1.jpg")
@@ -106,6 +117,7 @@ function createAnimeBodyMaterials(scene, det){
 
     return {
         hairMat,
+        femaleHair1Mat,
         femaleHair2Mat,
         clothMat,
         pantsMat,
@@ -184,7 +196,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     }
 
     function equipBoots(itemName) {
-        if(!itemName) return
+        if(!itemName) return console.warn("equipBoots: missing itemName")
         boots.forEach(boot => {
             if(boot.name === itemName){
                 boot.mesh.isVisible = true
@@ -220,11 +232,10 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     // hairVisible: true (a mask/half-helm with a gap the hair should still
     // poke through) leaves it showing.
     function equipHelmet(helmetToEquipName, metalColor, itemName, hairVisible) {
-        // male-fitted armor/gear meshes don't fit the new female rig yet
-        // (see this file's own createAnimeBody/isFemale comment) - equipping
-        // still updates det.items normally, it just doesn't render until
-        // female-fitted meshes exist
-        if(det.gender === "female") return
+        // female gate temporarily lifted for fit-testing on the new
+        // femalebody rig (helmet/gauntlet/armor/pauldron meshes were built
+        // for the male body's proportions/bone positions, so expect
+        // clipping/misalignment until confirmed otherwise)
         if(!helmetToEquipName) return
         let toEquip = false
         if(!helmetMeshes.length) {
@@ -280,7 +291,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     function equipGauntlet(gauntletToEquipName, metalColor) {
         // see equipHelmet's own comment
-        if(det.gender === "female") return
         if(!gauntletToEquipName) return
         let toEquip = false
         if(!gauntletMeshes.length) {
@@ -300,7 +310,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     function equipArmor(itemName, metalColor){
         // see equipHelmet's own comment
-        if(det.gender === "female") return
         if(!itemName) return
         armors.forEach(arm => {
             if(arm.name === itemName){
@@ -356,7 +365,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     function equipPauldron(pauldronToEquipName, metalColor) {
         // see equipHelmet's own comment
-        if(det.gender === "female") return
         if(!pauldronToEquipName) return
         let toEquip = false
         if(!pauldronMeshes.length) {
@@ -427,7 +435,13 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     if(det.items.length){
         det.items.forEach(itm => {
             if(itm.itemCateg === "equipable"){
-                if(itm.itemType === "boots" && itm.equiped) equipBoots(itm.name)
+                if(itm.itemType === "boots" && itm.equiped) {
+                    if(det.name === "fow") {
+                        console.log("equiping Boots", itm.name)
+                        console.log(boots)
+                    }
+                    equipBoots(itm.name)
+                }
                 if(itm.itemType === "armor" && itm.equiped) equipArmor(itm.name, itm.metalColor)
                 if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.modelName, itm.metalColor, itm.name, itm.hairVisible)
                 if(itm.itemType === "gauntlet" && itm.equiped) equipGauntlet(itm.name, itm.metalColor)
@@ -555,7 +569,14 @@ function createMainBodyTargetToClone(scene){
 // exported - setupcharacterscene.js's character-creation preview loads the
 // exact same avatar.glb and needs the identical gender split, not a
 // hand-copied second list that could drift out of sync with this one
-export const FEMALE_ONLY_NAMES = ["femalebody", "female.hair", "belt.style1", "mask.style", "skirt.style"]
+export const FEMALE_ONLY_NAMES = [
+    "femalebody", 
+    "female.hair", 
+    "belt.style1", 
+    "mask.style", 
+    "skirt.style",
+    "female"
+]
 
 // finds a bone/node anywhere under root whose name matches, instead of
 // assuming it sits at a fixed getChildren()[0] position - the pelvis search
@@ -580,6 +601,22 @@ export function findDeepByName(root, predicate){
     return null
 }
 
+// dispose(true) alone (see every dispose(true) call below) protects the
+// shared Armature from a recursive dispose taking it down, but that
+// protection is a double-edged sword: if the disposed node ALSO has a real
+// mesh submesh nested under it (not a bone - e.g. a hand as a child of
+// mainbody, same rig-nesting surprise as everything else on this asset),
+// doNotRecurse leaves that submesh behind as a live, still-visible orphan
+// instead of cleaning it up with its parent. getChildMeshes() (unlike
+// getChildren()) only ever returns Mesh-class descendants, never
+// TransformNode/bone ones, and is recursive by default - so disposing
+// every one of those first, then the node itself, removes all the real
+// geometry while never touching anything skeleton-related.
+function disposeMeshTree(mesh){
+    mesh.getChildMeshes().forEach(child => child.dispose(true))
+    mesh.dispose(true)
+}
+
 function createAnimeBody(containers, body, bodytarget, det, scene){
     const { animeBody, hairs } = containers
     let headBone, spineBone, rHand, lowerArmL, lowerArmR, shoulderL, shoulderR
@@ -589,13 +626,14 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     // mask.style.1/skirt.style1/bag/silverine, always on, no equip system
     // behind them) - see this function's own gender branch below
     const isFemale = det.gender === "female"
+    if(!isFemale) det.gender = "male"
 
     let belts = []
     let cloaks = []
     let armors = []
     let boots = []
     let characterHair = undefined
-    const {hairMat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
+    const {hairMat,femaleHair1Mat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
 
     const entries = animeBody.instantiateModelsToScene()
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
@@ -707,6 +745,26 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     })
     bodytarget.parent = spineBone
 
+    // TEMP DIAGNOSTIC - a mesh not showing up despite matching FEMALE_ONLY_NAMES/
+    // being the right gender keeps coming back to the same root cause on this
+    // rig: it isn't a direct child of mainBodyMeshes like every OTHER body
+    // part here, so the shallow main loop below never even visits it (already
+    // confirmed for the pelvis bone and boots - this checks belt the same
+    // way). Deep search instead of assuming a fixed depth, run BEFORE
+    // anything gets disposed so it reflects the real untouched tree.
+    // Remove once resolved.
+    const logDeepNameDebug = (label, matchesName) => console.log(`[${label} debug]`, det.name, det.gender, mainBodyMeshes.getDescendants(false, n => {
+        const realName = (n.name?.includes(" ") ? n.name.split(" ")[2] : n.name)?.toLowerCase()
+        return realName?.includes(matchesName)
+    }).map(n => ({
+        realName: (n.name?.includes(" ") ? n.name.split(" ")[2] : n.name)?.toLowerCase(),
+        isVisible: n.isVisible,
+        isDirectChild: n.parent === mainBodyMeshes,
+        parentName: n.parent?.name,
+    })))
+    logDeepNameDebug("boots", "boots")
+    logDeepNameDebug("belt", "belt")
+
     mainBodyMeshes.getChildren().forEach(mes => {
         mes.isPickable = false
         mes.name = mes.name.split(" ")[2].toLowerCase()
@@ -721,19 +779,22 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         // afterward - the recursive dispose() below ran in between and
         // deleted them out from under those already-resolved variables.
         // Passing true here means disposing a mesh only ever removes that
-        // one mesh, never anything living underneath it.
-        if(mes.name.includes("ref")) return mes.dispose(true)
-        if(mes.name==="hiddenbody") return mes.dispose(true)
+        // one mesh, never anything living underneath it - disposeMeshTree
+        // (this function's own comment above) still cleans up any real mesh
+        // submesh nested under it, just without touching bones.
+        if(mes.name.includes("ref")) return disposeMeshTree(mes)
+        if(mes.name==="hiddenbody") return disposeMeshTree(mes)
         // tripo_node_<uuid> - a leftover Tripo3D import-artifact node bundled
         // alongside the new female body parts in avatar.glb, same "generated
         // junk, not a real body part" category as ref/hiddenbody above
-        if(mes.name.includes("tripo_node")) return mes.dispose(true)
+        if(mes.name.includes("tripo_node")) return disposeMeshTree(mes)
         // log(mes.name)
 
         // "eyes" is shared by both bodies (parented under the common head
         // bone, not part of either body's own node group) - handle it before
         // the gender-exclusivity dispose below so it survives for both
         if(mes.name === "eyes") {
+            if(isFemale) return mes.dispose()
             // instantiateModelsToScene() above doesn't clone materials, so every
             // character shares this mesh's original material - mutating it in
             // place would make the last-created character's race win for everyone
@@ -752,7 +813,13 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         // gender's set doesn't match det.gender before either body's own
         // logic below ever runs
         const isFemaleNode = FEMALE_ONLY_NAMES.some(n => mes.name.includes(n))
-        if(isFemaleNode !== isFemale) return mes.isVisible = false
+        // merong female name sa mesh pero hindi siya female character(isFemale)
+
+        // showHideEquip (this file's own helper, top of file) - not a plain
+        // mes.isVisible = false, since a child submesh (this rig has already
+        // surprised us with nested submeshes more than once) wouldn't
+        // inherit the parent's hidden state on its own
+        if(isFemaleNode !== isFemale) return showHideEquip(mes, false)
 
         if(isFemale){
             if(mes.name.includes("femalebody")){
@@ -765,11 +832,13 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             }
             if(mes.name.includes("femaile.hair") || mes.name.includes("female.hair")){
                 const hairStyleName = mes.name.split(".")[1]
-                if(hairStyleName !== det.hair) return mes.isVisible = false
-                // hair2 gets its own strand-texture bump map (this function's
-                // own femaleHair2Mat comment) - hair1 stays the plain color
-                // material every other hair mesh already uses
-                mes.material = hairStyleName === "hair2" ? femaleHair2Mat : hairMat
+                if(hairStyleName !== det.hair) return showHideEquip(mes, false)
+                // hair2 gets its own strand-texture bump map, hair1 its own
+                // plain color material - both separate from the shared
+                // hairMat (male hair/scalp) so their backFaceCulling:false
+                // stays scoped to just her two hairstyles (this function's
+                // own femaleHair1Mat/femaleHair2Mat comment)
+                mes.material = hairStyleName === "hair2" ? femaleHair2Mat : femaleHair1Mat
                 characterHair = mes
                 return
             }
@@ -778,7 +847,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             // of these yet, see this function's own isFemale comment above) -
             // always on
             mes.isVisible = true
-            return
+
         }
 
         if(mes.name.includes("mainbody")){
@@ -786,31 +855,43 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
 
         }
         if(mes.name.includes("cloth")){
-            mes.name.split(".")[1] !== det.cloth && mes.dispose(true)
+            mes.name.split(".")[1] !== det.cloth && disposeMeshTree(mes)
             mes.material = clothMat
         }
         if(mes.name.includes("pants")){
-            mes.name.split(".")[1] !== det.pants && mes.dispose(true)
+            mes.name.split(".")[1] !== det.pants && disposeMeshTree(mes)
             mes.material = pantsMat
         }
         if(mes.name.includes("boots")){
-            // mes.name.split(".")[1] !== det.boots && mes.dispose()
-            mes.isVisible =false
+            // boots.<itemName>.<gender> - some boots (leatherboots) now ship
+            // as two separate meshes, one per gender, sharing the same item
+            // name. Without checking the gender segment, both would get
+            // pushed under the identical name ("leatherboots") and
+            // equipBoots(itemName) would match - and show - both at once
+            // regardless of which body they're on. No gender segment at all
+            // (just boots.<itemName>) is treated as a universal boot mesh.
+            const bootGender = mes.name.split(".")[2]
+            if(bootGender !== det.gender) {
+                console.log(mes)
+                return disposeMeshTree(mes)
+            }
+            // was true - every other equip slot (armor/cloak below, helmet/
+            // gauntlet/pauldron elsewhere in this file) defaults hidden here
+            // and only turns on via the real equip call driven by
+            // itm.equiped (see the det.items.forEach block below, which only
+            // ever calls equipBoots() when a boots item is actually
+            // equipped) - boots was the one exception, so a fresh character
+            // with nothing equipped still rendered wearing boots regardless
+            // of actual inventory state.
+            mes.isVisible = false
             mes.material = bootsMat
             boots.push({name: mes.name.split(".")[1], mesh:mes, isUsed: false})
+
         }
         if(mes.name.includes("scalp")){
             mes.material = hairMat
         }
-        if(mes.name.includes("belt.")){
-            const beltName = mes.name.split(".")[1]
-            if(!beltName) return
 
-            // const designatedMat = createEquipMat()
-            // mes.material = beltMat
-            mes.isVisible = false
-            belts.push({name: beltName, mesh:mes, isUsed: false})
-        }
         if(mes.name.includes("cloak.")){
             const cloakName = mes.name.split(".")[1]
             if(!cloakName) return

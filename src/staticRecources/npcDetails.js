@@ -1,15 +1,15 @@
 import { receiveAbilities } from "../charactersystem/abilitySystem.js"
-import { evaluateRank, getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
+import { evaluateRank, getCharState } from "../charactersystem/characterstate.js"
 import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
 import { startQuestionare } from "../components/conversations.js"
 // import { openCloseShop, updateShopItem } from "../charactersystem/shopSystem.js"
 // import { activateCinemaOne } from "../tools/cameraTools.js"
-import { randomNum, getNumUntil, checkIfTokenSaved} from "../tools/tools.js"
+import { randomNum, getNumUntil } from "../tools/tools.js"
 import { METAL_COLOR } from "../tools/metalmat.js"
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js"
 import { findPlaceMetaData } from "../states/placestates.js"
-import { exitScene } from "../sockets/exitsocket.js"
-import { changeScene, getSceneDet } from "../main/main.js"
+import { getSceneDet } from "../main/main.js"
+import { travelToPlace } from "../tools/travel.js"
 import { flameWardTitle } from "./titlesData.js"
 import { getPlayersOnScene, getNpcOnScene } from "../sockets/worldsocket.js"
 import { createMagicCircle } from "../creations/magiccircles.js"
@@ -317,6 +317,7 @@ export default [
                 speech: [
                     {name:"", message: "Let me just finish your registration..."},
                     {name:"", message: "Alright. The crystal has your reading on file now. Mana capacity, aptitudes — all logged. Every adventurer starts somewhere, and this gives us a baseline to track your growth over time."},
+                    {name:"", message: "Those aptitudes you saw are mostly just the elements that surpass your other aptitudes — and yes, you can use skills of any element."},
                     {name:"", message: "Your rank has been set to F. That is standard for new registrants. It is not a judgment — it simply means you have not yet taken on guild commissions. That changes the moment you start."},
                     {name:"", message: "Now, I do have something for you if you."},
                     {name:"", message: "Slimes have been crossing the eastern border for about a week now. Small, fast, and relentless when it comes to farmland. The villagers are losing crops every day and their requests have been sitting in the queue longer than they should."},
@@ -378,19 +379,14 @@ export default [
                     const guildmasterOffice = findPlaceMetaData(101)
                     if(!guildmasterOffice) return console.warn("guildmaster office metadata not found")
 
-                    const charState = getCharState()
-
-                    charState.currentPlace.placeId = guildmasterOffice.placeId
-                    charState.currentPlace.name = guildmasterOffice.name
-                    charState.currentPlace.areaType = guildmasterOffice.areaType
-
-                    charState.x = guildmasterOffice.spawn.x
-                    charState.y = guildmasterOffice.spawn.y
-                    charState.z = guildmasterOffice.spawn.z
-
-                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                    exitScene(charState.owner)
-                    await changeScene("whatever")
+                    await travelToPlace({
+                        placeId: guildmasterOffice.placeId,
+                        name: guildmasterOffice.name,
+                        areaType: guildmasterOffice.areaType,
+                        x: guildmasterOffice.spawn.x,
+                        y: guildmasterOffice.spawn.y,
+                        z: guildmasterOffice.spawn.z,
+                    })
                 }
             },
         ]
@@ -487,19 +483,7 @@ export default [
                     const village = findPlaceMetaData(1)
                     if(!village) return console.warn("village metadata not found")
 
-                    const charState = getCharState()
-
-                    charState.currentPlace.placeId = village.placeId
-                    charState.currentPlace.name = village.name
-                    charState.currentPlace.areaType = village.areaType
-
-                    charState.x = 27
-                    charState.y = 0.01
-                    charState.z = -42
-
-                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                    exitScene(charState.owner)
-                    await changeScene("whatever")
+                    await travelToPlace({ placeId: village.placeId, name: village.name, areaType: village.areaType, x: 27, y: 0.01, z: -42 })
                 }
             },
             { // storyInfo
@@ -627,17 +611,7 @@ export default [
                         const village = findPlaceMetaData(1)
                         if(!village) return console.warn("village metadata not found")
 
-                        charState.currentPlace.placeId = village.placeId
-                        charState.currentPlace.name = village.name
-                        charState.currentPlace.areaType = village.areaType
-
-                        charState.x = 6
-                        charState.y = 0.01
-                        charState.z = -2
-
-                        await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                        exitScene(charState.owner)
-                        await changeScene("whatever")
+                        await travelToPlace({ placeId: village.placeId, name: village.name, areaType: village.areaType, x: 6, y: 0.01, z: -2 })
                     }, 10000)
                 }
             },
@@ -1866,19 +1840,14 @@ export default [
                     const openworld = findPlaceMetaData(OPENWORLD_PLACE_ID)
                     if(!openworld) return console.warn("openworld metadata not found")
 
-                    const charState = getCharState()
-
-                    charState.currentPlace.placeId = openworld.placeId
-                    charState.currentPlace.name = openworld.name
-                    charState.currentPlace.areaType = openworld.areaType
-
-                    charState.x = openworld.spawn.x
-                    charState.y = openworld.spawn.y
-                    charState.z = openworld.spawn.z
-
-                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                    exitScene(charState.owner)
-                    await changeScene("whatever")
+                    await travelToPlace({
+                        placeId: openworld.placeId,
+                        name: openworld.name,
+                        areaType: openworld.areaType,
+                        x: openworld.spawn.x,
+                        y: openworld.spawn.y,
+                        z: openworld.spawn.z,
+                    })
                 }
             },
         ],
@@ -2553,19 +2522,14 @@ export default [
                     const guildmasterOffice = findPlaceMetaData(101)
                     if(!guildmasterOffice) return console.warn("guildmaster office metadata not found")
 
-                    const charState = getCharState()
-
-                    charState.currentPlace.placeId = guildmasterOffice.placeId
-                    charState.currentPlace.name = guildmasterOffice.name
-                    charState.currentPlace.areaType = guildmasterOffice.areaType
-
-                    charState.x = guildmasterOffice.spawn.x
-                    charState.y = guildmasterOffice.spawn.y
-                    charState.z = guildmasterOffice.spawn.z
-
-                    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                    exitScene(charState.owner)
-                    await changeScene("whatever")
+                    await travelToPlace({
+                        placeId: guildmasterOffice.placeId,
+                        name: guildmasterOffice.name,
+                        areaType: guildmasterOffice.areaType,
+                        x: guildmasterOffice.spawn.x,
+                        y: guildmasterOffice.spawn.y,
+                        z: guildmasterOffice.spawn.z,
+                    })
                 }
             },
         ],
@@ -2813,9 +2777,9 @@ export default [
         // near the weaponHouse/forge pair ({x:28,z:-43} and {x:29,z:-42}, see
         // localroomdb.js originalGlbs) but off to the side from Bram
         // (28.4, -42.6, standing right between the two) so they don't overlap
-        x: 25,
+        x: 26,
         y: 0.01,
-        z: -40,
+        z: -41,
         _dirTarg: {x:28.4, z:-42.6},
         cloth: 'style1',
         pants: 'style2',

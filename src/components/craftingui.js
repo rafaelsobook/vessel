@@ -1,8 +1,14 @@
-// Crafting window: category list (sword/armor/helmet/pauldron) on the left,
-// the part-slot diagram in the middle. Sword is the only itemType built from
-// 4 parts (blade/guard/handle/pommel, see createweapon.js) - everything else
-// equips a single mesh (see createcharacter.js's createHelmet/createGauntlet/
-// createPauldron/equipArmor), so it only ever needs one slot.
+// Crafting window: category list (sword/axe/spear) on the left, the
+// part-slot diagram in the middle. Every category is a real, part-based
+// weapon craft (blade/guard/handle/pommel, see createweapon.js's own
+// WEAPON_PART_LIST/getWeaponParts) - armor/helmet/pauldron used to live
+// here too as a single-material dry run that never produced a real item
+// (see this file's own git history) and were removed rather than left
+// half-built. Sword and spear both use all 4 parts; axe has no pommel at
+// all (models/axe/axes.glb never modeled one) - getWeaponParts(activeCategory)
+// is the one place that's read from, never a second hardcoded list, so the
+// diagram/craft logic can't drift out of sync with what createPartsWeapon
+// itself actually builds.
 //
 // Clicking a part box opens a material picker listing the player's OWNED
 // crafting materials (resourceLoot.js's solarore/adamantine/wood/etc, mined
@@ -10,7 +16,7 @@
 // crafting stat weights live in itemDictionary.js (ITEM_DICTIONARY), the
 // single source of truth both this file and the stat formula read from.
 // Rarity TIER (common/rare) is NOT picked per part: it's derived once from
-// the budget and applied to every part of the sword uniformly - there's no
+// the budget and applied to every part of the weapon uniformly - there's no
 // such thing as a common blade on a rare guard. But within a tier,
 // allswords.glb has more than one mesh for some parts (blade rare1 AND
 // rare2, guard common1 AND common2, etc, see the Blender outliner
@@ -18,6 +24,10 @@
 // (getAvailableRarityVariants/pickRarityVariant below), so two rare swords
 // don't come out looking identical. Which MATERIALS get picked, separately,
 // drives the actual stats - see buildSwordItem()/computeCraftedWeaponStats.
+// Only sword actually has both tiers modeled - axe (axes.glb) is
+// common-only, spear (allswords.glb's own spear_* meshes) is rare-only;
+// getAvailableRarityVariants falls back to whichever tier the weaponType
+// DOES have when the budget-requested one doesn't exist for it.
 //
 // EPIC is a third tier that overrides both of the above (matchEpicRecipe
 // below, staticRecources/epiccrafts.js) - not budget-driven at all ("for
@@ -29,7 +39,9 @@
 // common/rare tiers (sword_guard_epic1_cores/_outer, sword_blade_epic1_outer -
 // see createweapon.js's own EPIC_ACCENT_SUFFIXES), coloring them from the
 // recipe's own fixed guardCoreColor/guardOuterColor/bladeOuterColor fields
-// rather than whichever material was actually used.
+// rather than whichever material was actually used. Epic tier meshes only
+// ever got built for sword, so matchEpicRecipe() gates matching to
+// activeCategory === "sword" explicitly - axe/spear never match one.
 
 import { createElement } from "../tools/GUITools"
 import { openClosePopup } from "../tools/popupUI"
@@ -40,42 +52,54 @@ import { randomNum } from "../tools/tools"
 import { ITEM_DICTIONARY, computeCraftedWeaponStats } from "../staticRecources/itemDictionary"
 import { receiveAchievement } from "../charactersystem/achievement"
 import { epicSwordCraftDetails } from "../staticRecources/epiccrafts"
+import { getWeaponParts } from "../assetcreation/createweapon"
 
 const craftCont     = document.querySelector(".craft-container")
 const craftTitle    = document.querySelector(".craft-title")
 const categBtns     = document.querySelectorAll(".craft-categ-btn")
-const stage         = document.querySelector(".craft-parts-stage")
-const singleLabel   = document.querySelector(".single-slot .part-slot-label")
 const partBoxes     = document.querySelectorAll(".part-slot-box")
 const budgetInput   = document.querySelector(".craft-budget-input")
 const rarityValueEl = document.querySelector(".craft-rarity-value")
 const craftBtn      = document.querySelector(".craft-btn")
 const centerIcon    = document.querySelector(".craft-center-icon")
+// pommel is the one part not every weaponType has (createweapon.js's own
+// WEAPON_PART_LIST - axe has none) - the only slot that ever needs hiding,
+// see selectCategory() below
+const pommelSlotEl = document.querySelector(".pommel-slot")
 
 const mpCont = document.querySelector(".material-picker-container")
 const mpGrid = document.querySelector(".mp-grid")
 
+// armor/helmet/pauldron crafting used to live here as a single-material
+// "dry run" (no real item ever came out of it - see this file's own git
+// history) - removed entirely rather than left half-built. Every remaining
+// category is a real, working weapon craft (createweapon.js's own
+// WEAPON_PART_LIST/hasPartMeshes already treat sword/axe/spear identically
+// as part-based weapons, this file just needed to stop hardcoding "sword").
 const CATEGORIES = {
-    sword:    { dn: "Craft Sword" },
-    armor:    { dn: "Craft Armor",    singleLabel: "Armor" },
-    helmet:   { dn: "Craft Helmet",   singleLabel: "Helmet" },
-    pauldron: { dn: "Craft Pauldron", singleLabel: "Pauldron" },
+    sword: { dn: "Craft Sword" },
+    axe:   { dn: "Craft Axe" },
+    spear: { dn: "Craft Spear" },
 }
-const SWORD_PARTS = ["blade", "guard", "handle", "pommel"]
 
 const SWORD_ICON = "./images/UI/craftswordicon.webp"
 const SWORD_FORGING_ICON = "./images/UI/swordforging.webp"
 const FORGING_DURATION_MS = 3000
 
-// budget < 100 -> every part built from the "common" tier, >= 100 -> "rare".
-// The exact numbered variant within that tier (common1 vs common2, rare1 vs
-// rare2) is chosen per part by pickRarityVariant() below.
+// budget < 100 -> "common" tier requested, >= 100 -> "rare" requested. Only
+// sword actually HAS both tiers modeled (allswords.glb) - axe
+// (models/axe/axes.glb) only ever got a common tier built, spear only ever
+// got a rare tier built (see getAvailableRarityVariants' own fallback
+// comment below for what happens when the requested tier doesn't exist for
+// the active weaponType). The exact numbered variant within a tier
+// (common1 vs common2, rare1 vs rare2) is chosen per part by
+// pickRarityVariant() below.
 const RARITY_BUDGET_THRESHOLD = 100
 
 let activeCategory = "sword"
 // { blade: { materialName, materialLabel, tintKey }, guard: {...}, ... } - reset whenever category changes
 let selectedMaterials = {}
-let currentRarityBase = "common" // "common" | "rare" - the tier, not a specific mesh variant
+let currentRarityBase = "common" // "common" | "rare" - the tier REQUESTED by budget, not necessarily what a given weaponType actually has (see getAvailableRarityVariants)
 let isForging = false
 
 function resetPartSelections(){
@@ -99,10 +123,10 @@ function selectCategory(categ){
     activeCategory = categ
     categBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.categ === categ))
 
-    const isSword = categ === "sword"
-    stage.classList.toggle("sword-mode", isSword)
-    stage.classList.toggle("single-mode", !isSword)
-    if(!isSword) singleLabel.textContent = config.singleLabel
+    // pommel-slot only shown for weaponTypes that actually have one
+    // (createweapon.js's own getWeaponParts - axe doesn't) - same ground
+    // truth createPartsWeapon itself builds from, not a second hardcoded list
+    if(pommelSlotEl) pommelSlotEl.style.display = getWeaponParts(categ).includes("pommel") ? "" : "none"
 
     craftTitle.textContent = config.dn
     resetPartSelections()
@@ -221,19 +245,30 @@ function getRarityBase(budget){
     return budget >= RARITY_BUDGET_THRESHOLD ? "rare" : "common"
 }
 
-// Epic recipes (staticRecources/epiccrafts.js) are a COMBINATION rule, not
-// a budget one - "for epic rarity the money is not involved here it is the
-// combination" (verbatim). A recipe matches when every one of the 4 picked
-// materials is IN that part's own allowed list (requiredItems.bladeItems
-// etc - an OR set per part, not "use every material listed"). Checked
-// fresh off the live selectedMaterials every time a part changes (see the
-// partBoxes click handler below), never cached - swapping even one part's
-// material can make or break a match.
+// Epic recipes (staticRecources/epiccrafts.js) only ever exist for
+// allswords.glb's own sword_*_epic1 meshes - axe/spear have no epic tier
+// modeled at all, so matching one against an axe/spear's selection would
+// build parts (createweapon.js's own createPartsWeapon) that just don't
+// exist for that weaponType, rendering broken/missing. Gated to sword
+// explicitly here rather than relying on axe naturally failing the pommel
+// check below (axe has no pommel slot at all, so selectedMaterials.pommel
+// would always be unset) - spear DOES have all 4 parts and could otherwise
+// accidentally satisfy a recipe's material combination.
+//
+// A recipe matches when every one of the 4 picked materials is IN that
+// part's own allowed list (requiredItems.bladeItems etc - an OR set per
+// part, not "use every material listed"). "for epic rarity the money is
+// not involved here it is the combination" (verbatim) - a budget/rarity-tier
+// rule, this is not. Checked fresh off the live selectedMaterials every
+// time a part changes (see the partBoxes click handler below), never
+// cached - swapping even one part's material can make or break a match.
+const EPIC_RECIPE_PARTS = ["blade", "guard", "handle", "pommel"]
 function matchEpicRecipe(){
-    if(SWORD_PARTS.some(part => !selectedMaterials[part])) return null
+    if(activeCategory !== "sword") return null
+    if(EPIC_RECIPE_PARTS.some(part => !selectedMaterials[part])) return null
     return epicSwordCraftDetails.find(recipe => {
         const req = recipe.requiredItems
-        return SWORD_PARTS.every(part => req[`${part}Items`]?.includes(selectedMaterials[part].materialName))
+        return EPIC_RECIPE_PARTS.every(part => req[`${part}Items`]?.includes(selectedMaterials[part].materialName))
     }) ?? null
 }
 
@@ -261,23 +296,39 @@ budgetInput.addEventListener("input", () => {
 // the exact mesh name, so scanning its keys is the ground truth for which
 // numbered variants actually exist, instead of hardcoding a list here that'd
 // silently go stale the moment the glb changes.
+//
+// Only sword actually has BOTH tiers modeled - confirmed straight off the
+// real glbs: axe (models/axe/axes.glb) only ever got axe_*_common1 built,
+// spear (allswords.glb's own spear_* meshes) only ever got spear_*_rare1
+// built, neither has the other tier at all. Requesting the tier a
+// weaponType doesn't have used to fall back to a fabricated "<tier>1"
+// string with no real mesh behind it - createPartsWeapon would then warn
+// "missing part" and just skip it, rendering a broken/incomplete weapon.
+// Falling back to whichever tier this weaponType DOES have instead means
+// axe/spear crafting works correctly regardless of what budget the player
+// typed, rather than only "working" for whichever tier happens to match.
 function getAvailableRarityVariants(weaponType, part, tierBase){
     const { allweapons } = getSocketContainers()
-    const pattern = new RegExp(`^${weaponType}_${part}_(${tierBase}\\d+)$`)
-    const variants = []
-    if(allweapons){
-        Object.keys(allweapons).forEach(key => {
-            const match = key.match(pattern)
-            if(match) variants.push(match[1])
-        })
+    if(!allweapons) return [`${tierBase}1`]
+
+    const findVariants = (tier) => {
+        const pattern = new RegExp(`^${weaponType}_${part}_(${tier}\\d+)$`)
+        return Object.keys(allweapons)
+            .map(key => key.match(pattern))
+            .filter(Boolean)
+            .map(match => match[1])
     }
-    // allweapons not loaded yet, or the glb genuinely has nothing for this
-    // (part, tier) combo - fall back to *1 rather than crafting a broken part
-    return variants.length ? variants : [`${tierBase}1`]
+
+    const requested = findVariants(tierBase)
+    if(requested.length) return requested
+
+    const otherTier = tierBase === "rare" ? "common" : "rare"
+    const fallback = findVariants(otherTier)
+    return fallback.length ? fallback : [`${tierBase}1`]
 }
 
-function pickRarityVariant(part){
-    const variants = getAvailableRarityVariants("sword", part, currentRarityBase)
+function pickRarityVariant(weaponType, part){
+    const variants = getAvailableRarityVariants(weaponType, part, currentRarityBase)
     return variants[Math.floor(Math.random() * variants.length)]
 }
 
@@ -314,17 +365,16 @@ function buildSwordParts(epicRecipe){
 
     // every part shares the same TIER (currentRarityBase) - that's the
     // whole point, see the file-level comment - but which numbered mesh
-    // within that tier is randomized independently per part
-    return {
-        bladeRarity: pickRarityVariant("blade"),
-        guardRarity: pickRarityVariant("guard"),
-        handleRarity: pickRarityVariant("handle"),
-        pommelRarity: pickRarityVariant("pommel"),
-        bladeColor: selectedMaterials.blade.tintKey,
-        guardColor: selectedMaterials.guard.tintKey,
-        handleColor: selectedMaterials.handle.tintKey,
-        pommelColor: selectedMaterials.pommel.tintKey,
-    }
+    // within that tier is randomized independently per part. Built from
+    // getWeaponParts(activeCategory) rather than a hardcoded 4-part list so
+    // axe (no pommel) doesn't get a pommelRarity/pommelColor at all instead
+    // of crashing on the never-set selectedMaterials.pommel.
+    const result = {}
+    getWeaponParts(activeCategory).forEach(part => {
+        result[`${part}Rarity`] = pickRarityVariant(activeCategory, part)
+        result[`${part}Color`] = selectedMaterials[part].tintKey
+    })
+    return result
 }
 
 // Actually deducts the 4 materials that went into this sword from the
@@ -341,7 +391,7 @@ function buildSwordParts(epicRecipe){
 function deductSelectedMaterials(){
     const charState = getCharState()
     if(!charState) return
-    SWORD_PARTS.forEach(part => {
+    getWeaponParts(activeCategory).forEach(part => {
         const material = selectedMaterials[part]
         if(!material) return
         const owned = charState.items.find(itm => itm.name === material.materialName)
@@ -369,7 +419,11 @@ function buildSwordItem(){
     const bladeLabel  = selectedMaterials.blade.materialLabel
     const guardLabel  = selectedMaterials.guard.materialLabel
     const handleLabel = selectedMaterials.handle.materialLabel
-    const pommelLabel = selectedMaterials.pommel.materialLabel
+    // axe has no pommel slot at all (getWeaponParts) - epicRecipe is
+    // sword-only (matchEpicRecipe's own guard), so the epic desc below can
+    // still assume a pommel was picked, but the plain common/rare desc has
+    // to tolerate it being unset
+    const pommelLabel = selectedMaterials.pommel?.materialLabel
     const dn = epicRecipe ? epicRecipe.dn : `${bladeLabel} Blade`
 
     const { dmg, magicDmg, durabilityMax, magicResistance } = computeCraftedWeaponStats(selectedMaterials)
@@ -384,11 +438,11 @@ function buildSwordItem(){
         // cache's own comment on why THOSE need a unique name each time -
         // two different random recipes sharing a name would render
         // whichever one built its mesh first for both)
-        name: epicRecipe ? epicRecipe.name : `customsword_${Date.now()}`,
+        name: epicRecipe ? epicRecipe.name : `custom${activeCategory}_${Date.now()}`,
         dn,
         itemCateg: "equipable",
         itemType: "weapon",
-        weaponType: "sword",
+        weaponType: activeCategory,
         equipAbilities: {
             dmg, magicDmg, magicResistance, def: 0, plusStr: 0, plusDex: 0, plusInt: 0,
         },
@@ -403,7 +457,7 @@ function buildSwordItem(){
         qnty: 1,
         desc: epicRecipe
             ? `${epicRecipe.dn}, a legendary blade forged from ${bladeLabel}, ${guardLabel}, ${handleLabel}, and ${pommelLabel}.`
-            : `${dn}, a ${rarity} blade forged with a ${guardLabel.toLowerCase()} guard, a ${handleLabel.toLowerCase()} grip, and a ${pommelLabel.toLowerCase()} pommel.`,
+            : `${dn}, a ${rarity} blade forged with a ${guardLabel.toLowerCase()} guard, a ${handleLabel.toLowerCase()} grip${pommelLabel ? `, and a ${pommelLabel.toLowerCase()} pommel` : ""}.`,
         rarity,
         parts: buildSwordParts(epicRecipe),
     }
@@ -428,46 +482,38 @@ function playForgingAnimation(cb){
 craftBtn.addEventListener("click", () => {
     if(isForging) return
 
-    const isSword = activeCategory === "sword"
-    const requiredParts = isSword ? SWORD_PARTS : ["item"]
+    // every remaining category (sword/axe/spear) is a real, part-based
+    // weapon craft - getWeaponParts(activeCategory) is the same ground
+    // truth createPartsWeapon itself builds from (e.g. axe has no pommel,
+    // so it's never in requiredParts and never blocks the craft)
+    const requiredParts = getWeaponParts(activeCategory)
     const missingParts = requiredParts.filter(part => !selectedMaterials[part])
     if(missingParts.length) return openClosePopup("Pick a material for every part first", true, 1500)
 
     // epic recipes bypass the budget gate entirely - "for epic rarity the
-    // money is not involved here it is the combination" (verbatim). Every
-    // other path (including non-sword categories, which have no epic
-    // recipe concept at all) still needs a real budget entered.
-    const epicRecipe = isSword ? matchEpicRecipe() : null
+    // money is not involved here it is the combination" (verbatim).
+    // matchEpicRecipe() already self-gates to sword only, so axe/spear
+    // always fall through to the budget check below.
+    const epicRecipe = matchEpicRecipe()
     const budget = Number(budgetInput.value) || 0
     if(!epicRecipe && budget <= 0) return openClosePopup("Enter a budget first", true, 1500)
 
-    const rarity = epicRecipe ? epicRecipe.rarityName : currentRarityBase
-
     // TODO: budget still isn't spent - crafting is free of coin cost for
     // now. Once the pricing rule is settled, spendOnPrice() goes here (see
-    // buyorsell.js's actionBtn handler for that pattern). The 4 picked
-    // materials themselves ARE spent now, though - deductSelectedMaterials
-    // below, only on this successful-craft path (never just from picking a
+    // buyorsell.js's actionBtn handler for that pattern). The materials
+    // themselves ARE spent now, though - deductSelectedMaterials below,
+    // only on this successful-craft path (never just from picking a
     // material into a part slot - the picker only ever hides/disables what's
     // already spoken for, see getOwnedMaterials' own comment).
     const finish = () => {
-        if(isSword){
-            const item = buildSwordItem()
-            deductSelectedMaterials()
-            obtain(item)
-            resetPartSelections()
-            receiveAchievement("first-forge")
-        } else {
-            // armor/helmet/pauldron still aren't real items yet - see
-            // buildSwordItem's comment; those need a modelName that
-            // actually matches a template in their .glb, which isn't
-            // verified yet, so this stays a dry run for now
-            console.log(`craft ${activeCategory} requested`, { itemType: activeCategory, rarity, budget, metalColor: selectedMaterials.item.tintKey })
-        }
+        const item = buildSwordItem()
+        deductSelectedMaterials()
+        obtain(item)
+        resetPartSelections()
+        receiveAchievement("first-forge")
     }
 
-    if(isSword) playForgingAnimation(finish)
-    else finish()
+    playForgingAnimation(finish)
 })
 
 export function openCloseCraftUI(forceOpen){

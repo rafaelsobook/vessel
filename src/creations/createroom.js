@@ -13,14 +13,11 @@ import { loadModelByIndx, mergeAndLoadModel } from '../tools/loadmodel';
 import { createMat, createMatV2 } from '../tools/materials';
 import { createFireParticles } from '../tools/particlesystem';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
-import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
-import { exitScene } from '../sockets/exitsocket';
 import { findMyCurrentPlace, findPlaceMetaData } from '../states/placestates';
-import { changeScene } from '../main/main';
+import { travelToPlace } from '../tools/travel';
 import { openCloseInteractBtn } from '../tools/popupUI';
 
 import { startQuestionare } from '../components/conversations';
-import { checkIfTokenSaved } from "../tools/tools"
 import { getAllSounds } from '../components/soundSystem';
 
 const WALL_HEIGHT    = 0.5;
@@ -188,23 +185,17 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
             openCloseInteractBtn("normal", "none", async () => {
                 openCloseInteractBtn(false)
 
-                const charState = getCharState()
-                
                 const tcpCharPlaceMD = findPlaceMetaData(exitPlaceDetail.placeId)
 
-                charState.currentPlace.placeId = exitPlaceDetail.placeId
-                charState.currentPlace.name = exitPlaceDetail.name
-                charState.currentPlace.areaType = exitPlaceDetail.areaType
-                charState.x = tcpCharPlaceMD.spawn.x
-                charState.y = tcpCharPlaceMD.spawn.y
-                charState.z = tcpCharPlaceMD.spawn.z
-                console.log(tcpCharPlaceMD)
                 getAllSounds().normalDoorOC?.play()
-                const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                console.log(newCharData)
-                exitScene(charState.owner)
-                
-                await changeScene("whatever")
+                await travelToPlace({
+                    placeId: exitPlaceDetail.placeId,
+                    name: exitPlaceDetail.name,
+                    areaType: exitPlaceDetail.areaType,
+                    x: tcpCharPlaceMD.spawn.x,
+                    y: tcpCharPlaceMD.spawn.y,
+                    z: tcpCharPlaceMD.spawn.z,
+                })
             })
         })
         onIntersecExitTrig(exitTrigger, characterBody, scene, () => {

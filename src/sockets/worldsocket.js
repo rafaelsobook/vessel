@@ -108,7 +108,8 @@ let containers = {
     goblinRoot: null,
     monolithRoot: null,
     slimeRoot: null,
-    lesserDemonRoot: null
+    lesserDemonRoot: null,
+    deerRoot: null
 }
 
 
@@ -151,7 +152,8 @@ export function resetArray(){
         goblinRoot: null,
         monolithRoot: null,
         slimeRoot: null,
-        lesserDemonRoot: null
+        lesserDemonRoot: null,
+        deerRoot: null
     }
 }
 export function setSocketContainers(newContainers){

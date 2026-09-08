@@ -1,10 +1,7 @@
 import { startQuestionare } from '../components/conversations'
-import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate.js'
-import { checkIfTokenSaved } from '../tools/tools.js'
-import { exitScene } from '../sockets/exitsocket.js'
-import { changeScene } from '../main/main.js'
 import { findPlaceMetaData } from '../states/placestates.js'
 import { offerStarterQuest } from '../npc/questOffer.js'
+import { travelToPlace } from '../tools/travel.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Doran", isLeft: false, message }))
@@ -75,24 +72,10 @@ export function wagonData(){
             conversationWithQuestion: toLines(doranTravel),
             answers: [],
             cb: async () => {
-                // same transition procedure areascene.js's roomPaths trigger uses
-
+                // travelToPlace (tools/travel.js) - same transition procedure
+                // areascene.js's roomPaths trigger uses
                 const { placeId, meta, areaType, spawn } = findPlaceMetaData(888)
-                
-                const charState = getCharState()
-
-                charState.currentPlace.placeId = placeId
-                charState.currentPlace.name = meta.name
-                charState.currentPlace.areaType = areaType
-
-                console.log(spawn)
-                charState.x = spawn.x
-                charState.y = spawn.y
-                charState.z = spawn.z
-
-                await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                exitScene(charState.owner)
-                await changeScene("whatever")
+                await travelToPlace({ placeId, name: meta.name, areaType, x: spawn.x, y: spawn.y, z: spawn.z })
             }
         },
         {

@@ -16,6 +16,19 @@ import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
 import { FEMALE_ONLY_NAMES, findDeepByName } from "../charactersystem/createcharacter.js";
 
+// mainbody/femalebody/scalp aren't always a single flat mesh with no
+// children on this rig (see createcharacter.js's own dispose(true) comment -
+// the same asset already surprised us once with unexpected nesting) -
+// `mesh.isVisible = false` only ever hides that ONE mesh's own geometry,
+// never cascading to children the way a naive read of "hide this body"
+// would suggest, so a child submesh (e.g. a hand) can be left rendering
+// even while its parent is correctly marked invisible. Mirrors
+// createcharacter.js's own showHideEquip pattern.
+function setTreeVisible(mesh, isVisible){
+    mesh.isVisible = isVisible
+    mesh.getChildMeshes().forEach(child => child.isVisible = isVisible)
+}
+
 export async function setupCharacterScene(engine){
     let toSave = {
         owner: undefined,
@@ -40,7 +53,13 @@ export async function setupCharacterScene(engine){
     // silverine, always on, no picker)
     let femaleHairs = []
     let femaleAccessories = []
-    let mainBodyMesh, scalpMesh, femaleBodyMesh
+    // mainbodyhand is a SEPARATE mesh from mainbody, not a child of it (so
+    // setTreeVisible's own getChildMeshes() cascade can't reach it) - but its
+    // name contains "mainbody" as a substring, so it was already silently
+    // matching the plain includes("mainbody") check below too, racing with
+    // the real torso mesh for the one mainBodyMesh variable. Tracked
+    // separately here so gender toggles actually reach both.
+    let mainBodyMesh, mainBodyHandMesh, scalpMesh, femaleBodyMesh
 
     const spawnPos = new Vector3(0,0,0)
     const scene = new Scene(engine)
@@ -87,10 +106,14 @@ export async function setupCharacterScene(engine){
     }
 
     const hairMat = createColorMat("hair_mat", toSave.hairColor , scene)
-    // createcharacter.js's own femaleHair2Mat comment - female's "hair2"
-    // style only, separate material so the bump map doesn't also apply to
-    // hair1/male hair/scalp, which all still use the plain hairMat above
+    // createcharacter.js's own femaleHair1Mat/femaleHair2Mat comment -
+    // female's two hairstyles each get their own material, separate from
+    // the shared hairMat (male hair/scalp), so the bump map (hair2) and
+    // backFaceCulling:false (both) stay scoped to just her own hairstyles
     const femaleHair2Mat = createColorMat("hair_mat_f2", toSave.hairColor, scene, "./images/textures/girlhair/hairstyle2.webp")
+    const femaleHair1Mat = createColorMat("hair_mat_f1", toSave.hairColor, scene)
+    femaleHair1Mat.backFaceCulling = false
+    femaleHair2Mat.backFaceCulling = false
     const clothMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     clothMat.diffuseColor = new Color3(0.42, 0.30, 0.16)
@@ -126,6 +149,7 @@ export async function setupCharacterScene(engine){
         if(meshPartName.includes("armor")) return mesh.dispose(true)
         if(meshPartName.includes("gear")) return mesh.dispose(true)
 
+
         // createcharacter.js's own FEMALE_ONLY_NAMES/isFemale comment -
         // avatar.glb bundles both genders' meshes together now, hidden
         // (not disposed - the gender toggle below needs to swap back and
@@ -139,14 +163,15 @@ export async function setupCharacterScene(engine){
                 // own createAnimeBody has the matching change) - femalebody
                 // keeps whatever material it already ships with, untouched
                 femaleBodyMesh = mesh
-                mesh.isVisible = toSave.gender === "female"
+                setTreeVisible(mesh, toSave.gender === "female")
                 return
             }
             if(meshPartName.includes("femaile.hair") || meshPartName.includes("female.hair")){
                 const hairStyleName = mesh.name.split(".")[1]
-                // createcharacter.js's own femaleHair2Mat comment - hair2
-                // gets the bump-mapped material, hair1 stays plain
-                mesh.material = hairStyleName === "hair2" ? femaleHair2Mat : hairMat
+                // createcharacter.js's own femaleHair1Mat/femaleHair2Mat
+                // comment - hair2 gets the bump-mapped material, hair1 its
+                // own plain one, neither the shared hairMat
+                mesh.material = hairStyleName === "hair2" ? femaleHair2Mat : femaleHair1Mat
                 femaleHairs.push(mesh)
                 mesh.isVisible = toSave.gender === "female" && hairStyleName === toSave.hair
                 return
@@ -161,16 +186,23 @@ export async function setupCharacterScene(engine){
         if(meshPartName.includes("scalp")){
             mesh.material = hairMat
             scalpMesh = mesh
-            mesh.isVisible = toSave.gender !== "female"
+            setTreeVisible(mesh, toSave.gender !== "female")
             return
         }
 
         const toPush = mesh.name.split(".")[1]
 
-        if(meshPartName.includes("mainbody")){
+        // checked BEFORE the plain "mainbody" match below, which would
+        // otherwise also match this name (see this file's own
+        // mainBodyHandMesh comment up top)
+        if(meshPartName.includes("mainbodyhand")){
+            mesh.material = skinMat
+            mainBodyHandMesh = mesh
+            setTreeVisible(mesh, toSave.gender !== "female")
+        } else if(meshPartName.includes("mainbody")){
             mesh.material = skinMat
             mainBodyMesh = mesh
-            mesh.isVisible = toSave.gender !== "female"
+            setTreeVisible(mesh, toSave.gender !== "female")
         }
         if(toPush === undefined) return
         if(meshPartName.includes("cloth")) {
@@ -262,12 +294,13 @@ export async function setupCharacterScene(engine){
         toSave.gender = gender
         const isFemale = gender === "female"
 
-        if(mainBodyMesh) mainBodyMesh.isVisible = !isFemale
-        if(scalpMesh) scalpMesh.isVisible = !isFemale
+        if(mainBodyMesh) setTreeVisible(mainBodyMesh, !isFemale)
+        if(mainBodyHandMesh) setTreeVisible(mainBodyHandMesh, !isFemale)
+        if(scalpMesh) setTreeVisible(scalpMesh, !isFemale)
         clothes.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.cloth)
         pants.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.pants)
 
-        if(femaleBodyMesh) femaleBodyMesh.isVisible = isFemale
+        if(femaleBodyMesh) setTreeVisible(femaleBodyMesh, isFemale)
         femaleAccessories.forEach(mesh => mesh.isVisible = isFemale)
 
         // a hair style picked under the OTHER gender never matches this
@@ -324,6 +357,17 @@ export async function setupCharacterScene(engine){
         const { r, g, b } = pickerVal
         const mat = matMap[selectedCategory]
         if (mat) mat.diffuseColor.copyFrom(pickerVal)
+        // femaleHair1Mat/femaleHair2Mat are SEPARATE material objects from
+        // hairMat (so hair2's bump texture and both hairstyles'
+        // backFaceCulling:false don't also apply to male hair/scalp, which
+        // still shares hairMat) - being different objects entirely means
+        // neither ever heard about a diffuseColor change made through
+        // matMap.hair above. Mirror it here so all three hair materials
+        // track the same picked color.
+        if (selectedCategory === "hair"){
+            femaleHair1Mat.diffuseColor.copyFrom(pickerVal)
+            femaleHair2Mat.diffuseColor.copyFrom(pickerVal)
+        }
         if (selectedCategory === "hair")  toSave = { ...toSave, hairColor:  { r, g, b } }
         if (selectedCategory === "cloth") toSave = { ...toSave, clothColor: { r, g, b } }
         if (selectedCategory === "pants") toSave = { ...toSave, pantsColor: { r, g, b } }

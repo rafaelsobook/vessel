@@ -426,12 +426,14 @@
         <div class="craft-body">
             <ul class="craft-categories">
                 <li class="craft-categ-btn active" data-categ="sword">Sword</li>
-                <li class="craft-categ-btn" data-categ="armor">Armor</li>
-                <li class="craft-categ-btn" data-categ="helmet">Helmet</li>
-                <li class="craft-categ-btn" data-categ="pauldron">Pauldron</li>
+                <li class="craft-categ-btn" data-categ="axe">Axe</li>
+                <li class="craft-categ-btn" data-categ="spear">Spear</li>
             </ul>
             <div class="craft-parts-stage sword-mode">
-                <!-- sword: 4 parts around a center icon -->
+                <!-- every remaining category (sword/axe/spear) is a
+                     part-based weapon (createweapon.js's own
+                     WEAPON_PART_LIST) - axe just has no pommel, hidden per
+                     category by craftingui.js's own selectCategory() -->
                 <div class="craft-parts-diagram sword-layout">
                     <div class="part-slot blade-slot" data-part="blade">
                         <p class="part-slot-label">Blade</p>
@@ -458,14 +460,6 @@
                     <div class="connector-line line-guard"></div>
                     <div class="connector-line line-pommel"></div>
                     <div class="connector-line line-handle"></div>
-                </div>
-                <!-- armor/helmet/pauldron: single mesh, single box -->
-                <div class="craft-parts-diagram single-layout">
-                    <div class="part-slot single-slot" data-part="item">
-                        <p class="part-slot-label">Armor</p>
-                        <div class="part-slot-box"></div>
-                        <p class="part-slot-material"></p>
-                    </div>
                 </div>
             </div>
         </div>

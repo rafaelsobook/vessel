@@ -58,6 +58,14 @@ const WEAPON_PART_LIST = {
 }
 const DEFAULT_PART_LIST = ["blade", "guard", "handle", "pommel"]
 
+// exported - craftingui.js's own crafting-parts diagram needs the exact
+// same per-weaponType part list (e.g. to know axe has no pommel slot at
+// all), so it reads it from here instead of keeping a second hardcoded copy
+// that could drift out of sync with this file's own real behavior
+export function getWeaponParts(weaponType){
+    return WEAPON_PART_LIST[weaponType] ?? DEFAULT_PART_LIST
+}
+
 // Some weapon families SHARE a specific part's actual mesh with a
 // DIFFERENT weaponType instead of having their own - pickaxe has no
 // pickaxe_handle_* mesh in axes.glb at all (the artist's own outliner only

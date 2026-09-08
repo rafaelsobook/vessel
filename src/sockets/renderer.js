@@ -230,19 +230,38 @@ let renderCallback = function () {
             } else {
                 _lookTarget.set(en._wanderTarget.x, en.body.position.y, en._wanderTarget.z)
                 en.body.lookAt(_lookTarget)
+
+                // a plain wander (not a dodge burst) strolls at its own pace
+                // instead of sprinting everywhere it idly roams - opt-in via
+                // det.stats.walkSpd (genenemy.ts's own forestDeer/deerBase is
+                // the first enemy to set one). Any enemy without it
+                // (slime/monolith/lesserdemon etc) falls straight through to
+                // the exact same en.spd/speedMult behavior this always had.
+                const walkSpd = en.det.stats?.walkSpd
+                const isWalking = !en._isDodging && !!walkSpd
                 // dodging moves at 3x normal speed for its short burst -
                 // see createEnemy.js's own dodge-detection interval
                 const speedMult = en._isDodging ? 3 : 1
-                _moveVec.set(0, 0, en.spd * speedMult * dt)
+                const moveSpd = isWalking ? walkSpd : en.spd * speedMult
+                _moveVec.set(0, 0, moveSpd * dt)
                 en.body.locallyTranslate(_moveVec)
 
-                findAnimVariants(en.anims, "running").forEach(anim => {
+                // findAnimVariants returns [] for a rig with no "walking"
+                // clip at all (slime/monolith/lesserdemon's own glbs never
+                // modeled one) - falls back to "running" for those instead
+                // of silently playing nothing
+                const animBase = isWalking && findAnimVariants(en.anims, "walking").length ? "walking" : "running"
+                findAnimVariants(en.anims, animBase).forEach(anim => {
                     if (!anim.isPlaying) {
-                        anim.speedRatio = .9 + en.spd * speedMult * .05
+                        anim.speedRatio = .9 + moveSpd * .05
                         anim.play()
                     }
                 })
-                if(en.runSound && !en.runSound.isPlaying) en.runSound.play()
+                // no dedicated walk sound asset exists yet (monsterSounds
+                // only ever loads a run clip, ${modelStyle}run.mp3) - skip it
+                // entirely while walking rather than playing running audio
+                // under a walking animation
+                if(!isWalking && en.runSound && !en.runSound.isPlaying) en.runSound.play()
             }
             return
         }

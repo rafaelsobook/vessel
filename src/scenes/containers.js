@@ -55,6 +55,7 @@ export async function setStartingContainers(scene){
         let monolithRoot = await loadMonsterRoot("./models/monsters/monolith.glb", scene)
         let slimeRoot = await loadMonsterRoot("./models/monsters/slime.glb", scene)
         let lesserDemonRoot = await loadMonsterRoot("./models/monsters/lesserdemon.glb", scene)
+        let deerRoot = await loadMonsterRoot("./models/monsters/deer.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
         let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
 
@@ -118,6 +119,7 @@ export async function setStartingContainers(scene){
             monolithRoot,
             slimeRoot,
             lesserDemonRoot,
+            deerRoot,
             treasureRoot,
             bonfireRoot
         })

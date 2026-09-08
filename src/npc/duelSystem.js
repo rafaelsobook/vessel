@@ -25,10 +25,10 @@ import { getPlayersOnScene, getProjectilesOnScene, pushDuelOpponentOnScene, remo
 import { ATK_COLLIDER_PARKED_Y } from "../charactersystem/createMyCharacter.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { exitScene } from "../sockets/exitsocket.js"
-import { changeScene } from "../main/main.js"
+import { travelToPlace } from "../tools/travel.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { startConv } from "../components/conversations.js"
+import { displaySpeech } from "../tools/speechgui.js"
 import { showAnswerButtons } from "../tools/popupUI.js"
 import { giveSkill } from "../components/skillsui.js"
 import { receiveTitle } from "../components/titleUI.js"
@@ -221,19 +221,14 @@ async function acceptDuel(npcDet){
     const duelGrounds = findPlaceMetaData(DUEL_PLACE_ID)
     if(!duelGrounds) return console.warn("acceptDuel: duel grounds (placeId 200) not found")
 
-    const charState = getCharState()
-
-    charState.currentPlace.placeId = duelGrounds.placeId
-    charState.currentPlace.name = duelGrounds.name
-    charState.currentPlace.areaType = duelGrounds.areaType
-
-    charState.x = duelGrounds.spawn.x
-    charState.y = duelGrounds.spawn.y
-    charState.z = duelGrounds.spawn.z
-
-    await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-    exitScene(charState.owner)
-    await changeScene("whatever")
+    await travelToPlace({
+        placeId: duelGrounds.placeId,
+        name: duelGrounds.name,
+        areaType: duelGrounds.areaType,
+        x: duelGrounds.spawn.x,
+        y: duelGrounds.spawn.y,
+        z: duelGrounds.spawn.z,
+    })
 }
 
 // Opponent's outgoing damage - "enemy-attacked"'s own damage-to-player path
@@ -516,17 +511,14 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         const destMeta = findPlaceMetaData(exitPlaceDetail.placeId)
         if(!destMeta) return console.warn(`[duel] findPlaceMetaData found nothing for exitPlaceDetail.placeId ${exitPlaceDetail.placeId}`)
 
-        const freshCharState = getCharState()
-        freshCharState.currentPlace.placeId = exitPlaceDetail.placeId
-        freshCharState.currentPlace.name = exitPlaceDetail.name
-        freshCharState.currentPlace.areaType = exitPlaceDetail.areaType
-        freshCharState.x = destMeta.spawn.x
-        freshCharState.y = destMeta.spawn.y
-        freshCharState.z = destMeta.spawn.z
-
-        await updateMyDetailsOL(freshCharState, checkIfTokenSaved(), true, true)
-        exitScene(freshCharState.owner)
-        await changeScene("whatever")
+        await travelToPlace({
+            placeId: exitPlaceDetail.placeId,
+            name: exitPlaceDetail.name,
+            areaType: exitPlaceDetail.areaType,
+            x: destMeta.spawn.x,
+            y: destMeta.spawn.y,
+            z: destMeta.spawn.z,
+        })
     }
 
     // Shared damage-application path for anything that can hit this
@@ -634,7 +626,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 // battleSpeech.afterTheFightSpeech (npcDetails.js) if this
                 // fighter has one - falls back to the old flat line for any
                 // npcFighter that doesn't
-                startConv(toLines(npcDet.name, [npcDet.battleSpeech?.afterTheFightSpeech || "...alright, alright. You've made your point."]), returnToExitPlace)
+                displaySpeech([
+                    ...toLines(npcDet.name, [npcDet.battleSpeech?.afterTheFightSpeech || "...alright, alright. You've made your point."]),
+                    { speech: "You Win!" }
+                ], returnToExitPlace, undefined, true)
                 grantDuelWinRewards()
             }
         }
@@ -831,7 +826,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 // assistants don't speak, per spec - the fight still ends
                 // (the lines above run regardless of who landed the blow),
                 // just no dialogue from a non-main opponent
-                if(isMainOpponent) startConv(toLines(npcDet.name, ["Ha! Down you go. Good bout though."]), returnToExitPlace)
+                if(isMainOpponent) displaySpeech([
+                ...toLines(npcDet.name, ["Ha! Down you go. Good bout though."]),
+                { speech: "You Lose!" }
+            ], returnToExitPlace, undefined, true)
             }
         }, durationMs)
     }
@@ -1019,7 +1017,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
 
         const lines = npcDet.battleSpeech?.whileFighting
         if(!lines?.length || Math.random() >= BATTLE_SPEECH_CHANCE) return
-        startConv(toLines(npcDet.name, [lines[Math.floor(Math.random() * lines.length)]]), () => {})
+        displaySpeech(toLines(npcDet.name, [lines[Math.floor(Math.random() * lines.length)]]), () => {}, undefined, true)
     }
     // assistants don't speak at all, per spec - not even mid-fight lines -
     // so don't bother starting the check/timer for one in the first place
@@ -1282,7 +1280,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             // most common way to actually lose a duel, since most opponents
             // (Renarden included) whittle the player down with plain swings
             // long before ever landing a skill hit.
-            if(isMainOpponent) startConv(toLines(npcDet.name, ["Ha! Down you go. Good bout though."]), returnToExitPlace)
+            if(isMainOpponent) displaySpeech([
+                ...toLines(npcDet.name, ["Ha! Down you go. Good bout though."]),
+                { speech: "You Lose!" }
+            ], returnToExitPlace, undefined, true)
         }
     }, ATTACK_INTERVAL_MS)
     console.log("[duel] spawnDuelOpponent: attackInterval set")

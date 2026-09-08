@@ -20,13 +20,10 @@ import {
 import { createAggregate } from '../tools/physics';
 import { createMat } from '../tools/materials';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
-import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
-import { exitScene } from '../sockets/exitsocket';
 import { findPlaceMetaData } from '../states/placestates';
-import { changeScene } from '../main/main';
 import { openCloseInteractBtn } from '../tools/popupUI';
-import { checkIfTokenSaved } from "../tools/tools"
 import { getAllSounds } from '../components/soundSystem';
+import { travelToPlace } from '../tools/travel';
 
 const WALL_HEIGHT    = 0.5; // same knee-wall height every "room" defaults to
 const WALL_THICKNESS = 0.3;
@@ -110,20 +107,17 @@ export async function createDuelArena(scene, room, characterBody, hasPhysics = t
             openCloseInteractBtn("normal", "none", async () => {
                 openCloseInteractBtn(false)
 
-                const charState = getCharState()
                 const tcpCharPlaceMD = findPlaceMetaData(exitPlaceDetail.placeId)
 
-                charState.currentPlace.placeId = exitPlaceDetail.placeId
-                charState.currentPlace.name = exitPlaceDetail.name
-                charState.currentPlace.areaType = exitPlaceDetail.areaType
-                charState.x = tcpCharPlaceMD.spawn.x
-                charState.y = tcpCharPlaceMD.spawn.y
-                charState.z = tcpCharPlaceMD.spawn.z
-
                 getAllSounds().normalDoorOC?.play()
-                await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                exitScene(charState.owner)
-                await changeScene("whatever")
+                await travelToPlace({
+                    placeId: exitPlaceDetail.placeId,
+                    name: exitPlaceDetail.name,
+                    areaType: exitPlaceDetail.areaType,
+                    x: tcpCharPlaceMD.spawn.x,
+                    y: tcpCharPlaceMD.spawn.y,
+                    z: tcpCharPlaceMD.spawn.z,
+                })
             })
         })
         onIntersecExitTrig(exitTrigger, characterBody, scene, () => {

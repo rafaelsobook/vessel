@@ -14,6 +14,7 @@ import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
 import { giveAllItems, wipeAllItems } from '../charactersystem/inventory';
 import { giveSkill, giveAllSkills, giveRandomSkill, upgradeAllOwnedSkills } from '../components/skillsui';
+import { displaySpeech } from '../tools/speechgui';
 import { giveRandomTitle } from '../components/titleUI';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
@@ -315,10 +316,15 @@ function setupControls(scene, allsounds) {
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
     isMoving = false;
-    let jumpSpeed = 5;
+    const BASE_JUMP_SPEED = 5;
+    // statsSystem.js's own dex upgrade - same "read the live stat fresh at
+    // the moment it matters" approach getTotalDefense()/getTotalAtkSpd()
+    // already use for dex/atkSpd, rather than caching a jump speed once at
+    // controller setup and letting it go stale the instant dex changes
+    const DEX_JUMP_BONUS_PER_POINT = 0.25;
     // both tunable to taste - raise either if small bounces/jitter still flip to "inAir" too easily
     const GROUND_CHECK_MARGIN = 0.4; // extra ray length below the capsule's own bottom, so the check still lands on flat ground even mid-stride or after a small bounce
-    const GROUNDED_VELOCITY_TOLERANCE = 5.5; // upward speed still treated as "grounded" (bounce/jitter, not an actual jump - jumpSpeed is 5)
+    const GROUNDED_VELOCITY_TOLERANCE = 5.5; // upward speed still treated as "grounded" (bounce/jitter, not an actual jump - BASE_JUMP_SPEED is 5, higher with dex)
 
     const input = { forward: 0, right: 0 };
 
@@ -654,6 +660,12 @@ function setupControls(scene, allsounds) {
             case "h":
                 upgradeAllOwnedSkills()
             break
+            case "m":
+                // DEBUG CHEAT - quick trial of tools/speechgui.js's new
+                // Babylon GUI dialogue box, same call shape as
+                // conversations.js's own startConv([{speech}], cb)
+                // displaySpeech([{ speech: "hello" }], false, 100, true)
+            break
             case "f":
                 restoreAll()
             break
@@ -791,6 +803,7 @@ function setupControls(scene, allsounds) {
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10 || charState.currentPlace.placeId === 101) return openClosePopup("cannot jump here", true, 1000)
         const vel = aggregate.body.getLinearVelocity();
+        const jumpSpeed = BASE_JUMP_SPEED + (charState.stats.dex || 0) * DEX_JUMP_BONUS_PER_POINT
         aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
         // no animation call here - updateMovement()'s next tick sees vel.y > 0.1,
         // isGrounded() flips false immediately, and the mode sync below drives

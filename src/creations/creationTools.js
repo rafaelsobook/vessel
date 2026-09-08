@@ -177,7 +177,7 @@ export function createMonsterMaterial(scene, mosterModelStyle,textureName){
     // if(tex1rough) mat.specularTexture = tex1rough
     // mat.bumpScale = 1
     mat.backFaceCulling = false
-    // mat.specularColor = new Color3(.2,.2,.2)
+    mat.specularColor = new Color3(0,0,0)
     return mat
 }
 export function createMesh(scene, meshName, size, pos, visibility, isVisible, hasActionManager, rotations){

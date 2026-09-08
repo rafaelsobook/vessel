@@ -16,8 +16,9 @@ import { createDuelArena } from "../creations/createduelarena.js";
 import { startDuel } from "../npc/duelSystem.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
 import { getSocket, joinWorld } from "../sockets/joinsocket.js";
-import { changeScene, getEngine, setGameStatus } from "../main/main.js";
-import { getCharState, initiateCharacter, setAllowDeath, setCanPress, setCharStateMode, updateMyDetailsOL } from "../charactersystem/characterstate.js";
+import { getEngine, setGameStatus } from "../main/main.js";
+import { travelToPlace } from "../tools/travel.js";
+import { getCharState, initiateCharacter, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
 import { pushPlayer, setSocketContainers, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
@@ -29,13 +30,12 @@ import {emitMyLoc, runEmitMyLocInterval } from "../sockets/emits.js";
 import { disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay, showHideIcons } from "../charactersystem/uimanagement.js";
 import { obtain, reduceDurability } from "../charactersystem/inventory.js";
 import createAllNpcInArea from "../npc/createAllNpcInArea.js";
-import { exitScene } from "../sockets/exitsocket.js";
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js";
 import { createFireParticles } from "../tools/particlesystem.js";
 import { initSounds, getAllSounds, playSound } from "../components/soundSystem.js";
 import { createOriginal, createSky, createMainShadow, putFakeShadow } from "../creations/creationTools.js";
 import { setWorldChatAvailable } from "../components/worldChatSystem.js";
-import { faceForward } from "../controllers/inputMovement.js";
+import { clearLocTimeOut, faceForward } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
@@ -64,7 +64,7 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    //await SceneLoader.ImportMeshAsync("", "", "./models/avatar/alisa.glb", scene);
+    // await SceneLoader.ImportMeshAsync("", "", "./models/monsters/deer.glb", scene);
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()
@@ -428,22 +428,13 @@ export async function areaScene(placeDetail){
         pathTrigger.isPickable = false
 
         onIntersecEnterTrig(pathTrigger, myCharacter.body, scene, () => {
+
+            clearLocTimeOut()
+
             openCloseInteractBtn("normal", true, async () => {
                 openCloseInteractBtn(false)
 
-                const charState = getCharState()
-
-                charState.currentPlace.placeId = placeId
-                charState.currentPlace.name = name
-                charState.currentPlace.areaType = areaType
-
-                charState.x = startingPos.x
-                charState.y = startingPos.y
-                charState.z = startingPos.z
-
-                const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-                exitScene(charState.owner)
-                await changeScene("whatever")
+                await travelToPlace(path)
             })
         })
         onIntersecExitTrig(pathTrigger, myCharacter.body, scene, () => {

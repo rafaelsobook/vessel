@@ -173,6 +173,121 @@ export function obtainAll(itemsArray){
 // per call, so no extra work needed here to keep pickups distinct.
 export function giveAllItems(){
     obtainAll([...lootNames.map(name => createLootItem(name)),
+        // same item shapes toSell.js's sellerBram stall already trusts
+        // (armor/pauldron/gauntlet art under images/items/equipable/* is
+        // guaranteed to exist for these three) - added for fit-testing
+        // equipable gear on the new femalebody rig
+        {
+            itemId: randomNum(),
+            name: "knightscale",
+            dn: "Knight's Scale",
+            itemCateg: "equipable",
+            itemType: "armor",
+            weaponType: undefined,
+            equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 45 },
+            qnty: 1,
+            desc: "Sturdy scale armor, fresh off Bram's anvil.",
+            rarity: "rare",
+            metalColor: METAL_COLOR.ADAMANTINE
+        },
+        {
+            itemId: randomNum(),
+            name: "ironpaul",
+            dn: "Iron Pauldron",
+            itemCateg: "equipable",
+            itemType: "pauldron",
+            weaponType: undefined,
+            equipAbilities: { dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 30 },
+            qnty: 1,
+            desc: "A solid iron pauldron, hammered to shape by Bram himself.",
+            rarity: "rare",
+            metalColor: METAL_COLOR.ADAMANTINE
+        },
+        {
+            itemId: randomNum(),
+            name: "gauntler",
+            dn: "Gauntlet",
+            itemCateg: "equipable",
+            itemType: "gauntlet",
+            weaponType: undefined,
+            equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 30 },
+            qnty: 1,
+            desc: "A well-fitted gauntlet, straight from the forge.",
+            rarity: "rare",
+            metalColor: METAL_COLOR.ADAMANTINE
+        },
+        // orionhelm (npcDetails.js) and ironjaw (toSell.js's sellerBram
+        // stall, dn "Knight's Helm III") - the two helmets missing from this
+        // list, for the same fit-testing purpose as knightscale/ironpaul/
+        // gauntler above
+        {
+            itemId: randomNum(),
+            name: "orionhelm",
+            modelName: "orionhelm",
+            dn: "Orion Helm",
+            itemCateg: "equipable",
+            itemType: "helmet",
+            weaponType: undefined,
+            equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 10 },
+            qnty: 1,
+            desc: undefined,
+            rarity: "rare",
+            metalColor: METAL_COLOR.SILVER
+        },
+        {
+            itemId: randomNum(),
+            name: "ironjaw",
+            modelName: "ironjaw",
+            dn: "Knight's Helm III",
+            itemCateg: "equipable",
+            itemType: "helmet",
+            weaponType: undefined,
+            equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 35 },
+            qnty: 1,
+            desc: "A full iron helm, dented once and re-forged since.",
+            rarity: "rare",
+            metalColor: METAL_COLOR.ADAMANTINE
+        },
         {
             itemId: randomNum(), // should be string also in client
             name: "lauriethat", // is also the image name

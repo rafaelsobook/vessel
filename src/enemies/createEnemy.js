@@ -42,7 +42,7 @@ export default function createEnemy(scene, det) {
     // that can't be bypassed no matter what called this or why
     if(scene.getMeshByName(`enemy.${det._id}`)) return null
     console.log(det)
-    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot} = getSocketContainers()
+    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
     // on openworld's uneven terrain, so look up the real ground height instead.
     // sampleTerrainSurfaceHeight (not terrainHeight) - matches the coarse,
@@ -53,7 +53,7 @@ export default function createEnemy(scene, det) {
     const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? sampleTerrainSurfaceHeight(det.x, det.z, OPENWORLD_TERRAIN_VERTS) : det.y
     let yPos = groundY+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
-        { x: det.x, y:yPos , z: det.z }, 1, false, true)
+        { x: det.x, y:yPos , z: det.z }, 0.3, false, true)
 
     // openworld's terrain is uneven and this enemy's y can drift (chunk streaming,
     // chase movement across slopes, etc.) - periodically verify against the real
@@ -108,6 +108,9 @@ export default function createEnemy(scene, det) {
         break
         case "lesserdemon":
             entries = lesserDemonRoot?.instantiateModelsToScene()
+        break
+        case "deer":
+            entries = deerRoot?.instantiateModelsToScene()
         break
     }
     // model container failed to load (missing glb) or modelStyle has no case
