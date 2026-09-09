@@ -71,8 +71,15 @@ const DEER_LOOKAHEAD_DIST = 5
 const DEER_LOOKAHEAD_DIST_SQ = DEER_LOOKAHEAD_DIST * DEER_LOOKAHEAD_DIST
 // how often (ms) each deer re-checks for a tree ahead - a full scene.meshes
 // scan every single frame for a background prop isn't worth it; this is a
-// last-moment dodge, not something that needs sub-frame precision
-const DEER_OBSTACLE_CHECK_INTERVAL_MS = 500
+// last-moment dodge, not something that needs sub-frame precision.
+// Was 500 at the deer's old 5 units/sec pace (2.5 units traveled between
+// checks, comfortably inside DEER_LOOKAHEAD_DIST's 5-unit margin). Scaled
+// down the same 3x the deer's own spd was bumped (see
+// createwagon.js/tcp/recources/wagons.ts's own WAGON_SPD/HARNESS_SPD) to
+// hold that exact same 2.5-unit margin - left at 500 with a 3x faster deer,
+// it would cover 7.5 units between checks, blowing straight past the
+// 5-unit lookahead with zero chance of ever detecting a tree in the gap.
+const DEER_OBSTACLE_CHECK_INTERVAL_MS = 167
 
 // "tree" is the one obstacle category confirmed to exist as its own named
 // scene meshes - same substring match attackingSystem.js's own
