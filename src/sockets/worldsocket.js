@@ -28,7 +28,7 @@ import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import createWagon, { positionWagonBehindDeer } from "../assetcreation/createwagon.js"
-import createHarnessDeer from "../assetcreation/createharnessdeer.js"
+import createHarnessDeer, { computeHarnessDeerPosition } from "../assetcreation/createharnessdeer.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -1135,6 +1135,13 @@ export function reCreateMeshesInScene() {
 
         const deer = createHarnessDeer(scene, deerTcpInfo)
         if(deer) pushHarnessDeerOnScene(deer)
+        // TEMP DEBUG - so the wagon's own [wagon debug] placement log can
+        // be compared directly against where this deer actually is right
+        // now. Safe to delete once wagons are confirmed positioned
+        // correctly again.
+        const debugPos = computeHarnessDeerPosition(deerTcpInfo)
+        console.log(`[wagon debug] deer.${deerTcpInfo._id} (name=${deerTcpInfo.name}) computed pos=`,
+            [debugPos.x.toFixed(2), debugPos.z.toFixed(2)], ' dir=', [debugPos.dirX.toFixed(2), debugPos.dirZ.toFixed(2)])
     })
     tcpWagons.length && tcpWagons.forEach(wagonTcpInfo => {
         if (characterState.currentPlace.placeId !== wagonTcpInfo.currentPlaceId) return
@@ -1150,12 +1157,35 @@ export function reCreateMeshesInScene() {
         pushWagonOnScene(wagon)
 
         // initial placement - the deer this wagon is paired with may not
-        // exist yet (e.g. this wagon's own deer hasn't spawned into range
-        // yet on this client) - if so, it just sits wherever wagonRoot's
-        // own template happens to be until a deer shows up and
-        // renderer.js's own loop starts correcting it every frame
+        // exist yet AT ALL (e.g. this wagon's own deer hasn't spawned into
+        // range yet on this client) - if so, it just sits wherever
+        // createWagonBody's own template happens to be until a deer shows
+        // up and renderer.js's own loop starts correcting it every frame.
+        // If the deer DOES exist, its position is computed directly via
+        // computeHarnessDeerPosition - the same pure, elapsed-time-only
+        // formula renderer.js's own loop calls every frame - rather than
+        // requiring pairedDeer._lastResolved to already be set.
+        // _lastResolved is only ever written by renderer.js's own
+        // onBeforeRenderObservable loop, which hasn't run even once yet
+        // this early (right on connect) - relying on it here used to
+        // silently skip this teleport every time, leaving the wagon
+        // sitting near the collider template's default spot (near the
+        // scene origin, likely hundreds/thousands of units from the
+        // deer's actual HARNESS_ORIGIN-based position) until
+        // applyWagonPhysics's own clamped correction term slowly crawled
+        // it into view over a very long time - the "wagon invisible"
+        // report this fixes.
         const pairedDeer = harnessDeerOnScene.find(dr => dr._id === wagonTcpInfo.deerId)
-        if(pairedDeer?._lastResolved) positionWagonBehindDeer(sceneDet.scene, wagon, pairedDeer._lastResolved)
+        // TEMP DEBUG - confirms whether a paired deer was even found at
+        // creation time, and if so, exactly where the teleport placed the
+        // wagon. Safe to delete once wagons are confirmed visible again.
+        if(!pairedDeer){
+            console.warn(`[wagon debug] wagon.${wagonTcpInfo._id} has no paired deer (deerId=${wagonTcpInfo.deerId}) on this client yet - staying at its default spot`)
+        }else{
+            positionWagonBehindDeer(sceneDet.scene, wagon, pairedDeer._lastResolved ?? computeHarnessDeerPosition(pairedDeer.det))
+            console.log(`[wagon debug] wagon.${wagonTcpInfo._id} deerId=${wagonTcpInfo.deerId} offsetZ=${wagonTcpInfo.offsetZ} placed at`, wagon.body.position.asArray().map(n => n.toFixed(2)),
+                ' using', pairedDeer._lastResolved ? '_lastResolved' : 'computeHarnessDeerPosition fallback')
+        }
     })
     if(characterState.currentPlace.placeId === 9){
         console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)

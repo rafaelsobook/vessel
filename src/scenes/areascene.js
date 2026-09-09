@@ -64,8 +64,8 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    const wagon = await SceneLoader.ImportMeshAsync("", "", "./models/outdors/wagon.glb", scene);
-    wagon.meshes[0].position = new Vector3(0, 2, 503);
+    // const wagon = await SceneLoader.ImportMeshAsync("", "", "./models/outdors/wagon.glb", scene);
+    // wagon.meshes[0].position = new Vector3(0, 2, 503);
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()

@@ -591,12 +591,12 @@ function setupControls(scene, allsounds) {
             case "shift": currentSpeed = walkSpeed; break;
             case "c":
                 console.log("players ", getPlayersOnScene())
-                // clearLocTimeOut()
-                // myPlayer.body.position.x = 0
-                // myPlayer.body.position.z = 1100
-                // myPlayer.body.position.y = 20
-                // hideShowAllScreenUI(hideUIToggle)
-                // hideUIToggle = !hideUIToggle
+                clearLocTimeOut()
+                myPlayer.body.position.x = 0
+                myPlayer.body.position.z = 600
+                myPlayer.body.position.y = 20
+                hideShowAllScreenUI(hideUIToggle)
+                hideUIToggle = !hideUIToggle
             break
             case "e":
                 if(weaponLightning){

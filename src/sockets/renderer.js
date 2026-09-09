@@ -1,5 +1,5 @@
 import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene, getWagonsOnScene, getHarnessDeerOnScene } from "./worldsocket";
-import { positionWagonBehindDeer } from "../assetcreation/createwagon.js";
+import { applyWagonPhysics } from "../assetcreation/createwagon.js";
 import { resolveHarnessDeerPosition } from "../assetcreation/createharnessdeer.js";
 import { getCharState } from "../charactersystem/characterstate.js";
 import { playAnim, ANIM_STATE, findAnimVariants } from "../tools/animation.js";
@@ -366,15 +366,15 @@ let renderCallback = function () {
     // wagon (tcp/recources/wagons.ts's own Twagon) - no movement law of its
     // own at all anymore, purely a follower: find its paired deer by
     // deerId, read whatever position the deer loop above JUST resolved
-    // this exact frame, and trail det.offsetZ behind it (createwagon.js's
-    // own positionWagonBehindDeer - plain sampleTerrainSurfaceHeight for y
-    // and yaw-only facing, same as the deer loop above and every other
-    // moving entity in this game - neither one pitches to match slope
-    // anymore, see positionWagonBehindDeer's own comment for why that was
-    // tried and reverted). A wagon whose deer isn't on THIS client's scene
-    // right now (not yet in range, or briefly between reCreateMeshesInScene
-    // passes) is simply skipped for this frame - it stays wherever it last
-    // was rather than popping to some fallback position.
+    // this exact frame, and trail det.offsetZ behind it. Real Havok
+    // physics (createwagon.js's own applyWagonPhysics) - drives the box
+    // collider via setLinearVelocity every tick rather than a direct
+    // position.set; Y is left to gravity/contact with the terrain, only
+    // X/Z and yaw are ever commanded. A wagon whose deer isn't on THIS
+    // client's scene right now (not yet in range, or briefly between
+    // reCreateMeshesInScene passes) is simply skipped for this frame - its
+    // physics body just keeps drifting under gravity/whatever velocity it
+    // last had rather than getting a fresh command.
     getWagonsOnScene().forEach(wgn => {
         if(!wgn?.body || !wgn.det) return
         if(charState.currentPlace.placeId !== wgn.det.currentPlaceId) return
@@ -382,7 +382,7 @@ let renderCallback = function () {
         const deer = getHarnessDeerOnScene().find(dr => dr._id === wgn.det.deerId)
         if(!deer?._lastResolved) return
 
-        positionWagonBehindDeer(scene, wgn, deer._lastResolved)
+        applyWagonPhysics(wgn, deer._lastResolved)
     })
     getNpcOnScene().forEach(player => {
         if(charState.currentPlace.placeId !== player.currentPlaceId) return
