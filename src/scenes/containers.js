@@ -23,9 +23,18 @@ async function loadMonsterRoot(path, scene){
 // loadAvatarContainer path above (wrong tool for a static prop). Same
 // "warn and fall back to null" resilience as every other optional asset
 // here - a missing/corrupt treasure.glb shouldn't take the whole scene down.
-async function loadPropRootSafe(path, scene){
+// functionBeforeMerge - optional pass-through to mergeAndLoadModel's own
+// escape hatch (loadmodel.js): when given, it's used INSTEAD OF the default
+// Mesh.MergeMeshes(container.meshes[0].getChildMeshes(), ...) step. That
+// default only works for a multi-part hierarchy (bonfire.glb/treasure.glb -
+// several child meshes under a root), which is why bonfireRoot/treasureRoot
+// never needed this. A single-mesh glb (wagon.glb - confirmed by its own
+// glTF JSON: exactly one node, no children at all) has nothing for
+// getChildMeshes() to find, so the default merge silently produces null -
+// see containers.js's own wagonRoot call for the real fix that needed.
+async function loadPropRootSafe(path, scene, functionBeforeMerge){
     try {
-        const mesh = await mergeAndLoadModel(path, scene)
+        const mesh = await mergeAndLoadModel(path, scene, functionBeforeMerge)
         if(mesh) mesh.isVisible = false
         return mesh
     } catch (error) {
@@ -58,6 +67,57 @@ export async function setStartingContainers(scene){
         let deerRoot = await loadMonsterRoot("./models/monsters/deer.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
         let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
+        // openworld ambient wagon traffic (tcp/recources/wagons.ts) - static,
+        // non-animated prop (confirmed by grepping wagon.glb's own raw text:
+        // no "animations" key at all). Unlike bonfireRoot/treasureRoot,
+        // wagon.glb is a SINGLE fused mesh with no children at all (confirmed
+        // against its own glTF JSON: one node, "wagon", nothing under it) -
+        // mergeAndLoadModel's default Mesh.MergeMeshes(...getChildMeshes())
+        // step finds nothing to merge for a leaf mesh like this and silently
+        // returns null, which is why wagons never actually appeared. The
+        // functionBeforeMerge callback skips that step entirely and just
+        // returns the one real mesh directly - same technique confirmed
+        // working via a manual SceneLoader.ImportMeshAsync test in-game.
+        let wagonRoot = await loadPropRootSafe("./models/outdors/wagon.glb", scene, container => {
+            const mesh = container.meshes.find(m => m.getTotalVertices() > 0)
+            if(!mesh) console.warn(`[containers] wagon.glb loaded but no mesh with geometry was found in it`)
+            return mesh ?? null
+        })
+        if(wagonRoot){
+            // wagon.glb's own shaft/tongue poles (what a deer actually
+            // harnesses to) sit at LOCAL -z, not +z - confirmed straight off
+            // the glb's own geometry bounds (its POSITION accessor:
+            // z ranges -5.23..2.36, i.e. the model extends more than twice
+            // as far in -z as +z, which is exactly the long shafts). Every
+            // wagon's own body.lookAt(...) (createwagon.js) always aims
+            // local +z at the travel direction, so without this the wagon
+            // drove shaft-end trailing instead of leading - and since the
+            // harness deer is parented at a fixed LOCAL offset off that
+            // same (wrong) frame, that's what actually threw it out to the
+            // wrong world position/rotation too, not a height bug on its
+            // own. Baked into the vertices ONCE here (not left as a plain
+            // .rotation, which lookAt would just overwrite on every single
+            // call anyway - same bakeCurrentTransformIntoVertices technique
+            // loadmodel.js's own loadMeshOnlyParts already uses) so every
+            // future .clone() already has its real front at +z, and both
+            // createwagon.js's lookAt calls and HARNESS_OFFSET_Z's existing
+            // +6 need no changes of their own to line up correctly.
+            // glTF imports commonly land with rotationQuaternion already set
+            // (not null) - Babylon ignores .rotation entirely whenever that's
+            // non-null, which would make the very next line silently do
+            // nothing. Forced back to null here so plain Euler .rotation
+            // actually takes effect, same as every other freshly-cloned
+            // mesh in this codebase that gets a rotationQuaternion assigned
+            // instead (createEnemy.js's own mainBodyMeshes.rotationQuaternion
+            // = Quaternion.Identity() right before it needs Euler-friendly
+            // handling is the same idea, just resetting to null here instead
+            // of identity since bakeCurrentTransformIntoVertices below folds
+            // this rotation into the geometry itself, not into either
+            // rotation property going forward)
+            wagonRoot.rotationQuaternion = null
+            wagonRoot.rotation.y = Math.PI
+            wagonRoot.bakeCurrentTransformIntoVertices()
+        }
 
         const HairModel = await importMeshSafe("./models/avatar/", "hairModels.glb", scene)
         const helmets = await importMeshSafe("./models/helmets/", "helmets.glb", scene)
@@ -121,7 +181,8 @@ export async function setStartingContainers(scene){
             lesserDemonRoot,
             deerRoot,
             treasureRoot,
-            bonfireRoot
+            bonfireRoot,
+            wagonRoot
         })
         return { animeBodyContainer }
     } catch (error) {

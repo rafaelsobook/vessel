@@ -311,7 +311,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = 6;
+    let sprintSpeed = 20;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)

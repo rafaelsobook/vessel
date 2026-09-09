@@ -1,4 +1,6 @@
-import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene } from "./worldsocket";
+import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnScene, getNpcOnScene, getWagonsOnScene, getHarnessDeerOnScene } from "./worldsocket";
+import { positionWagonBehindDeer } from "../assetcreation/createwagon.js";
+import { resolveHarnessDeerPosition } from "../assetcreation/createharnessdeer.js";
 import { getCharState } from "../charactersystem/characterstate.js";
 import { playAnim, ANIM_STATE, findAnimVariants } from "../tools/animation.js";
 import { getGameStatus } from "../main/main.js";
@@ -323,6 +325,64 @@ let renderCallback = function () {
             //     if(anim.name.includes('hit') && anim.isPlaying) return
             // })
         }
+    })
+    // harness deer (tcp/recources/wagons.ts's own Tharnessdeer) - the
+    // primary/driving entity of the wagon/deer pairing now (see wagons.ts's
+    // own header comment on the flip). Normally never locally translated/
+    // dead-reckoned frame-to-frame off a velocity, just recomputed FRESH
+    // every frame from the pure elapsed-time formula (driftless, zero
+    // network traffic to stay in sync) UNLESS this specific client has
+    // detected a tree in its path, in which case it switches to local
+    // per-frame translation instead (see createharnessdeer.js's own
+    // resolveHarnessDeerPosition for the full reasoning on why that can
+    // only ever be a per-client decision). Run BEFORE the wagon loop below
+    // so a wagon can read this exact frame's already-resolved deer position.
+    getHarnessDeerOnScene().forEach(deer => {
+        if(!deer?.body || !deer.det) return
+        if(charState.currentPlace.placeId !== deer.det.currentPlaceId) return
+
+        const resolved = resolveHarnessDeerPosition(scene, deer, dt)
+        const { x, z, dirX, dirZ } = resolved
+        const y = sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS)
+        deer.body.position.set(x, y, z)
+        // yaw-only facing, same as every other moving entity in this game -
+        // NOT the slope-sampling pitch tilt this used to have
+        // (faceAlongGroundSlope, tools/groundOrientation.js), which tipped
+        // the deer over onto its side (confirmed in-game)
+        if(deer.body.rotationQuaternion) deer.body.rotationQuaternion = null
+        deer.body.rotation.y = Math.atan2(dirX, dirZ)
+
+        // stashed (WITH y, unlike a plain resolved{x,z,dirX,dirZ}) so the
+        // wagon loop right below can read THIS frame's already-resolved
+        // deer position without calling resolveHarnessDeerPosition a
+        // second time - that call mutates local tree-dodge state
+        // (createharnessdeer.js's own deer._local), so invoking it twice in
+        // the same frame for the same deer would double-advance that state
+        // instead of just reading it. The wagon loop below only actually
+        // uses x/z/dirX/dirZ from this (its own y comes from its own
+        // independent ground sample, not the deer's).
+        deer._lastResolved = { x, y, z, dirX, dirZ }
+    })
+    // wagon (tcp/recources/wagons.ts's own Twagon) - no movement law of its
+    // own at all anymore, purely a follower: find its paired deer by
+    // deerId, read whatever position the deer loop above JUST resolved
+    // this exact frame, and trail det.offsetZ behind it (createwagon.js's
+    // own positionWagonBehindDeer - plain sampleTerrainSurfaceHeight for y
+    // and yaw-only facing, same as the deer loop above and every other
+    // moving entity in this game - neither one pitches to match slope
+    // anymore, see positionWagonBehindDeer's own comment for why that was
+    // tried and reverted). A wagon whose deer isn't on THIS client's scene
+    // right now (not yet in range, or briefly between reCreateMeshesInScene
+    // passes) is simply skipped for this frame - it stays wherever it last
+    // was rather than popping to some fallback position.
+    getWagonsOnScene().forEach(wgn => {
+        if(!wgn?.body || !wgn.det) return
+        if(charState.currentPlace.placeId !== wgn.det.currentPlaceId) return
+
+        const deer = getHarnessDeerOnScene().find(dr => dr._id === wgn.det.deerId)
+        if(!deer?._lastResolved) return
+
+        positionWagonBehindDeer(scene, wgn, deer._lastResolved)
     })
     getNpcOnScene().forEach(player => {
         if(charState.currentPlace.placeId !== player.currentPlaceId) return
