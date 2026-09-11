@@ -26,17 +26,12 @@ function displayOnlinePL(numbertoDisplay){
 async function updatePlayersOnlineDisplay() {
     if (!playersCountSmall || !playersCountBig) return
     let numberToDisplay = 16 + Math.floor(Math.random()*8)
-    console.log(numberToDisplay)
     displayOnlinePL(numberToDisplay)
-    console.log(tcpHttpURL)
 
     const res = await fetch(`${tcpHttpURL}`)
-    console.log(res)
     const tcpPlayers = await res.json()
-    console.log(tcpPlayers)
     // const count = tcpPlayers.length.toLocaleString()
     numberToDisplay += tcpPlayers.length
-    console.log(numberToDisplay)
 
     displayOnlinePL(numberToDisplay)
 

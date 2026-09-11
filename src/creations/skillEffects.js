@@ -250,9 +250,16 @@ export function castOffenseSkill(scene, player, skill, charState){
     const meteorGroundPos = skill.meteorRain
         ? computeGroundAOEPos(charState, player, randNum(skill.meteorRain.minDistance ?? 5, skill.meteorRain.maxDistance ?? 10), forward)
         : null
-    const aoeGroundPos = groundTrapPos ?? meteorGroundPos
+    // skill.lightningStrike (thunderclapSkill) - same exact shape as
+    // meteorRain right above (see thunderclapSkill's own comment in
+    // skillsData.js for why this is its own dedicated property/mechanic
+    // rather than reusing meteorRain's internals with a different visual)
+    const lightningGroundPos = skill.lightningStrike
+        ? computeGroundAOEPos(charState, player, randNum(skill.lightningStrike.minDistance ?? 12, skill.lightningStrike.maxDistance ?? 20), forward)
+        : null
+    const aoeGroundPos = groundTrapPos ?? meteorGroundPos ?? lightningGroundPos
     if(aoeGroundPos){
-        const circleRadius = skill.groundTrap ? getGroundTrapRadius(skill) : (skill.meteorRain?.spread ?? 4)
+        const circleRadius = skill.groundTrap ? getGroundTrapRadius(skill) : (skill.meteorRain?.spread ?? skill.lightningStrike?.spread ?? 4)
         createMagicCircle(aoeGroundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(circleRadius))
     } else {
         // circle stays up roughly through the cast window plus a beat after
@@ -294,6 +301,14 @@ export function castOffenseSkill(scene, player, skill, charState){
             // this just controls WHERE that spot is, not who's targeted.
             pendingCasts.delete(skill.name)
             triggerMeteorRain(scene, charState, skill, meteorGroundPos, powerScale)
+        } else if(skill.lightningStrike){
+            // thunderclapSkill - same shape as skill.meteorRain right above,
+            // just a real lightning bolt (createLightningBoltLine, stretched
+            // vertically from the sky down) instead of a falling meteor mesh.
+            // triggerThunderclapStrike does its own per-strike AOE damage
+            // check once each bolt actually lands, same as triggerMeteorRain.
+            pendingCasts.delete(skill.name)
+            triggerThunderclapStrike(scene, charState, skill, lightningGroundPos, powerScale)
         } else {
             // fireProjectileVolley owns clearing pendingCasts itself here,
             // once its own LAST scheduled bolt actually fires - a volley
@@ -649,7 +664,6 @@ export function castDashSkill(scene, player, skill, charState){
 
     const dash = skill.dash || {}
     const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
-    console.log("[dashstrike] aggregate present?", !!player.aggregate, "forward:", forward.asArray(), "impulseForce:", dash.impulseForce ?? DASH_STRIKE_DEFAULT_IMPULSE)
 
     if(player.aggregate){
         // mirrors positionAtkCollider's own (confirmed-working) normal-attack
@@ -662,14 +676,12 @@ export function castDashSkill(scene, player, skill, charState){
         // aggregate)` check (not `.aggregate?.body`) too, for the same reason.
         setTimeout(() => {
             if(!player.body || player.body.isDisposed()) return
-            console.log("[dashstrike] velocity before impulse:", player.aggregate.body.getLinearVelocity()?.asArray())
             // impulse = mass * deltaV (player mass is 10, see createcharacter.js's
             // createAggregate call) - bigger than a normal swing's own fixed
             // DASH_IMPULSE (25, createMyCharacter.js) since this skill is
             // supposed to read as a real dash, not a small attack-shove
             
             player.aggregate.body.applyImpulse(forward.scale(dash.impulseForce), player.body.absolutePosition)
-            console.log("[dashstrike] velocity right after impulse:", player.aggregate.body.getLinearVelocity()?.asArray())
             // without this, inputMovement.js's own movement loop hard-overwrites
             // linear velocity every physics tick while a movement key/joystick is
             // held, stomping this impulse before it ever renders a frame - same
@@ -677,7 +689,6 @@ export function castDashSkill(scene, player, skill, charState){
             markDashActive(dash.durationMs ?? 350)
         }, 200)
     } else {
-        console.log("[dashstrike] no player.aggregate - falling back to locallyTranslate ramp")
         // no physics body - ramp the position forward manually instead over
         // the same durationMs, covering roughly `distance` units either way
         // (same intent skillsData.js's own dash field comment describes)
@@ -2522,6 +2533,112 @@ function spawnFallingMeteor(scene, charState, skill, groundPos, powerScale){
             })
         }
     }, travelMs)
+}
+
+// --- thunderclapSkill's lightning strike (skill.lightningStrike, see
+// skillsData.js and the branch in castOffenseSkill above) ---
+// Same invisible-marker-then-shower SHAPE spawnFallingMeteor above already
+// established (see thunderclapSkill's own header comment in skillsData.js
+// for why this is its own dedicated pair, not a meteorRain reuse) - but a
+// real jagged bolt (effects/lightning.js's createLightningBoltLine, the
+// exact same helper thunderstrikeSkill's own lightningLine already draws)
+// instead of a falling mesh with a comet trail. Stretched VERTICALLY, from
+// high above the landing spot straight down to it, instead of
+// triggerLightningStrike's own horizontal caster-to-max-range line.
+const THUNDERCLAP_SKY_HEIGHT = 20 // how far above its own landing spot each bolt's sky-end starts
+const THUNDERCLAP_ORIGIN_JITTER = 1.5 // per-strike scatter around its own start point in the sky, so several strikes don't all draw from the exact same spot
+const THUNDERCLAP_STAGGER_MS = 260 // gap between each strike's own spawn, when lightningStrike.max is more than 1
+const THUNDERCLAP_BOLT_LIFETIME_MS = 450 // how long the bolt itself stays visible/reshaping (createLightningBoltLine's own lifetimeMs)
+const THUNDERCLAP_STRIKE_DELAY_MS = 120 // "flash, then boom" - ground impact lands a beat after the bolt itself appears, not the exact same instant a falling meteor's own travelMs delay gives it
+const THUNDERCLAP_IMPACT_RADIUS = 2.6
+
+function triggerThunderclapStrike(scene, charState, skill, groundPos, powerScale){
+    const lightningStrike = skill.lightningStrike
+    const count = randBetween(lightningStrike.min ?? 1, lightningStrike.max ?? 1)
+
+    for(let i = 0; i < count; i++){
+        setTimeout(() => spawnLightningStrike(scene, charState, skill, groundPos, powerScale), i * THUNDERCLAP_STAGGER_MS)
+    }
+}
+
+function spawnLightningStrike(scene, charState, skill, groundPos, powerScale){
+    const spread = skill.lightningStrike.spread ?? 3
+    const landingPos = new Vector3(
+        groundPos.x + randNum(-spread, spread),
+        groundPos.y,
+        groundPos.z + randNum(-spread, spread),
+    )
+    const skyPos = new Vector3(
+        landingPos.x + randNum(-THUNDERCLAP_ORIGIN_JITTER, THUNDERCLAP_ORIGIN_JITTER),
+        landingPos.y + THUNDERCLAP_SKY_HEIGHT,
+        landingPos.z + randNum(-THUNDERCLAP_ORIGIN_JITTER, THUNDERCLAP_ORIGIN_JITTER),
+    )
+
+    getAllSounds().electricHitS?.play()
+    createLightningBoltLine(scene, skyPos, landingPos, "yellow", {
+        updateInterval: 15,
+        lifetimeMs: THUNDERCLAP_BOLT_LIFETIME_MS,
+    })
+
+    setTimeout(() => {
+        playImpactSound(skill)
+        fireGenericBurst(scene, landingPos.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
+
+        // same "only the real caster's own client emits the actual hit"
+        // gate, and same enemy/duel-opponent damage+curse+burn application,
+        // spawnFallingMeteor's own identical block above already follows
+        if(charState.owner === getCharState()?.owner){
+            const freshCharState = getCharState()
+            getEnemiesOnScene().forEach(enemy => {
+                if(!enemy.body) return
+                const edx = enemy.body.position.x - landingPos.x
+                const edz = enemy.body.position.z - landingPos.z
+                if((edx * edx + edz * edz) > THUNDERCLAP_IMPACT_RADIUS * THUNDERCLAP_IMPACT_RADIUS) return
+
+                const abilityAdditions = getAdditionalsFromAbilities()
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+
+                dealDamageToEnemy({
+                    playerId: freshCharState.owner,
+                    dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                    targetId: enemy._id,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
+                })
+                registerSkillHitTarget(enemy, freshCharState)
+
+                const curseEffect = getSkillEffect(skill, "curse")
+                if(curseEffect && Math.random() < (curseEffect.chance ?? 1)){
+                    emitEnemyCurse({ targetId: enemy._id, currentPlaceId: freshCharState.currentPlace.placeId })
+                }
+
+                const burnEffect = getSkillEffect(skill, "burn")
+                if(burnEffect){
+                    startTargetBurn(burnEffect, enemy.body, scene, enemy.det?.bodyHeight, enemy.det?.bodyWidenes, dmg => dealDamageToEnemy({
+                        playerId: freshCharState.owner,
+                        dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                        targetId: enemy._id,
+                        currentPlaceId: freshCharState.currentPlace.placeId,
+                    }))
+                }
+            })
+
+            getDuelOpponentsOnScene().forEach(duelOpp => {
+                if(!duelOpp.body) return
+                const ddx = duelOpp.body.position.x - landingPos.x
+                const ddz = duelOpp.body.position.z - landingPos.z
+                if((ddx * ddx + ddz * ddz) > THUNDERCLAP_IMPACT_RADIUS * THUNDERCLAP_IMPACT_RADIUS) return
+
+                const abilityAdditions = getAdditionalsFromAbilities()
+                const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                duelOpp.applyDamage(totalDmg, { skill })
+
+                const burnEffect = getSkillEffect(skill, "burn")
+                if(burnEffect) startTargetBurn(burnEffect, duelOpp.body, scene, undefined, undefined, dmg => duelOpp.applyDamage(dmg))
+            })
+        }
+    }, THUNDERCLAP_STRIKE_DELAY_MS)
 }
 
 // --- continentalrendSkill's ground spike line (skill.groundSpikes, see

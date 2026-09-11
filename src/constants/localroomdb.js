@@ -453,9 +453,8 @@ export const metaDatas = [
                     collider.actionManager = new ActionManager(scene)
                     onIntersecEnterTrig(collider, player.body, scene, () => {
                         charState = getCharState()
-                        console.log(charState.quests)
                         const touchCrystalQuest = charState.quests.find(qst => qst.qName === "touchTheCrystal")
-                        if(!touchCrystalQuest) return console.log("no touchCrystalQuest")
+                        if(!touchCrystalQuest) return 
                         openCloseInteractBtn("normal", true, () => {
                             openCloseInteractBtn("none", false)
                             
@@ -474,7 +473,6 @@ export const metaDatas = [
                             let timeoutnums = 1000
                             let discPosY = 2
                             charState.aptitude.forEach(apt => {
-                                console.log(apt)
                                 const capturedY = discPosY
                                 setTimeout(() => {
                                     createMagicCircle({x: 1, y: capturedY, z: 3.1}, getSceneDet().scene, `apt_${apt.element}`, 2, 4000)
@@ -488,7 +486,7 @@ export const metaDatas = [
                             setTimeout( async () => {
                                 // touchCrystalQuest.questRequirements.completed = true
                                 const isQuestExist = setQuestCompleted("touchTheCrystal")
-                                if(!isQuestExist) return console.log("quest completion failed")
+                                if(!isQuestExist) return 
                                 // save to database
 
                                 setCharStateMode("idle")

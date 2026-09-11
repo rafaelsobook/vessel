@@ -1,4 +1,4 @@
-import { MeshBuilder, Quaternion, Vector3, PhysicsShapeCapsule, PhysicsAggregate } from "@babylonjs/core"
+import { Quaternion, Vector3, PhysicsShapeConvexHull, PhysicsAggregate } from "@babylonjs/core"
 import { getSocketContainers } from "../sockets/worldsocket.js"
 import { getRealGroundHeight } from "../tools/groundHeight.js"
 
@@ -69,15 +69,10 @@ import { getRealGroundHeight } from "../tools/groundHeight.js"
 // wagon (or worse) with nothing in the console to explain why
 const DEFAULT_WAGON_TRAIL_OFFSET_Z = 6
 
-// Collider box size (see createWagonBody) - kept as named constants
-// instead of literals inline, since WAGON_BODY_HEIGHT specifically needs
-// reusing below (both the center-pivot offset math and
-// WAGON_CAPSULE_RADIUS) and duplicating a bare number there would silently
-// go stale the next time this collider's size gets tuned. WAGON_BODY_WIDTH
-// (the old box's own width) is gone - a capsule has no separate width, only
-// WAGON_CAPSULE_RADIUS (derived from height) and WAGON_BODY_DEPTH (its length).
-const WAGON_BODY_HEIGHT = 2.75
-const WAGON_BODY_DEPTH = 6
+// Collider is now a real, purpose-modeled mesh (wagonbodycollider.glb, see
+// containers.js's own wagonBodyColliderRoot) instead of a primitive built
+// here - no more WAGON_BODY_HEIGHT/DEPTH size constants to keep in sync,
+// the shape comes straight from the asset.
 const WAGON_MASS = 1300
 const WAGON_LINEAR_DAMPING = 2.9
 const WAGON_ANGULAR_DAMPING = 2
@@ -86,19 +81,44 @@ const WAGON_ANGULAR_DAMPING = 2
 // reCreateMeshesInScene, for initial placement) now that body is a real
 // physics aggregate. NOT the per-tick path anymore - see applyWagonPhysics
 // below for that.
+//
+// wagon._placedOnce ENFORCES that "one-time" - worldsocket.js's own
+// "wagons-spawned" AND "harness-deer-spawned" listeners each independently
+// call reCreateMeshesInScene() on receipt, and index.ts's own staggered
+// startup sequence emits BOTH events on every single stagger tick - the
+// existing isAlreadyHere/getMeshByName dedup in reCreateMeshesInScene
+// should already stop a second CREATION for the same wagon, but this is a
+// second, structural line of defense directly on the one thing that
+// actually breaks if it ever fires twice: a stray repeat call here would
+// silently teleport (direct position.set, not velocity) an ALREADY-MOVING
+// wagon back to a NEW target computed from the deer's position at THIS
+// later moment - which, after the wagon's been driving for a while, can be
+// wildly different from wherever the wagon's own physics body actually is
+// by now. That's a hard teleport discontinuity, not a smooth correction -
+// confirmed against real logged data (a wagon's own position jumping +37
+// units in ONE direction while its own commanded velocity was negative the
+// entire time, the signature of a direct position write, not physics
+// integration).
 export function positionWagonBehindDeer(scene, wagon, deerResolved){
+    if(wagon._placedOnce){
+        console.warn(`[wagon debug] positionWagonBehindDeer called AGAIN for wagon.${wagon._id} - blocked (would have teleported an already-moving wagon)`)
+        return
+    }
+    wagon._placedOnce = true
+
     const { x: dx, z: dz, dirX, dirZ } = deerResolved
     const offsetZ = wagon.det.offsetZ ?? DEFAULT_WAGON_TRAIL_OFFSET_Z
     const x = dx - dirX * offsetZ
     const z = dz - dirZ * offsetZ
-    // getRealGroundHeight gives the GROUND SURFACE height, but the box is
-    // CENTER-pivoted (Babylon boxes always are) - placing its center
-    // directly on the surface buries the bottom half (WAGON_BODY_HEIGHT/2)
-    // into the terrain collider, which Havok resolves with a hard
-    // separating impulse on the very next physics step (a visible
-    // "explosion" launch) - so the center needs to sit HALF the box's
-    // height above the surface for the bottom face to land exactly on it.
-    const y = getRealGroundHeight(scene, x, z) + WAGON_BODY_HEIGHT / 2
+    // wagonbodycollider.glb's own pivot already sits at its bottom (raw
+    // POSITION bounds y:[0,2], confirmed straight off the glb's own JSON -
+    // see containers.js's own wagonBodyColliderRoot comment), unlike the
+    // old MeshBuilder box/capsule primitives (always CENTER-pivoted) that
+    // needed a +height/2 offset here to keep from burying their bottom
+    // half in the terrain (the "explosion on spawn" bug that caused).
+    // Placing this mesh's own position.y directly at the ground surface
+    // already lands its bottom flush - no offset needed anymore.
+    const y = getRealGroundHeight(scene, x, z)
 
     wagon.body.position.set(x, y, z)
     // rotationQuaternion forced back to null so plain Euler .rotation.y
@@ -185,10 +205,6 @@ export function applyWagonPhysics(wagon, deerResolved){
         wagon._lastDebugLog = now
         const errX = targetX - pos.x
         const errZ = targetZ - pos.z
-        console.log(`[wagon debug] wagon.${wagon._id} pos=`, [pos.x.toFixed(2), pos.z.toFixed(2)],
-            ' target=', [targetX.toFixed(2), targetZ.toFixed(2)],
-            ' error=', [errX.toFixed(2), errZ.toFixed(2)], ' errorMag=', Math.sqrt(errX*errX+errZ*errZ).toFixed(2),
-            ' vel=', [_wagonVelocity.x.toFixed(2), _wagonVelocity.y.toFixed(2), _wagonVelocity.z.toFixed(2)])
     }
 
     wagon.body.rotationQuaternion = null
@@ -231,20 +247,31 @@ export default function createWagon(scene, det){
         console.error(`[wagon debug] createWagonBody threw for wagon.${det._id}:`, err)
         return null
     }
+    if(!body){
+        // wagonBodyColliderRoot missing/failed-to-load - createWagonBody's
+        // own quiet-bail (same convention as wagonRoot's own missing-check
+        // above), loud here too while debug logging is still in place
+        console.warn(`[wagon debug] wagonBodyColliderRoot missing for wagon.${det._id} - createWagon bailing out, nothing will render`)
+        return null
+    }
 
     body.visibility = 0.4
     wagonMesh.parent = body
-    // wagonMesh's own local transform needs to be zeroed/offset relative
-    // to its new parent - left alone (just parenting, no position set),
-    // whatever local position the clone carried over from wagonRoot (a
-    // standalone template, never previously parented to anything) would
-    // offset the visible model away from the collider box it's now riding
-    // on. The box pivots at its CENTER (Babylon boxes always do), but the
-    // visual model's own pivot is at ground level (per this file's earlier
-    // rotation-bake work in containers.js), so it needs to sit HALF the
-    // box's height below that center to actually rest on the box's bottom
-    // face instead of floating half a box-height above it.
-    wagonMesh.position.set(0, -WAGON_BODY_HEIGHT / 2, 0)
+    // wagonMesh's own local transform needs to be zeroed relative to its
+    // new parent - left alone (just parenting, no position set), whatever
+    // local position the clone carried over from wagonRoot (a standalone
+    // template, never previously parented to anything) would offset the
+    // visible model away from the collider it's now riding on. Both
+    // wagonRoot AND wagonBodyColliderRoot now share the SAME ground-level
+    // pivot convention (each baked that way in containers.js), so unlike
+    // the old center-pivoted box/capsule primitives, a plain (0,0,0) local
+    // offset is the correct starting point here - no vertical compensation
+    // needed. Z/X may still need a small manual nudge once tested in-game
+    // if the two models' own footprints don't line up exactly (the
+    // collider's own bounds are asymmetric in Z, per its own comment in
+    // containers.js), but that's a visual tuning constant, not a structural
+    // fix like the old height offset was.
+    wagonMesh.position.set(0, 0, 0)
     if(wagonMesh.rotationQuaternion) wagonMesh.rotationQuaternion = null
     wagonMesh.rotation.set(0, 0, 0)
     wagonMesh.isVisible = true
@@ -255,69 +282,40 @@ export default function createWagon(scene, det){
     // reports exactly where things ended up. Safe to delete once wagons
     // are confirmed visible again.
     wagonMesh.computeWorldMatrix(true)
-    console.log(`[wagon debug] wagon.${det._id} created ok - body.pos=`, body.position.asArray().map(n => n.toFixed(2)),
-        ' body.isVisible=', body.isVisible, ' body.isEnabled=', body.isEnabled(),
-        ' wagonMesh.isVisible=', wagonMesh.isVisible, ' wagonMesh.isEnabled(true)=', wagonMesh.isEnabled(true),
-        ' wagonMesh worldPos=', wagonMesh.getAbsolutePosition().asArray().map(n => n.toFixed(2)),
-        ' totalVertices=', wagonMesh.getTotalVertices())
 
     return { det, _id: det._id, body }
 }
-// Babylon's mesh-based capsule auto-fit (PhysicsShapeCapsule.FromMesh, see
-// @babylonjs/core's own physicsShape.js) always orients the capsule along
-// the mesh's local Y (vertical) and derives radius from the X extent ONLY
-// - Z (depth) never factors in at all. Back when the collider was a box
-// (width x WAGON_BODY_HEIGHT x WAGON_BODY_DEPTH), that auto-fit would have
-// collapsed into a small, roughly spherical blob sitting at the box's
-// center (X half-width exceeded the Y half-height), completely ignoring
-// the wagon's real 6-unit-long footprint - still true now even with the
-// collider mesh itself built as a capsule (createWagonBody, below): its
-// own bounding box is still just as X/Y-symmetric (a Z-aligned capsule's
-// only X/Y extent IS its radius), so the auto-fit would still degenerate
-// to a near-zero-length capsule. Built explicitly here instead - the
-// SHAPE's own segment runs along LOCAL Z (the wagon's actual long axis /
-// direction of travel), radius taken from WAGON_BODY_HEIGHT/2 (its
-// vertical cross-section) - matches the wagon's real proportions far
-// better than the vertical auto-fit ever could, and (deliberately) the
-// exact same dimensions createWagonBody's own visible capsule mesh uses,
-// so the debug-visible shape actually matches what's really colliding.
-const WAGON_CAPSULE_RADIUS = WAGON_BODY_HEIGHT / 2
-function createWagonCapsuleShape(scene){
-    const halfDepth = WAGON_BODY_DEPTH / 2
-    const pointA = new Vector3(0, 0, -halfDepth + WAGON_CAPSULE_RADIUS)
-    const pointB = new Vector3(0, 0, halfDepth - WAGON_CAPSULE_RADIUS)
-    return new PhysicsShapeCapsule(pointA, pointB, WAGON_CAPSULE_RADIUS, scene)
-}
-
+// Collider mesh - a purpose-modeled glb (wagonbodycollider.glb, see
+// containers.js's own wagonBodyColliderRoot) instead of a MeshBuilder
+// primitive, cloned fresh per wagon straight off that persistent template
+// (same simple pattern createWagon's own wagonMesh = wagonRoot.clone(...)
+// already uses - no scene.getMeshByName cache/reuse dance needed here
+// anymore, since the template itself already only ever loads once, up
+// front, in containers.js).
+//
+// Shape: PhysicsShapeConvexHull, NOT "mesh" (PhysicsShapeType.MESH, a
+// CONCAVE triangle-mesh shape) - "mesh" WAS tried here at the user's own
+// request, then reverted after it produced exactly the predicted failure:
+// the wagon stopped moving in a straight line (verified the yaw/velocity
+// MATH itself is correct - matches createharnessdeer.js's own proven-
+// working Math.atan2(dirX,dirZ) convention exactly, so this wasn't a
+// direction-formula bug). Concave mesh shapes are a well-established
+// static/kinematic-only restriction across physics engines generally
+// (collision resolution against a concave shape isn't well-defined for two
+// moving/dynamic bodies) - every OTHER "mesh" shapeType usage in this
+// codebase (createvillage.js's own tree colliders, tools/physics.js's own
+// createAggregate switch) is exclusively static/mass:0, consistent with
+// that being a real constraint. This wagon is DYNAMIC (mass,
+// setLinearVelocity), so PhysicsShapeConvexHull - wrapping the collider
+// mesh's own real geometry in its convex hull - is the correct shape here.
 function createWagonBody(scene, wagonId){
-    // was scene.getMeshByName("wagon") - never actually matched anything
-    // (the template below is named "wagonbody", and the VISUAL mesh is
-    // "wagon.<id>", never plain "wagon"), so this reuse check silently
-    // missed every single time and a brand new template got created (and
-    // left sitting in the scene, never disposed) on every wagon spawn.
-    // Matching the template's own actual name fixes the reuse AND stops
-    // that leak.
-    let mainBody = scene.getMeshByName("wagonbody")
-    if(!mainBody){
-        // was a plain box - now a real capsule MESH (not just the physics
-        // SHAPE below), built with the exact same dimensions/orientation
-        // (height=WAGON_BODY_DEPTH along Z, radius=WAGON_CAPSULE_RADIUS)
-        // as createWagonCapsuleShape's own invisible collider, so
-        // createWagon's own body.visibility=0.4 debug transparency
-        // actually shows the real capsule instead of a box that no longer
-        // matches what's actually colliding
-        mainBody = MeshBuilder.CreateCapsule("wagonbody", { height: WAGON_BODY_DEPTH, radius: WAGON_CAPSULE_RADIUS, orientation: Vector3.Forward() }, scene)
-        mainBody.isVisible = false
-        mainBody.setEnabled(false)
-        mainBody.isPickable = false
-    }
+    const wagonBodyColliderRoot = getSocketContainers()?.wagonBodyColliderRoot
+    if(!wagonBodyColliderRoot) return null
 
-    const body = mainBody.clone(`wagonbody.${wagonId}`)
-    // template is isVisible=false (never itself shown, only ever cloned
-    // from) - without resetting this on the clone too, createWagon's own
-    // body.visibility = 0.4 (debug transparency) would never actually
-    // render anything, since isVisible gates rendering entirely before
-    // visibility/opacity is even considered
+    const body = wagonBodyColliderRoot.clone(`wagonbody.${wagonId}`)
+    // debug transparency (createWagon's own body.visibility=0.4) needs
+    // isVisible=true to render at all - the TEMPLATE stays isVisible=false
+    // (containers.js), so every clone needs this reset explicitly
     body.isVisible = true
     body.setEnabled(true)
     body.isPickable = false
@@ -329,16 +327,16 @@ function createWagonBody(scene, wagonId){
     // own existing { det, _id, body } shape
     //
     // createAggregate (tools/physics.js) only ever auto-fits a shape from
-    // the mesh's own bounding box for its "capsule" option - no way to
-    // hand it an already-built PhysicsShape - so this constructs the
-    // PhysicsAggregate directly instead (same technique areascene.js's own
-    // terrain collider already uses - passing a constructed PhysicsShape
-    // straight in as the second argument), manually mirroring
+    // the mesh's own bounding box for its "capsule"/"mesh"/"box" options -
+    // no way to hand it an already-built PhysicsShape - so this constructs
+    // the PhysicsAggregate directly instead (same technique areascene.js's
+    // own terrain collider already uses - passing a constructed
+    // PhysicsShape straight in as the second argument), manually mirroring
     // createAggregate's own post-construction setup (material + damping)
     // so this doesn't silently diverge from every other physics body in
     // this codebase's own conventions.
-    const capsuleShape = createWagonCapsuleShape(scene)
-    const aggregate = new PhysicsAggregate(body, capsuleShape, { mass: WAGON_MASS }, scene)
+    const hullShape = new PhysicsShapeConvexHull(body, scene)
+    const aggregate = new PhysicsAggregate(body, hullShape, { mass: WAGON_MASS }, scene)
     aggregate.shape.material = { restitution: 0, friction: 1 }
     aggregate.body.setLinearDamping(WAGON_LINEAR_DAMPING)
     aggregate.body.setAngularDamping(WAGON_ANGULAR_DAMPING)

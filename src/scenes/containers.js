@@ -119,9 +119,60 @@ export async function setStartingContainers(scene){
             wagonRoot.bakeCurrentTransformIntoVertices()
         }
 
+        // wagon's own physics collider - a purpose-built shape (not the
+        // visible wagon.glb model itself), confirmed off its own glb JSON:
+        // a single node/mesh, scale (1,1,~2.746), translation
+        // (0,0,~-0.854), raw POSITION bounds x:[-1,1] y:[0,2] z:[-1,1] -
+        // meaning its pivot already sits at ground level (y=0 is the
+        // shape's own bottom, not its center), same convention wagonRoot's
+        // own bake above already established for the visible model.
+        let wagonBodyColliderRoot = await loadPropRootSafe("./models/outdors/wagonbodycollider.glb", scene, container => {
+            const mesh = container.meshes.find(m => m.getTotalVertices() > 0)
+            if(!mesh) console.warn(`[containers] wagonbodycollider.glb loaded but no mesh with geometry was found in it`)
+            return mesh ?? null
+        })
+        if(wagonBodyColliderRoot){
+            wagonBodyColliderRoot.isVisible = false
+            wagonBodyColliderRoot.setEnabled(false)
+            wagonBodyColliderRoot.isPickable = false
+            // MUST bake the node's own scale/translation into the vertices
+            // (not just leave it as .position/.scaling) - createwagon.js's
+            // own PhysicsShapeConvexHull reads this mesh's RAW local
+            // vertices plus only its absoluteSCALING when building the
+            // collision shape (see @babylonjs/core's own
+            // havokPlugin.js/MeshAccumulator - deliberately bakes ancestor
+            // SCALE in, since physics shapes are defined in a purely
+            // rigid frame, but never bakes in POSITION/rotation, since
+            // those are the physics BODY's own job to track). Left
+            // un-baked, the resulting collision shape would sit offset
+            // from wherever this mesh actually visually renders by that
+            // same ~-0.854 translation - an invisible mismatch between
+            // what's shown and what's actually solid.
+            //
+            // wagonbodycollider.glb's own modeled "front" doesn't line up
+            // with local +z (the axis createwagon.js's own
+            // rotation.y = Math.atan2(dirX,dirZ) always points at the
+            // direction of travel) - confirmed in-game, the collider was
+            // visibly facing off at an angle instead of leading the
+            // direction it was actually moving. Same fix wagonRoot's own
+            // rotation.y = Math.PI bake above already used for the exact
+            // same class of problem on wagon.glb itself: correct the
+            // mismatch ONCE here, baked permanently into the geometry, so
+            // every per-wagon clone already has its real front at +z and
+            // createwagon.js's own yaw code needs no changes of its own to
+            // line up correctly. 45deg per visual estimate in-game - if
+            // this overshoots/undershoots or goes the wrong way, adjust
+            // the sign/magnitude here (a negative value turns the other
+            // direction) rather than touching any of the yaw math itself.
+            wagonBodyColliderRoot.rotationQuaternion = null
+            wagonBodyColliderRoot.rotation.y = Math.PI / 4
+            wagonBodyColliderRoot.bakeCurrentTransformIntoVertices()
+        }
+
         const HairModel = await importMeshSafe("./models/avatar/", "hairModels.glb", scene)
         const helmets = await importMeshSafe("./models/helmets/", "helmets.glb", scene)
         helmets.meshes.forEach(m => m.isVisible = false)
+        HairModel.meshes.forEach(m => m.isVisible = false)
         const gauntlets = await importMeshSafe("./models/gauntlets/", "gauntlets.glb", scene)
         gauntlets.meshes.forEach(m => m.isVisible = false)
         const pauldrons = await importMeshSafe("./models/pauldrons/", "pauldrons.glb", scene)
@@ -182,11 +233,11 @@ export async function setStartingContainers(scene){
             deerRoot,
             treasureRoot,
             bonfireRoot,
-            wagonRoot
+            wagonRoot,
+            wagonBodyColliderRoot
         })
         return { animeBodyContainer }
     } catch (error) {
-        console.log(error)
         return false
     }
 }

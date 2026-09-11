@@ -41,7 +41,6 @@ export default function createEnemy(scene, det) {
     // twice for the same _id) - returning null here early is the one place
     // that can't be bypassed no matter what called this or why
     if(scene.getMeshByName(`enemy.${det._id}`)) return null
-    console.log(det)
     const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
     // on openworld's uneven terrain, so look up the real ground height instead.
@@ -198,7 +197,7 @@ export default function createEnemy(scene, det) {
     function attack(){
 
         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-        if (getGameStatus() === "loading") return console.log("game status loading")
+        if (getGameStatus() === "loading") return 
         if (!thisEnemy) return clearInterval(intervalWillAttack)
         // bound (see applyEnemyBind below) - "cannot move, cannot attack,
         // cannot do anything" - the interval itself is only actually
@@ -328,7 +327,6 @@ export default function createEnemy(scene, det) {
             if (!thisEnemy) return clearInterval(enemySkillInterval)
             const theEnemyBodyMesh = getSceneDet().scene.getMeshByName(`enemy.${det._id}`)
             if(!theEnemyBodyMesh) {
-                console.log(`enemy.${det._id} body mesh not found, and is still casting skill remove this body`)
                 return clearInterval(enemySkillInterval)
             }
             if (thisEnemy._disabled) return
@@ -880,7 +878,6 @@ export function defeatedAmonster(data){
         }, 1000)
     }
     // log("killed a monster ", data)
-    console.log(characterState.quests)
     // getSocket().emit('respawnEnemy', data)
 }
 // ENEMY WHEN HIT RELATED

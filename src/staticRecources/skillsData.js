@@ -1706,6 +1706,73 @@ export const meteorSkill = {
     desc: "An invisible mark burns into the target - moments later, blazing meteors rain down from the sky, each erupting into a fiery crater on impact.",
 }
 
+// --- THUNDERCLAP (God Tier) ---
+// Fills lightning's own missing God Tier slot - fire already has meteor
+// (above), light has astralrain, dark has darkorb; lightning had climbed as
+// far as mjolnir/thunderstrike (Legendary Class/High Skill) but nothing at
+// the very top yet. Requested explicitly "like how meteor skill works" - so
+// this reuses the EXACT same "no target to aim at, ground AOE circle during
+// the cast, strike(s) land directly at a computed spot once castDuration
+// elapses" shape meteorRain already established (skillEffects.js's
+// castOffenseSkill dispatch, computeGroundAOEPos), as its own dedicated
+// skill.lightningStrike property + triggerThunderclapStrike/
+// spawnLightningStrike pair - same reasoning meteorRain's own header
+// comment already gives for not just reusing swordRain's internals: the
+// actual falling/descending VISUAL is completely different (a real jagged
+// bolt via effects/lightning.js's createLightningBoltLine, reused from
+// thunderstrikeSkill's own lightningLine but stretched VERTICALLY from high
+// in the sky down to the ground instead of horizontally out from the
+// caster - "a lightning will come from the sky and hit a certain area",
+// verbatim), not a falling mesh with a comet trail.
+//
+// Deliberately only 1 bolt at lvl 1 (meteorRain starts at 2-3) - a single
+// decisive strike reads as more "legendary" than a shower, and
+// differentiates the playstyle from meteor's own multi-hit spread instead
+// of just being a lightning reskin of it. growThunderclapStrike
+// (skillUpgrades.js) grows this toward a small barrage (up to 3) at higher
+// levels, mirroring growMeteorRain's own "remembered base, capped growth"
+// shape. plusDmg is correspondingly higher per-strike than meteor's own
+// (260 vs 110) to land at comparable total output despite fewer hits.
+export const thunderclapSkill = {
+    slotNumber: 35,
+    equiped: true,
+    isActive: false,
+    name: "thunderclap",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "lightning",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Thunderclap",
+    castDuration: 2.2,
+    returnModeDura: 900,
+    skillCoolDown: 6000,
+    demand: [{ name: "mp", minCost: 75, cost: 0 }],
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.3, plusDmg: 260, chance: 1, bashPower: 0.6 }],
+    skillrank: 4,
+    upgradePlus: 24,
+    explosionColor: "yellow",
+    explosionScale: 1,
+    // minDistance/maxDistance matches meteorRain's own 12-20 band - same
+    // "somewhere in a rough band ahead of the caster" reasoning, not a
+    // fixed spot. spread is tighter (3 vs meteor's 4.5) since a single bolt
+    // reads best landing close to where the circle actually was, only
+    // scattering more once growThunderclapStrike adds a second/third strike.
+    lightningStrike: { min: 1, max: 1, spread: 3, minDistance: 12, maxDistance: 20 },
+    onLevelUp: "growThunderclapStrike",
+    // no projectile at all (same shape meteorRain/groundTrap skills use) -
+    // castOffenseSkill's dispatch treats skill.lightningStrike exactly like
+    // skill.meteorRain: a flat ground circle during the cast, then strikes
+    // directly at the computed spot once castDuration elapses
+    projectileVisual: { useProjectile: false },
+    // impactSound: "electricHitS" - the one sound every other lightning
+    // skill already shares (lightningbolt/thunderstrike), not a new asset
+    onHitVisual: [{ type: "burst", burst: { texture: "flare3", fireScale: 1.3, smokeScale: 0.8, emberEmitRate: 18, gravitySign: 1, includeSmoke: false }, impactSound: "electricHitS" }],
+    desc: "The sky itself answers your call - a searing bolt of lightning crashes down from above, splitting the earth where it lands.",
+}
+
 export const skillsData = [
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
@@ -1725,6 +1792,7 @@ export const skillsData = [
     multicastSkill, disintegrationSkill, massivedisintegrationSkill,
     mjolnirSkill, dashstrikeSkill,
     meteorSkill,
+    thunderclapSkill,
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an

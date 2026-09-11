@@ -1,5 +1,4 @@
 import { Sound } from "@babylonjs/core"
-const log = console.log
 let allSounds = {}
 
 // Missing/corrupt sound files don't throw synchronously - Sound fetches
@@ -199,7 +198,7 @@ export function playHalfSound(sound){
 
 export function runSound(characterStatSpd){
     if(!allSounds.runningS) return
-    if(allSounds.runningS.isPlaying) return log("is playing")
+    if(allSounds.runningS.isPlaying) return
     allSounds.runningS.stop()
     allSounds.runningS.play()
     allSounds.runningS.setPlaybackRate(.8 + characterStatSpd*0.04)

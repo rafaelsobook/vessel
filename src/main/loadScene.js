@@ -17,7 +17,6 @@ export default async function loadScene(){
     const charState = await initiateCharacter(checkIfTokenSaved())
    
     if(!charState) {
-        console.log("return to home")
         sessionStorage.clear()
         showMainPage()
         showLoginPage()
@@ -26,7 +25,6 @@ export default async function loadScene(){
 
     const placeDetail = findMyCurrentPlace()
     let sceneDetail;
-    console.log(placeDetail)
     switch(placeDetail.areaType){
         case "dungeon":
             sceneDetail = await dungeonScene(placeDetail)
@@ -39,11 +37,9 @@ export default async function loadScene(){
         break
         case "openworld":
             sceneDetail = await areaScene(placeDetail)
-            console.log(sceneDetail)
         break
         case "duel":
             sceneDetail = await areaScene(placeDetail)
-            console.log(sceneDetail)
         break
     }
 

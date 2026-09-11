@@ -2,7 +2,7 @@
 import { getSpawnPos } from "../tools/position.js";
 import { useFetch, checkIfTokenSaved } from "../tools/tools.js";
 import { APIURL } from "../constants/constants.js";
-import { createElement, setLoadingInAList} from "../tools/GUITools.js"
+import { createElement, setLoadingInAList, poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js";
 import { checkStoryQuestIfCompleted, updateStoryQuestUI } from "./storyQuestSystem.js";
 import { getHeroDetail } from "../serverApiFun/getHeroDetail.js";
@@ -13,7 +13,7 @@ import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worl
 import { emitMode, emitWeaponBlock, emitEnemyIsHit } from "../sockets/emits.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord, capsuleHeight } from "./createcharacter.js";
-import { getAllSounds } from "../components/soundSystem.js";
+import { getAllSounds, playSound } from "../components/soundSystem.js";
 import { getGameStatus, setGameStatus, getSceneDet } from "../main/main.js";
 import { createBodyFireParticles } from "../tools/particlesystem.js";
 import { updateSkillListUI } from "../components/skillsui.js";
@@ -225,6 +225,7 @@ export function getTotalDefense(){
         const additionalDefByPercent = totalD*abilityDef.percent
         totalD += additionalDefByPercent 
     }
+    totalD+=characterState.stats.dex;
     // log(`total def ${totalD}`)
     return totalD
 }
@@ -528,7 +529,6 @@ function summarizeStatsUnsafe(){
 }
 export async function initiateCharacter(_accountDet){
     characterState = await getHeroDetail(_accountDet)
-    console.log(characterState)
     if(!characterState){
         return null
     }
@@ -606,7 +606,7 @@ export async function deductHp(dmg, effects, enemyStats){
 
     let totalDmg = dmg
     totalDmg -= getTotalDefense()
-    if(totalDmg <= 0) totalDmg = Math.floor(Math.random()*5)
+    if(totalDmg <= 0) totalDmg = 1
     let timeOutCount = 0
     if(effects.length){
         effects.forEach(effect=>{
@@ -820,8 +820,21 @@ export function isPlayerCursed(){
 // they're just burning" was that exact bug.
 export async function dealDamageToEnemy({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical = false }){
     if(isPlayerCursed()){
+
         const selfDmg = dmgDetails.weaponDmg || dmgDetails.physicalDmg || 0
         await deductHp(selfDmg, [])
+
+        // curse backfire feedback - a dark-purple "-dmg" number popping above
+        // the player's own head, mirroring enemyIsHit's red -dmg number over a
+        // hit enemy (createEnemy.js). Same poppingTextMesh call/params, just
+        // parented to the local player's body and coloured for the curse.
+        const me = getPlayersOnScene().find(pl => pl.owner === characterState?.owner)
+        if(me && selfDmg > 0){
+            playSound(getAllSounds().struckS)
+            me.bloodps?.play()
+            
+            poppingTextMesh(`-${Math.floor(selfDmg)} cursed`, "#4B0082", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, me.body, true)
+        }
         return
     }
     emitEnemyIsHit({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical })

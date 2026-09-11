@@ -64,7 +64,6 @@ export async function receiveTitle(title){
         // request failure) - no popup, no local state change. The
         // "already taken" case specifically isn't a bug to surface to the
         // player with its own message - they just don't get this one
-        console.log(`[titleUI] did not claim "${title.titleId}":`, result?.reason ?? result)
         return
     }
 

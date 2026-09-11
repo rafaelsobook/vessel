@@ -1,4 +1,4 @@
-import toSellCatalog from "../staticRecources/toSell.js"
+import npcDetails from "../staticRecources/npcDetails.js"
 import { createElement } from "../tools/GUITools.js"
 import { checkIfTokenSaved, randomNum } from "../tools/tools.js"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
@@ -8,43 +8,48 @@ import { canAfford, earnFromPrice, getWealthInBronze, spendOnPrice } from "../ch
 
 const bsCont      = document.querySelector(".buysell-container")
 const tabBtns     = document.querySelectorAll(".bs-tab-btn")
-const categBtns   = document.querySelectorAll(".bs-categ-btn")
 const itemsGrid   = document.querySelector(".bs-items-grid")
 const walletAmount = document.querySelector(".bs-wallet-amount")
 const actionBtn   = document.querySelector(".bs-action-btn")
 
 let mode = "buy" // buy // sell
-let activeCategory = "all"
 let selectedItem = null
 let sellableCategories = null // null = no restriction, otherwise an array of itemCateg values (e.g. ["consumable", "crafting"]) - some shops don't buy weapons/armor
-
-const CATEG_MATCHERS = {
-    all: () => true,
-    weapon: itm => itm.itemType === "weapon",
-    armor: itm => itm.itemType === "armor",
-    helmet: itm => itm.itemType === "helmet",
-    boots: itm => itm.itemType === "boots",
-    material: itm => itm.itemCateg === "crafting",
-    consumable: itm => itm.itemCateg === "consumable",
-}
+// which NPC's toSell array the "buy" tab reads from - set whenever a seller
+// opens their own shop (buyOrSell(false, npcDet._id)), stays put across a
+// Buy/Sell tab switch inside that same already-open shop
+let currentSellerId = null
 
 // switching tabs inside an already-open shop must NOT touch
-// sellableCategories - only opening the shop (buyOrSell, below) sets it
+// sellableCategories/currentSellerId - only opening the shop (buyOrSell, below) sets those
 function switchMode(willSell){
     mode = willSell ? "sell" : "buy"
-    activeCategory = "all"
     selectedItem = null
 
     tabBtns.forEach(btn => btn.classList.toggle("active", btn.classList.contains(mode)))
-    categBtns.forEach(btn => btn.classList.toggle("active", btn.dataset.categ === "all"))
 
     render()
 }
 
-export function buyOrSell(willSell, arrayOfItemCategoryToSell){
-    sellableCategories = arrayOfItemCategoryToSell || null
+// willSell false: `arg` is the seller NPC's own _id (npcDetails.js) - its
+// toSell array becomes the buy list. willSell true: `arg` is an optional
+// itemCateg restriction on what this shop will buy back from the player
+// (e.g. flirtdata.js's buyOrSell(true, "crafting")) - unused when buying.
+export function buyOrSell(willSell, arg){
+    if(willSell) sellableCategories = arg || null
+    else if(arg !== undefined) currentSellerId = arg
     switchMode(willSell)
     bsCont.style.display = "flex"
+}
+
+// each seller now owns their own stock (npcDetails.js's toSell:[] on that
+// NPC) instead of everyone sharing one big toSell.js catalog - no more
+// "every vendor sells everything" (buyorsell.js used to filter ONE shared
+// array down by the left-hand category sidebar, which has been removed
+// entirely along with that sidebar)
+function getBuyableItems(){
+    const seller = npcDetails.find(npc => npc._id === currentSellerId)
+    return seller?.toSell || []
 }
 
 function getSellableItems(){
@@ -61,20 +66,18 @@ function render(){
     const charState = getCharState()
     walletAmount.innerHTML = `x${getWealthInBronze(charState)}`
 
-    const sourceItems = mode === "buy" ? toSellCatalog : getSellableItems()
-    const matcher = CATEG_MATCHERS[activeCategory] || CATEG_MATCHERS.all
-    const filteredItems = sourceItems.filter(matcher)
+    const sourceItems = mode === "buy" ? getBuyableItems() : getSellableItems()
 
     itemsGrid.innerHTML = ""
     actionBtn.textContent = mode === "buy" ? "Buy" : "Sell"
     actionBtn.disabled = true
 
-    if(!filteredItems.length){
+    if(!sourceItems.length){
         itemsGrid.append(createElement("p", "bs-empty-msg", mode === "buy" ? "Nothing here for sale" : "You have nothing to sell here"))
         return
     }
 
-    filteredItems.forEach(itm => {
+    sourceItems.forEach(itm => {
         const slot = createElement("button", "bs-item-slot")
         const img = createElement("img", "bs-item-img")
         img.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
@@ -99,7 +102,7 @@ function render(){
         // never meant to exist.
         if(itm.itemType === "helmet") img.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
         if(itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/pickaxe.webp`
-        // some existing item art is .png rather than .webp (see toSell.js weapons) - fall back once
+        // some existing item art is .png rather than .webp (see npcDetails.js sellers' toSell weapons) - fall back once
         img.onerror = () => { img.onerror = null; img.src = `./images/items/${itm.itemCateg}/${itm.name}.png` }
         const name = createElement("p", "bs-item-name", itm.dn)
 
@@ -127,15 +130,6 @@ tabBtns.forEach(btn => {
     })
 })
 
-categBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-        activeCategory = btn.dataset.categ
-        selectedItem = null
-        categBtns.forEach(b => b.classList.toggle("active", b === btn))
-        render()
-    })
-})
-
 actionBtn.addEventListener("click", async () => {
     if(!selectedItem) return
     const charState = getCharState()
@@ -144,7 +138,7 @@ actionBtn.addEventListener("click", async () => {
         if(!canAfford(charState, selectedItem.price)) return openClosePopup("Not enough coins", true, 1500)
         spendOnPrice(charState, selectedItem.price)
         // obtain() handles stacking, the acquired popup, and persisting charState
-        await obtain({...selectedItem, itemId: randomNum(), sellerId: undefined})
+        await obtain({...selectedItem, itemId: randomNum()})
     }else{
         await earnFromPrice(selectedItem.price)
         charState.items = charState.items.filter(itm => itm.itemId !== selectedItem.itemId)

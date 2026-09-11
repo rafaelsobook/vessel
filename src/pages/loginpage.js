@@ -52,7 +52,6 @@ export async function login() {
             setLoading(false)
             return
         }
-        console.log(data)
         keepAccountWithTokenDet(data)
 
         const charRes = await fetch(`${APIURL}/characters/${data.details._id}`, {
@@ -76,7 +75,6 @@ export async function login() {
 
 export async function continueSession() {
     const saved = checkIfTokenSaved()
-    console.log(saved.token)
     if (!saved) return showLoginPage()
 
     setLoading(true)

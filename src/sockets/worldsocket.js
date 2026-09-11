@@ -295,15 +295,14 @@ export function activateOnSocketListeners(socket){
         const characterState = getCharState()
         const gameStat = getGameStatus()
         if (gameStat === "loading") return
-        console.log(`${newPlayerName} joined in ${currentPlaceId}`)
         if(currentPlaceId !== characterState.currentPlace.placeId) return
         if (socket === undefined) return console.warn("socket UNDEFINED !")
 
-        if (!characterState) return console.log("no charState")
+        if (!characterState) return 
 
         if (gameStat === "running") {
             reCreateMeshesInScene()
-        }else console.log("gameStat is not running, skipping reCreateMeshesInScene()")
+        }
     })
     // equiping
     socket.on("equiped-item", data => {
@@ -901,7 +900,6 @@ export function activateOnSocketListeners(socket){
         const prevMode = player.mode
         if(ownerId === charState.owner) return
 
-        console.log(`${player.name} `, mode, weaponName)
         setPlayerMode(ownerId, mode, weaponName)
     })
     // r-click hold-to-block, other players' side - inputMovement.js's
@@ -1044,7 +1042,6 @@ export function reCreateMeshesInScene() {
         // we can tell whether a wrong gender already arrived over the socket
         // relay (server/getCharSocket() issue) vs. something going wrong
         // inside createCharacter itself. Remove once resolved.
-        console.log("[reCreateMeshesInScene relay debug]", { name: tcpCharDet.name, owner: tcpCharDet.owner, gender: tcpCharDet.gender })
 
         let player = createCharacter(sceneDet.scene, spawnPos, tcpCharDet, false)
         if(!player) return
@@ -1140,8 +1137,6 @@ export function reCreateMeshesInScene() {
         // now. Safe to delete once wagons are confirmed positioned
         // correctly again.
         const debugPos = computeHarnessDeerPosition(deerTcpInfo)
-        console.log(`[wagon debug] deer.${deerTcpInfo._id} (name=${deerTcpInfo.name}) computed pos=`,
-            [debugPos.x.toFixed(2), debugPos.z.toFixed(2)], ' dir=', [debugPos.dirX.toFixed(2), debugPos.dirZ.toFixed(2)])
     })
     tcpWagons.length && tcpWagons.forEach(wagonTcpInfo => {
         if (characterState.currentPlace.placeId !== wagonTcpInfo.currentPlaceId) return
@@ -1183,12 +1178,9 @@ export function reCreateMeshesInScene() {
             console.warn(`[wagon debug] wagon.${wagonTcpInfo._id} has no paired deer (deerId=${wagonTcpInfo.deerId}) on this client yet - staying at its default spot`)
         }else{
             positionWagonBehindDeer(sceneDet.scene, wagon, pairedDeer._lastResolved ?? computeHarnessDeerPosition(pairedDeer.det))
-            console.log(`[wagon debug] wagon.${wagonTcpInfo._id} deerId=${wagonTcpInfo.deerId} offsetZ=${wagonTcpInfo.offsetZ} placed at`, wagon.body.position.asArray().map(n => n.toFixed(2)),
-                ' using', pairedDeer._lastResolved ? '_lastResolved' : 'computeHarnessDeerPosition fallback')
         }
     })
     if(characterState.currentPlace.placeId === 9){
-        console.log("You are inside currentPlaceId: 9, available quests: ", allQuests)
 
         allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest, sceneDet.scene))
     }
@@ -1207,11 +1199,9 @@ export function playerDied(ownerId, currentPlaceId) {
     player._minning = false
     player.mode = "death"
 
-    console.log(`${ownerId} placeId: ${currentPlaceId} died`)
     player.anims.forEach(anim => {
         anim.weight = 0
         anim.stop()
-        console.log(anim.name)
         if(anim.name === "death") anim.play()
     })
     player.characterAnimations.playAction(player.anims, "death", 1, null, true)
@@ -1271,9 +1261,6 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
     if(!player) return;
     const prevMode = player.mode
     if(_newMode === "minning" && player.hasWeapon) player.equipSword(weaponName, true)
-    console.log(prevMode)
-    console.log(_newMode)
-    console.log(player)
     if(prevMode === "idle" && _newMode === "fighting"){
         
         // first also think how you can get the character if equiping a weapon
@@ -1282,7 +1269,6 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
         if(weaponName){
             player.characterAnimations.playAction(player.anims, "act_idletoready1", 1, null, false, ANIM_STATE.COMBAT_IDLE)
             setTimeout(() => {
-                console.log("equiping ", weaponName)
                 player.equipSword(weaponName, true)
             }, 400)
         }
@@ -1291,7 +1277,6 @@ export function setPlayerMode(ownerId, _newMode, weaponName){
         if(weaponName){
             player.characterAnimations.playAction(player.anims, "act_readytoidle", 1, null, false, ANIM_STATE.IDLE)
             setTimeout(() => {
-                console.log("equiping ", weaponName)
                 player.equipSword(weaponName, false)
             }, 300)
         }

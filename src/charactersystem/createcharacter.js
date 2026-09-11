@@ -49,6 +49,8 @@ export function getPlayerCoord(ownerId){
 function createAnimeBodyMaterials(scene, det){
     const { hairColor, clothColor, pantsColor, skinColor } = det
     
+
+    
     const hairMat = createColorMat("hair_mat", hairColor , scene)
     // female's "hair2" style only (femaile.hair1/female.hair2 - see
     // createAnimeBody's own FEMALE_ONLY_NAMES comment) - a separate material
@@ -72,9 +74,11 @@ function createAnimeBodyMaterials(scene, det){
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const bootsMat = createMatV2(scene, "./images/fabrics/leather1.jpg", "./images/fabrics/leather1.jpg")
     
-    clothMat.diffuseColor = new Color3(clothColor.r, clothColor.g, clothColor.b)
-    pantsMat.diffuseColor = new Color3(pantsColor.r, pantsColor.g, pantsColor.b)
-
+    if(det.gender !== "female"){
+         clothMat.diffuseColor = new Color3(clothColor.r, clothColor.g, clothColor.b)
+        pantsMat.diffuseColor = new Color3(pantsColor.r, pantsColor.g, pantsColor.b)
+    }
+   
     // the shirt hem and pants waistband are two separate meshes sitting
     // almost exactly coincident at the waist/lower back (see the source
     // rig - cloth.X and pants.X below) - close enough that the depth
@@ -170,7 +174,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const {root, animationGroups, rHand, belts, cloaks, 
         armors, boots, spineBone, headBone, lowerArmL, lowerArmR, 
-        shoulderL, shoulderR, characterHair} = createAnimeBody(containers, body, bodytarget, det, scene)
+        shoulderL, shoulderR, characterHairs} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
@@ -254,7 +258,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         }
         if(!toEquip) return
         showHideEquip(toEquip.mesh, true)
-        if(characterHair) characterHair.isVisible = hairVisible ?? false
+        if(hairVisible){
+            characterHairs.forEach(hairOrScalp => hairOrScalp.isVisible = true)
+
+        }else characterHairs.forEach(hairOrScalp => hairOrScalp.isVisible = false)
+
     }
 
     function createGauntlet(gauntletName, metalColor) {
@@ -422,7 +430,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             break
             case "helmet":
                 helmetMeshes.forEach(hlm => showHideEquip(hlm.mesh, false))
-                if(characterHair) characterHair.isVisible = true
+                if(characterHairs) characterHairs.forEach(hairOrScalp => hairOrScalp.isVisible = true)
             break
             case "gauntlet":
                 gauntletMeshes.forEach(gtl => gtl.meshes.forEach(mesh => showHideEquip(mesh, false)))
@@ -437,8 +445,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             if(itm.itemCateg === "equipable"){
                 if(itm.itemType === "boots" && itm.equiped) {
                     if(det.name === "fow") {
-                        console.log("equiping Boots", itm.name)
-                        console.log(boots)
                     }
                     equipBoots(itm.name)
                 }
@@ -628,13 +634,14 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     const isFemale = det.gender === "female"
     if(!isFemale) det.gender = "male"
 
+
     let belts = []
     let cloaks = []
     let armors = []
     let boots = []
-    let characterHair = undefined
+    let characterHairs = []
     const {hairMat,femaleHair1Mat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
-
+   
     const entries = animeBody.instantiateModelsToScene()
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
     const mainBodyMeshes = entries.rootNodes[0]
@@ -643,9 +650,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     mainBodyMeshes.rotationQuaternion = Quaternion.Identity()
 
     const pelvisBone = findDeepByName(mainBodyMeshes, bne => bne.name.includes("pelvis"))
-    console.log(det.name, pelvisBone.getChildren().length)
     if(pelvisBone){
-        console.log(pelvisBone.getChildren())
         // optional chaining all the way down - female's own skeleton (see
         // this function's own isFemale comment) doesn't have a full
         // neck/shoulder/arm chain under upperSpine at all right now, so a
@@ -720,50 +725,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     // can see if rHand's deeper index chain landed on the wrong node) plus
     // how many "pelvis"-matching nodes exist at all (rules out
     // findDeepByName grabbing an ambiguous/wrong match). Remove once resolved.
-    console.log("[createAnimeBody bone debug]", {
-        // name/owner - so a log line can be matched to an actual character
-        // by name instead of guessed from console ordering (the two clients'
-        // logs interleave with each other and with enemy-spawn/join noise)
-        name: det.name,
-        owner: det.owner,
-        gender: det.gender,
-        pelvisName: pelvisBone?.name,
-        pelvisMatchCount: (function countMatches(node, pred, n = 0){
-            if(pred(node)) n++
-            node.getChildren().forEach(c => n = countMatches(c, pred, n))
-            return n
-        })(mainBodyMeshes, bne => bne.name.includes("pelvis")),
-        spineBoneName: spineBone?.name,
-        headBoneName: headBone?.name,
-        rHandName: rHand?.name,
-        rHandClass: rHand?.getClassName?.(),
-        rHandWorldPos: rHand?.getAbsolutePosition?.()?.asArray(),
-        shoulderLName: shoulderL?.name,
-        shoulderRName: shoulderR?.name,
-        lowerArmLName: lowerArmL?.name,
-        lowerArmRName: lowerArmR?.name,
-    })
     bodytarget.parent = spineBone
-
-    // TEMP DIAGNOSTIC - a mesh not showing up despite matching FEMALE_ONLY_NAMES/
-    // being the right gender keeps coming back to the same root cause on this
-    // rig: it isn't a direct child of mainBodyMeshes like every OTHER body
-    // part here, so the shallow main loop below never even visits it (already
-    // confirmed for the pelvis bone and boots - this checks belt the same
-    // way). Deep search instead of assuming a fixed depth, run BEFORE
-    // anything gets disposed so it reflects the real untouched tree.
-    // Remove once resolved.
-    const logDeepNameDebug = (label, matchesName) => console.log(`[${label} debug]`, det.name, det.gender, mainBodyMeshes.getDescendants(false, n => {
-        const realName = (n.name?.includes(" ") ? n.name.split(" ")[2] : n.name)?.toLowerCase()
-        return realName?.includes(matchesName)
-    }).map(n => ({
-        realName: (n.name?.includes(" ") ? n.name.split(" ")[2] : n.name)?.toLowerCase(),
-        isVisible: n.isVisible,
-        isDirectChild: n.parent === mainBodyMeshes,
-        parentName: n.parent?.name,
-    })))
-    logDeepNameDebug("boots", "boots")
-    logDeepNameDebug("belt", "belt")
 
     mainBodyMeshes.getChildren().forEach(mes => {
         mes.isPickable = false
@@ -839,7 +801,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
                 // stays scoped to just her two hairstyles (this function's
                 // own femaleHair1Mat/femaleHair2Mat comment)
                 mes.material = hairStyleName === "hair2" ? femaleHair2Mat : femaleHair1Mat
-                characterHair = mes
+
+                characterHairs.push(mes)
                 return
             }
             // belt.style1/blindfold/mask.style.1/skirt.style1/bag/silverine -
@@ -847,7 +810,6 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             // of these yet, see this function's own isFemale comment above) -
             // always on
             mes.isVisible = true
-
         }
 
         if(mes.name.includes("mainbody")){
@@ -872,7 +834,6 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             // (just boots.<itemName>) is treated as a universal boot mesh.
             const bootGender = mes.name.split(".")[2]
             if(bootGender !== det.gender) {
-                console.log(mes)
                 return disposeMeshTree(mes)
             }
             // was true - every other equip slot (armor/cloak below, helmet/
@@ -889,9 +850,12 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
 
         }
         if(mes.name.includes("scalp")){
+            if(isFemale) return mes.dispose()
             mes.material = hairMat
         }
-
+        if(mes.name === "scalphairinside" && !isFemale){
+            characterHairs.push(mes)
+        }
         if(mes.name.includes("cloak.")){
             const cloakName = mes.name.split(".")[1]
             if(!cloakName) return
@@ -911,20 +875,24 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             armors.push({name: armorName, mesh:mes, isUsed: false})
         }
     })
-    hairs.forEach(hairMsh => {
-        if(hairMsh.name.includes("root")) return hairMsh.parent = headBone
-        const hairStyleName = hairMsh.name.split(".")[1]
-        if(hairMsh.name.includes("root") || !hairStyleName) return
-        if(hairStyleName === det.hair){
-            characterHair = hairMsh.clone(det._id)
-            characterHair.material = hairMat
-            characterHair.parent = headBone
-            characterHair.rotationQuaternion = null
-            characterHair.position = new Vector3(0,.45,-.1)
-            characterHair.scaling = new Vector3(8,8,8)
-            characterHair.isVisible=true
-        }
-    })
+    if(!isFemale){
+        hairs.forEach(hairMsh => {
+            if(hairMsh.name.includes("root")) return hairMsh.parent = headBone
+            const hairStyleName = hairMsh.name.split(".")[1]
+            if(hairMsh.name.includes("root") || !hairStyleName) return
+            if(hairStyleName === det.hair){
+                const chosenHairStyle = hairMsh.clone(det._id)
+                chosenHairStyle.material = hairMat
+                chosenHairStyle.parent = headBone
+                chosenHairStyle.rotationQuaternion = null
+                chosenHairStyle.position = new Vector3(0,.45,-.1)
+                chosenHairStyle.scaling = new Vector3(8,8,8)
+                chosenHairStyle.isVisible=true
+                characterHairs.push(chosenHairStyle)
+            }else hairMsh.isVisible = false
+        })
+    }
+
     return {
         root: mainBodyMeshes,
         animationGroups: entries.animationGroups,
@@ -939,7 +907,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         lowerArmR,
         shoulderL,
         shoulderR,
-        characterHair
+        characterHairs
     }
 }
 function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {

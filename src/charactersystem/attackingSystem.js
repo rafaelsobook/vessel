@@ -252,11 +252,9 @@ export function getAttackInfo(){
         if (itm.itemType === "weapon" && itm.equiped) {
             hasWeapon = itm.name
             weaponType = itm.weaponType
-            console.log(itm.name)
         }
     })
     const dmgDetails = calcDmg(charState)
-    console.log(hasWeapon)
     return {
         owner: charState.owner,
         pos,
@@ -389,7 +387,6 @@ export function registerToAtkCollider(scene, meshName, cb, excludeSkillStrikes =
                     // visible tree, this is what pins down which real mesh
                     // (wrong name, oversized hidden instance, stray leftover
                     // from a previous area load, etc) is responsible
-                    console.log(`[registerToAtkCollider] "${meshName}" hit: ${mesh.name}`)
                     cb()
                 }, true)
             }

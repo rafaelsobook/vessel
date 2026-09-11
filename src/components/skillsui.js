@@ -65,8 +65,6 @@ export const SKILL_RANK_LABELS = {
 let selectedSkillName = null
 let currentSkill = null
 
-const log = console.log
-
 // DEBUG CHEAT - bound to the "n" key in controllers/inputMovement.js, e.g.
 // giveSkill(singlecastSkill) or giveSkill(voidrendSkill) (see skillsData.js
 // for the full list). Grants skillDetail if not already known. Auto-bumps
@@ -194,7 +192,6 @@ export function upgradeAllOwnedSkills(){
 export function openCloseSkills(){
     skillCont.style.display = skillCont.style.display === "flex" ? "none" : "flex";
 
-    console.log(skillCont.style.display)
 
     updateSkillListUI()
 }

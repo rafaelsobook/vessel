@@ -176,8 +176,6 @@ export async function areaScene(placeDetail){
 
             // showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
-            console.log('[terrain] physics plugin=', scene.getPhysicsEngine()?.getPhysicsPlugin?.()?.name,
-                ' gravity=', scene.getPhysicsEngine()?.gravity?.asArray?.())
 
             for (let s = 1; s <= 5; s++) {
                 setTimeout(() => {
@@ -189,11 +187,6 @@ export async function areaScene(placeDetail){
                         new Vector3(pos.x, startY, pos.z),
                         new Vector3(pos.x, startY - 5000, pos.z)
                     )
-                    console.log(`[terrain] t+${s}s: pos=`, pos.asArray().map(n => n.toFixed(2)),
-                        ' velocity=', vel ? [vel.x.toFixed(3), vel.y.toFixed(3), vel.z.toFixed(3)] : 'NO BODY',
-                        ' raycastFromHere hasHit=', result?.hasHit,
-                        ' hitY=', result?.hitPointWorld?.y,
-                        ' hitBodyName=', result?.body?.transformNode?.name)
                 }, s * 1000)
             }
         break;
@@ -303,13 +296,10 @@ export async function areaScene(placeDetail){
                     else if (sub instanceof StandardMaterial) sub.disableLighting = true
                 })
             } else if (model.material instanceof PBRMaterial) {
-                console.log(`[${item.name}] material is PBRMaterial — setting unlit`)
                 // model.material.unlit = true
             } else if (model.material instanceof StandardMaterial) {
-                console.log(`[${item.name}] material is StandardMaterial — disabling lighting`)
                 model.material.disableLighting = true
             } else {
-                console.log(`[${item.name}] material type:`, model.material?.getClassName())
             }
         }))
     }

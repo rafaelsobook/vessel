@@ -248,11 +248,8 @@ function calcOpponentDmg(npcDet){
 // is authoritative for who's fighting here, not any per-player transient
 // state. No-ops quietly if the place has no npcEnemies declared.
 export function startDuel(scene, characterBody, placeDetail){
-    console.log("[duel] startDuel called with placeDetail:", placeDetail)
     const npcEnemies = placeDetail.npcEnemies || []
-    console.log("[duel] npcEnemies:", npcEnemies)
     if(!npcEnemies.length){
-        console.log("[duel] no npcEnemies on this place - bailing out")
         return
     }
 
@@ -296,11 +293,8 @@ export function startDuel(scene, characterBody, placeDetail){
     })
 
     allFighters.forEach(({ npcId, position, isMainOpponent }, index) => {
-        console.log("[duel] about to call spawnDuelOpponent for npcId:", npcId, "position:", position, "isMainOpponent:", isMainOpponent)
         spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, index, allFighters.length, duelOpponents, duelState, isMainOpponent)
-        console.log("[duel] spawnDuelOpponent call returned (synchronously) for npcId:", npcId)
     })
-    console.log("[duel] startDuel finished looping npcEnemies")
 
     // Reactive safety net - the per-opponent surround-slot targeting
     // (spawnDuelOpponent's own chase loop) already spreads fighters out by
@@ -343,14 +337,12 @@ export function startDuel(scene, characterBody, placeDetail){
 // directions of damage. Pulled out of startDuel so a future npcEnemies list
 // with more than one entry (a gauntlet) just calls this once per entry.
 function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, slotIndex, totalOpponents, duelOpponents, duelState, isMainOpponent){
-    console.log("[duel] spawnDuelOpponent: start, npcId:", npcId)
     // fixed world-space angle this opponent tries to approach/hold the
     // player from, evenly divided among however many are in this fight (2
     // fighters -> opposite sides, 3 -> ~120° apart, etc.) - see the const
     // block above for why this exists
     const surroundAngle = (2 * Math.PI / totalOpponents) * slotIndex
     const npcDet = npcDetails.find(npc => npc._id === npcId)
-    console.log("[duel] spawnDuelOpponent: npcDet lookup result:", npcDet)
     if(!npcDet) return console.warn("spawnDuelOpponent: opponent npc not found for id", npcId)
 
     // per-entry position (localroomdb.js's npcEnemies[i].position) if it was
@@ -362,7 +354,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         y: position?.y ?? OPPONENT_SPAWN.y,
         z: position?.z ?? OPPONENT_SPAWN.z,
     }
-    console.log("[duel] spawnDuelOpponent: resolved spawnPos:", spawnPos)
 
     // same spreading convention createnpc.js already uses internally for
     // glbPath:null npcs - owner/ownerId default to the npc's own _id, which
@@ -391,16 +382,12 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         currentPlaceId: placeDetail.placeId,
         currentPlace: { placeId: placeDetail.placeId, name: placeDetail.name, areaType: placeDetail.areaType },
     }
-    console.log("[duel] spawnDuelOpponent: spawnDet built:", spawnDet)
     // createFighterNpc (not createNpc) - gives this opponent the same
     // characterAnimations/equip* rig the player has, which is what actually
     // makes him able to fight (createNpc's usual isNpc:true path has neither).
-    console.log("[duel] spawnDuelOpponent: calling createFighterNpc...")
     const opponent = createFighterNpc(scene, spawnDet)
-    console.log("[duel] spawnDuelOpponent: createFighterNpc returned:", opponent)
     if(!opponent) return console.warn("spawnDuelOpponent: failed to build opponent body")
 
-    console.log("[duel] spawnDuelOpponent: opponent.body:", opponent.body, "opponent.anims:", opponent.anims, "opponent.characterAnimations:", opponent.characterAnimations)
 
     const charState = getCharState()
     let opponentDefeated = false
@@ -431,9 +418,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
 
     let hp = npcDet.hp
     const maxHp = npcDet.maxHp
-    console.log("[duel] spawnDuelOpponent: about to call createHpBar, hp:", hp, "maxHp:", maxHp)
     const { hpbar } = createHpBar(capsuleHeight + 0.3, npcDet._id, opponent.body, hp, maxHp)
-    console.log("[duel] spawnDuelOpponent: createHpBar done")
 
     let attackInterval = null
     let inCombatRange = false
@@ -783,7 +768,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 isDashStriking = false
                 return
             }
-            console.log("dashing ! ...")
             const dt = scene.getEngine().getDeltaTime()
             opponent.body.locallyTranslate(new Vector3(0, 0, (totalDist / durationMs) * dt))
         })
@@ -855,7 +839,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         if(nearDist < NEAR_SKILL_MIN_DIST || nearDist > NEAR_SKILL_MAX_DIST) return
         if(Math.random() >= NEAR_SKILL_CHANCE) return
         skillCooldownUntil.nearSkill = now + npcDet.skills.nearSkill.skillCoolDown
-        console.log("[duel-skill] nearSkill firing (dashstrike), nearDist:", nearDist)
         performOpponentDashStrike(npcDet.skills.nearSkill)
     }
     const nearSkillCheckInterval = setInterval(rollNearSkill, NEAR_SKILL_CHECK_MS)
@@ -1029,7 +1012,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     }
 
     function runSkillCheck(){
-        console.log("[duel-skill] runSkillCheck fired. opponentDefeated:", opponentDefeated, "duelState.playerDefeated:", duelState.playerDefeated)
         if(opponentDefeated || duelState.playerDefeated) return
         scheduleNextSkillCheck() // reschedule unconditionally - a missed roll this tick just tries again in another 5-6s
 
@@ -1037,16 +1019,14 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             characterBody.position.x - opponent.body.position.x,
             characterBody.position.z - opponent.body.position.z
         )
-        console.log("[duel-skill] dist:", dist, "SKILL_RANGE:", SKILL_RANGE)
         // nearSkill (dashstrikeSkill) is no longer rolled here - it has its
         // own much faster dedicated interval (rollNearSkill/nearSkillCheckInterval
         // above), since this function's own 5-6s cadence almost never landed
         // during the narrow window the opponent is actually 2-3 units out
 
-        if(dist > SKILL_RANGE) return console.log("[duel-skill] out of range, skipping this tick")
+        if(dist > SKILL_RANGE) return 
 
         const hpPercent = hp / maxHp
-        console.log("[duel-skill] hp:", hp, "maxHp:", maxHp, "hpPercent:", hpPercent)
         // which skill KEYS are even in play at this hp tier - hiddenSkill
         // below 8% completely excludes basic/seriousSkill, per spec ("only
         // the hiddenSkill is working"), not just adds to them
@@ -1054,37 +1034,29 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         if(hpPercent <= HIDDEN_HP_THRESHOLD) eligibleKeys = ["hiddenSkill"]
         else if(hpPercent <= SERIOUS_HP_THRESHOLD) eligibleKeys = ["basicSkill", "seriousSkill"]
         else eligibleKeys = ["basicSkill"]
-        console.log("[duel-skill] eligibleKeys:", eligibleKeys, "npcDet.skills:", npcDet.skills, "skillCooldownUntil:", skillCooldownUntil)
 
         const now = Date.now()
         const castableKeys = eligibleKeys.filter(key => npcDet.skills?.[key] && now >= skillCooldownUntil[key])
-        console.log("[duel-skill] castableKeys:", castableKeys)
-        if(!castableKeys.length) return console.log("[duel-skill] nothing castable this tick (missing skill data or still on cooldown)")
+        if(!castableKeys.length) return 
 
         const targetPlayer = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-        console.log("[duel-skill] targetPlayer found?", !!targetPlayer, targetPlayer)
-        if(!targetPlayer) return console.log("[duel-skill] no targetPlayer, bailing")
+        if(!targetPlayer) return 
 
         const pickedKey = castableKeys[Math.floor(Math.random() * castableKeys.length)]
         const skill = npcDet.skills[pickedKey]
         skillCooldownUntil[pickedKey] = now + skill.skillCoolDown
-        console.log("[duel-skill] casting skill:", pickedKey, skill)
 
         // real enemies branch on getIsSocketOn() here (emit vs local cast) -
         // this scene is never multiplayer (isMultiplayer:false, see the file
         // header), so it's always the local path, same as every other combat
         // call in this file
         castEnemySkill(scene, opponent, skill, targetPlayer)
-        console.log("[duel-skill] castEnemySkill call returned")
     }
-    console.log("[duel] spawnDuelOpponent: about to call scheduleNextSkillCheck()")
     scheduleNextSkillCheck()
-    console.log("[duel] spawnDuelOpponent: scheduleNextSkillCheck() returned")
 
     // player -> opponent: reuses the exact atkCollider mechanism already
     // wired up for tree-chopping (areascene.js), matched against this
     // specific opponent's own body mesh name
-    console.log("[duel] spawnDuelOpponent: about to call registerToAtkCollider, opponent.body.name:", opponent.body.name)
     registerToAtkCollider(scene, opponent.body.name.toLowerCase(), () => {
         if(opponentDefeated || duelState.playerDefeated) return
 
@@ -1103,14 +1075,12 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         const hitSound = WEAPON_HIT_SOUNDS[weaponType] ?? DEFAULT_HIT_SOUND
         applyDamageToOpponent(dmgToApply, { weaponType, hitSound, isPhysical: true })
     })
-    console.log("[duel] spawnDuelOpponent: registerToAtkCollider returned")
 
     // Chase - faces and closes on the player whenever out of ATTACK_RANGE,
     // otherwise holds a combat-ready idle. Runs every frame (matches how
     // continuous movement/facing is already driven elsewhere in this project,
     // e.g. renderer.js's own chase loop) rather than on the attack interval's
     // slower cadence, so it doesn't look like he's teleporting between beats.
-    console.log("[duel] spawnDuelOpponent: about to add chaseObserver")
     const chaseObserver = scene.onBeforeRenderObservable.add(() => {
         if(opponentDefeated || duelState.playerDefeated) return
         // performOpponentDashStrike/performDodge own position/facing
@@ -1198,7 +1168,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         }
         opponent.characterAnimations.tickBlend()
     })
-    console.log("[duel] spawnDuelOpponent: chaseObserver added")
 
     // opponent -> player: local timer standing in for the server-driven
     // "enemy-attacked" event, calling deductHp directly instead of waiting
@@ -1206,7 +1175,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // allowDeath:false is the soft-loss clamp (characterstate.js) - a duel
     // never actually kills the player. Gated on inCombatRange (kept in sync
     // by the chase loop above) rather than re-measuring distance here too.
-    console.log("[duel] spawnDuelOpponent: about to set attackInterval")
     attackInterval = setInterval(async () => {
         if(opponentDefeated || duelState.playerDefeated || !inCombatRange || isDodging) return
 
@@ -1286,8 +1254,6 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             ], returnToExitPlace, undefined, true)
         }
     }, ATTACK_INTERVAL_MS)
-    console.log("[duel] spawnDuelOpponent: attackInterval set")
 
     opponent.body.onDisposeObservable.add(stopFight)
-    console.log("[duel] spawnDuelOpponent: FULLY COMPLETE for npcId:", npcId)
 }

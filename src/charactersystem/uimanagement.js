@@ -166,7 +166,6 @@ export function activateBtnOnce(){
             const weapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
             const currentMode = charState.mode
 
-            console.log("currentMode ", currentMode)
             const plMode = getPlayerMode()
             clickedTimeOut = setTimeout(() => {
                 disableEnableWalkRunButtons(true)
@@ -177,7 +176,7 @@ export function activateBtnOnce(){
             // clip (equippedWeaponType + "attack_1_air") wired up for exactly
             // this - it was just unreachable before, since this early
             // return happens before the switch ever runs.
-            if(plMode === "inAir" && btnName !== "attack") return console.log("cannot change mode while inAir")
+            if(plMode === "inAir" && btnName !== "attack") return 
 
             
             clearTimeout(clickedTimeOut)
@@ -223,9 +222,7 @@ export function activateBtnOnce(){
                     if(getTotal().sp < spToDeduct) {
                         // openClosePopup("no stamina", true, 1000)
                         popStatusEffect("no stamina", "yellow")
-                        console.log("physical damage ", dmgDetails.physicalDmg)
-                        console.log("weapon damage ", dmgDetails.weaponDmg)
-                        return console.log("not enough sp")
+                        return 
                     }
                     
                     // charState.sp -= spToDeduct

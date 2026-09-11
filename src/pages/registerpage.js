@@ -45,7 +45,6 @@ export async function   register() {
             setLoading(false)
             return
         }
-        console.log(data)
         keepAccountWithTokenDet(data)
 
         const entered = await startScene(true)

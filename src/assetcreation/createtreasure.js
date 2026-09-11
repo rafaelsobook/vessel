@@ -51,7 +51,6 @@ const RARITY_TREASURE_TEX = {
 export function createTreasureMesh(scene, position, itemDetail, options = {}){
     if(!itemDetail) return console.warn("[createtreasure] no itemDetail passed")
 
-    console.log("createing treasure ...")
     const { treasureId } = options
     const { itemId, rarity } = itemDetail
 
@@ -60,7 +59,6 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
         // missing/failed-to-load treasure.glb already warned about once in
         // containers.js - no need to spam the console again per spawn, just
         // bail quietly instead of crashing whatever placed this
-        console.log("no treasure Root")
         return null
     }
 
@@ -71,7 +69,6 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
     chest.isPickable = false
     chest.position = new Vector3(position.x, position.y, position.z)
 
-    console.log("new treasure cloned and positioned")
 
     // material is cached/shared by rarity (below), not rebuilt fresh per
     // chest - several chests of the same rarity reuse one StandardMaterial/
@@ -82,9 +79,7 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
     if(!mat){
         mat = new StandardMaterial(`treasuremat_${RARITY_TREASURE_TEX[rarity]}`, scene)
         mat.diffuseTexture = new Texture(texPath, scene, true, false)
-        console.log("[createtreasure] created new treasure mat for", texPath)
     }
-    console.log("treasure set material")
     chest.material = mat
 
     const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState().owner)

@@ -18,7 +18,6 @@ const upgradeBtns = document.querySelectorAll(".upgrade-btn")
 const uniquesList = document.querySelector('.uniques-list')
 const statPointsAvailable = document.querySelector(".stat-points-available")
 
-const log =console.log
 let statUpgradeBtnInitiated = false
 
 let timeOutForsaving
@@ -46,8 +45,8 @@ export function initOnceStatsSystem(){
 
                     state.hp+=50
                     state.maxHp+=50
-                    state.mp+=65
-                    state.maxMp+=65
+                    state.mp+=5
+                    state.maxMp+=5
                     state.sp+=30
                     state.maxSp+=30
                 break
@@ -61,6 +60,8 @@ export function initOnceStatsSystem(){
                 break
                 case "magic":
                     state.stats.magic++
+                    state.mp+=90;
+                    state.maxMp+=90;
                 break
             }
             state.statPoints -= 1

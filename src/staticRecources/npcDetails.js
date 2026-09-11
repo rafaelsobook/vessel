@@ -674,6 +674,12 @@ export default [
                     {name:"", message: "You are not finished yet. Nine cores, three of each kind. Come back once you have them all."},
                 ],
                 questsToReceive: [
+                    {
+                        qName: "first-travel",
+                        qTtle: "Short Talk",
+                        desc: "Let's talk a little more about traveling alone",
+                        questRequirements: { reqType: false, completed: true },
+                    }
                 ],
                 // "Choose a skill that you think will help you the most for
                 // your goal" (this quest's own speech, above) - a real
@@ -705,6 +711,62 @@ export default [
                     const eligibleNames = new Set(eligible.map(sk => sk.name))
                     const ownedEligible = (charState.skills || []).filter(sk => eligibleNames.has(sk.name))
                     if(ownedEligible.length) upgradeOwnedSkill(ownedEligible[Math.floor(Math.random() * ownedEligible.length)])
+                }
+            },
+            { // storyInfo 
+                qName: "first-travel",
+                desc: false,
+                questType: "story", //story//hunt//reqItem }, // story means you will get reward after you talk to the
+                //receiveRT: //afterTalk//afterHunt//afterFoundItem
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                // completion here is the reactive itemLists path
+                // (checkStoryQuestIfCompleted, storyQuestSystem.js) - every
+                // obtain() call already checks against this quest's
+                // itemLists automatically, no live-scan needed the way
+                // craftFirstSword's reqType:"craft" required
+                // one array only, matching return-to-guildmaster's own
+                // choice above - no speechBasic duplicate kept alongside it
+                speech: [
+                    {name:"", message: "I know your journey is long, and it is not an easy one."},
+                    {name:"", message: "I wish I could do more for you ..."},
+                    {name:"", message: "If you start traveling you'll unravel a lot of things that are not meant to be unraveled."},
+                    {name:"", message: "You are still a member of this guild so you can check the guild board to find some available jobs..."},
+                    {name:"", message: "It will help you financially and also help you gain some experience."},
+                    {name:"", message: "This old hag will rest for now, I really want to tell you more about the danger but I think I know a right person for that..."},
+                    {name:"", message: "I have a friend named Colousa, she is a very wise and powerful warrior..."},
+                    {name:"", message: "She likes helping people, or even train them to see if they are ready to face the danger of traveling alone"},
+                    {name:"", message: "I usually see her in the Market outside the guild, tell her this sexy Hag sent me.."},
+                    {name:"", message: "I will see you again, goodluck on your journey ..."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "Astonishing ..."},
+                ],
+                questsToReceive: [
+                    {
+                        qName: "meet-colousa",
+                        qTtle: "Meet Colousa",
+                        desc: "Find Colousa in the market outside the guild.",
+                        questRequirements: { reqType: false, completed: true },
+                    }
+                ],
+                // "Choose a skill that you think will help you the most for
+                // your goal" (this quest's own speech, above) - a real
+                // choice this time, unlike return-to-guildmaster's own
+                // auto-granted primary-aptitude skill. eligibleSkillsFor
+                // (skillWheel.js) is the SAME aptitude/lightning-unlock
+                // eligibility rule grantSkillReward's random roll already
+                // uses - reused here, not reimplemented, so "what am I
+                // allowed to learn" only has one real definition in the
+                // codebase. Only unowned skills are offered (chooseskillui.js's
+                // chooseASkill grants whichever card gets clicked) - if
+                // there's genuinely nothing left to offer (every eligible
+                // skill already known), falls back to upgrading a random
+                // owned-eligible one instead, same two-tier fallback
+                // grantSkillReward itself uses, rather than opening a picker
+                // with nothing new in it.
+                cbAfterNewQuestReceived: () => {
+                   
                 }
             },
         ]
@@ -1921,6 +1983,224 @@ export default [
         }
     },
     {
+        // Colousa - the "friend named Colousa... very wise and powerful
+        // warrior" Halric names in her own "first-travel" storyInfo (further
+        // up this file, "111_halric"), the target of the "meet-colousa"
+        // quest that block hands out. "I usually see her in the Market
+        // outside the guild" - placed near smallmarket.glb (localroomdb.js's
+        // own placeId 1 originalGlbs, at {x:-12,y:0,z:-24}), same village
+        // Doran/Wren/Corin stand in.
+        //
+        // glbPath:null + gender:"female" builds her off the generic
+        // avatar.glb's own female body/rig (createcharacter.js's
+        // createAnimeBody: det.gender === "female" gates in the
+        // FEMALE_ONLY_NAMES mesh set) - the maintained female rig with real
+        // hair-style support, rather than a standalone one-off female glb.
+        glbPath: null,
+        gender: "female",
+        currentPlaceId: 1,
+        mode: "idle",
+        _id: "114_colousa",
+        name: "Colousa",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // just north-east of the market stall cluster, clear of it - adjust
+        // in-game if she ends up clipping a stall or the palisade
+        x: -12,
+        y: 0.01,
+        z: -23,
+        _dirTarg: {x:0, z:0},
+        hair: 'hair2',
+        hairColor: ADVENTURER_COLORS.red,
+        items: [],
+        titles: ['warrior'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        // "lightning" is NOT a real aptitude slot (aptitudeSystem.js: it's
+        // unlocked by a high FIRE aptitude, never a slot of its own) - fire
+        // is both a valid slot AND the actual path to the lightning skills
+        // that fit her, so it doubles as the thematic pick here
+        aptitude: ['fire'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "Keep your guard up out there. The road doesn't care how ready you feel."}
+        ],
+        forQuests: [
+            { // storyInfo - fires when the player talks to her holding the
+              // "meet-colousa" quest Halric handed out. Same shape as Doran's
+              // own "meet-doran-journey" above (the parallel "Halric sent you
+              // to meet someone" beat): reqType:false/completed:true, talking
+              // to her is the completion. No follow-up quest yet - the
+              // training/trial she offers ("come find me when you want to be
+              // tested for real") is a natural next chain to add later, left
+              // as questsToReceive:[] for now.
+                qName: "meet-colousa",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "So Halric sent you. 'This sexy Hag,' she'll have called herself - she always does. She's earned it."},
+                    {name:"", message: "Colousa. I train the ones about to walk out that gate thinking a sharp blade is the same as being ready. It isn't."},
+                    {name:"", message: "She's right about the danger. Most of what's out there won't announce itself the way a slime does - it waits, it's patient, and it has already decided you are prey."},
+                    {name:"", message: "You've got the look of someone who'll go anyway. Good. That stubbornness is half of what keeps people alive."},
+                    {name:"", message: "Come find me here when you want to be tested for real. Until then - watch the treeline, don't fight tired, and never let the first hit be theirs."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "..."},
+                ],
+                questsToReceive: [],
+            },
+        ],
+    },
+    {
+        // Maela - a consumables (food/potion) seller stationed right next to
+        // Colousa ("114_colousa" above, at {x:-12,z:-23} in the same
+        // placeId:1 market). No quest chain of her own (forQuests:[]), so
+        // createAllNpcInArea.js's talk handler always falls straight to
+        // randomSpeech -> callbackAfterRandomSpeech - same "quest-less
+        // merchant" shape sellerEldric123/sellerSylvan123 use further down
+        // this file, except she actually opens the real buyorsell.js shop
+        // (those two still have their openCloseShop cb commented out).
+        //
+        // buyOrSell(false, "115_maela") (maeladata.js) hands buyorsell.js
+        // this NPC's own _id, which it uses to read straight off her own
+        // toSell array below - no more shared toSell.js catalog to filter by
+        // category. These are the same food/potion items sellerSylvan123
+        // used to list (etherpearl/sylfple/lunaraqum/antidote/duskmire),
+        // moved here since she's the one actually spawned and reachable.
+        glbPath: null,
+        currentPlaceId: 1,
+        mode: "idle",
+        _id: "115_maela",
+        name: "Maela",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // a few paces from Colousa's own spot (-12,-23) - close enough to
+        // read as "the same market corner", clear of her so neither NPC's
+        // collider/name-plate overlaps the other
+        x: -15,
+        y: 0.01,
+        z: -20,
+        _dirTarg: {x:-12, z:-23},
+        cloth: 'style2',
+        pants: 'style1',
+        hair: 'style2',
+        boots: 'style1',
+        skinColor: "skin3",
+        hairColor: ADVENTURER_COLORS.brown,
+        clothColor: ADVENTURER_COLORS.darkTeal,
+        pantsColor: ADVENTURER_COLORS.tan,
+        items: [],
+        toSell: [
+            {
+                itemId: randomNum(),
+                name: "etherpearl",
+                dn: "Etherpearl",
+                itemCateg: "consumable",
+                itemType: "food",
+                consumeAbilities: { plusHp: 100, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 15, fillTireness: 0, cure: [] },
+                price: { coinType: "bronze", pieces: 1 },
+                qnty: 1,
+                desc: "A rare, luminous fruit that shimmers with a soft, otherworldly glow. ",
+                rarity: "normal"
+            },
+            {
+                itemId: randomNum(),
+                name: "sylfple",
+                dn: "Sylfple",
+                itemCateg: "consumable",
+                itemType: "food",
+                consumeAbilities: { plusHp: 200, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 25, fillTireness: 0, cure: [] },
+                price: { coinType: "bronze", pieces: 2 },
+                qnty: 1,
+                desc: "A delicate, green-skinned fruit, with soft, velvety flesh that emits a fresh, herbal fragrance.",
+                rarity: "normal"
+            },
+            {
+                itemId: randomNum(),
+                name: "lunaraqum",
+                dn: "Lunaraqum",
+                itemCateg: "consumable",
+                itemType: "food",
+                consumeAbilities: { plusHp: 400, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 30, fillTireness: 10, cure: ["poisoned"] },
+                price: { coinType: "bronze", pieces: 3 },
+                qnty: 1,
+                desc: "A striking fruit with a deep crimson skin that glimmers like molten metal under moonlight. Its content can even cure poisons",
+                rarity: "normal"
+            },
+            // cures "cursed" (charactersystem/characterstate.js's
+            // curseStatusEffect/isPlayerCursed - dark magic's "your own
+            // damage backfires on you" debuff) - same cure:[] mechanism
+            // lunaraqum's own poison-cure above already uses, just naming
+            // "cursed" instead of "poisoned".
+            {
+                itemId: randomNum(),
+                name: "antidote",
+                dn: "Antidote",
+                itemCateg: "consumable",
+                itemType: "potion",
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, fillHunger: 0, fillTireness: 0, cure: ["cursed"] },
+                price: { coinType: "bronze", pieces: 5 },
+                qnty: 1,
+                desc: "A bitter, silver-blue tonic brewed to burn a curse out of the blood. Does nothing for wounds, hunger, or poison - only for the mark dark magic leaves behind.",
+                rarity: "normal"
+            },
+            {
+                itemId: randomNum(),
+                name: "duskmire",
+                dn: "Duskmire",
+                itemCateg: "consumable",
+                itemType: "food",
+                consumeAbilities: { plusHp: 900, plusMp: 200, plusSp: 200, plusDmg: 10, plusSpd: 0, fillHunger: 60, fillTireness: 15 },
+                price: { coinType: "bronze", pieces: 13 },
+                qnty: 1,
+                desc: "Its rarity stems from the fact that it only grows in the heart of enchanted swamps, blooming at dusk under the watchful eye of ancient spirits.",
+                rarity: "rare"
+            },
+        ],
+        titles: ['merchant'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 300,
+        aptitude: ['light'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "Fresh off the vine and still warm from the kettle - care to see what I've got?"}
+        ],
+        forQuests: [],
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(320)
+        }
+    },
+    {
         glbPath: null,
         currentPlaceId: 1,
         mode: "idle",
@@ -2241,6 +2521,12 @@ export default [
         pantsColor: ADVENTURER_COLORS.blue,
         items: [
         ],
+        // currentPlaceId "wisemanVillage" isn't a real placeId (see
+        // localroomdb.js) and this NPC's own shop cb below is still
+        // commented out, so she never actually spawns or sells anything
+        // right now - toSell:[] left empty rather than guessing at stock
+        // for a stall nobody can reach yet.
+        toSell: [],
         titles: ['priest', 'warrior'],
         skills: [], 
         status: [], // sickness //poisoned etc
@@ -2288,8 +2574,13 @@ export default [
         pantsColor: ADVENTURER_COLORS.maroon,
         items: [
         ],
+        // same "wisemanVillage" placeId problem as sellerEldric123 above -
+        // her own food/potion stock now lives on the actually-reachable
+        // "115_maela" NPC instead (see that entry's own comment), so this
+        // one is left with no stock of her own.
+        toSell: [],
         titles: ['merchant'],
-        skills: [], 
+        skills: [],
         status: [], // sickness //poisoned etc
         regens: {sp: 1, hp: 1, mana: 1},
         monsSoul: 2, // same like points system
@@ -2360,6 +2651,143 @@ export default [
                 desc: "This Boots is light and useful for first time adventurers",
                 rarity: "common"
             }
+        ],
+        // Bram's own shop stock (moved out of the old shared toSell.js
+        // catalog - buyorsell.js now reads straight off this NPC's own
+        // toSell array instead of one big catalog everyone shared) - armor
+        // and weapons fresh off the anvil, reusing the same item shapes
+        // already worn by Armin/Strong/Vordz so the art (images/items/
+        // equipable/*) is guaranteed to already exist.
+        toSell: [
+            {
+                itemId: randomNum(),
+                name: "knightscale",
+                dn: "Knight's Scale",
+                itemCateg: "equipable",
+                itemType: "armor",
+                weaponType: undefined,
+                equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 45 },
+                qnty: 1,
+                desc: "Sturdy scale armor, fresh off Bram's anvil.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.ADAMANTINE
+            },
+            {
+                itemId: randomNum(),
+                name: "ironpaul",
+                dn: "Iron Pauldron",
+                itemCateg: "equipable",
+                itemType: "pauldron",
+                weaponType: undefined,
+                equipAbilities: { dmg: 0, def: 20, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 30 },
+                qnty: 1,
+                desc: "A solid iron pauldron, hammered to shape by Bram himself.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.ADAMANTINE
+            },
+            {
+                itemId: randomNum(),
+                name: "gauntler",
+                dn: "Gauntlet",
+                itemCateg: "equipable",
+                itemType: "gauntlet",
+                weaponType: undefined,
+                equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 30 },
+                qnty: 1,
+                desc: "A well-fitted gauntlet, straight from the forge.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.ADAMANTINE
+            },
+            {
+                itemId: randomNum(),
+                name: "ironjaw",
+                modelName: "ironjaw",
+                dn: "Knight's Helm III",
+                itemCateg: "equipable",
+                itemType: "helmet",
+                weaponType: undefined,
+                equipAbilities: { dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 35 },
+                qnty: 1,
+                desc: "A full iron helm, dented once and re-forged since.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.ADAMANTINE
+            },
+            {
+                itemId: randomNum(),
+                name: "leatherboots",
+                dn: "Leather Boots",
+                itemCateg: "equipable",
+                itemType: "boots",
+                equipAbilities: { dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: false,
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            },
+            {
+                itemId: randomNum(),
+                name: "frostbite",
+                dn: "Frost Bite",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "sword",
+                equipAbilities: { dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 10, plusSpd: 1 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 50 },
+                qnty: 1,
+                desc: "A frost-etched blade, quenched in ice water the moment it left the forge.",
+                rarity: "rare",
+                parts: {
+                    bladeRarity: "rare2",
+                    guardRarity: "rare2",
+                    handleRarity: "common1",
+                    pommelRarity: "common1"
+                }
+            },
         ],
         titles: ['blacksmith'],
         skills: [],

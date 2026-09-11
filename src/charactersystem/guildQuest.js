@@ -30,7 +30,6 @@ const REQ_TYPE_LABELS = {
 export function questToItem(quest) {
     // claimed, desc, pos, price, qName, qTtle, questId, 
     // quesRequirements{completed, current, modelStyle, name, reqType,requiredNum}
-    console.log(quest)
     return {
         itemId: quest.questId,
         name: quest.questRequirements.modelStyle ,

@@ -411,7 +411,6 @@ function setupControls(scene, allsounds) {
             const pl = getPlayersOnScene().find(pl => pl.owner === state.owner)
             if(!pl) return
             const pos = pl.body.getAbsolutePosition()
-            console.log(`saving ...`, pos)
             await updateMyDetailsOL({...state, x: pos.x, y: pos.y, z: pos.z}, checkIfTokenSaved(), false, true)
         }, 5000)
     }
@@ -590,7 +589,6 @@ function setupControls(scene, allsounds) {
             case "d": input.right   = 0; break;
             case "shift": currentSpeed = walkSpeed; break;
             case "c":
-                console.log("players ", getPlayersOnScene())
                 clearLocTimeOut()
                 myPlayer.body.position.x = 0
                 myPlayer.body.position.z = 600
@@ -612,8 +610,6 @@ function setupControls(scene, allsounds) {
                 }
             break
             case " ":
-                console.log(getCharState())
-                console.log(checkDistance( new Vector3(0,0,500), myPlayer?.body.position))
                 updateStoryQuestUI()
                     
             break
@@ -652,35 +648,43 @@ function setupControls(scene, allsounds) {
                 // pushed 3-of-each via obtainAll (inventory.js - same helper
                 // giveAllItems/"i" key already uses, stacks same-name items
                 // and saves once at the end instead of a raw items.push per item).
-                const CORE_DEBUG_ITEMS = [
-                    { name: "waterslimecore", dn: "Water Slime Core", desc: "a gelatinous core taken from a water slime, useful for enhancing items" },
-                    { name: "fireslimecore", dn: "Fire Slime Core", desc: "a smoldering core taken from a fire slime, useful for enhancing items" },
-                    { name: "electricslimecore", dn: "Electric Slime Core", desc: "a crackling core taken from an electric slime, useful for enhancing items" },
-                ]
-                obtainAll(CORE_DEBUG_ITEMS.flatMap(core => Array.from({ length: 3 }, () => ({
-                    itemId: randomNum(),
-                    name: core.name,
-                    dn: core.dn,
-                    itemCateg: "crafting",
-                    itemType: "core",
-                    weaponType: false,
-                    equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0, plusDurability: 30 },
-                    equiped: false,
-                    price: { coinType: "bronze", pieces: 50 },
-                    qnty: 1,
-                    desc: core.desc,
-                    rarity: "normal",
-                })))).then(() => {
-                    changeStory({
-                        qName: "gatherElementalCores",
-                        qTtle: "Three of a Kind",
-                        desc: "Collect 3 each of Water Slime Core, Fire Slime Core, and Electric Slime Core, then return to Halric.",
-                        questRequirements: { reqType: "item", itemLists: [
-                            { name: "waterslimecore", dn: "Water Slime Core", current: 3, total: 3 },
-                            { name: "fireslimecore", dn: "Fire Slime Core", current: 3, total: 3 },
-                            { name: "electricslimecore", dn: "Electric Slime Core", current: 3, total: 3 },
-                        ], completed: true },
-                    })
+ 
+                // const CORE_DEBUG_ITEMS = [
+                //     { name: "waterslimecore", dn: "Water Slime Core", desc: "a gelatinous core taken from a water slime, useful for enhancing items" },
+                //     { name: "fireslimecore", dn: "Fire Slime Core", desc: "a smoldering core taken from a fire slime, useful for enhancing items" },
+                //     { name: "electricslimecore", dn: "Electric Slime Core", desc: "a crackling core taken from an electric slime, useful for enhancing items" },
+                // ]
+                // obtainAll(CORE_DEBUG_ITEMS.flatMap(core => Array.from({ length: 3 }, () => ({
+                //     itemId: randomNum(),
+                //     name: core.name,
+                //     dn: core.dn,
+                //     itemCateg: "crafting",
+                //     itemType: "core",
+                //     weaponType: false,
+                //     equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0, plusDurability: 30 },
+                //     equiped: false,
+                //     price: { coinType: "bronze", pieces: 50 },
+                //     qnty: 1,
+                //     desc: core.desc,
+                //     rarity: "normal",
+                // })))).then(() => {
+                //     changeStory({
+                //         qName: "gatherElementalCores",
+                //         qTtle: "Three of a Kind",
+                //         desc: "Collect 3 each of Water Slime Core, Fire Slime Core, and Electric Slime Core, then return to Halric.",
+                //         questRequirements: { reqType: "item", itemLists: [
+                //             { name: "waterslimecore", dn: "Water Slime Core", current: 3, total: 3 },
+                //             { name: "fireslimecore", dn: "Fire Slime Core", current: 3, total: 3 },
+                //             { name: "electricslimecore", dn: "Electric Slime Core", current: 3, total: 3 },
+                //         ], completed: true },
+                //     })
+                // })
+
+                changeStory({
+                    qName: "meet-colousa",
+                    qTtle: "Meet Colousa",
+                    desc: "Find Colousa in the market outside the guild.",
+                    questRequirements: { reqType: false, completed: true },
                 })
 
             break
@@ -730,7 +734,6 @@ function setupControls(scene, allsounds) {
                     behindDistance: 8,
                     lookHeight: 2,
                     onComplete: () => {
-                        console.log("trick 1 complete")
                         hideShowAllScreenUI(true)
                         // myPlayer?.characterAnimations?.setMoveSpeedRatio(1)
                     }
@@ -846,7 +849,7 @@ function setupControls(scene, allsounds) {
 
     function performJump() {
         if (!aggregate || !isGrounded()) return;
-        if(myPlayer.body) console.log(myPlayer.body.position)
+        if(myPlayer.body) ;
 
         const charState = getCharState()
         if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10 || charState.currentPlace.placeId === 101) return openClosePopup("cannot jump here", true, 1000)

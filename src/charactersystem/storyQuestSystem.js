@@ -304,7 +304,6 @@ function renderStoryQuests(){
     storyCont.style.display = "block"
 
     charState.quests.forEach(({ qName, qTtle, desc, questRequirements }) => {
-        console.log(qName)
         const storyBx = createElement("div", "story-bx")
         storyBx.append(
             createElement("h4", "story-title", qTtle),

@@ -16,6 +16,9 @@
 //   - continentalrend -> growGroundSpikes: one more spike in the line
 //   - thunderstrike -> growLightningLine: one more "stacked plane" check
 //     point along the line (its own maxDistance stays fixed)
+//   - meteor -> growMeteorRain: more falling meteors per cast
+//   - thunderclap -> growThunderclapStrike: same shape as growMeteorRain,
+//     just a lower cap (starts at a single decisive bolt, tops out at 3)
 //   - darkorb -> growDarkOrb: its own onHit stick-and-swell sequence itself
 //     gets more extreme
 //   - radiantjudgment additionally -> growBindPower: its enemyBind gets
@@ -101,6 +104,18 @@ export function growMeteorRain(skillDetail){
     const lvl = skillDetail.lvl
     skillDetail.meteorRain.max = Math.min(10, 3 + (lvl - 1) * 2)
     skillDetail.meteorRain.min = Math.min(7, 2 + (lvl - 1))
+}
+
+// thunderclap only - same "remembered growth toward a cap" shape as
+// growMeteorRain above, just a much lower ceiling (starts at a single
+// decisive bolt, caps at 3 rather than meteorRain's own 10/7 - see
+// thunderclapSkill's own comment in skillsData.js for why it starts lower).
+// Reaches min:2/max:2-3 by lvl 3 and stays there.
+export function growThunderclapStrike(skillDetail){
+    if(!skillDetail.lightningStrike) return
+    const lvl = skillDetail.lvl
+    skillDetail.lightningStrike.max = Math.min(3, 1 + (lvl - 1))
+    skillDetail.lightningStrike.min = Math.min(2, 1 + Math.floor((lvl - 1) / 2))
 }
 
 // continentalrend only - one more spike per level, capped so the line
@@ -194,6 +209,7 @@ export const UPGRADE_TEMPLATES = {
     growArcAuraAndPlasma,
     growSwordRain,
     growMeteorRain,
+    growThunderclapStrike,
     growGroundSpikes,
     growLightningLine,
     growDarkOrb,

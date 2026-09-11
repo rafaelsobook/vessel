@@ -10,7 +10,6 @@ export async function getCharDetFromDB(accountDet){
         }) 
         return res.json()
     } catch (error) {
-         console.log(error)
          return false
     }
 
@@ -19,6 +18,5 @@ export async function getCharDetFromDB(accountDet){
     
 
 export function keepAccountWithTokenDet(accoundDetail){
-    console.log(JSON.stringify(accoundDetail))
     sessionStorage.setItem(sessionStorageName, JSON.stringify(accoundDetail))
 }

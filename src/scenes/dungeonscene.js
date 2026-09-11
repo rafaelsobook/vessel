@@ -26,7 +26,6 @@ export async function dungeonScene(placeDetail){
     const scene = new Scene(engine)
     setupLighting(scene, placeDetail)
 
-    console.log(placeDetail)
     
     const container = await loadAvatarContainer("./models/avatar/avatar.glb", scene)
 

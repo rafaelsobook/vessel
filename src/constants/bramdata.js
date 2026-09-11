@@ -25,7 +25,7 @@ export function bramData(){
             questionId: 300,
             conversationWithQuestion: toLines(pick(bramGreetings)),
             answers: [
-                { text: "Show me your wares", cb: () => buyOrSell(false) },
+                { text: "Show me your wares", cb: () => buyOrSell(false, "110_bram") },
                 { text: "I'd like to craft something", cb: () => openCloseCraftUI(true) },
                 { text: "Just looking around.", cb: () => startQuestionare(301) },
             ],

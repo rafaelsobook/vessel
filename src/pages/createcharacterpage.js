@@ -225,7 +225,6 @@ async function createCharacter(input, btn, msg, overlay, getToSaveInfoFromSetup)
 
         const data = await res.json()
 
-        console.log(data)
 
         if (data === "exist") {
             msg.textContent = "Name already taken, choose another."

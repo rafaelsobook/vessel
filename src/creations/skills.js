@@ -123,7 +123,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     enemies.forEach(enem => {
         if(!enem.body) return
         const enterAction = onIntersecEnterTrig(instance, enem.body, scene, () => {
-            if(hasHit) return console.log("this projectile already hit something, ignoring enemy collision")
+            if(hasHit) return 
             hasHit = true
             if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
             getAllSounds().struckS?.play()

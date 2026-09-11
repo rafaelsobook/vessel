@@ -435,7 +435,7 @@ armorybx.addEventListener("click", e => {
     if(!myChar) return
     if(className && className.split(" ")[0] === "eqpd-slot"){
         const itemType = className.split(" ")[1] //weapon //boots// belt // armor
-        if(!itemType) return console.log("category undefined");
+        if(!itemType) return ;
 
         // show details first, same as tapping an inventory item - unequipping
         // now only happens if the "unequip" button in that popup gets pressed

@@ -2209,6 +2209,7 @@ canvas {
     cursor: pointer;
     background: none;
     position: relative;
+    border: none;
     .slot-img {
       padding: 3px;
       width: 100%;
@@ -4294,39 +4295,10 @@ canvas {
     gap: 14px;
     min-height: 0;
 
-    .bs-categories {
-      list-style: none;
-      width: 130px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      overflow-y: auto;
-
-      .bs-categ-btn {
-        cursor: pointer;
-        font-family: $tipsFont;
-        font-size: 0.85rem;
-        color: rgba(245, 245, 245, 0.6);
-        border: 1px solid transparent;
-        border-radius: 4px;
-        padding: 8px 10px;
-        transition: 0.15s;
-      }
-      .bs-categ-btn:hover {
-        border-color: rgba(202, 165, 1, 0.3);
-      }
-      .bs-categ-btn.active {
-        color: #edd59f;
-        border-color: rgba(237, 213, 159, 0.5);
-        background: rgba(202, 165, 1, 0.08);
-      }
-    }
-
     .bs-items-grid {
       flex: 1;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       align-content: flex-start;
       overflow-y: auto;
