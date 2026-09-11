@@ -160,7 +160,11 @@ function getElementDamageMultiplier(skill){
 // caller already spawned for its OWN reasons (disintegrationSkill's own
 // bind-visual particles) instead of stacking a second overlapping one on
 // the same body - only spawns its own when omitted.
-function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyWidenes, dealTick, existingParticles){
+// exported so a weapon's own effectsWhenHit (npcDetails.js item data, e.g.
+// the Majestic Sword's burn) can reuse this exact same tick+particle
+// machinery from createEnemy.js's own enemyIsHit() - see that function's
+// own comment for how the weapon-hit path wires into this.
+export function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyWidenes, dealTick, existingParticles){
     const totalTicks = Math.max(1, Math.round(burnEffect.duration / 1000))
     let ticksDone = 0
 

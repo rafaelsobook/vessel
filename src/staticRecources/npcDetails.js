@@ -747,7 +747,7 @@ export default [
                         qName: "meet-colousa",
                         qTtle: "Meet Colousa",
                         desc: "Find Colousa in the market outside the guild.",
-                        questRequirements: { reqType: false, completed: true },
+                        questRequirements: { reqType: "duel", completed: false },
                     }
                 ],
                 // "Choose a skill that you think will help you the most for
@@ -2021,7 +2021,88 @@ export default [
         _dirTarg: {x:0, z:0},
         hair: 'hair2',
         hairColor: ADVENTURER_COLORS.red,
-        items: [],
+        // her own worn gear (equiped:true, same as Bram's/Wren's own items
+        // arrays above) - not shop stock, she has no toSell of her own.
+        // Majestic Sword is the epic1 sword recipe (staticRecources/
+        // epiccrafts.js: blade adamantine/unobtanium, guard blackdragon,
+        // handle phoenixore, pommel blackdragon) - same item shape
+        // craftingui.js's buildSwordItem() produces for a real craft of
+        // that recipe. dmg bumped up from computeCraftedWeaponStats' raw
+        // 24 to 45 - a hand-tuned boost past the plain crafting formula's
+        // output, same way frostbite (toSell.js-era hand-authored sword)
+        // was never run through that formula either, to justify her being
+        // the one carrying a blade this strong.
+        //
+        // effectsWhenHit: [{effectType:"burn", ...}] - same shape as a
+        // fire skill's own "burn" entry (skillsData.js, e.g. infernorush's
+        // `{ effectType: "burn", dmgPm: 30, duration: 4000,
+        // soundPlayPerDmg: "dmgpm" }`, read via getSkillEffect(skill,"burn")
+        // and applied with startTargetBurn - skillEffects.js). NOTE: unlike
+        // that skill path, nothing currently reads a WEAPON item's own
+        // effectsWhenHit on a melee swing (createEnemy.js's atkCollider hit
+        // handler / dealDamageToEnemy don't check for it at all - the only
+        // other effectsWhenHit in the codebase is destructured off enemy
+        // data in createEnemy.js's defeatedAmonster and is unused there
+        // too) - this is data only for now, inert until a melee-hit effect
+        // pipeline actually consumes it.
+        items: [
+            {
+                itemId: randomNum(),
+                name: "majesticsword",
+                dn: "Majestic Sword",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "sword",
+                equipAbilities: { dmg: 45, magicDmg: 13, magicResistance: 12, def: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                effectsWhenHit: [
+                    { effectType: "burn", dmgPm: 45, duration: 4000, soundPlayPerDmg: "dmgpm" },
+                ],
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 104, max: 104 },
+                price: { coinType: "bronze", pieces: 500 },
+                qnty: 1,
+                desc: "Majestic Sword, a legendary blade forged from Adamantine, Black Dragon Scale, Phoenix Ore, and Black Dragon Scale. Its edge still smolders with the phoenix ore bound into it, setting anything it cuts alight.",
+                rarity: "epic1",
+                parts: {
+                    bladeRarity: "epic1",
+                    guardRarity: "epic1",
+                    handleRarity: "epic1",
+                    pommelRarity: "epic1",
+                    bladeColor: "adamantine",
+                    guardColor: "dragonscale",
+                    handleColor: "firecrystal",
+                    pommelColor: "dragonscale",
+                    epicAccents: {
+                        bladeOuterColor: "gold",
+                        guardCoreColor: "red",
+                        guardOuterColor: "silver",
+                    },
+                }
+            },
+            {
+                itemId: randomNum(),
+                name: "leatherboots",
+                dn: "Leather Boots",
+                itemCateg: "equipable",
+                itemType: "boots",
+                equipAbilities: { dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false,
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            }
+        ],
         titles: ['warrior'],
         skills: [],
         status: [], // sickness //poisoned etc
@@ -2054,17 +2135,23 @@ export default [
                 hasReward: false,
                 reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
                 speech: [
-                    {name:"", message: "So Halric sent you. 'This sexy Hag,' she'll have called herself - she always does. She's earned it."},
-                    {name:"", message: "Colousa. I train the ones about to walk out that gate thinking a sharp blade is the same as being ready. It isn't."},
-                    {name:"", message: "She's right about the danger. Most of what's out there won't announce itself the way a slime does - it waits, it's patient, and it has already decided you are prey."},
-                    {name:"", message: "You've got the look of someone who'll go anyway. Good. That stubbornness is half of what keeps people alive."},
-                    {name:"", message: "Come find me here when you want to be tested for real. Until then - watch the treeline, don't fight tired, and never let the first hit be theirs."},
+                    {name:"", message: "That was a nice match !"},
+                    {name:"", message: "I enjoyed the battle !"},
+                    {name:"", message: "Practise your swing more and you'll have greater damage !"},
+                    {name:"", message: "I can say you are ready to travel, go north !"},
+                    {name:"", message: "You'll find a witch tower there, but inside is not a witch but a friend"},
+                    {name:"", message: "She's capable of different types of magic ! and she can help you enhace your skills"},
+                    {name:"", message: "goodluck on your journey !"},
                 ],
                 notCompletedSpeech: [
-                    {name:"", message: "..."},
+                    {name:"", message: "So Halric sent you. Alright ! Let's battle !"}
                 ],
                 questsToReceive: [],
+                cbAfterNotCompletedSpeech: () => {
+                    // start a duel between colousa and us and if we win the quest will be completed: true
+                }
             },
+
         ],
     },
     {

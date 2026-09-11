@@ -684,7 +684,7 @@ function setupControls(scene, allsounds) {
                     qName: "meet-colousa",
                     qTtle: "Meet Colousa",
                     desc: "Find Colousa in the market outside the guild.",
-                    questRequirements: { reqType: false, completed: true },
+                    questRequirements: { reqType: "duel", completed: false },
                 })
 
             break

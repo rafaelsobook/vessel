@@ -818,7 +818,21 @@ export function isPlayerCursed(){
 // silently defaulted to playing that same melee sound on every skill cast
 // and every single burn tick too - "why do I hear my slash sound when
 // they're just burning" was that exact bug.
-export async function dealDamageToEnemy({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical = false }){
+// effectsWhenHit (optional) - the ATTACKING weapon item's own on-hit
+// effects array (npcDetails.js item data, e.g. the Majestic Sword's
+// `effectsWhenHit: [{effectType:"burn", ...}]`). Only the real melee
+// atkCollider hit handler (createEnemy.js) ever passes this - every other
+// caller (skillEffects.js's own hit handlers, that same burn's own repeat
+// tick) omits it, which is deliberate: undefined here just means "nothing
+// extra rides along with this hit," and specifically the burn tick's OWN
+// dealDamageToEnemy call must never pass this back through (see
+// enemyIsHit's own comment on why re-passing it would restart the burn
+// every single tick). Just forwarded on to emitEnemyIsHit - the server's
+// enemyIsHit handler (tcp/index.ts) already spreads the whole incoming
+// data object into its "enemy-is-hit" broadcast, so this rides all the way
+// back to every connected client for free, same free ride isPhysical
+// already gets (see this function's other comments).
+export async function dealDamageToEnemy({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical = false, effectsWhenHit }){
     if(isPlayerCursed()){
 
         const selfDmg = dmgDetails.weaponDmg || dmgDetails.physicalDmg || 0
@@ -837,7 +851,7 @@ export async function dealDamageToEnemy({ playerId, dmgDetails, targetId, curren
         }
         return
     }
-    emitEnemyIsHit({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical })
+    emitEnemyIsHit({ playerId, dmgDetails, targetId, currentPlaceId, isPhysical, effectsWhenHit })
 }
 export async function gameOver(){
     hideShowAllScreenUI(false)

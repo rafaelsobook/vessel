@@ -644,7 +644,15 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             return
         }
 
-        await deductHp(dmgToPlayer, npcDet.effects || [], npcDet.stats)
+        // equippedWeapon?.effectsWhenHit (npcDetails.js item data, e.g. a
+        // fighter carrying the Majestic Sword) - deductHp's own effects loop
+        // (characterstate.js) already knows how to apply a "burn" entry
+        // (startBurnDamage - ticks hp AND spawns the same "wreathed in
+        // flame" particle burnEffect uses elsewhere), so just needs the
+        // weapon's own effectsWhenHit merged in alongside whatever effects
+        // this npcFighter's own data already carries - no duel-specific burn
+        // handling needed here at all.
+        await deductHp(dmgToPlayer, [...(npcDet.effects || []), ...(equippedWeapon?.effectsWhenHit || [])], npcDet.stats)
         // orange (not red - red's already "damage I just dealt", see the
         // atkCollider hit handler above) so incoming vs outgoing damage
         // reads as visually distinct at a glance

@@ -25,7 +25,7 @@ import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
-import { castEnemySkill } from "../creations/skillEffects.js"
+import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 
 
@@ -534,12 +534,24 @@ export default function createEnemy(scene, det) {
             // whole game), what actually drives enemyIsHit's own
             // swordS1/punchedS sound decision - see dealDamageToEnemy's own
             // comment for the full reasoning
+            //
+            // equippedWeapon?.effectsWhenHit (npcDetails.js item data, e.g.
+            // the Majestic Sword's burn) - forwarded through
+            // dealDamageToEnemy -> emitEnemyIsHit -> tcp/index.ts's
+            // "enemyIsHit" handler (which already spreads the whole incoming
+            // data object into its "enemy-is-hit" broadcast, no server
+            // change needed) -> back to every client's own enemyIsHit() down
+            // below, which is what actually starts the burn tick/particles.
+            // Bare hand or a weapon with no effectsWhenHit of its own just
+            // sends undefined here - enemyIsHit's own find() on it no-ops.
+            const equippedWeapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
             dealDamageToEnemy({
                 playerId: charState.owner,
                 dmgDetails: calcDmg(charState),
                 targetId: det._id,
                 currentPlaceId: det.currentPlaceId,
                 isPhysical: true,
+                effectsWhenHit: equippedWeapon?.effectsWhenHit,
             })
             // no notPlayerBody arg - faceForward targets the LOCAL PLAYER's
             // own body (see its own comment on why it can't just reuse the
@@ -779,6 +791,43 @@ export function enemyIsHit(data){
     enemy.det.hp = data.hp
     playRandomAnim(enemy.anims, "hit")
     enemy.hitSound?.play()
+
+    // weapon-on-hit effects (npcDetails.js item data's own effectsWhenHit,
+    // e.g. the Majestic Sword's burn) - data.effectsWhenHit rode here for
+    // free off dealDamageToEnemy's own forwarding + tcp/index.ts's
+    // "enemyIsHit" handler spreading its whole incoming data object into
+    // the "enemy-is-hit" broadcast this function is reacting to (no server
+    // change needed - see dealDamageToEnemy's own comment). This function
+    // runs identically on EVERY connected client (same as the hp
+    // bar/popup/hit-anim/sound just above), so everyone watching actually
+    // sees the enemy catch fire - but only the ORIGINAL ATTACKER's own
+    // client (playerId === charState.owner) is allowed to deal the tick
+    // damage, same "only the real doer of a hit mutates state" rule
+    // skillEffects.js's own fire-burn hit handler already follows (see its
+    // header comment on "other players get exp too") - everyone else gets
+    // the particles/visual with a no-op tick.
+    const burnEffect = data.effectsWhenHit?.find(eff => eff.effectType === "burn")
+    if(burnEffect){
+        startTargetBurn(
+            burnEffect,
+            enemy.body,
+            getSceneDet().scene,
+            enemy.det?.bodyHeight,
+            enemy.det?.bodyWidenes,
+            playerId === charState.owner
+                ? dmg => dealDamageToEnemy({
+                    playerId,
+                    dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                    targetId,
+                    currentPlaceId,
+                    // NOT effectsWhenHit again - this tick's own
+                    // dealDamageToEnemy call would otherwise re-trigger this
+                    // exact burn every single tick, stacking runaway fire on
+                    // top of itself
+                })
+                : () => {}
+        )
+    }
 
     const player = getPlayersOnScene().find(pl => pl.owner === playerId)
     if(!player) return
