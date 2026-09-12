@@ -66,8 +66,15 @@ export function createAllNpcInArea(hero, scene){
                 // the enemy-kill/item-gathering reqTypes, which flip
                 // .completed reactively as they happen instead)
                 evaluateLiveQuestRequirements(myQuestShortDetail)
-                if(!myQuestShortDetail.questRequirements.completed && storyInfo.notCompletedSpeech) return startConv(storyInfo.notCompletedSpeech)
-                
+                // storyInfo.cbAfterNotCompletedSpeech (npcDetails.js, e.g.
+                // Colousa's own duel challenge) - fires once this speech
+                // finishes playing, same "cb runs after the conversation
+                // closes" contract every other startConv call in this file
+                // already relies on. Optional - most notCompletedSpeech
+                // entries have nothing to do beyond just saying their line,
+                // so this no-ops via ?. for all of those.
+                if(!myQuestShortDetail.questRequirements.completed && storyInfo.notCompletedSpeech) return startConv(storyInfo.notCompletedSpeech, () => storyInfo.cbAfterNotCompletedSpeech?.())
+
 
                 if(myQuestShortDetail.questRequirements.completed) return startConv(storyInfo.speech, async () => {
                     myState = getCharState()

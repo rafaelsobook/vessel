@@ -32,7 +32,9 @@ import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect } from "../charactersystem/characterstate.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect } from "../charactersystem/characterstate.js"
+import { poppingTextMesh } from "../tools/GUITools.js"
+import { openClosePopup } from "../tools/popupUI.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
@@ -807,6 +809,147 @@ const originalZ = atkCollider.scaling.z
         atkCollider.scaling.z = originalZ
         atkCollider.isSkillHijacked = false
     }, HAND_STRIKE_WINDOW_MS)
+}
+
+// --- BLINKSTRIKE (effectType "blink", dashstrikeSkill's own lvl-5
+// evolution) - scans for the nearest enemy/duel opponent within
+// skill.blink.range (Vector3.Distance, default 7), instantly repositions
+// the caster to just short of it, and lands a strike through the exact
+// same strikeWithHandCollider mechanism dashstrikeSkill's own castDashSkill
+// already uses (that function's own header comment covers why reusing the
+// shared atkCollider - already wired with real damage triggers on every
+// enemy/duel opponent - is what actually deals the hit). The only real
+// difference from a plain dash: WHERE the caster ends up is a scanned
+// target's position, not just "forward", and criticalPercent:1 (see
+// skillsData.js's own effects entry) makes the landed strike a guaranteed
+// crit instead of dashstrike's own 40% chance.
+function findNearestBlinkTarget(player, range){
+    const playerPos = player.body.position
+    let nearest = null
+    let nearestDist = range
+
+    getEnemiesOnScene().forEach(enemy => {
+        if(!enemy.body) return
+        const dist = Vector3.Distance(playerPos, enemy.body.position)
+        if(dist > nearestDist) return
+        nearestDist = dist
+        nearest = enemy.body
+    })
+    // npcFighter duel opponents - never server-tracked, same parallel
+    // this file's other enemy-sweep loops already add (spawnMassGroundTrap
+    // etc.) - a duel is otherwise a valid target for this skill too, same
+    // as a real wild enemy
+    getDuelOpponentsOnScene().forEach(duelOpp => {
+        if(!duelOpp.body) return
+        const dist = Vector3.Distance(playerPos, duelOpp.body.position)
+        if(dist > nearestDist) return
+        nearestDist = dist
+        nearest = duelOpp.body
+    })
+
+    return nearest
+}
+
+// how close to the target the blink actually lands - inside melee reach
+// with a little slack, same "not literally standing inside them" idea
+// createEnemy.js's own lesserdemon teleport-to-melee uses
+const BLINK_LAND_OFFSET_DEFAULT = 1.2
+
+// isCaster-gated for the actual scan/teleport/strike, same reasoning
+// castDashSkill's own header comment gives in full: this function runs
+// identically on every client watching the "skillactivated" relay, but
+// only the real caster's own client should ever move MY OWN local
+// player.body or hit-check MY OWN atkCollider. The animation still plays
+// for everyone watching (below, unconditional) - other clients simply see
+// the caster's position update on the next regular movement-sync tick,
+// which is the correct "they blinked" read for a genuinely instant
+// teleport anyway (unlike dashstrike's own gradual translate/impulse,
+// there's no smooth in-between motion to show even if this ran for
+// everyone).
+export function castBlinkstrikeSkill(scene, player, skill, charState){
+    if(!player?.body || !scene) return
+
+    player.characterAnimations?.playAction(player.anims, skill.animationName, 1, null, false, null)
+
+    if(skill.activationSound){
+        const soundKey = SOUND_TYPE_MAP[skill.activationSound.soundType] || skill.activationSound.soundType
+        setTimeout(() => getAllSounds()[soundKey]?.play(), skill.activationSound.willPlayAfterSeconds ?? 0)
+    }
+
+    if(charState.owner !== getCharState()?.owner) return
+
+    const range = skill.blink?.range ?? 7
+    const targetBody = findNearestBlinkTarget(player, range)
+    if(!targetBody){
+        openClosePopup("No target in range", true, 1200)
+        return
+    }
+
+    // same short-lived meeleeDmg buff trick castDashSkill's own plusDmg
+    // handling uses - positionAtkCollider's hit handlers just call
+    // calcDmg(charState) fresh with no idea a skill triggered this swing
+    const powerScale = (skill._castPowerScale ?? 1) * (skill.explosionScale ?? 1)
+    const blinkEffect = getSkillEffect(skill, "blink")
+    if(blinkEffect?.plusDmg){
+        const buffId = `skillbuff_${skill.name}`
+        addTempBuff({
+            id: buffId,
+            stat: "meeleeDmg",
+            toAdd: Math.round(blinkEffect.plusDmg * powerScale),
+            percent: 0,
+            expiresAt: Date.now() + DASH_BONUS_DMG_WINDOW_MS,
+        })
+        setTimeout(() => removeTempBuff(buffId), DASH_BONUS_DMG_WINDOW_MS)
+    }
+
+    // guaranteed crit on the strike this blink lands - same short-lived
+    // temp-buff trick castDashSkill's own criticalPercent handling uses
+    // (critChance is additive and uncapped by CRIT_CHANCE_CAP, unlike the
+    // base accuracy-driven chance - see that function's own comment).
+    // skillsData.js's blinkstrikeSkill sets criticalPercent: 1 - a full
+    // 100%, so this strike specifically is never a non-crit.
+    const criticalEffect = getSkillEffect(skill, "critical")
+    if(criticalEffect?.criticalPercent){
+        const critBuffId = `skillcrit_${skill.name}`
+        addTempBuff({
+            id: critBuffId,
+            stat: "critChance",
+            toAdd: criticalEffect.criticalPercent * 100,
+            percent: 0,
+            expiresAt: Date.now() + DASH_BONUS_DMG_WINDOW_MS,
+        })
+        setTimeout(() => removeTempBuff(critBuffId), DASH_BONUS_DMG_WINDOW_MS)
+    }
+
+    // land just short of the target, approaching from wherever the caster
+    // actually started (not a fixed cardinal side) - same idea
+    // createEnemy.js's own lesserdemon teleport-to-melee uses, just aimed
+    // at the CASTER's own origin instead of a random angle
+    const targetPos = targetBody.position
+    const awayFromTarget = player.body.position.subtract(targetPos)
+    awayFromTarget.y = 0
+    if(awayFromTarget.lengthSquared() < 0.0001) awayFromTarget.set(0, 0, 1)
+    awayFromTarget.normalize()
+
+    const landOffset = skill.blink?.landOffset ?? BLINK_LAND_OFFSET_DEFAULT
+    const landPos = targetPos.add(awayFromTarget.scale(landOffset))
+
+    // Y left as the caster's own current height, not the target's - real
+    // physics/gravity settles any small mismatch onto the ground within a
+    // frame or two, same reasoning createMyCharacter.js's own spawn
+    // comment gives ("gravity settles them onto the real ground regardless
+    // of the exact starting height"). aggregate.body.disablePreStep is
+    // already false on the player's own physics body (createcharacter.js -
+    // same fix createwagon.js's own teleport needed), so this direct
+    // position write isn't silently discarded on the next physics step the
+    // way it would be on a body still defaulting to disablePreStep:true.
+    player.body.position.set(landPos.x, player.body.position.y, landPos.z)
+    player.aggregate?.body?.setLinearVelocity(Vector3.Zero())
+    // face the target immediately, not whatever direction the caster
+    // happened to be facing before the blink
+    player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), Math.atan2(targetPos.x - landPos.x, targetPos.z - landPos.z))
+
+    strikeWithHandCollider(scene, player, skill)
 }
 
 // cached template mesh per shape, CLONED (not instanced) per cast - every
@@ -3242,6 +3385,217 @@ function spawnMassGroundTrap(scene, charState, skill, groundPos, powerScale){
     }, MASS_TRAP_ACTIVATE_DELAY_MS)
 }
 
+// --- HEALING GROUND CIRCLE (effectType "heal", e.g. a "healing" element
+// skill) - same two-phase shape every groundTrap offense skill above uses
+// (castOffenseSkill's own groundTrap branch): castHealSkill fires
+// immediately on activation (same "called once, at cast-start" contract
+// castOffenseSkill/castBuffSkill/castDashSkill all share - see
+// attackingSystem.js's activateSkill) and shows a flat PREVIEW circle that
+// lasts through the castDuration windup; once that windup actually
+// elapses, spawnHealingCircle blooms the REAL circle and, a beat later
+// (MASS_TRAP_ACTIVATE_DELAY_MS, same as spawnMassGroundTrap), sweeps
+// whoever's standing inside it. Centered on the caster's own body
+// (distance defaults to GROUND_TRAP_DEFAULT_DISTANCE, i.e. 0 - a standing
+// zone, not thrown out in front), reusing the exact same
+// getGroundTrapRadius/groundTrapCircleScale helpers so a "heal" skill
+// levels/scales identically to the fire AOE family - radius grows with
+// skill.lvl the same way whenever skill.groundTrap.aoe is set.
+//
+// No new server relay needed for this to heal more than one person: both
+// functions run on EVERY client watching the "skillactivated" relay (same
+// as every other skill in this file, see activateSkill's own header
+// comment - the caster's own live body/casterState is already synced to
+// everyone), so each client independently resolves whether ITS OWN local
+// player is standing inside the shared circle position and only ever
+// heals its own local hp (characterstate.js's healPlayer) - never reaches
+// into another player's state directly, same "only the client that owns
+// this state mutates it" rule every other hit path here already follows,
+// just flipped from "only the caster" to "only whoever's actually
+// standing in it."
+export function castHealSkill(scene, player, skill, charState){
+    cancelPendingCast(skill.name)
+    if(!player?.body || !scene) return
+
+    // captured now, not read again at fire time - same convention
+    // castOffenseSkill's own powerScale comment gives
+    const powerScale = (skill._castPowerScale ?? 1) * (skill.explosionScale ?? 1)
+    const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
+    const groundPos = computeGroundAOEPos(charState, player, skill.groundTrap?.distance ?? GROUND_TRAP_DEFAULT_DISTANCE, forward)
+    const radius = getGroundTrapRadius(skill)
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+
+    // pre-cast preview - lies flat on the ground where the real circle
+    // will bloom, lasts through the cast window plus a beat, same shape
+    // castOffenseSkill's own groundTrap preview branch uses
+    createMagicCircle(groundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(radius))
+
+    const timeoutId = setTimeout(() => {
+        pendingCasts.delete(skill.name)
+        spawnHealingCircle(scene, skill, groundPos, powerScale)
+    }, skill.castDuration * 1000)
+
+    pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
+}
+
+function spawnHealingCircle(scene, skill, groundPos, powerScale){
+    const radius = getGroundTrapRadius(skill)
+    const durationMs = skill.groundTrap?.duration ?? GROUND_TRAP_DEFAULT_DURATION_MS
+
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    createMagicCircle(groundPos, scene, circleImg, 0.8, durationMs, null, groundTrapCircleScale(radius))
+
+    setTimeout(() => {
+        // MY OWN local player, not the caster - see castHealSkill's own
+        // header comment on why every client checks itself against the
+        // shared circle position rather than the caster checking everyone
+        const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
+        if(!myPlayer?.body) return
+
+        const dx = myPlayer.body.position.x - groundPos.x
+        const dz = myPlayer.body.position.z - groundPos.z
+        if((dx * dx + dz * dz) > radius * radius) return
+
+        const healEffect = getSkillEffect(skill, "heal")
+        if(!healEffect) return
+
+        const healAmount = Math.round((healEffect.plusHp || 0) * powerScale)
+        healPlayer(healAmount)
+        // green "+40" popup, mirroring the red "-dmg" popup every damage
+        // path here already uses (createEnemy.js's enemyIsHit,
+        // duelSystem.js's applyDamageToOpponent) just positive and green
+        poppingTextMesh(`+${healAmount}`, "#2ecc71", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
+        getAllSounds().healS?.play()
+    }, MASS_TRAP_ACTIVATE_DELAY_MS)
+}
+
+// --- ROTATING BARRIER (effectType "barrier", e.g. aegiswardSkill) - a
+// spinning projectile shield. Structurally nothing like the ground-circle
+// skills above: no target, no magic circle, no damage/heal of its own -
+// it just conjures a mesh chain attached to the caster's own body and
+// keeps it spinning for skill.barrier.duration ms. Called once, at
+// cast-start (same "called once, immediately" contract every other
+// cast*Skill here shares - attackingSystem.js's activateSkill), which
+// only matters for the short castDuration windup before the barrier
+// actually appears - cancelPendingCast still works mid-windup the same
+// way it does for every other skill.
+export function castBarrierSkill(scene, player, skill, charState){
+    cancelPendingCast(skill.name)
+    if(!player?.body || !scene) return
+
+    const timeoutId = setTimeout(() => {
+        pendingCasts.delete(skill.name)
+        spawnBarrier(scene, player, skill)
+    }, skill.castDuration * 1000)
+
+    pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
+}
+
+// longest a projectile can still be mid-flight with a trigger registered
+// against the barrier's own box (fireEnemySkillProjectile's own
+// ENEMY_SKILL_PROJECTILE_TIMEOUT below is 3000 - this just needs to be at
+// least that long, kept as its own separate constant so this file's two
+// halves - player-cast skills above, enemy-cast below - don't have to
+// agree on a shared number). See spawnBarrier's own disposeBarrier for why
+// this grace period exists at all.
+const BARRIER_DISPOSE_GRACE_MS = 3000
+
+// Conjures the actual barrier - a TransformNode parented to the player's
+// own body (createcharacter.js's capsule, so it inherits every position/
+// facing change for free, same trick weaponSocket/bodytarget already use
+// for their own body-attached props), spun continuously via a per-frame
+// onBeforeRenderObservable, with the box itself parented to THAT node and
+// offset out to barrier.distance - Babylon recomputes the box's world
+// position from the node's own spinning transform automatically, so
+// "rotate the node" alone is enough to make the box orbit the player,
+// nothing has to manually update the box's own position every frame.
+//
+// Runs UNGATED - no isCaster/charState.owner check, unlike every other
+// skill's own state mutation above. There's no characterState field being
+// written here at all: the barrier's only "effect" is a mesh existing at
+// the right place for a projectile's own hit-test to find (see
+// fireEnemySkillProjectile's own comment below on exactly how that
+// redirect works) - and that hit-test runs LOCALLY on whichever client is
+// resolving a given projectile's flight, so the barrier mesh has to exist
+// identically on EVERY client watching this player, not just the caster's
+// own screen (same reasoning applyWeaponBuff's own lightning-FX half runs
+// for everyone, just here there's no gated stat-mutation half at all to
+// separate out).
+//
+// player.barrierMesh (a plain {box, node} pair, not wrapped in any
+// registry) is what fireEnemySkillProjectile/skills.js's spawnProjectile
+// both read to find "does this target currently have a barrier up" - set
+// here, cleared the moment the barrier's own duration elapses.
+function spawnBarrier(scene, player, skill){
+    const cfg = skill.barrier || {}
+
+    const node = new TransformNode(`barrierNode_${skill.name}_${player.owner}`, scene)
+    node.parent = player.body
+
+    const box = MeshBuilder.CreateBox(`barrier_${skill.name}_${player.owner}`, {
+        height: cfg.height ?? 1.75,
+        width: cfg.width ?? 1,
+        depth: cfg.depth ?? 0.25,
+    }, scene)
+    box.parent = node
+    box.position.set(0, 0, cfg.distance ?? 2)
+    box.isPickable = false
+
+    // a simple glowing "ward panel" look - emissive so it reads clearly
+    // even in a dim scene, semi-transparent so it doesn't fully hide the
+    // player standing behind it. Not skill.explosionColor-driven like the
+    // particle bursts above - this is a shield's own fixed color, not an
+    // elemental detonation tint.
+    const mat = new StandardMaterial(`barrierMat_${skill.name}_${player.owner}`, scene)
+    mat.emissiveColor = new Color3(0.35, 0.85, 0.85)
+    mat.diffuseColor = new Color3(0.35, 0.85, 0.85)
+    mat.alpha = 0.55
+    box.material = mat
+
+    const rotSpeed = (cfg.rotationsPerSecond ?? 1) * Math.PI * 2 // rad/sec
+    const rotateObserver = scene.onBeforeRenderObservable.add(() => {
+        const dt = scene.getEngine().getDeltaTime() / 1000
+        node.rotation.y += rotSpeed * dt
+    })
+
+    player.barrierMesh = { box, node }
+
+    const duration = cfg.duration ?? 10000
+    setTimeout(() => disposeBarrier(scene, player, rotateObserver, box, node), duration)
+}
+
+// player.barrierMesh is cleared FIRST (before any of the actual mesh
+// teardown) so no NEW projectile ever registers a trigger against a
+// barrier that's already ending. The box/node themselves aren't disposed
+// immediately though - hidden and frozen instead, then actually freed
+// only after BARRIER_DISPOSE_GRACE_MS more: a projectile that was already
+// mid-flight with a trigger registered against this exact box (see
+// fireEnemySkillProjectile below) needs that mesh to keep existing (even
+// invisible/inert) a little longer, or Babylon's own per-frame
+// intersection check would error trying to read a disposed mesh's
+// bounding info.
+function disposeBarrier(scene, player, rotateObserver, box, node){
+    if(player.barrierMesh?.box === box) player.barrierMesh = null
+    scene.onBeforeRenderObservable.remove(rotateObserver)
+    box.isVisible = false
+
+    setTimeout(() => {
+        box.dispose()
+        node.dispose()
+    }, BARRIER_DISPOSE_GRACE_MS)
+}
+
+// The "a projectile actually hit the barrier" reaction - same cyan
+// "Blocked!" popup + weaponblockS sound duelSystem.js's own
+// weaponBlocking branches already use for a melee block, reused here so
+// "this attack got blocked" reads consistently across both mechanics.
+// Runs on every client that registers this trigger (no isCaster gate,
+// same reasoning spawnBarrier's own header comment gives) - purely
+// feedback, nothing here mutates any state.
+function triggerBarrierBlock(barrierBox){
+    getAllSounds().weaponblockS?.play()
+    poppingTextMesh("Blocked!", "cyan", 40 + Math.random() * 25, Math.random() * 1, { x: -0.3 + Math.random() * 0.6, y: 0.3, z: -0.3 + Math.random() * 0.6 }, barrierBox, true)
+}
+
 // --- ENEMY-CAST SKILLS (det.skills, see tcp/recources/enemyDetails.ts -
 // fireslime/electricslime) - the reverse direction of everything above: an
 // ENEMY casting a player skill AT a player instead of a player casting one
@@ -3408,11 +3762,38 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
     // missTimeout above.
     if(!targetPlayer?.bodytarget) return
 
+    // aegiswardSkill's own rotating barrier (player.barrierMesh,
+    // spawnBarrier above) - if this target currently has one up, register
+    // a SECOND trigger against the barrier's own box, sharing the same
+    // `hasHit` flag the bodytarget trigger below uses so whichever one
+    // this projectile's flight path actually reaches first is the one
+    // that "wins". Deliberately not a guaranteed block: the barrier orbits
+    // at a wider radius than bodytarget's own tiny hitbox, so it only
+    // intercepts when it actually happens to be in the way at that exact
+    // moment - a spinning panel has real gaps, matching the "shield you
+    // have to be turned toward" read the request asked for, not an
+    // invincible dome. No isCaster gate needed here (or below) - which
+    // mesh a projectile hit first isn't a state mutation, just geometry.
+    let barrierAction = null
+    const targetBarrier = targetPlayer.barrierMesh
+    if(targetBarrier?.box){
+        barrierAction = onIntersecEnterTrig(box, targetBarrier.box, scene, () => {
+            if(hasHit) return
+            hasHit = true
+            clearTimeout(missTimeout)
+            removeIntersecTrig(box, enterAction)
+            removeIntersecTrig(box, barrierAction)
+            triggerBarrierBlock(targetBarrier.box)
+            cleanupProjectile()
+        })
+    }
+
     const enterAction = onIntersecEnterTrig(box, targetPlayer.bodytarget, scene, async () => {
         if(hasHit) return
         hasHit = true
         clearTimeout(missTimeout)
         removeIntersecTrig(box, enterAction)
+        if(barrierAction) removeIntersecTrig(box, barrierAction)
 
         // onHitVisual.stickBriefly skills (weapon-shaped: blade/bladecross/
         // spearlance/shadowblade family) - play the actual "got struck"

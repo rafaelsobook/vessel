@@ -6,6 +6,7 @@ import { randNum } from "../tools/random.js"
 import { getProjectilesOnScene } from "../sockets/worldsocket.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
 import { getAllSounds } from "../components/soundSystem.js"
+import { poppingTextMesh } from "../tools/GUITools.js"
 
 export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround){
     let weaponPartDetails = _weaponPartDetails;
@@ -83,10 +84,36 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
 
     const players = getPlayersOnScene()
     players.forEach(pl => {
+        // aegiswardSkill's own rotating barrier (skillEffects.js's
+        // spawnBarrier, player.barrierMesh) - if this player currently has
+        // one up, register a trigger against the barrier's own box too,
+        // sharing the same `hasHit` flag the bodytarget trigger below
+        // uses. Same "whichever mesh this thing's flight path actually
+        // reaches first wins" reasoning skillEffects.js's own
+        // fireEnemySkillProjectile already follows for enemy/npcFighter
+        // projectiles - see that function's own comment for the full
+        // rundown (not duplicated import-wise here on purpose, to avoid a
+        // skillEffects.js <-> skills.js import cycle - this file already
+        // gets imported BY skillEffects.js).
+        const targetBarrier = pl.barrierMesh
+        let barrierAction = null
+        if(targetBarrier?.box){
+            barrierAction = onIntersecEnterTrig(instance, targetBarrier.box, scene, () => {
+                if(hasHit) return
+                hasHit = true
+                if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
+                removeIntersecTrig(instance, barrierAction)
+                getAllSounds().weaponblockS?.play()
+                poppingTextMesh("Blocked!", "cyan", 40 + Math.random() * 25, Math.random() * 1, { x: -0.3 + Math.random() * 0.6, y: 0.3, z: -0.3 + Math.random() * 0.6 }, targetBarrier.box, true)
+                removeProjectile(projectile.itemId)
+            })
+        }
+
         const enterAction = onIntersecEnterTrig(instance, pl.bodytarget, scene, () => {
             if(hasHit) return
             hasHit = true
             if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
+            if(barrierAction) removeIntersecTrig(instance, barrierAction)
             getAllSounds().struckS?.play()
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             theProjectile.spd = 2

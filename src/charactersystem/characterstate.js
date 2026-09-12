@@ -694,6 +694,21 @@ export async function deductHp(dmg, effects, enemyStats){
     return false
 }
 
+// deductHp's own positive mirror - a flat, undefended, one-shot hp gain
+// (no getTotalDefense() involved, same as deductHp's own poisoned/spdrain
+// hpcost lump - defense only ever reduces incoming HARM, not healing),
+// clamped to maxHp same as every consumable's own plusHp already is
+// (itemInfoSystem.js's consumeItemFunc). First caller: skillEffects.js's
+// castHealSkill (a "heal" effectType skill, e.g. a healing ground circle -
+// skillsData.js). No save/updateMyDetailsOL call here, matching
+// deductHp/startBurnDamage's own convention of mutating in-memory + UI
+// only, relying on whatever save already happens elsewhere.
+export function healPlayer(amount){
+    if(!characterState || !amount) return
+    characterState.hp = Math.min(characterState.maxHp, characterState.hp + amount)
+    updateHpMpSp_UI()
+}
+
 // FIRE'S BURN (skillsData.js's own "burn" effect entries, e.g.
 // { effectType: "burn", dmgPm: 50, duration: 5000 }) - ticks dmgPm off hp
 // every BURN_TICK_MS, for effect.duration ms total (duration/BURN_TICK_MS

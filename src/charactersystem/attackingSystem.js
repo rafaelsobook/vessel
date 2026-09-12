@@ -1,12 +1,15 @@
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
-import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd } from "./characterstate"
+import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd, updateMyDetailsOL } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 import { getSceneDet } from "../main/main"
-import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, cancelPendingCast } from "../creations/skillEffects"
+import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, castHealSkill, castBarrierSkill, castBlinkstrikeSkill, cancelPendingCast } from "../creations/skillEffects"
 import { UPGRADE_TEMPLATES } from "../staticRecources/skillUpgrades"
 import { onIntersecEnterTrig } from "../components/actionManager"
 import { trackAptitudeUsage } from "./aptitudeSystem"
 import { getSkillEffect } from "../staticRecources/skillsData"
+import { updateSkillListUI } from "../components/skillsui.js"
+import { openClosePopup } from "../tools/popupUI.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 
 // CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
 // stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
@@ -99,6 +102,9 @@ export function activateSkill(ownerId, skillDetail, casterStats){
     // cast via the same socket relay, see this function's own header
     // comment on isMe)
     if(isMe && skillDetail.isActive) trackAptitudeUsage(skillDetail.element)
+    // this skill's OWN level - same isMe/isActive gate as the aptitude
+    // tracking just above, for the same reason
+    if(isMe && skillDetail.isActive) trackSkillUsage(skillDetail.name)
 
     switch(skillDetail.name){
         case "flexaura":
@@ -165,10 +171,74 @@ export function activateSkill(ownerId, skillDetail, casterStats){
                 if(skillDetail.isActive){
                     castDashSkill(getSceneDet().scene, player, skillDetail, casterState)
                 }
+            } else if(getSkillEffect(skillDetail, "blink")){
+                // blinkstrikeSkill - same "no cast window to cancel" shape
+                // the dash branch right above uses
+                if(skillDetail.isActive){
+                    castBlinkstrikeSkill(getSceneDet().scene, player, skillDetail, casterState)
+                }
+            } else if(getSkillEffect(skillDetail, "heal")){
+                // a "heal" element skill (e.g. a healing ground circle,
+                // skillsData.js) - same castDuration windup/cancel shape
+                // offense skills use above (skillsui.js can still toggle
+                // this off mid-charge)
+                if(skillDetail.isActive){
+                    castHealSkill(getSceneDet().scene, player, skillDetail, casterState)
+                } else {
+                    cancelPendingCast(skillDetail.name)
+                }
+            } else if(getSkillEffect(skillDetail, "barrier")){
+                // a "barrier" skill (e.g. aegiswardSkill's rotating
+                // projectile shield, skillsData.js) - same castDuration
+                // windup/cancel shape offense/heal skills use above
+                if(skillDetail.isActive){
+                    castBarrierSkill(getSceneDet().scene, player, skillDetail, casterState)
+                } else {
+                    cancelPendingCast(skillDetail.name)
+                }
             }
         break
     }
 }
+
+// SKILL LEVELING - a skill levels up purely from being CAST enough times,
+// no points/currency spent (pointsToClaim/pointsForUpgrade on every
+// skillsData.js entry are unused leftovers, not what actually drives
+// this - there's no other leveling mechanic for skills anywhere in the
+// game). First level-up (lvl 1 -> 2) needs 20 real casts; every level
+// after that only needs 10 more (2->3, 3->4, ...), not a growing amount -
+// "20 the first time, then +10 each time from there." uses resets to 0 on
+// every level-up (same reset-per-level shape aptitudeSystem.js's own
+// trackAptitudeUsage already uses for aptitude levels), so this tracks
+// "casts since the last level-up," not a lifetime total.
+const FIRST_LEVEL_UP_USES = 20
+const REPEAT_LEVEL_UP_USES = 10
+
+function trackSkillUsage(skillName){
+    const charState = getCharState()
+    if(!charState) return
+
+    // looked up fresh by name, not the skillDetail param activateSkill was
+    // handed - same reasoning upgradeOwnedSkill's own comment (skillsui.js)
+    // gives: a multiplayer cast's own skillDetail is whatever came off the
+    // "skillactivated" socket relay, a deserialized COPY, not the same
+    // in-memory object sitting in charState.skills - mutating that copy's
+    // own .uses/.lvl would be silently lost the moment this function returns
+    const ownedSkill = charState.skills.find(sk => sk.name === skillName)
+    if(!ownedSkill) return
+
+    ownedSkill.uses = (ownedSkill.uses ?? 0) + 1
+
+    const neededUses = ownedSkill.lvl === 1 ? FIRST_LEVEL_UP_USES : REPEAT_LEVEL_UP_USES
+    if(ownedSkill.uses < neededUses) return
+
+    ownedSkill.uses = 0
+    upgradeSkill(ownedSkill)
+    updateSkillListUI()
+    openClosePopup(`${ownedSkill.displayName} is now Lv. ${ownedSkill.lvl}`, true, 1500)
+    updateMyDetailsOL(charState, checkIfTokenSaved())
+}
+
 // Increases a skill's lvl and scales its power to match - same idea as
 // abilitySystem.js's upgradeAbility (the equivalent for blessings), just
 // for the skills array. Pure mutator - bound to the "h" key via
@@ -204,6 +274,10 @@ export function upgradeSkill(skillDetail){
         skillDetail.effects.forEach(effect => {
             if(effect.plusDmg) effect.plusDmg += bump
             if(effect.dmgPm)   effect.dmgPm   += bump
+            // "heal" effectType's own magnitude field (castHealSkill,
+            // skillEffects.js) - same per-level bump every other
+            // magnitude field above already gets via upgradePlus
+            if(effect.plusHp)  effect.plusHp  += bump
         })
     }
 

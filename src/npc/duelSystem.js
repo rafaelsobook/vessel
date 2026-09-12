@@ -17,6 +17,7 @@ import npcDetails from "../staticRecources/npcDetails.js"
 import { createFighterNpc } from "./createnpc.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
 import { getCharState, updateMyDetailsOL, deductHp, isPlayerCursed, curseStatusEffect } from "../charactersystem/characterstate.js"
+import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { calcDmg, registerToAtkCollider } from "../charactersystem/attackingSystem.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { ANIM_STATE, findAnimVariants } from "../tools/animation.js"
@@ -714,6 +715,17 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         }
 
         receiveAchievement("first-duel")
+
+        // reqType "duel" story quests (npcDetails.js, e.g. Colousa's own
+        // "meet-colousa" quest - questRequirements:{reqType:"duel",
+        // name:"114_colousa",...}) - same call shape createEnemy.js's
+        // defeatedAmonster already uses for checkStoryQuestIfCompleted(
+        // 'enemy', name) on a real monster kill. No-ops for every OTHER
+        // duel (Renarden included) - checkStoryQuestIfCompleted only ever
+        // matches a quest whose own reqType+name line up with what's passed
+        // here, and nothing else in the game currently grants a "duel"
+        // reqType quest.
+        checkStoryQuestIfCompleted('duel', npcDet._id)
 
         updateMyDetailsOL(charState, checkIfTokenSaved())
     }

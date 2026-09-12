@@ -684,7 +684,17 @@ function setupControls(scene, allsounds) {
                     qName: "meet-colousa",
                     qTtle: "Meet Colousa",
                     desc: "Find Colousa in the market outside the guild.",
-                    questRequirements: { reqType: "duel", completed: false },
+                    // name/current/requiredNum - same generic single-target
+                    // shape checkStoryQuestIfCompleted (storyQuestSystem.js)
+                    // already reads for "enemy"/"item" quests, just fed a
+                    // duel win instead (duelSystem.js's grantDuelWinRewards
+                    // calls checkStoryQuestIfCompleted('duel', npcDet._id)).
+                    // Missing here before - buildRequiredEl's fallback
+                    // renders `${current}/${requiredNum}`, both undefined
+                    // without these, hence "undefined/undefined" in the
+                    // tracker. Must match npcDetails.js's own "meet-colousa"
+                    // questsToReceive entry (Halric's storyInfo) exactly.
+                    questRequirements: { reqType: "duel", name: "114_colousa", current: 0, requiredNum: 1, completed: false },
                 })
 
             break

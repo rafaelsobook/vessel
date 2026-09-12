@@ -747,7 +747,19 @@ export default [
                         qName: "meet-colousa",
                         qTtle: "Meet Colousa",
                         desc: "Find Colousa in the market outside the guild.",
-                        questRequirements: { reqType: "duel", completed: false },
+                        // "duel" isn't a reqType checkStoryQuestIfCompleted
+                        // (storyQuestSystem.js) needs any special-cased
+                        // handling for - name/current/requiredNum is the
+                        // same generic single-target shape "enemy"/"item"
+                        // quests already use there, just fed a duel win
+                        // instead of a kill/gather event. name is the
+                        // npcDetails.js _id of who has to be beaten (Colousa
+                        // herself) - duelSystem.js's grantDuelWinRewards
+                        // calls checkStoryQuestIfCompleted('duel', npcDet._id)
+                        // the moment the player actually wins, same call
+                        // shape createEnemy.js's defeatedAmonster already
+                        // uses for checkStoryQuestIfCompleted('enemy', name).
+                        questRequirements: { reqType: "duel", name: "114_colousa", current: 0, requiredNum: 1, completed: false },
                     }
                 ],
                 // "Choose a skill that you think will help you the most for
@@ -2141,14 +2153,52 @@ export default [
                     {name:"", message: "I can say you are ready to travel, go north !"},
                     {name:"", message: "You'll find a witch tower there, but inside is not a witch but a friend"},
                     {name:"", message: "She's capable of different types of magic ! and she can help you enhace your skills"},
+                    {name:"", message: "But listen well before you go - out there, danger doesn't announce itself the way it did in that ring. Just teeth in the dark before you've even drawn your blade."},
+                    {name:"", message: "See fruit growing wild past the tree line ? Leave it be unless you know it by name. Not everything that looks like a meal will heal you, some of it does the opposite, and it won't warn you first."},
+                    {name:"", message: "There's a saying among the guild - if you see the land ahead of you turn dark, you turn around. Every adventurer who kept walking anyway, we're still waiting on them to walk back. None of them have."},
+                    {name:"", message: "And it isn't only beasts you have to watch for. Demon assassins don't chase like a slime or a goblin would - they wait, and by the time you know one's found you it's usually too late to matter. Keep your back to something solid when you can."},
+                    {name:"", message: "You'll cross paths with mystical beasts no bestiary quite agrees on either. Learn what you can about them before you swing first and ask questions never - a dead adventurer doesn't get to be curious about anything again."},
+                    {name:"", message: "Don't neglect the forge, either. Bram will teach you to craft if you let him, and a blade you understand serves you far better than one you just happen to be holding."},
+                    {name:"", message: "Doran keeps a wagon at the edge of the village - fastest, safest way out to the wilderness proper. Better than walking it on your own two feet."},
+                    {name:"", message: "And if you ever find yourself lost out there, activate flexaura and let it burn. It won't fight for you, but it'll be seen a long way off - enough that someone might actually come looking before it's too late."},
                     {name:"", message: "goodluck on your journey !"},
                 ],
                 notCompletedSpeech: [
                     {name:"", message: "So Halric sent you. Alright ! Let's battle !"}
                 ],
                 questsToReceive: [],
-                cbAfterNotCompletedSpeech: () => {
-                    // start a duel between colousa and us and if we win the quest will be completed: true
+                // start the duel - a DEDICATED arena (localroomdb.js
+                // placeId 201, "Colousa's Dueling Grounds"), not a reuse of
+                // placeId 200 (Renarden's own grounds): duelSystem.js's
+                // startDuel reads WHO to fight straight off the arena's own
+                // static npcEnemies list (placeDetail.npcEnemies) - there's
+                // no per-challenger parameter to pass in, one arena can only
+                // ever hold one fixed roster. Same travel sequence
+                // duelSystem.js's own (unexported) acceptDuel and every
+                // other placeId teleport in this file already use:
+                // findPlaceMetaData -> travelToPlace with that spot's own
+                // spawn. Winning is what actually completes this quest -
+                // duelSystem.js's grantDuelWinRewards calls
+                // checkStoryQuestIfCompleted('duel', npcDet._id) the moment
+                // the fight is won, same call shape createEnemy.js's
+                // defeatedAmonster already uses for a real monster kill -
+                // which is what flips this quest's own questRequirements
+                // (Halric's own questsToReceive entry above,
+                // {reqType:"duel", name:"114_colousa", ...}) to completed,
+                // so the NEXT talk falls through to the "speech" branch
+                // above instead of back to notCompletedSpeech.
+                cbAfterNotCompletedSpeech: async () => {
+                    const duelGrounds = findPlaceMetaData(201)
+                    if(!duelGrounds) return console.warn("cbAfterNotCompletedSpeech: Colousa's duel grounds (placeId 201) not found")
+
+                    await travelToPlace({
+                        placeId: duelGrounds.placeId,
+                        name: duelGrounds.name,
+                        areaType: duelGrounds.areaType,
+                        x: duelGrounds.spawn.x,
+                        y: duelGrounds.spawn.y,
+                        z: duelGrounds.spawn.z,
+                    })
                 }
             },
 

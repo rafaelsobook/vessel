@@ -738,6 +738,46 @@ export const metaDatas = [
 
         isMultiplayer: false
     },
+    {
+        // Colousa's own dueling grounds - a SEPARATE arena from placeId 200
+        // above (Renarden's), not a reuse of it. duelSystem.js's startDuel
+        // reads WHO to fight straight off THIS place's own static
+        // npcEnemies list (placeDetail.npcEnemies) - there's no
+        // per-challenger parameter threaded through the travel/teleport
+        // call, so one arena can only ever hold one fixed roster. Colousa's
+        // own "meet-colousa" quest (npcDetails.js, "114_colousa"'s
+        // cbAfterNotCompletedSpeech) travels here specifically instead of
+        // placeId 200.
+        placeId: 201,
+        name: "Colousa's Dueling Grounds",
+        areaType: "duel",
+        npcEnemies: [
+            {
+                npcId: "114_colousa",
+                position: {x: 0, y: 0.01, z: 20}, // duelSystem.js's own OPPONENT_SPAWN default, spelled out for consistency with placeId 200's own entries
+            }
+        ],
+        width: 50,
+        height: 50,
+        wallHeight: 0.5,
+        layout: { cellSize: 1 },
+        spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
+        exitPlaceDetail: {
+            placeId: 1,
+            name: "village",
+            areaType: "village",
+        },
+        sceneTemp: {
+            fogDensity: 0,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+                {name:"hemispheric", intensity: 0.6},
+            ],
+        },
+        isMultiplayer: false
+    },
 
 
     // openworld

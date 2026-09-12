@@ -1580,6 +1580,7 @@ export const dashstrikeSkill = {
     skillElementType: "na",
     animationLoop: false,
     displayName: "Dashstrike",
+    evolution: {name: "blinkstrike", skillLevelRequired: 5},
     // a WEAPON skill - skillsui.js's own click handler refuses to activate
     // this at all (popup + no mana charged) unless a weapon is actually
     // equipped, same rule the npcFighter side of this skill enforces too
@@ -1611,6 +1612,59 @@ export const dashstrikeSkill = {
     // no target circle/projectile at all - a melee weapon skill, not a caster
     projectileVisual: { useProjectile: false },
     desc: "Surge forward in an instant and cleave through anything in your path.",
+}
+
+// --- BLINKSTRIKE (Elite Skill) - dashstrikeSkill's own lvl-5 evolution
+// (see that skill's own evolution field above - NOT wired to any actual
+// unlock/replace trigger yet, this is only the skill itself being made
+// real; "reaching dashstrike lvl 5 grants/evolves into this
+// automatically" would be a separate feature on top of just this). Same
+// weapon-skill shape as dashstrike (no cast window, requiresWeapon,
+// reuses strikeWithHandCollider for the actual damage - see that
+// function's own header comment), but instead of a fixed forward dash it
+// scans for the nearest enemy/duel opponent within blink.range
+// (Vector3.Distance, default 7) and instantly teleports next to it - see
+// skillEffects.js's own castBlinkstrikeSkill for the full mechanism.
+// criticalPercent: 1 (not dashstrike's own 0.4) makes the landed strike a
+// guaranteed crit, per spec ("that attack is a critical attack").
+export const blinkstrikeSkill = {
+    slotNumber: 38,
+    equiped: true,
+    isActive: false,
+    name: "blinkstrike",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "normal",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Blinkstrike",
+    requiresWeapon: true,
+    // 0, not omitted - same reasoning dashstrikeSkill's own castDuration
+    // comment gives: activating this IS the blink+strike, no separate cast
+    // bar to sit through
+    castDuration: 0,
+    returnModeDura: 900,
+    skillCoolDown: 4000,
+    demand: [{ name: "mp", minCost: 35, cost: 0 }],
+    effects: [
+        { effectType: "blink", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.5 },
+        { effectType: "critical", criticalPercent: 1 },
+    ],
+    // range: how far (Vector3.Distance) the nearest-target scan reaches;
+    // landOffset: how close to the target the blink actually lands - both
+    // read by skillEffects.js's castBlinkstrikeSkill
+    blink: { range: 7, landOffset: 1.2 },
+    animationName: "dashstrike",
+    activationSound: { soundType: "blade", willPlayAfterSeconds: 200 },
+    impactSound: "struckS",
+    skillrank: 1,
+    upgradePlus: 20,
+    explosionColor: "red",
+    explosionScale: 1,
+    // no target circle/projectile at all - a melee weapon skill, not a caster
+    projectileVisual: { useProjectile: false },
+    desc: "Blink instantly to the nearest foe within range and land a guaranteed critical strike.",
 }
 
 // --- METEOR (God Tier) ---
@@ -1773,6 +1827,122 @@ export const thunderclapSkill = {
     desc: "The sky itself answers your call - a searing bolt of lightning crashes down from above, splitting the earth where it lands.",
 }
 
+// --- WELLSPRING (healing) - a wide, ground-summoned circle that mends
+// whoever's standing inside it, instead of harming them. Same AOE
+// ground-trap shape massivedisintegrationSkill uses (groundTrap.aoe: true -
+// radius scales LINEARLY with skill.lvl, see getGroundTrapRadius in
+// skillEffects.js), just reading a "heal" effect entry instead of
+// "offense" - see that file's own castHealSkill (and
+// attackingSystem.js's activateSkill, which routes any skill carrying a
+// "heal" effect entry there, same else-if chain offense/buff/dash already
+// use) for the actual mechanism. plusHp: 40 at lvl 1 is the flat heal
+// amount (upgradePlus bumps it per level, same generic per-level
+// magnitude bump plusDmg/dmgPm already get - see attackingSystem.js's
+// upgradeSkill).
+//
+// element: "healing" - a genuinely NEW element, not one of the existing
+// aptitude slots (fire/water/earth/light/dark - server's own
+// generateAptitudes never rolls a "healing" one). That means this skill
+// can't be offered through the normal aptitude-gated skill wheel reveal
+// (skillWheel.js's eligibleSkillsFor only matches real aptitude slots) -
+// it needs a direct grant instead, e.g. giveSkill(wellspringSkill) from an
+// NPC quest reward, same as Bram's own item rewards, or the "l"
+// giveAllSkills() dev key (inputMovement.js) for testing. Casting it is
+// still completely safe even though nothing ever rolls that aptitude on
+// its own - aptitudeSystem.js's trackAptitudeUsage already tolerates a
+// skill cast in an element the caster never rolled (starts a fresh
+// "healing" aptitude at level 1 instead of crashing).
+//
+// magicCircleImg: "apt_earth_second" per spec - reuses the existing earth
+// aptitude circle art rather than a new "healing"-specific asset.
+export const wellspringSkill = {
+    slotNumber: 36,
+    equiped: true,
+    isActive: false,
+    name: "wellspring",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "healing",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Wellspring",
+    castDuration: 2,
+    returnModeDura: 900,
+    skillCoolDown: 12000,
+    demand: [{ name: "mp", minCost: 80, cost: 0 }],
+    effects: [{ effectType: "heal", plusHp: 40, chance: 1 }],
+    skillrank: 3,
+    upgradePlus: 20,
+    explosionColor: "green",
+    explosionScale: 1,
+    // radius: 8 at lvl1, scaling linearly with lvl same as
+    // massivedisintegration's own 10 (aoe:true) - slightly smaller base
+    // since this is a standing "step into it" zone, not a thrown detonation
+    groundTrap: { radius: 8, duration: 6000, aoe: true },
+    magicCircleImg: "apt_earth_second",
+    onLevelUp: "growParticleAura",
+    // no projectile - ground circle instead, same shape disintegration/
+    // massivedisintegration/meteor/thunderclap all use
+    projectileVisual: { useProjectile: false },
+    desc: "Summons a wide circle of restorative earth-magic from the ground - anyone standing inside it when it blooms is mended.",
+}
+
+// --- AEGIS WARD (Elite Skill, healing element) - a rotating projectile
+// barrier: conjures a TransformNode parented to the caster's own body,
+// spinning it continuously (skillEffects.js's castBarrierSkill/
+// spawnBarrier), with a small box parented to THAT node offset out to
+// barrier.distance - same parent-chain trick every other body-attached
+// prop in this game already uses (weaponSocket, bodytarget, etc.), just
+// animated every frame instead of static. Doesn't deal or heal any hp
+// itself - effectType "barrier" is its own new dispatch branch
+// (attackingSystem.js's activateSkill), not "offense"/"buff"/"heal". See
+// spawnBarrier's own header comment in skillEffects.js for exactly how an
+// incoming projectile gets redirected onto it instead of the player.
+//
+// element: "healing" - grouped with wellspringSkill as this element's
+// second skill (support/defense rather than damage), same "not a real
+// rollable aptitude" caveat that skill's own header comment already
+// covers - needs a direct grant (giveSkill), can't be offered through the
+// normal aptitude-gated skill wheel.
+export const aegiswardSkill = {
+    slotNumber: 37,
+    equiped: true,
+    isActive: false,
+    name: "aegisward",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "healing",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Aegis Ward",
+    castDuration: 0.6,
+    returnModeDura: 900,
+    skillCoolDown: 8000,
+    demand: [{ name: "mp", minCost: 40, cost: 0 }],
+    effects: [{ effectType: "barrier", chance: 1 }],
+    skillrank: 1,
+    // no plusDmg/dmgPm/plusHp to bump per level (nothing here deals damage
+    // or heals) - upgradePlus stays 0, same reasoning multicastSkill's own
+    // upgradePlus:0 gives; leveling this still grows explosionScale/
+    // projectileScale generically (harmless, unused by a meshless-
+    // projectile skill like this one)
+    upgradePlus: 0,
+    explosionColor: "cyan",
+    explosionScale: 1,
+    // height/width/depth exactly as specified; distance is how far out
+    // from the rotating node the box sits (skillEffects.js's spawnBarrier);
+    // rotationsPerSecond is the node's own spin speed; duration is how
+    // long the barrier stays up before it has to be recast
+    barrier: { height: 1.75, width: 1, depth: 0.25, distance: 2, rotationsPerSecond: 1.2, duration: 8000 },
+    // no projectile/magic circle of its own - a self-cast defensive
+    // conjure, same shape mjolnirSkill's own weapon buff uses
+    projectileVisual: { useProjectile: false },
+    desc: "Conjures a spinning barrier around you that intercepts incoming projectiles - anything it collides with strikes the barrier instead of you.",
+}
+
 export const skillsData = [
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
@@ -1790,9 +1960,11 @@ export const skillsData = [
     darkorbSkill,
     burstshotsSkill,
     multicastSkill, disintegrationSkill, massivedisintegrationSkill,
-    mjolnirSkill, dashstrikeSkill,
+    mjolnirSkill, dashstrikeSkill, blinkstrikeSkill,
     meteorSkill,
     thunderclapSkill,
+    wellspringSkill,
+    aegiswardSkill,
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an
