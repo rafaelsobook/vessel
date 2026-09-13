@@ -8,7 +8,7 @@ import { createWeapon } from "../assetcreation/createweapon.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 
-export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround){
+export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword"){
     let weaponPartDetails = _weaponPartDetails;
 
     if(weaponPartDetails === "default"){
@@ -43,7 +43,15 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     // itemName slot and glowingColor into the options slot, leaving the
     // real glowingColor param empty - no sword spawned via this function
     // ever actually glowed. null keeps the arg count correct.
-    const weaponsRoot = createWeapon(scene, "sword", {x:0, y:0, z:0}, instance, null, weaponPartDetails, glowingColor)
+    //
+    // weaponType (new, defaults to "sword" - every existing caller keeps
+    // rendering a sword exactly as before) - lets a thrown weapon actually
+    // look like whatever's being thrown instead of always a sword. Only
+    // meaningful for a part-based weaponType (sword/spear/axe/pickaxe -
+    // see createweapon.js's hasPartMeshes); a single-mesh weaponType would
+    // need itemName wired through here too, not done yet since nothing
+    // calls this with one.
+    const weaponsRoot = createWeapon(scene, weaponType, {x:0, y:0, z:0}, instance, null, weaponPartDetails, glowingColor)
     weaponsRoot.addRotation(Math.PI,0,Math.random())
     weaponsRoot.scaling = new Vector3(0.2,0.2,0.2)
     // weaponsRoot.bakeCurrentTransformIntoVertices()

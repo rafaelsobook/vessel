@@ -2,7 +2,10 @@ import { showItemInfo } from "./itemInfoSystem.js"
 import { closeInventory, openUpdateInventory } from "./inventory.js"
 import { openOrCloseStats } from "./statsSystem.js"
 import { getCharState, getTotal, setCanPress, getCanPress, setCharStateMode, updateSP_UI } from "./characterstate.js"
-import { getIsSocketOn } from "../sockets/worldsocket.js"
+import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
+import { getSceneDet } from "../main/main.js"
+import { spawnProjectile } from "../creations/skills.js"
+import { Vector3 } from "@babylonjs/core"
 import { emitAttack, emitMode, emitMyLoc } from "../sockets/emits.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
 import { positionAtkCollider } from "./createMyCharacter.js"
@@ -39,6 +42,41 @@ export function updateThrowButtonVisibility(){
     const charState = getCharState()
     const hasSpearEquipped = !!charState?.items?.some(itm => itm.itemType === "weapon" && itm.equiped && itm.weaponType === "spear")
     throwBtn.style.display = hasSpearEquipped ? "block" : "none"
+}
+
+// the actual projectile release - called from case "throw" below once the
+// "spearthrow" clip is 90% through (see that block's own comment on the
+// timing). Spawns a real flying copy of whatever spear is currently
+// equipped (creations/skills.js's spawnProjectile, now weaponType-aware
+// instead of hardcoded to always render a sword) from roughly hand
+// height, flying the same direction the player's currently facing.
+//
+// Deliberately minimal for now: doesn't remove/consume the equipped item
+// (a disposable visual copy, not a real disarm - the design call from the
+// original "should throwing cost you your weapon" discussion), doesn't
+// deal any damage (spawnProjectile's own enemy-hit branch is visual-only
+// by design, matching every other caller of it), and only runs on the
+// LOCAL caster's own client - no multiplayer relay of the projectile
+// itself yet, so someone else watching this throw sees the animation
+// (that part already rides attack()/emitAttack()) but not yet the spear
+// actually flying.
+function throwSpearProjectile(myChar, charState){
+    if(!myChar?.body) return
+    const spear = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped && itm.weaponType === "spear")
+    if(!spear) return
+
+    const pos = myChar.body.position
+    const forward = myChar.body.getDirection(Vector3.Forward())
+    // roughly hand/shoulder height, not the capsule's own center - a flat
+    // throw straight out along the facing direction
+    const spawnPos = { x: pos.x, y: pos.y + 1, z: pos.z }
+    const targetPos = { x: pos.x + forward.x, y: pos.y + 1, z: pos.z + forward.z }
+
+    if(getIsSocketOn()){
+        //send an emit to tcp
+    }else{
+        spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear")
+    }
 }
 
 // RESTING - player.mode "resting" (see skillsData.js-style mode gating
@@ -363,17 +401,47 @@ export function activateBtnOnce(){
                     // check is just a defensive backstop, not the real gate)
                     if(attackInfo.weaponType !== "spear") break
 
+                    // release point - the actual spear leaves the hand once
+                    // the "spearthrow" clip is 90% through, not when it
+                    // ends. Real playback speed matters here (unlike the
+                    // debug log this replaced): attack() plays every clip
+                    // at speedRatio (0.8 + atkSpd), a faster swing speed
+                    // shortens how long that 90% mark actually takes to
+                    // arrive in real time, so the timeout below has to
+                    // divide by the SAME ratio attack() itself uses, or the
+                    // spear would visibly leave the hand early/late whenever
+                    // atkSpd isn't exactly 0.
+                    {
+                        const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+                        const spearThrowAnim = myChar?.anims.find(a => a.name.toLowerCase() === "spearthrow")
+                        if(spearThrowAnim){
+                            const fps = spearThrowAnim.targetedAnimations?.[0]?.animation.framePerSecond ?? 30
+                            const frames = spearThrowAnim.to - spearThrowAnim.from
+            
+                            const releaseDelayMs = (frames / fps ) * 0.7 * 1000
+                            setTimeout(() => {
+                                throwSpearProjectile(myChar, charState)
+
+                            }, releaseDelayMs)
+                        } else {
+                            console.warn(`[spearthrow] no "spearthrow" clip found on this rig's own animation groups - projectile never released`)
+                        }
+                    }
+
                     clickedTimeOut = setTimeout(() => {
                         disableEnableWalkRunButtons(true)
                     }, 500)
 
-                    // just the animation for now, same attack()/emitAttack()
-                    // relay every other walkrun-btns action already rides
+                    // animation only here - same attack()/emitAttack() relay
+                    // every other walkrun-btns action already rides
                     // (attack() -> attackingSystem.js's own
                     // characterAnimations.playAction) so every client
                     // watching sees the same throw play, not just the
-                    // caster - the actual thrown projectile/damage is a
-                    // separate step on top of this
+                    // caster. throwSpearProjectile above is deliberately
+                    // LOCAL-ONLY for now (no multiplayer relay of its own
+                    // yet) - other clients watching this throw won't see
+                    // the actual projectile fly until that gets wired up
+                    // separately.
                     if(isSocketOn){
                         emitAttack(attackInfo, "spearthrow")
                     }else{
