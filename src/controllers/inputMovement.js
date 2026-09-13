@@ -17,7 +17,7 @@ import { giveSkill, giveAllSkills, giveRandomSkill, upgradeAllOwnedSkills } from
 import { displaySpeech } from '../tools/speechgui';
 import { giveRandomTitle } from '../components/titleUI';
 import { singlecastSkill } from '../staticRecources/skillsData';
-import { hideShowAllScreenUI } from '../charactersystem/uimanagement';
+import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
 import { checkDistance } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
@@ -516,8 +516,15 @@ function setupControls(scene, allsounds) {
         if (e.pointerType !== "touch") return;
         if (e.target !== canvasEl) return; // let taps on HTML UI (chat, buttons...) through untouched
         if (joystickPointerId !== null) return;
-        if (!getCanPress()) return;
         if (!isInJoystickZone(e.clientX, e.clientY)) return;
+        // same auto-wake handleKeyDown's own w/a/s/d check does, for touch
+        // players - checked before getCanPress() below for the same reason
+        // (resting sets it false), so a joystick touch is the touch
+        // equivalent of pressing a movement key to end resting. Without
+        // this, removing the old dedicated "wake up" button would leave
+        // touch players with no way to stop resting at all.
+        if(getCharState()?.mode === "resting") stopResting();
+        if (!getCanPress()) return;
 
         joystickPointerId = e.pointerId;
         camera.detachControl();
@@ -536,9 +543,20 @@ function setupControls(scene, allsounds) {
     }
 
     function handleKeyDown(e) {
+        const key = e.key.toLowerCase();
+        // resting (uimanagement.js's startResting) sets canPress false, so
+        // the early return right below would otherwise swallow this key
+        // entirely - checked BEFORE that gate, and only for an actual
+        // movement key, so pressing w/a/s/d wakes the player up and (since
+        // getCanPress() is true again immediately after) this SAME
+        // keypress falls straight through into moving them too, instead of
+        // needing a separate press. No dedicated "wake up" button anymore -
+        // this is the only way rest ends now.
+        if(["w","a","s","d"].includes(key) && getCharState()?.mode === "resting"){
+            stopResting()
+        }
         if(!getCanPress()) return
         clearTimeout(saveLocTimeout)
-        const key = e.key.toLowerCase();
 
         switch (key) {
             case "w": input.forward =  1; isMoving = true; break;

@@ -205,6 +205,13 @@ canvas{
     height: 70px;
     display: none;
   }
+  .rest{
+    right: 0;
+    top: 20%;
+    z-index: 2;
+    width: 70px;
+    height: 70px;
+  }
   // top-left of the attack button, mirroring how walk/running sit in the
   // bottom two corners
   .cast{
@@ -5018,9 +5025,6 @@ canvas {
       font-family: $numFont;
     }
   }
-}
-.wake-up-btn{
-  display: none;
 }
 .title-popup-hidden{
   display: none;

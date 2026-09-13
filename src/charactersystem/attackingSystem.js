@@ -53,15 +53,32 @@ export function attack(_attackInfo, attackAnimName){
     if(hasWeapon) playerAttacked.equipSword(hasWeapon, true)
     const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)
 
+    // spearthrow - the equipped spear itself visibly flips 180° in hand for
+    // the throw pose (point-first, instead of its normal carry angle).
+    // Runs here (not uimanagement.js's own case "throw") so it plays for
+    // EVERY client watching via the attack()/emitAttack() relay, same as
+    // the animation itself - not just on the thrower's own screen. Same
+    // swordMeshes lookup applyWeaponBuff (skillEffects.js) already uses to
+    // find whichever weapon entry is actually the visible one right now.
+    // Reverted once the clip itself actually finishes below (not a fixed
+    // timeout), so it stays correct regardless of playback speed (0.8 +
+    // atkSpd above changes how long that actually takes).
+    const weaponEntry = attackAnimName === "spearthrow"
+        ? playerAttacked.swordMeshes?.find(sw => sw.mesh?.getChildMeshes().some(m => m.isVisible))
+        : null
+    weaponEntry?.mesh.addRotation(Math.PI, 0, 0)
+
     if (played) {
         const actionAnim = playerAttacked.anims.find(a => a.name.toLowerCase() === attackAnimName.toLowerCase())
         actionAnim.onAnimationEndObservable.addOnce(() => {
             const plToanim = getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
             if (!plToanim || plToanim.isDead) return
             playerAttacked._attacking = false
+            weaponEntry?.mesh.addRotation(-Math.PI, 0, 0)
         })
     } else {
         playerAttacked._attacking = false
+        weaponEntry?.mesh.addRotation(-Math.PI, 0, 0)
     }
 }
 export function activateSkill(ownerId, skillDetail, casterStats){

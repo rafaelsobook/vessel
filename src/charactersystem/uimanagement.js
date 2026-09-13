@@ -23,8 +23,23 @@ const walkRunBtns       = document.querySelectorAll(".walkrun-btns")
 const conts       = document.querySelectorAll(".cont")
 const itemSlotList   = document.querySelector(".slots-list")
 const inventoryCont  = document.querySelector(".inventory-container")
-const wakeUpBtn      = document.querySelector(".wake-up-btn")
 const storyNotifCont = document.querySelector(".story-notif-container")
+const throwBtn       = document.querySelector(".walkrun-btns.throw")
+
+// THROW BUTTON - spear-only basic action (style.scss's own .throw rule
+// already ships with display:none baked in, waiting for exactly this).
+// Visible only while a spear is actually equipped, hidden the rest of the
+// time - called once at startup (activateBtnOnce below, so it starts
+// correct for whatever's already equipped when the scene first loads) and
+// again from itemInfoSystem.js's equipItemFunc/unequipItemFunc whenever
+// the equipped weapon actually changes, since those are the only two
+// places a weapon's own `equiped` flag flips.
+export function updateThrowButtonVisibility(){
+    if(!throwBtn) return
+    const charState = getCharState()
+    const hasSpearEquipped = !!charState?.items?.some(itm => itm.itemType === "weapon" && itm.equiped && itm.weaponType === "spear")
+    throwBtn.style.display = hasSpearEquipped ? "block" : "none"
+}
 
 // RESTING - player.mode "resting" (see skillsData.js-style mode gating
 // throughout this game: renderer.js's own switch drives the "structed"
@@ -32,9 +47,12 @@ const storyNotifCont = document.querySelector(".story-notif-container")
 // it like any other mode). While resting, canPress is false - every other
 // input path (keyboard/joystick movement in inputMovement.js, this file's
 // own walkRunBtns click handler below, skillsui.js's skill-slot clicks)
-// already gates on getCanPress()/checks it here, so the ONLY thing still
-// reachable is wakeUpBtn's own click handler further below, which isn't
-// gated at all.
+// already gates on getCanPress()/checks it here. There's no dedicated
+// "wake up" button anymore - inputMovement.js's own handleKeyDown/
+// handleJoystickPointerDown call stopResting() directly the moment a
+// movement input actually happens (checked BEFORE their own getCanPress()
+// gate, specifically so a movement press can end resting instead of
+// silently no-opping against it).
 export function startResting(){
     const charState = getCharState()
     if(!charState) return
@@ -52,7 +70,6 @@ export function startResting(){
     if(getIsSocketOn()) emitMode("resting", weapon?.name)
     setCanPress(false)
     hideShowAllScreenUI(false)
-    if(wakeUpBtn) wakeUpBtn.style.display = "block"
 }
 export function stopResting(){
     const charState = getCharState()
@@ -64,7 +81,6 @@ export function stopResting(){
     if(getIsSocketOn()) emitMode("idle", weapon?.name)
     setCanPress(true)
     hideShowAllScreenUI(true)
-    if(wakeUpBtn) wakeUpBtn.style.display = "none"
 }
 
 let buttonsActivated = false
@@ -107,6 +123,10 @@ export function openCloseLifeDisplay(_isVisible){
 }
 export function activateBtnOnce(){
     if(buttonsActivated) return
+    // starting state - matches whatever's already equipped on this very
+    // first scene load, not just whatever's equipped the NEXT time the
+    // player opens their inventory and (un)equips something
+    updateThrowButtonVisibility()
     menuBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
             // these are real <button> elements (index.html) - a mouse click
@@ -152,8 +172,9 @@ export function activateBtnOnce(){
             // already what every raw movement input path gates on
             // (inputMovement.js), this is the same gate extended to these
             // buttons too, so attack/cast/walk/running/rest are all
-            // unreachable while resting - only wakeUpBtn's own untouched
-            // handler further below can end it
+            // unreachable while resting - only an actual movement input
+            // (inputMovement.js's own handleKeyDown/handleJoystickPointerDown)
+            // can end it now
             if(!getCanPress()) return
             const btnName = e.target.className.split(" ")[1]
             const isSocketOn = getIsSocketOn()
@@ -228,8 +249,8 @@ export function activateBtnOnce(){
                     // charState.sp -= spToDeduct
                     updateSP_UI()
                     
-                    getAllSounds().voiceAttackS?.setPlaybackRate(0.9 + (Math.random()*0.2))
-                    getAllSounds().voiceAttackS?.play()
+                    // getAllSounds().voiceAttackS?.setPlaybackRate(0.9 + (Math.random()*0.2))
+                    // getAllSounds().voiceAttackS?.play()
                     
                     // unarmed combo alternates punch1/kick1 - same swordAnimNum
                     // toggle already used for the weapon combo below, reused
@@ -337,48 +358,27 @@ export function activateBtnOnce(){
                     startResting()
                 break
                 case "throw":
-                    // if(this.myChar.mode !== "weapon") return this._statPopUp("You must hold a weapon")
-                    // closeGameUI()
-                    // this.stopPress()
-                    // this.myChar.mode = "noneweapon"
-                    // this.stopAnim(this.myChar.anims, "running", true)
-                    // this.playAnim(this.myChar.anims, "throw")
+                    // spear-only (uimanagement.js's own updateThrowButtonVisibility
+                    // already hides this button unless one's equipped - this
+                    // check is just a defensive backstop, not the real gate)
+                    if(attackInfo.weaponType !== "spear") break
 
-                    // const myCurSword = this.myChar.swordz.find(swrd => swrd.name.split(".")[1] === this.det.weapon.name)
-                    // if(!myCurSword) return
-                    // const weaponDetail = this.det.items.find(itm => itm.meshId === this.det.weapon.meshId)
-                    // if(!weaponDetail) return
-                    // myCurSword.addRotation(Math.PI,0,0)
-                    // log("cur sowrd " + myCurSword )
-                    // if(this.socketAvailable) this.socket.emit("action-willthrow", {_id:this.det._id, weaponName: this.det.weapon.name})
-                    
-                    // setTimeout(() => this.myChar.whoopS.play(), 900)
-                    // setTimeout( async () => {
-                    //     const infrontPos = this.getMyPos(this.myChar.bx, 1)
-                    //     const infrontPosX2 = this.getMyPos(this.myChar.bx, 3)
-                    //     let myDmg = this.recalMeeleDmg()
-                    //     myDmg = myDmg * 5
-                    //     log('damage of spear ' + myDmg)
-                    //     const myPpos = this.myChar.bx.position
-                    //     if(this.socketAvailable){
-                    //         this.socket.emit("will-throw", { _id: this.det._id, myFosNow: {x: myPpos.x, z: myPpos.z} , mode:this.myChar.mode, dmg: myDmg, frontPos: {x:infrontPos.x,z:infrontPos.z}, dirTa: { x: infrontPosX2.x,z:infrontPosX2.z}, weaponDetail, curPlace: this.currentPlace})
-                    //     }else{
-                    //         this.createFlyingWeapon(this.myChar.bx.position, myDmg, this.myChar.mode, myCurSword, infrontPos, infrontPosX2, weaponDetail, this.det._id)
-                    //         this.hideAllSword(this.myChar.swordz)
-                    //         this.keepSword(this.myChar.rootSword, this.myChar.rootBone)
-                    //     }
-                    //     setTimeout(() => this.setMode("fist"), 400)
-                    //     // this.myChar.swordz = this.myChar.swordz.filter(swrd => swrd.name.split(".")[1] !== this.det.weapon.name)
-                    //     const theItem = this.det.items.find(itm => itm.meshId === this.det.weapon.meshId)
-                    //     await this.deductItem(theItem.meshId)
-                    //     this.det.weapon.name = "none"
-                    //     this.det.weapon.meshId = "none"
-                    //     this.changeAtkBtnImg()
-                    //     await this.updateMyDetailsOL(this.det, true)
-                    //     openGameUI()
-                    //     this.allCanPress()
-                    //     myCurSword.addRotation(-Math.PI,0,0)
-                    // },950)
+                    clickedTimeOut = setTimeout(() => {
+                        disableEnableWalkRunButtons(true)
+                    }, 500)
+
+                    // just the animation for now, same attack()/emitAttack()
+                    // relay every other walkrun-btns action already rides
+                    // (attack() -> attackingSystem.js's own
+                    // characterAnimations.playAction) so every client
+                    // watching sees the same throw play, not just the
+                    // caster - the actual thrown projectile/damage is a
+                    // separate step on top of this
+                    if(isSocketOn){
+                        emitAttack(attackInfo, "spearthrow")
+                    }else{
+                        attack(attackInfo, "spearthrow")
+                    }
                 break
             }
 
@@ -392,13 +392,6 @@ export function activateBtnOnce(){
             e.target.parentElement.style.display="none"
         })
     })
-    // wake up from resting - deliberately NOT gated by getCanPress() (it's
-    // false the entire time we're resting - this is the one control meant
-    // to still work)
-    wakeUpBtn?.addEventListener("click", () => {
-        stopResting()
-    })
-
     document.addEventListener("keyup", e => {
         if(e.key === " "){
         }

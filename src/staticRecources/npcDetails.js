@@ -2166,7 +2166,25 @@ export default [
                 notCompletedSpeech: [
                     {name:"", message: "So Halric sent you. Alright ! Let's battle !"}
                 ],
-                questsToReceive: [],
+                // "go north... you'll find a witch tower there" (this
+                // block's own speech above) is what actually sends the
+                // player looking - this is what makes that a real, tracked
+                // quest instead of just a line of flavor text. Same
+                // reqType:"duel" shape this quest's own questRequirements
+                // uses (Halric's questsToReceive entry, further up this
+                // file) - name:"117_vesper" is Vesper's own npcDetails.js
+                // _id, checked the same way by
+                // duelSystem.js's grantDuelWinRewards ->
+                // checkStoryQuestIfCompleted('duel', npcDet._id) once she's
+                // actually beaten.
+                questsToReceive: [
+                    {
+                        qName: "meet-vesper",
+                        qTtle: "Meet Vesper",
+                        desc: "Find Vesper inside the witch house north of the village.",
+                        questRequirements: { reqType: "duel", name: "117_vesper", current: 0, requiredNum: 1, completed: false },
+                    }
+                ],
                 // start the duel - a DEDICATED arena (localroomdb.js
                 // placeId 201, "Colousa's Dueling Grounds"), not a reuse of
                 // placeId 200 (Renarden's own grounds): duelSystem.js's
@@ -2336,6 +2354,123 @@ export default [
         callbackAfterRandomSpeech: () => {
             startQuestionare(320)
         }
+    },
+    {
+        // Vesper - the "friend" Colousa promises inside the witch tower
+        // ("114_colousa"'s post-duel speech: "you'll find a witch tower
+        // there, but inside is not a witch but a friend... she's capable of
+        // different types of magic! and she can help you enhance your
+        // skills"). Lives at placeId 15 (localroomdb.js's "Witch House"
+        // interior, reached via placeId 888's own roomPaths entry for the
+        // building at {x:20,z:10}), standing by her own witch_crystal prop.
+        //
+        // Duels the same way Colousa does, granted BY Colousa - see this
+        // NPC's own "meet-colousa" forQuests entry above, whose
+        // questsToReceive now hands out "meet-vesper" the moment that fight
+        // is won. forQuests entry below mirrors Colousa's exactly: talking
+        // to Vesper while holding that quest and not yet having beaten her
+        // plays notCompletedSpeech -> cbAfterNotCompletedSpeech starts the
+        // duel (her own DEDICATED arena, placeId 202 - same one-arena-one-
+        // roster limitation Colousa's own placeId 201 has, see that
+        // callback's comment on the real npc), winning is what actually
+        // flips questRequirements.completed (duelSystem.js's
+        // grantDuelWinRewards -> checkStoryQuestIfCompleted('duel',
+        // npcDet._id)).
+        //
+        // "help you enhance your skills" itself still isn't a real system -
+        // attackingSystem.js's trackSkillUsage (automatic, usage-based) is
+        // the only skill-leveling mechanic that exists; her own win speech
+        // below nods at that instead of promising a mechanic that isn't
+        // there. A real "Vesper lets you do X to a skill" feature would be
+        // a separate task on top of just this.
+        //
+        // stats bumped above Colousa's own (1/1) - a harder duel than the
+        // one that unlocked her, not a repeat of the exact same fight.
+        // calcOpponentDmg (duelSystem.js) reads strength/weapon directly,
+        // nothing else - she's fought unarmed (items:[], same as Renarden)
+        // rather than guessing at a first-ever "staff" item shape with no
+        // existing data anywhere in the project to copy from.
+        glbPath: null,
+        gender: "female",
+        currentPlaceId: 15,
+        mode: "idle",
+        _id: "117_vesper",
+        name: "Vesper",
+        stats: { weapon: 2, accuracy: 1.2, critical: 1.6, dex: 1, strength: 2, magic: 3, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 200,
+        maxMp: 200,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // standing just past her own witch_crystal prop (localroomdb.js's
+        // placeId 15, {x:0,y:0,z:0.5}), facing the door
+        x: 0,
+        y: 0.01,
+        z: 1.5,
+        _dirTarg: {x:0, z:-4},
+        hair: 'hair1',
+        hairColor: ADVENTURER_COLORS.white,
+        items: [],
+        titles: ['mage'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 100,
+        aptitude: ['dark'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "Colousa sends everyone who beats her out here eventually. You're not the first, and you won't be the last."},
+            {name: "", message: "Different types of magic, she says, like it's a party trick. It's a lifetime of study she's flattening into one sentence, but she means well."},
+            {name: "", message: "Come back once you've got a real question for me. I don't do idle chatter for its own sake."}
+        ],
+        forQuests: [
+            { // storyInfo - same shape as Colousa's own "meet-colousa"
+              // entry above, just her side of the same pattern
+                qName: "meet-vesper",
+                desc: false,
+                questType: "story",
+                hasReward: false,
+                reward: {receiveRewardType: false, rewardItems: [], rewardCoin: 0},
+                speech: [
+                    {name:"", message: "Hm. Not bad."},
+                    {name:"", message: "Colousa teaches the body - how to move, how to hit, how to take a hit and stay standing. Useful, and rare enough on its own."},
+                    {name:"", message: "But there's more out there than steel can answer. Fire that thinks. Water that remembers. Shadow that waits for you to blink."},
+                    {name:"", message: "I won't pretend I can hand you mastery in one afternoon. What I can do is make sure you're not walking toward it blind."},
+                    {name:"", message: "Keep at your skills. Every one you actually use enough will grow on its own - that's not a lesson, that's just how it works. I'm only here to make sure you survive long enough to see it happen."},
+                    {name:"", message: "Go on, then. The door's behind you, same as it was."},
+                ],
+                notCompletedSpeech: [
+                    {name:"", message: "So Colousa finally sent one that could actually beat her. Words are cheap, though - let's see if it means anything."}
+                ],
+                questsToReceive: [],
+                // same travel sequence Colousa's own cbAfterNotCompletedSpeech
+                // uses, targeting her own dedicated arena (placeId 202,
+                // "Vesper's Dueling Grounds" - localroomdb.js) instead of
+                // reusing placeId 201 (Colousa's own roster is fixed to just
+                // her, same one-arena-one-roster limitation)
+                cbAfterNotCompletedSpeech: async () => {
+                    const duelGrounds = findPlaceMetaData(202)
+                    if(!duelGrounds) return console.warn("cbAfterNotCompletedSpeech: Vesper's duel grounds (placeId 202) not found")
+
+                    await travelToPlace({
+                        placeId: duelGrounds.placeId,
+                        name: duelGrounds.name,
+                        areaType: duelGrounds.areaType,
+                        x: duelGrounds.spawn.x,
+                        y: duelGrounds.spawn.y,
+                        z: duelGrounds.spawn.z,
+                    })
+                }
+            },
+        ]
     },
     {
         glbPath: null,

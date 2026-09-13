@@ -1653,8 +1653,10 @@ export const blinkstrikeSkill = {
     ],
     // range: how far (Vector3.Distance) the nearest-target scan reaches;
     // landOffset: how close to the target the blink actually lands - both
-    // read by skillEffects.js's castBlinkstrikeSkill
-    blink: { range: 7, landOffset: 1.2 },
+    // read by skillEffects.js's castBlinkstrikeSkill. range bumped 7 -> 56
+    // (8x) - 7 read as "already standing next to the enemy" in practice,
+    // not the "blink across a real gap" feel this skill's supposed to have
+    blink: { range: 56, landOffset: 1.2 },
     animationName: "dashstrike",
     activationSound: { soundType: "blade", willPlayAfterSeconds: 200 },
     impactSound: "struckS",

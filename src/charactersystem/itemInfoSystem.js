@@ -14,6 +14,7 @@ import { emitEquipItem } from "../sockets/emits.js"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { showGuildQuest } from "./guildQuest.js"
+import { updateThrowButtonVisibility } from "./uimanagement.js"
 
 
 const itemInfoCont = document.querySelector(".item-info-cont")
@@ -70,6 +71,10 @@ let equipItemFunc = () => {
     openCloseMiniLS(`Equiping ${itemDetail.dn} ...`, true)
     // for UI and setting charState item to equiped
     equipItem(itemDetail, true)
+    // throw button (uimanagement.js) - only visible while a spear is
+    // equipped, so it needs re-checking on every equip, not just weapons
+    // (cheap no-op the rest of the time)
+    updateThrowButtonVisibility()
     const { itemType, name, parts, itemId, metalColor, weaponType } = itemDetail
     //  for 3d multiplayer sword mesh logic
     const isMultiplayerZone = getIsSocketOn()
@@ -106,6 +111,9 @@ let unequipItemFunc = () => {
     const myChar = getPlayersOnScene().find(pl => pl.owner === state.owner)
 
     unEquip(itemType)
+    // same re-check the equip path above does - unequipping the spear is
+    // exactly when this button needs to disappear again
+    updateThrowButtonVisibility()
 
     const isMultiplayerZone = getIsSocketOn()
     if(isMultiplayerZone){

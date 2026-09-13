@@ -16,6 +16,8 @@ import { getAllSounds } from '../components/soundSystem.js';
 import { getSocket } from '../sockets/joinsocket.js';
 import { emitSpawnCircle } from '../sockets/emits.js';
 import { randomNum } from '../tools/tools.js';
+import { sampleTerrainSurfaceHeight } from 'infterrain';
+import { OPENWORLD_TERRAIN_VERTS } from './constants.js';
 
 export const metaDatas = [
 
@@ -304,6 +306,187 @@ export const metaDatas = [
             lights: [
                 {name:"directional", intensity: 0.9},
                 // {name:"hemispheric", intensity: 0.1},
+            ],
+        },
+        isMultiplayer: false
+    },
+    {
+        // Witch House interior - entered via placeId 888's own roomPaths
+        // entry (walking up to the "Witch House" building at {x:20,z:10} in
+        // the wilderness), same procedural boxed-room shape as "Simple
+        // Room"/"Guild House" above (createroom.js), not a custom modeled
+        // interior. Houses Colousa's own "friend" ("114_colousa"'s
+        // post-duel speech: "she's capable of different types of magic! and
+        // she can help you enhance your skills") - see npcDetails.js's
+        // "117_vesper".
+        placeId: 15,
+        name: 'Witch House',
+        width: 9, // ground width
+        height: 12, // ground height
+        areaType: "room",
+        layout: { cellSize: 1 },
+        // just inside the south door (same door-adjacent spawn convention
+        // "Simple Room"'s own spawn:{x:0,y:1,z:-2} uses)
+        spawn: {x: 0, y: 1, z: -4, rotation: 0},
+
+        optionalObjects: [
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "roomdoor",
+                position: {x: 0, y: 0, z: -5.5},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/door.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "table",
+                position: {x: 3, y: 0, z: 3},
+                scale: null,
+                rotation: Math.PI / 2,
+                glbPath: "./models/indors/table1.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                // this table has a transform node we don't need, so dispose
+                // it before merging - same fix "Simple Room"'s own table
+                // entry above already needed for this exact glb
+                functionBeforeMerge:(container) => {
+                    container.meshes[0].getChildren()[0].dispose()
+
+                    return container.meshes[0].getChildren()[0]
+                }
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "spellbook",
+                position: {x: 3.7, y: 0.9, z: 3},
+                scale: null,
+                rotation: Math.PI / 2,
+                glbPath: "./models/indors/book1.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "scroll",
+                position: {x: 2.4, y: 0.9, z: 3},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/scroll.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "shelves",
+                position: {x: -3.7, y: 0, z: -3},
+                scale: null,
+                rotation: Math.PI / 2,
+                glbPath: "./models/indors/shelves.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                // a witch's own magic crystal, standing centerpiece -
+                // testcrystal.glb (indoor asset), not a resource-node
+                // "crystal" (staticRecources/resourceLoot.js's own mined
+                // material of the same generic word - unrelated glb/system)
+                itemId: randNum(1000,9999).toString(),
+                name: "witch_crystal",
+                position: {x: 0, y: 0, z: 0.5},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/testcrystal.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "fireplace",
+                position: {x: -3, y: 0, z: 4},
+                scale: null,
+                rotation: Math.PI + 1,
+                glbPath: "./models/indors/fireplace.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null,
+                cbAfterMade: (scene) => {
+                    getAllSounds().bonfireS?.play()
+                }
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "particle_fire",
+                position: {x: -3, y: 0, z: 4},
+                scale: null,
+                rotation: 0,
+                glbPath: null,
+                physics: null,
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "wallTorch1",
+                position: {x: -4.3, y: 1.6, z: -4},
+                scale: null,
+                rotation: Math.PI / 2,
+                glbPath: "./models/indors/wallTorch.glb",
+                physics: null,
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(1000,9999).toString(),
+                name: "wallTorch2",
+                position: {x: 4.3, y: 1.6, z: -4},
+                scale: null,
+                rotation: -Math.PI / 2,
+                glbPath: "./models/indors/wallTorch.glb",
+                physics: null,
+                functionBeforeMerge: null
+            },
+        ],
+        exit: "south",
+        exitPlaceDetail: {
+            placeId: 888,
+            name: "Wilderness",
+            areaType: "openworld",
+        },
+        entryExitPlaceId: {
+            exit: {
+                placeId: 888,
+                name: "Wilderness",
+                areaType: "openworld",
+            }
+        },
+        sceneTemp: {
+            // a shade purpler than "Simple Room"'s own green-tinted fog -
+            // reads as a mystical hut rather than a plain lived-in room
+            fogDensity: 0.1,
+            fogColor:{ r:0.12, g:0.05, b:0.16},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
             ],
         },
         isMultiplayer: false
@@ -778,6 +961,43 @@ export const metaDatas = [
         },
         isMultiplayer: false
     },
+    {
+        // Vesper's own dueling grounds - same one-arena-one-roster
+        // limitation placeId 201 (Colousa's) already documents, just for
+        // her instead. exitPlaceDetail sends the player back into placeId
+        // 15 (the Witch House interior, where the challenge was actually
+        // issued) rather than the village - the fight started at her own
+        // front door, not back in town.
+        placeId: 202,
+        name: "Vesper's Dueling Grounds",
+        areaType: "duel",
+        npcEnemies: [
+            {
+                npcId: "117_vesper",
+                position: {x: 0, y: 0.01, z: 20},
+            }
+        ],
+        width: 50,
+        height: 50,
+        wallHeight: 0.5,
+        layout: { cellSize: 1 },
+        spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
+        exitPlaceDetail: {
+            placeId: 15,
+            name: "Witch House",
+            areaType: "room",
+        },
+        sceneTemp: {
+            fogDensity: 0,
+            fogColor:{ r:0.1, g:0.05, b:0.16},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+                {name:"hemispheric", intensity: 0.6},
+            ],
+        },
+        isMultiplayer: false
+    },
 
 
     // openworld
@@ -795,6 +1015,43 @@ export const metaDatas = [
                 glbPath: "./models/outdors/wagon.glb",
                 diffuseTexPath:null,
                 // bumpTexPath: "./images/textures/houses/guild1.jpg",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                // Colousa's own "witch tower" (npcDetails.js's "114_colousa"
+                // post-duel speech - "you'll find a witch tower there, but
+                // inside is not a witch but a friend"). No dedicated tower
+                // glb exists yet, so this reuses bighouse.glb (already
+                // proven/loaded - generateArea's own totalBigHouse uses it
+                // for this same placeId) as a stand-in - swap glbPath if a
+                // real tower model gets added later.
+                //
+                // y is NOT a hand-picked number - areascene.js's own
+                // optionalObjects loader (see its own comment) sets
+                // model.position straight from this position object with no
+                // openworld ground-height correction of its own (unlike
+                // enemies/projectiles/the wagon-follow deer, which all
+                // re-snap to sampleTerrainSurfaceHeight every frame -
+                // createEnemy.js/renderer.js). A static building has no such
+                // per-frame correction, so this bakes the SAME lookup in
+                // once here, at the exact (x,z) this house actually sits at -
+                // matching the coarse, interpolated grid the visible chunk
+                // mesh was built from (OPENWORLD_TERRAIN_VERTS's own
+                // comment), not the floating-point-perfect analytical height
+                // (terrainHeight) that can visibly disagree with it on
+                // bumpy ground.
+                itemId: randNum(0,9999).toString(),
+                name: "Witch House",
+                position: {x: 20, y: sampleTerrainSurfaceHeight(20, 10, OPENWORLD_TERRAIN_VERTS), z: 10},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/houses/bighouse.glb",
+                diffuseTexPath: null,
+                bumpTexPath: null,
                 physics: {
                     opt: {mass: 0},
                     type: "box"
@@ -823,6 +1080,18 @@ export const metaDatas = [
                 name: "Dungeon",
                 areaType: "dungeon",
                 pos: {x: -1.5, y: 3, z: 510}
+            },
+            {
+                // door into the Witch House (this same optionalObjects
+                // entry above, {x:20,z:10}) - same "+1 off the sampled
+                // ground" trigger-height convention as that building's own
+                // ground-snap, not a guessed flat number, since this spot
+                // is on the same uneven openworld terrain
+                placeId: 15,
+                name: "Witch House",
+                areaType: "room",
+                pos: {x: 20, y: sampleTerrainSurfaceHeight(20, 9, OPENWORLD_TERRAIN_VERTS) + 1, z: 9},
+                startingPos: {x: 0, y: 1, z: -4}
             },
         ],
         resources: [

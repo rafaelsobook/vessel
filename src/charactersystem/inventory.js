@@ -358,6 +358,43 @@ export function giveAllItems(){
             qnty: 1,
             desc: "This Boots is light and useful for first time adventurers",
             rarity: "common"
+        },
+        // stormpiercer (swordsdata.js) - the ONLY spear item that currently
+        // exists (spear only has one modeled tier, rare1 on every part, no
+        // combination to vary - see that file's own comment), added here so
+        // equipping a spear (and the throw button that now only shows up
+        // for one, uimanagement.js's updateThrowButtonVisibility) is
+        // actually testable without hunting one down first
+        {
+            itemId: randomNum(),
+            name: "stormpiercer",
+            dn: "Stormpiercer",
+            itemCateg: "equipable",
+            itemType: "weapon",
+            weaponType: "spear",
+            equipAbilities: { dmg: 25, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 19 },
+            qnty: 1,
+            desc: "Stormpiercer, a rare spear forged with a silver guard, a wood shaft, and a silver butt-cap.",
+            rarity: "rare",
+            parts: {
+                bladeRarity: "rare1",
+                guardRarity: "rare1",
+                handleRarity: "rare1",
+                pommelRarity: "rare1",
+
+                bladeColor: "mythril",
+                guardColor: "silver",
+                handleColor: "wood",
+                pommelColor: "silver",
+            }
         }
     ])
 }
