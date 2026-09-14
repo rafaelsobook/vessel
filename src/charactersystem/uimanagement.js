@@ -1,12 +1,14 @@
-import { showItemInfo } from "./itemInfoSystem.js"
+import { showItemInfo, unEquip } from "./itemInfoSystem.js"
 import { closeInventory, openUpdateInventory } from "./inventory.js"
 import { openOrCloseStats } from "./statsSystem.js"
-import { getCharState, getTotal, setCanPress, getCanPress, setCharStateMode, updateSP_UI } from "./characterstate.js"
+import { getCharState, getTotal, setCanPress, getCanPress, setCharStateMode, updateSP_UI, updateMyDetailsOL } from "./characterstate.js"
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSceneDet } from "../main/main.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { Vector3 } from "@babylonjs/core"
 import { emitAttack, emitMode, emitMyLoc, emitThrowSpear } from "../sockets/emits.js"
+import { getSocket } from "../sockets/joinsocket.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
 import { positionAtkCollider } from "./createMyCharacter.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
@@ -51,15 +53,14 @@ export function updateThrowButtonVisibility(){
 // instead of hardcoded to always render a sword) from roughly hand
 // height, flying the same direction the player's currently facing.
 //
-// Deliberately minimal for now: doesn't remove/consume the equipped item
-// (a disposable visual copy, not a real disarm - the design call from the
-// original "should throwing cost you your weapon" discussion), and deals
-// no damage (spawnProjectile's own enemy-hit branch is visual-only by
-// design, matching every other caller of it). Multiplayer-visible though -
-// emitThrowSpear (sockets/emits.js) relays this to every other client via
-// tcp/index.ts's own "throwspear" -> "spear-thrown" broadcast, same
-// "purely visual sync, no server state to touch" shape spawncirc/
-// circle-spawned already use for magic circles.
+// A real disarm now, not a disposable visual copy - throwing your spear
+// actually costs you it, same as a real one would (supersedes the earlier
+// "should throwing cost you your weapon" design call). Deals no damage
+// yet though (spawnProjectile's own enemy-hit branch is visual-only by
+// design, matching every other caller of it) - that's still a separate
+// step on top of this. Multiplayer-visible - emitThrowSpear relays the
+// flying projectile, and emitUnEquip (below) relays the disarm itself, to
+// every other client.
 function throwSpearProjectile(myChar, charState){
     if(!myChar?.body) return
     const spear = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped && itm.weaponType === "spear")
@@ -83,6 +84,37 @@ function throwSpearProjectile(myChar, charState){
     if(getIsSocketOn()){
         emitThrowSpear(spawnPos, targetPos, spear.parts)
     }
+
+    // hide it in your own hand - myChar.unEquip (createcharacter.js), not a
+    // literal `.isVisible = false` on the weapon mesh directly: swordMeshes'
+    // own .mesh is a bare TransformNode with no isVisible of its own (only
+    // its CHILD meshes actually render), so unEquip("weapon") -> that
+    // file's own showHideSword is what actually hides those children -
+    // same helper equipSword/createSword already use for this exact job.
+    myChar.unEquip("weapon")
+    unEquip("weapon")
+    // and actually gone from the bag too - filtered out, not just flipped
+    // to equiped:false, same "this item is genuinely gone now" pattern
+    // itemBroke()/the sell flow (buyorsell.js) already use
+    charState.items = charState.items.filter(itm => itm.itemId !== spear.itemId)
+
+    updateThrowButtonVisibility()
+
+    // same emitUnEquip relay itemInfoSystem.js's own unequipItemFunc
+    // already uses - tells the server to drop its own authoritative
+    // equiped flag AND every other client to hide this player's weapon
+    // mesh too (worldsocket.js's "unequiped-item" -> theEquipingPlayer.unEquip)
+    if(getIsSocketOn()){
+        getSocket()?.emit("emitUnEquip", {
+            ownerId: charState.owner,
+            itemType: "weapon",
+            currentPlaceId: charState.currentPlace.placeId
+        })
+    }
+
+    updateMyDetailsOL(charState, checkIfTokenSaved()).then(() => {
+        openUpdateInventory(false)
+    })
 }
 
 // RESTING - player.mode "resting" (see skillsData.js-style mode gating

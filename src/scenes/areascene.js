@@ -199,8 +199,12 @@ export async function areaScene(placeDetail){
     // ever ran. Nothing reads this counter yet; declared here just to stop
     // the crash and preserve whatever it was meant to track.
 
-    registerToAtkCollider(scene, "tree", () => {
-        // console.log("hit tree")
+    registerToAtkCollider(scene, "tree", (meshHIT) => {
+        console.log("hit tree")
+        meshHIT.showBoundingbox = true
+        console.log(meshHIT.position)
+        console.log(meshHIT.name)
+        if(!myCharacter.hasWeapon) return
         playSound(getAllSounds().woodcuttingS)
 
         if(Math.random() >= 0.7){

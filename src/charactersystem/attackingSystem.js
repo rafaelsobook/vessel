@@ -478,7 +478,7 @@ export function registerToAtkCollider(scene, meshName, cb, excludeSkillStrikes =
                     // visible tree, this is what pins down which real mesh
                     // (wrong name, oversized hidden instance, stray leftover
                     // from a previous area load, etc) is responsible
-                    cb()
+                    cb(mesh)
                 }, true)
             }
         }
