@@ -629,7 +629,7 @@ function setupControls(scene, allsounds) {
             break
             case " ":
                 updateStoryQuestUI()
-                    
+                console.log(myPlayer.body.position)
             break
             case "x":
                 // changeStory({

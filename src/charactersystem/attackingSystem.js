@@ -460,7 +460,21 @@ export function registerToAtkCollider(scene, meshName, cb, excludeSkillStrikes =
         // spawnProps/spawnNonPhysics, and infterrain's own foliage placement),
         // which returns an "InstancedMesh", not a "Mesh". Both need to be checked.
         if(mesh.getClassName() === "Mesh" || mesh.getClassName() === "InstancedMesh"){
-            
+
+            // isVisible:false HIDDEN TEMPLATE MESHES (assetregistry.js's
+            // bigTree/mediumTree/smallTree etc - the raw glb import every
+            // real tree instance gets .createInstance()'d from) still match
+            // "Mesh" + the "tree" name filter below, still have real
+            // geometry/bounding info, and are never repositioned away from
+            // wherever they loaded in (the world origin, by default) -
+            // Babylon's own intersection check doesn't care about
+            // isVisible at all, only real geometry. Without this guard,
+            // standing near world center and swinging genuinely intersects
+            // that invisible master mesh and grants wood from nothing
+            // visibly there (confirmed: assetregistry.js explicitly sets
+            // these hidden and matches this exact name filter).
+            if(!mesh.isVisible) return
+
             if(mesh.name && mesh.name.toLocaleLowerCase().includes(meshName)){
                 // precise:true - this is a swing landing damage/loot, not a
                 // walk-up proximity check, so it needs real mesh-level
