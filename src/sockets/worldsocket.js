@@ -29,6 +29,7 @@ import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import createWagon, { positionWagonBehindDeer } from "../assetcreation/createwagon.js"
 import createHarnessDeer, { computeHarnessDeerPosition } from "../assetcreation/createharnessdeer.js"
+import { spawnProjectile } from "../creations/skills.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -733,6 +734,19 @@ export function activateOnSocketListeners(socket){
         if (getGameStatus() === "loading") return
         if (!charState || data.placeId !== charState.currentPlace.placeId) return
         createMagicCircle(new Vector3(data.pos.x, data.pos.y, data.pos.z), scene, `apt_${data.element}`, 0.8, 4000)
+    })
+    // SPEAR THROW - same shape as "circle-spawned" right above: tcp's own
+    // "throwspear" handler relays via socket.broadcast.emit (not io.emit),
+    // so this never fires for the thrower's own client - they already
+    // spawned their own local copy (uimanagement.js's throwSpearProjectile).
+    // No damage/hit-detection here, same as that local spawn - purely the
+    // visual so everyone else actually sees the spear fly too.
+    socket.on("spear-thrown", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.placeId !== charState.currentPlace.placeId) return
+        spawnProjectile(data.spawnPos, data.targetPos, null, scene, data.parts, null, 3000, null, false, "spear")
     })
     // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
     // hit handler, tcp/index.ts's enemyBind handler) - server is the actual

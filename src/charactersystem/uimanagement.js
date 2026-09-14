@@ -6,7 +6,7 @@ import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSceneDet } from "../main/main.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { Vector3 } from "@babylonjs/core"
-import { emitAttack, emitMode, emitMyLoc } from "../sockets/emits.js"
+import { emitAttack, emitMode, emitMyLoc, emitThrowSpear } from "../sockets/emits.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
 import { positionAtkCollider } from "./createMyCharacter.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
@@ -53,13 +53,13 @@ export function updateThrowButtonVisibility(){
 //
 // Deliberately minimal for now: doesn't remove/consume the equipped item
 // (a disposable visual copy, not a real disarm - the design call from the
-// original "should throwing cost you your weapon" discussion), doesn't
-// deal any damage (spawnProjectile's own enemy-hit branch is visual-only
-// by design, matching every other caller of it), and only runs on the
-// LOCAL caster's own client - no multiplayer relay of the projectile
-// itself yet, so someone else watching this throw sees the animation
-// (that part already rides attack()/emitAttack()) but not yet the spear
-// actually flying.
+// original "should throwing cost you your weapon" discussion), and deals
+// no damage (spawnProjectile's own enemy-hit branch is visual-only by
+// design, matching every other caller of it). Multiplayer-visible though -
+// emitThrowSpear (sockets/emits.js) relays this to every other client via
+// tcp/index.ts's own "throwspear" -> "spear-thrown" broadcast, same
+// "purely visual sync, no server state to touch" shape spawncirc/
+// circle-spawned already use for magic circles.
 function throwSpearProjectile(myChar, charState){
     if(!myChar?.body) return
     const spear = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped && itm.weaponType === "spear")
@@ -72,10 +72,16 @@ function throwSpearProjectile(myChar, charState){
     const spawnPos = { x: pos.x, y: pos.y + 1, z: pos.z }
     const targetPos = { x: pos.x + forward.x, y: pos.y + 1, z: pos.z + forward.z }
 
+    // always spawn locally first - the multiplayer relay (below) is
+    // deliberately broadcast-excluding-sender (tcp/index.ts's own
+    // "throwspear" handler uses socket.broadcast.emit, not io.emit), same
+    // "I already applied it locally, this is just for everyone else
+    // watching" pattern circle-spawned/spawncirc already use - so this
+    // client's own copy has to come from here, it'll never come back
+    // through the socket
+    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear")
     if(getIsSocketOn()){
-        //send an emit to tcp
-    }else{
-        spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear")
+        emitThrowSpear(spawnPos, targetPos, spear.parts)
     }
 }
 

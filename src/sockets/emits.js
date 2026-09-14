@@ -151,6 +151,20 @@ export function emitSpawnCircle(pos, element){
         socket.emit("spawncirc", {pos, placeId, element})
     }
 }
+// SPEAR THROW - purely visual sync, same "spawncirc" shape right above:
+// no server state to touch, the thrower already spawned their OWN
+// projectile locally (uimanagement.js's throwSpearProjectile), this is
+// just so every other connected client also sees it fly. tcp/index.ts's
+// own "throwspear" handler relays via socket.broadcast.emit (not io.emit)
+// for the exact same reason spawncirc's own handler does - io.emit would
+// echo this right back to the sender too, spawning a SECOND overlapping
+// spear on their own screen on top of the one they already made locally.
+export function emitThrowSpear(spawnPos, targetPos, parts){
+    const socket = getSocket()
+    if(!getIsSocketOn() || !socket) return
+    const placeId = getCharState().currentPlace.placeId
+    socket.emit("throwspear", { spawnPos, targetPos, parts, placeId })
+}
 export function emitAttack(attackInfo,attackAnimName) {
     if (!getIsSocketOn()) return
     const socket = getSocket()
