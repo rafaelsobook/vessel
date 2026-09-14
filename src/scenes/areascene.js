@@ -20,7 +20,7 @@ import { getEngine, setGameStatus } from "../main/main.js";
 import { travelToPlace } from "../tools/travel.js";
 import { getCharState, initiateCharacter, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
-import { pushPlayer, setSocketContainers, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
+import { pushPlayer, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
 import { checkIfTokenSaved, randomNum } from "../tools/tools.js";
 import { startMyOwnSpeech } from "../components/conversations.js";

@@ -1,9 +1,9 @@
-import { Quaternion, MeshBuilder, Vector3, FreeCamera, PointerEventTypes } from '@babylonjs/core';
+import { Quaternion, MeshBuilder, Vector3, FreeCamera, PointerEventTypes, Space } from '@babylonjs/core';
 import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
 import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp } from '../charactersystem/characterstate';
-import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn } from '../sockets/worldsocket';
+import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn, getSocketContainers } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim, randomNum } from '../tools/tools';
 import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
 import { emitMove, emitStop, emitMode, emitWeaponBlock } from '../sockets/emits';
@@ -19,7 +19,7 @@ import { giveRandomTitle } from '../components/titleUI';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
-import { checkDistance } from '../creations/creationTools';
+import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
 
 
@@ -143,6 +143,45 @@ export function relocatePos(body, newPos){
         aggregate.body.setLinearVelocity(Vector3.Zero())
         aggregate.body.setAngularVelocity(Vector3.Zero())
     }
+}
+// DEBUG - bound to the " " keyup case below. Spawns a visible clone of the
+// wagon's own collider template (containers.js's wagonBodyColliderRoot,
+// stashed on socketContainers) a couple units in front of the local
+// player, so its real shape/scale can be inspected outside of an actual
+// wagon. Same clone-then-reset pattern createwagon.js's own
+// createWagonBody already uses for a real wagon's collider - the template
+// itself stays isVisible:false/setEnabled(false) (containers.js), every
+// clone has to flip both back explicitly, the template's own state is
+// never touched.
+function createWagonRoot(){
+    const wagonBodyColliderRoot = getSocketContainers()?.wagonBodyColliderRoot
+    if(!wagonBodyColliderRoot) return console.warn("[debug] createWagonRoot: wagonBodyColliderRoot not loaded")
+    myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState().owner)
+    if(!myPlayer) return console.log("not found myPlayer")
+    const clone = wagonBodyColliderRoot.clone(`wagonbody_debug_${Date.now()}`)
+    clone.parent = null
+    clone.isVisible = true
+    clone.setEnabled(true)
+    // clone.isPickable = false
+    clone.rotationQuaternion = Quaternion.Identity()
+
+    // rotationHelper ("rotBox") - the dedicated tiny box this same file's
+    // own updateRotation() already keeps facing the player's real movement
+    // direction every tick (see its own lookAt() call above) - aggregate's
+    // own rotationQuaternion just COPIES this every frame, so rotationHelper
+    // is the actual source of truth for "which way is the player facing,"
+    // not a second-hand read of it.
+    const fPos = rotationHelper.forward
+    const cPos = myPlayer.body.position.clone()
+    const newPos = { x: cPos.x + fPos.x, y: cPos.y, z: cPos.z + fPos.z }
+    console.log(`x: ${cPos.x} z: ${cPos.z}`)
+    console.log(newPos)
+    clone.position = cPos
+
+    const forwardDir = {x: cPos.x+newPos.x, y: cPos.y+2, z: cPos.z+newPos.z}
+    // clone.lookAt(new Vector3(newPos.x+forwardDir.x, forwardDir.y,newPos.z+ forwardDir.z),0,0,0, Space.LOCAL)
+     clone.rotationQuaternion = rotationHelper.rotationQuaternion
+    return clone
 }
 // uimanagement.js's startResting - forcing canPress false mid-stride only
 // blocks NEW input from here on (handleKeyDown/handleKeyUp/joystick
@@ -630,6 +669,7 @@ function setupControls(scene, allsounds) {
             case " ":
                 updateStoryQuestUI()
                 console.log(myPlayer.body.position)
+                createWagonRoot()
             break
             case "x":
                 // changeStory({
