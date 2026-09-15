@@ -572,6 +572,11 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // per-frame RUNNING/COMBAT_IDLE calls don't stomp the CASTING pose the
     // instant it's set
     let isCasting = false
+    // tracks whether chaseObserver's own retreat branch is the one currently
+    // holding opponent.weaponBlocking true (see that branch below) - so it
+    // only ever clears the flag it itself set, not a genuine reactive block
+    // performBlock might have independently started
+    let isRetreatBlocking = false
     let comboNum = 1 // alternates punch1/kick1 (unarmed) or swordattack1/2 (armed) each swing - same combo/toggle pattern uimanagement.js's own swordAnimNum drives for the player
 
     // if this npc spawned with an equiped weapon item (npcDetails.js), it's
@@ -1629,22 +1634,51 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
 
             if(dist > 0.05 && wantsDistance && dist < PREFERRED_CAST_RANGE){
                 // retreat straight away from the player - attitude.distancing,
-                // "sometimes she runs away from the character first" per spec
+                // "sometimes she runs away from the character first" per spec.
+                // weaponblock instead of a running stride - she's backing
+                // away facing the threat (facing is set unconditionally
+                // above, toward the player, regardless of this branch), not
+                // fleeing at a dead sprint, and it's a REAL block too, not
+                // just the pose: opponent.weaponBlocking is the exact same
+                // live flag applyDamageToOpponent's own melee-block check
+                // reads (see performBlock's identical comment), so a swing
+                // landing while she's retreating gets nullified the same way
+                // a reactive block would. isActionPlaying() gates the
+                // re-trigger so this doesn't restart the clip from frame 0
+                // every single frame (playAction always does exactly that) -
+                // only re-fires once the previous playthrough has actually
+                // finished, keeping the pose effectively held for the whole
+                // retreat instead of looking like a run cycle played backward.
                 const step = Math.min(RETREAT_SPEED * dt, PREFERRED_CAST_RANGE - dist)
                 opponent.body.position.x -= (dx / dist) * step
                 opponent.body.position.z -= (dz / dist) * step
-                opponent.characterAnimations.setState(ANIM_STATE.RUNNING)
-                findAnimVariants(opponent.anims, "running").forEach(anim => anim.speedRatio = 0.9 + RETREAT_SPEED * 0.05)
-            } else if(dist > 0.05 && dist > SKILL_RANGE){
-                // drifted out of casting range entirely - close back in just
-                // far enough to cast again, never all the way to ATTACK_RANGE
-                const step = Math.min(CHASE_SPEED * dt, dist - SKILL_RANGE)
-                opponent.body.position.x += (dx / dist) * step
-                opponent.body.position.z += (dz / dist) * step
-                opponent.characterAnimations.setState(ANIM_STATE.RUNNING)
-                findAnimVariants(opponent.anims, "running").forEach(anim => anim.speedRatio = 0.9 + CHASE_SPEED * 0.05)
+                opponent.weaponBlocking = true
+                isRetreatBlocking = true
+                if(!opponent.characterAnimations.isActionPlaying()){
+                    playFirstAction(opponent.characterAnimations, opponent.anims, ["weaponblock"], { nextState: null })
+                }
             } else {
-                opponent.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE)
+                // left the retreat branch (or never entered it this frame) -
+                // only clear weaponBlocking if THIS branch was the one that
+                // turned it on, not a genuine reactive block (performBlock)
+                // that might have started independently
+                if(isRetreatBlocking){
+                    isRetreatBlocking = false
+                    opponent.weaponBlocking = false
+                }
+
+                if(dist > 0.05 && dist > SKILL_RANGE){
+                    // drifted out of casting range entirely - close back in
+                    // just far enough to cast again, never all the way to
+                    // ATTACK_RANGE
+                    const step = Math.min(CHASE_SPEED * dt, dist - SKILL_RANGE)
+                    opponent.body.position.x += (dx / dist) * step
+                    opponent.body.position.z += (dz / dist) * step
+                    opponent.characterAnimations.setState(ANIM_STATE.RUNNING)
+                    findAnimVariants(opponent.anims, "running").forEach(anim => anim.speedRatio = 0.9 + CHASE_SPEED * 0.05)
+                } else {
+                    opponent.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE)
+                }
             }
         }
         opponent.characterAnimations.tickBlend()
