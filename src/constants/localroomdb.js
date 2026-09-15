@@ -330,141 +330,141 @@ export const metaDatas = [
         spawn: {x: 0, y: 1, z: -4, rotation: 0},
 
         optionalObjects: [
-            {
-                itemId: randNum(0,9999).toString(),
-                name: "roomdoor",
-                position: {x: 0, y: 0, z: -5.5},
-                scale: null,
-                rotation: 0,
-                glbPath: "./models/indors/door.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "table",
-                position: {x: 3, y: 0, z: 3},
-                scale: null,
-                rotation: Math.PI / 2,
-                glbPath: "./models/indors/table1.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                // this table has a transform node we don't need, so dispose
-                // it before merging - same fix "Simple Room"'s own table
-                // entry above already needed for this exact glb
-                functionBeforeMerge:(container) => {
-                    container.meshes[0].getChildren()[0].dispose()
+            // {
+            //     itemId: randNum(0,9999).toString(),
+            //     name: "roomdoor",
+            //     position: {x: 0, y: 0, z: -5.5},
+            //     scale: null,
+            //     rotation: 0,
+            //     glbPath: "./models/indors/door.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "table",
+            //     position: {x: 3, y: 0, z: 3},
+            //     scale: null,
+            //     rotation: Math.PI / 2,
+            //     glbPath: "./models/indors/table1.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     // this table has a transform node we don't need, so dispose
+            //     // it before merging - same fix "Simple Room"'s own table
+            //     // entry above already needed for this exact glb
+            //     functionBeforeMerge:(container) => {
+            //         container.meshes[0].getChildren()[0].dispose()
 
-                    return container.meshes[0].getChildren()[0]
-                }
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "spellbook",
-                position: {x: 3.7, y: 0.9, z: 3},
-                scale: null,
-                rotation: Math.PI / 2,
-                glbPath: "./models/indors/book1.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "scroll",
-                position: {x: 2.4, y: 0.9, z: 3},
-                scale: null,
-                rotation: 0,
-                glbPath: "./models/indors/scroll.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "shelves",
-                position: {x: -3.7, y: 0, z: -3},
-                scale: null,
-                rotation: Math.PI / 2,
-                glbPath: "./models/indors/shelves.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null
-            },
-            {
-                // a witch's own magic crystal, standing centerpiece -
-                // testcrystal.glb (indoor asset), not a resource-node
-                // "crystal" (staticRecources/resourceLoot.js's own mined
-                // material of the same generic word - unrelated glb/system)
-                itemId: randNum(1000,9999).toString(),
-                name: "witch_crystal",
-                position: {x: 0, y: 0, z: 0.5},
-                scale: null,
-                rotation: 0,
-                glbPath: "./models/indors/testcrystal.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "fireplace",
-                position: {x: -3, y: 0, z: 4},
-                scale: null,
-                rotation: Math.PI + 1,
-                glbPath: "./models/indors/fireplace.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null,
-                cbAfterMade: (scene) => {
-                    getAllSounds().bonfireS?.play()
-                }
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "particle_fire",
-                position: {x: -3, y: 0, z: 4},
-                scale: null,
-                rotation: 0,
-                glbPath: null,
-                physics: null,
-                functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "wallTorch1",
-                position: {x: -4.3, y: 1.6, z: -4},
-                scale: null,
-                rotation: Math.PI / 2,
-                glbPath: "./models/indors/wallTorch.glb",
-                physics: null,
-                functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(1000,9999).toString(),
-                name: "wallTorch2",
-                position: {x: 4.3, y: 1.6, z: -4},
-                scale: null,
-                rotation: -Math.PI / 2,
-                glbPath: "./models/indors/wallTorch.glb",
-                physics: null,
-                functionBeforeMerge: null
-            },
+            //         return container.meshes[0].getChildren()[0]
+            //     }
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "spellbook",
+            //     position: {x: 3.7, y: 0.9, z: 3},
+            //     scale: null,
+            //     rotation: Math.PI / 2,
+            //     glbPath: "./models/indors/book1.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "scroll",
+            //     position: {x: 2.4, y: 0.9, z: 3},
+            //     scale: null,
+            //     rotation: 0,
+            //     glbPath: "./models/indors/scroll.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "shelves",
+            //     position: {x: -3.7, y: 0, z: -3},
+            //     scale: null,
+            //     rotation: Math.PI / 2,
+            //     glbPath: "./models/indors/shelves.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     // a witch's own magic crystal, standing centerpiece -
+            //     // testcrystal.glb (indoor asset), not a resource-node
+            //     // "crystal" (staticRecources/resourceLoot.js's own mined
+            //     // material of the same generic word - unrelated glb/system)
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "witch_crystal",
+            //     position: {x: 0, y: 0, z: 0.5},
+            //     scale: null,
+            //     rotation: 0,
+            //     glbPath: "./models/indors/testcrystal.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "fireplace",
+            //     position: {x: -3, y: 0, z: 4},
+            //     scale: null,
+            //     rotation: Math.PI + 1,
+            //     glbPath: "./models/indors/fireplace.glb",
+            //     physics: {
+            //         opt: {mass: 0},
+            //         type: "box"
+            //     },
+            //     functionBeforeMerge: null,
+            //     cbAfterMade: (scene) => {
+            //         getAllSounds().bonfireS?.play()
+            //     }
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "particle_fire",
+            //     position: {x: -3, y: 0, z: 4},
+            //     scale: null,
+            //     rotation: 0,
+            //     glbPath: null,
+            //     physics: null,
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "wallTorch1",
+            //     position: {x: -4.3, y: 1.6, z: -4},
+            //     scale: null,
+            //     rotation: Math.PI / 2,
+            //     glbPath: "./models/indors/wallTorch.glb",
+            //     physics: null,
+            //     functionBeforeMerge: null
+            // },
+            // {
+            //     itemId: randNum(1000,9999).toString(),
+            //     name: "wallTorch2",
+            //     position: {x: 4.3, y: 1.6, z: -4},
+            //     scale: null,
+            //     rotation: -Math.PI / 2,
+            //     glbPath: "./models/indors/wallTorch.glb",
+            //     physics: null,
+            //     functionBeforeMerge: null
+            // },
         ],
         exit: "south",
         exitPlaceDetail: {
@@ -1022,42 +1022,20 @@ export const metaDatas = [
                 functionBeforeMerge: null
             },
             {
-                // Colousa's own "witch tower" (npcDetails.js's "114_colousa"
-                // post-duel speech - "you'll find a witch tower there, but
-                // inside is not a witch but a friend"). No dedicated tower
-                // glb exists yet, so this reuses bighouse.glb (already
-                // proven/loaded - generateArea's own totalBigHouse uses it
-                // for this same placeId) as a stand-in - swap glbPath if a
-                // real tower model gets added later.
-                //
-                // y is NOT a hand-picked number - areascene.js's own
-                // optionalObjects loader (see its own comment) sets
-                // model.position straight from this position object with no
-                // openworld ground-height correction of its own (unlike
-                // enemies/projectiles/the wagon-follow deer, which all
-                // re-snap to sampleTerrainSurfaceHeight every frame -
-                // createEnemy.js/renderer.js). A static building has no such
-                // per-frame correction, so this bakes the SAME lookup in
-                // once here, at the exact (x,z) this house actually sits at -
-                // matching the coarse, interpolated grid the visible chunk
-                // mesh was built from (OPENWORLD_TERRAIN_VERTS's own
-                // comment), not the floating-point-perfect analytical height
-                // (terrainHeight) that can visibly disagree with it on
-                // bumpy ground.
                 itemId: randNum(0,9999).toString(),
-                name: "Witch House",
-                position: {x: 20, y: sampleTerrainSurfaceHeight(20, 10, OPENWORLD_TERRAIN_VERTS), z: 10},
+                name: "Witch Tower",
+                position: {x: -1893, y:7.5, z: 563},
                 scale: null,
-                rotation: 0,
-                glbPath: "./models/houses/bighouse.glb",
-                diffuseTexPath: null,
-                bumpTexPath: null,
+                rotation:-Math.PI/2,
+                glbPath: "./models/outdors/tower.glb",
+                diffuseTexPath:null,
+                // bumpTexPath: "./images/textures/houses/guild1.jpg",
                 physics: {
                     opt: {mass: 0},
-                    type: "box"
+                    type: "cylinder"
                 },
                 functionBeforeMerge: null
-            },
+            }
         ],
         roomPaths: [
             {
@@ -1090,7 +1068,7 @@ export const metaDatas = [
                 placeId: 15,
                 name: "Witch House",
                 areaType: "room",
-                pos: {x: 20, y: sampleTerrainSurfaceHeight(20, 9, OPENWORLD_TERRAIN_VERTS) + 1, z: 9},
+                pos: {x: -1888.8, y: 7.5, z: 562.9},
                 startingPos: {x: 0, y: 1, z: -4}
             },
         ],

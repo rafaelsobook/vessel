@@ -125,7 +125,7 @@ export async function areaScene(placeDetail){
             
                 {
                     viewRadius: 1,
-                    verts: 12, // 17 // 36
+                    verts: 17,//12 // 17 // 36
                 // 'mesh' shape never collides in this Havok build (confirmed: raycast
                 // AND real dynamic-body contact both fail on every chunk). 'box' DOES
                 // collide (confirmed) but createAggregate's box auto-fit uses the

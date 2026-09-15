@@ -61,6 +61,9 @@ export function createAggregate(mesh, options = { mass: 0 }, shapeType, scene){
         case "capsule":
             shape = PhysicsShapeType.CAPSULE
         break;
+        case "cylinder":
+            shape = PhysicsShapeType.CYLINDER
+        break
         default:
             shape = PhysicsShapeType.BOX
         break

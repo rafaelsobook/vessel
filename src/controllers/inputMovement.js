@@ -158,29 +158,50 @@ function createWagonRoot(){
     if(!wagonBodyColliderRoot) return console.warn("[debug] createWagonRoot: wagonBodyColliderRoot not loaded")
     myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState().owner)
     if(!myPlayer) return console.log("not found myPlayer")
+
     const clone = wagonBodyColliderRoot.clone(`wagonbody_debug_${Date.now()}`)
+    // clone(name) with no second arg still copies the SOURCE mesh's own
+    // .parent onto the clone internally (Mesh._copySource - confirmed
+    // against @babylonjs/core's own source) - this is the actual 2-day bug:
+    // without clearing it, every .position/.rotationQuaternion write below
+    // was being interpreted as a LOCAL offset from whatever parent the
+    // template itself picked up on import, not world space
     clone.parent = null
     clone.isVisible = true
     clone.setEnabled(true)
-    // clone.isPickable = false
-    clone.rotationQuaternion = Quaternion.Identity()
+    clone.isPickable = false
+    clone.rotationQuaternion = null
+
 
     // rotationHelper ("rotBox") - the dedicated tiny box this same file's
     // own updateRotation() already keeps facing the player's real movement
-    // direction every tick (see its own lookAt() call above) - aggregate's
-    // own rotationQuaternion just COPIES this every frame, so rotationHelper
-    // is the actual source of truth for "which way is the player facing,"
-    // not a second-hand read of it.
+    // direction every tick (see its own lookAt() call above), so its own
+    // .forward is the same "which way is the player facing" direction
+    // every other yaw-only object in this game already trusts (the wagon,
+    // the harness deer, every enemy - all just Math.atan2(dirX, dirZ) off
+    // a plain direction vector, see createwagon.js's own
+    // rotation.y = Math.atan2(dirX, dirZ)). Doing the SAME thing here
+    // instead of copying rotationHelper's own rotationQuaternion directly -
+    // that copy approach depends on wagonBodyColliderRoot's own baked
+    // "front" axis lining up exactly with rotationHelper's local +Z, which
+    // is unverified (containers.js's own 45° bake on that mesh is a rough
+    // in-game visual estimate, not a confirmed-exact value - see that
+    // file's own comment). Math.atan2 sidesteps that entirely: it only
+    // ever needs a plain direction vector, same as every other proven
+    // facing calc in this codebase, not a matching pair of mesh-local axes.
     const fPos = rotationHelper.forward
     const cPos = myPlayer.body.position.clone()
     const newPos = { x: cPos.x + fPos.x, y: cPos.y, z: cPos.z + fPos.z }
-    console.log(`x: ${cPos.x} z: ${cPos.z}`)
-    console.log(newPos)
-    clone.position = cPos
+    // was `clone.position = cPos` - the character's OWN position, not
+    // newPos (the point actually computed in front of them) - the clone
+    // spawned exactly on top of the player regardless of any rotation fix
+    clone.position = new Vector3(newPos.x, newPos.y, newPos.z)
+    // rotationQuaternion is already null (set above) - required for plain
+    // Euler .rotation to actually take effect (Babylon ignores .rotation
+    // entirely whenever rotationQuaternion is non-null, same reasoning
+    // createwagon.js's own positionWagonBehindDeer comment already covers)
+    clone.rotation.y = Math.atan2(fPos.x, fPos.z)
 
-    const forwardDir = {x: cPos.x+newPos.x, y: cPos.y+2, z: cPos.z+newPos.z}
-    // clone.lookAt(new Vector3(newPos.x+forwardDir.x, forwardDir.y,newPos.z+ forwardDir.z),0,0,0, Space.LOCAL)
-     clone.rotationQuaternion = rotationHelper.rotationQuaternion
     return clone
 }
 // uimanagement.js's startResting - forcing canPress false mid-stride only
@@ -667,9 +688,9 @@ function setupControls(scene, allsounds) {
                 }
             break
             case " ":
-                updateStoryQuestUI()
+                // updateStoryQuestUI()
                 console.log(myPlayer.body.position)
-                createWagonRoot()
+                // createWagonRoot()
             break
             case "x":
                 // changeStory({
