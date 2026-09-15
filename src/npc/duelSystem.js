@@ -162,6 +162,91 @@ const DODGE_PROJECTILE_MIN_DIST = 3
 const DODGE_PROJECTILE_MAX_DIST = 5
 const DODGE_DURATION_MS    = 220
 
+// --- npcFighter "attitude" (npcDetails.js's Renarden/Vesper own attitude:{}
+// fields) - the new per-fighter personality system this whole block powers.
+// Six 0-1 sliders, each read as a probability/tendency, not a hard on/off:
+//   weapon        - rolled ONCE at spawn (isMeleeFighter below): does this
+//                    fighter ever close to melee range and swing at all?
+//                    1 = always (Renarden, today's only behavior), 0 = never
+//                    (Vesper - "she does not charge the player she only
+//                    standby and casting")
+//   dodging       - replaces the old flat DODGE_CHANCE constant per-fighter
+//   blocking      - NEW: a reactive weaponBlocking stance (see performBlock)
+//                    a melee threat can trigger, same detection rollDodge
+//                    already does, just a different reaction
+//   standbycasting - rolled ONCE at spawn: does this fighter use the NEW
+//                    "cast a flurry of whatever's off cooldown" AI
+//                    (runStandbyCastCheck) instead of the OLD hp-tiered
+//                    single-skill roll (runSkillCheck/basicSkill/
+//                    seriousSkill/hiddenSkill)? 0 (or missing attitude
+//                    entirely, e.g. Robin) keeps today's exact behavior.
+//   distancing    - "running away" - a caster actively backing off to hold
+//                    PREFERRED_CAST_RANGE instead of just standing still.
+//                    Only read in the non-melee (caster) branch of
+//                    chaseObserver below - Renarden's own melee branch never
+//                    looks at this at all, so his distancing:0 isn't even
+//                    load-bearing, it's just honest about "he doesn't have
+//                    a running-away mode" per spec.
+//   continuescast - after a cast/flurry, chance to immediately queue
+//                    another one soon (CONTINUE_CAST_DELAY_MS) instead of
+//                    waiting out the normal randomized interval again
+//
+// DEFAULT_ATTITUDE reproduces today's exact hardcoded behavior for any
+// npcFighter with no attitude field at all (Robin) - always melees, flat
+// DODGE_CHANCE, never blocks/distances/continue-casts, and stays on the old
+// hp-tiered skill model (standbycasting:0 means the isStandbyCaster roll
+// below can never come up true).
+const DEFAULT_ATTITUDE = { weapon: 1, dodging: DODGE_CHANCE, blocking: 0, standbycasting: 0, distancing: 0, continuescast: 0 }
+
+// Blocking - same detection/cadence rollDodge's own DODGE_CHECK_MS/
+// DODGE_MELEE_RANGE already use, just a different reaction (a real
+// weaponBlocking stance instead of hopping away) and its own cooldown so a
+// fighter with both high dodging and high blocking doesn't spam one or the
+// other every single tick.
+const BLOCK_CHECK_MS    = 200
+const BLOCK_DURATION_MS = 1200
+const BLOCK_COOLDOWN_MS = 2000
+
+// Distancing ("running away") - how often a caster re-rolls whether it
+// currently WANTS to hold distance (wantsDistance below), and how close is
+// "too close for comfort". Inside SKILL_RANGE (9) but well outside
+// ATTACK_RANGE (1.5) - "distance herself... for effective casting", not
+// fleeing to the edge of the map.
+const DISTANCE_CHECK_MS     = 500
+const PREFERRED_CAST_RANGE  = 7
+const RETREAT_SPEED         = CHASE_SPEED // same read/speed as closing the gap, just the opposite direction
+
+// Standby-casting (attitude.standbycasting) - a much more eager cadence
+// than the old SKILL_CHECK_MIN/MAX_MS (5-6s, tuned for an occasional-skill
+// melee fighter) - a fighter who ONLY casts is supposed to read as far
+// busier than that. STANDBY_CAST_STAGGER_MS is the gap between each skill
+// in one "flurry" (runStandbyCastCheck) - "cast all together, but with
+// style" per spec, a quick staggered sequence rather than one skill at a
+// time OR all in the exact same frame.
+const STANDBY_CAST_CHECK_MIN_MS = 2500
+const STANDBY_CAST_CHECK_MAX_MS = 4000
+const STANDBY_CAST_STAGGER_MS   = 500
+const CONTINUE_CAST_DELAY_MS    = 800
+
+// npcDet.hiddencombo (Vesper's own blinkstrike->massivedisintegration loop)
+// activates once and for the rest of the fight once hp drops to/below this -
+// "when her life is 30% below" per spec. Never un-triggers (opponents have
+// no heal-back mechanic in this file at all, hp is monotonically decreasing).
+const HIDDEN_COMBO_HP_THRESHOLD = 0.3
+
+// Guaranteed-critical multiplier for performOpponentBlinkstrike's own
+// landed strike - calcOpponentDmg's own header comment already establishes
+// there's no real calcDmg/crit pipeline on the opponent's attack side at
+// all, just a flat formula; this is that same file's own flat stand-in for
+// "guaranteed crit" (skillsData.js's blinkstrikeSkill criticalPercent:1 on
+// the PLAYER side has a real crit-chance buff to hook into - critChance
+// buffs/CRIT_CHANCE_CAP don't exist on this side to reuse).
+const BLINK_CRIT_MULTIPLIER = 1.5
+// same 1.2 default skillsData.js's own blinkstrikeSkill.blink.landOffset
+// uses - only a fallback here (npcDetails.js's hiddencombo entry sets its
+// own blink.landOffset explicitly anyway)
+const BLINK_LAND_OFFSET_DEFAULT = 1.2
+
 // player -> opponent melee hit sound, keyed off the ATTACKER's own equipped
 // weaponType (charState.items, not the opponent's) - a swing should sound
 // like whatever weapon actually swung. "sword"/"axe" (both blade-on-body
@@ -346,6 +431,23 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     const npcDet = npcDetails.find(npc => npc._id === npcId)
     if(!npcDet) return console.warn("spawnDuelOpponent: opponent npc not found for id", npcId)
 
+    // npcDet.attitude (see DEFAULT_ATTITUDE's own header comment) - merged
+    // over the defaults rather than requiring every field, so a future
+    // npcFighter can set just the sliders it cares about (e.g. only
+    // {blocking:0.3}) and get today's default behavior everywhere else
+    const attitude = { ...DEFAULT_ATTITUDE, ...(npcDet.attitude || {}) }
+    // rolled ONCE per fight, not re-rolled per frame/tick - a fighter is
+    // either "the kind that closes to melee" or "the kind that doesn't" for
+    // the whole duel, not flip-flopping tick to tick. weapon:1 (Renarden) ->
+    // always true (today's exact behavior); weapon:0 (Vesper) -> always false
+    const isMeleeFighter = Math.random() < attitude.weapon
+    // same one-roll-per-fight shape - which skill-casting AI this fighter
+    // uses for the whole duel (see runStandbyCastCheck's own header comment
+    // for what standbycasting actually changes). standbycasting:0 (Robin,
+    // Renarden, or any npcFighter with no attitude field at all) can never
+    // roll true here, so they always stay on the untouched old model.
+    const isStandbyCaster = Math.random() < attitude.standbycasting
+
     // per-entry position (localroomdb.js's npcEnemies[i].position) if it was
     // actually given a real value, else OPPONENT_SPAWN's default - `?? undefined`-
     // safe against a bare `position: {}` placeholder (x/y/z all undefined on
@@ -451,6 +553,25 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // off its own movement while this is true too, same reasoning
     let isDodging = false
     let dodgeCooldownUntil = 0
+    // same "something else owns position/facing right now" idea isDodging's
+    // own comment gives - performBlock doesn't move the body at all, but
+    // still shouldn't overlap a dodge (rollDodge/rollBlock both check the
+    // other's own flag so only one reaction fires per threat)
+    let isBlocking = false
+    let blockCooldownUntil = 0
+    // distancing ("running away") - re-rolled on its own DISTANCE_CHECK_MS
+    // interval (rollDistance below) rather than continuously, so a mid-range
+    // value doesn't flicker between advancing/retreating every single frame.
+    // Only ever read in chaseObserver's own non-melee (caster) branch - see
+    // DEFAULT_ATTITUDE's own header comment for why this is safely inert
+    // for a melee fighter like Renarden regardless of his own distancing value.
+    let wantsDistance = false
+    // same "something else owns position/facing right now" suppression
+    // isDashStriking/isDodging already use - set by castOpponentSkill below
+    // for the real cast window (skill.castDuration), so chaseObserver's own
+    // per-frame RUNNING/COMBAT_IDLE calls don't stomp the CASTING pose the
+    // instant it's set
+    let isCasting = false
     let comboNum = 1 // alternates punch1/kick1 (unarmed) or swordattack1/2 (armed) each swing - same combo/toggle pattern uimanagement.js's own swordAnimNum drives for the player
 
     // if this npc spawned with an equiped weapon item (npcDetails.js), it's
@@ -467,16 +588,35 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // Renarden) and should track independently, same as real enemies do
     // per-skill in createEnemy.js (enemySkillCooldownUntil there is only
     // single-skill because a real enemy only ever has one skill at a time)
+    // extra keys (e.g. Vesper's own thunderclap/multishotskill/zoltraak, see
+    // getCastableSkillEntries) get added to this SAME object dynamically the
+    // first time runStandbyCastCheck fires one - a plain object handles an
+    // unknown key fine (undefined -> ?? 0 falls through to "off cooldown"),
+    // no need to pre-declare every possible key the way the original four did
     const skillCooldownUntil = { basicSkill: 0, seriousSkill: 0, hiddenSkill: 0, nearSkill: 0 }
     let skillCheckTimeout = null
+    // runStandbyCastCheck's own reschedule handle (isStandbyCaster fighters
+    // only - see that function's own header comment)
+    let standbyCastTimeout = null
+    // npcDet.hiddencombo (see HIDDEN_COMBO_HP_THRESHOLD's own header comment) -
+    // isHiddenComboActive latches true forever once hp crosses the threshold
+    // (opponents never heal back up in this file), hiddenComboIndex tracks
+    // which entry in the array fires next, looping back to 0 past the end
+    let isHiddenComboActive = false
+    let hiddenComboIndex = 0
+    let hiddenComboTimeout = null
 
     const stopFight = () => {
         clearInterval(attackInterval)
         clearTimeout(skillCheckTimeout)
+        clearTimeout(standbyCastTimeout)
+        clearTimeout(hiddenComboTimeout)
         clearTimeout(reengageTimeout)
         clearInterval(nearSkillCheckInterval)
         clearTimeout(battleSpeechTimeout)
         clearInterval(dodgeCheckInterval)
+        clearInterval(blockCheckInterval)
+        clearInterval(distanceCheckInterval)
         scene.onBeforeRenderObservable.remove(chaseObserver)
         removeDuelOpponentOnScene(opponent.body)
     }
@@ -563,6 +703,11 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
 
         hp = Math.max(0, hp - dmgToApply)
         hpbar.width = `${hp / maxHp * 100 * 3}px`
+        // npcDet.hiddencombo (Vesper's own blinkstrike->massivedisintegration
+        // loop) - hp is the only thing that ever changes in this function
+        // that could newly cross HIDDEN_COMBO_HP_THRESHOLD, so this is the
+        // one natural place to check it rather than a separate polling timer
+        checkHiddenComboTrigger()
         if(hitSound) getAllSounds()[hitSound]?.play()
         // same poppingTextMesh call/color/jitter createEnemy.js's own
         // enemyIsHit already uses for "you damaged this thing" - capsuleHeight
@@ -838,12 +983,108 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         }, durationMs)
     }
 
+    // npcDet.hiddencombo's own blinkstrike entry - a MELEE weapon skill
+    // (effectType:"blink"), same reasoning performOpponentDashStrike's own
+    // header comment gives for why this needs a dedicated local equivalent
+    // instead of reusing skillEffects.js's castBlinkstrikeSkill directly:
+    // that function is entirely PLAYER-shaped (isCaster-gated on
+    // getCharState(), and its own findNearestBlinkTarget scans
+    // getEnemiesOnScene()/getDuelOpponentsOnScene() for a target NEAR THE
+    // CASTER - for an NPC opponent that would scan for a target near
+    // ITSELF, which would find nothing meaningful, never the actual player,
+    // who isn't in either of those registries at all). This opponent's only
+    // possible target in a 1v1 duel is the player, so there's nothing to
+    // "find nearest" - it blinks straight to them.
+    //
+    // Instant teleport (no gradual translate like performOpponentDashStrike's
+    // own dash) - same skill.blink.landOffset convention the player-facing
+    // castBlinkstrikeSkill uses, landing just short of the player instead of
+    // inside them. Guaranteed critical via BLINK_CRIT_MULTIPLIER - see that
+    // constant's own header comment for why this is a flat stand-in rather
+    // than a real crit-chance buff.
+    function performOpponentBlinkstrike(skill){
+        if(opponentDefeated || duelState.playerDefeated) return
+
+        const dx = opponent.body.position.x - characterBody.position.x
+        const dz = opponent.body.position.z - characterBody.position.z
+        const dist = Math.hypot(dx, dz) || 1
+        const landOffset = skill.blink?.landOffset ?? BLINK_LAND_OFFSET_DEFAULT
+        const nx = dx / dist
+        const nz = dz / dist
+        opponent.body.position.x = characterBody.position.x + nx * landOffset
+        opponent.body.position.z = characterBody.position.z + nz * landOffset
+        // face the player from the newly-landed spot - same atan2(dx,dz)
+        // yaw convention chaseObserver's own facing uses every frame, just
+        // computed once here since this is an instant teleport, not a
+        // per-frame update
+        opponent.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), Math.atan2(-nx, -nz))
+
+        playFirstAction(opponent.characterAnimations, opponent.anims, [skill.animationName || "dashstrike"], { nextState: ANIM_STATE.COMBAT_IDLE })
+        getAllSounds().swordS1?.play()
+        if(skill.activationSound){
+            // same soundType->key convention performOpponentDashStrike's own
+            // activationSound handling uses just above
+            const soundKey = skill.activationSound.soundType === "blade" ? "swordWhooshS" : skill.activationSound.soundType
+            setTimeout(() => getAllSounds()[soundKey]?.play(), skill.activationSound.willPlayAfterSeconds ?? 0)
+        }
+
+        // short delay so the strike animation/sound has a beat to actually
+        // read before the damage lands, same idea performOpponentDashStrike's
+        // own durationMs delay gives its dash
+        setTimeout(async () => {
+            if(opponentDefeated || duelState.playerDefeated) return
+            const dmgToPlayer = Math.round((calcOpponentDmg(npcDet) + (getSkillEffect(skill, "blink")?.plusDmg || 0)) * BLINK_CRIT_MULTIPLIER)
+
+            // cursed opponent - same self-redirect rule every other damage-
+            // dealing branch in this file already follows
+            if(opponent._cursed){
+                applyDamageToOpponent(dmgToPlayer)
+                return
+            }
+
+            await applyDamageToPlayer(dmgToPlayer)
+
+            if(getCharState().hp <= 1 && !duelState.playerDefeated){
+                duelState.playerDefeated = true
+                stopFight()
+                duelOpponents.forEach(o => o.stopFight())
+                if(isMainOpponent) displaySpeech([
+                    ...toLines(npcDet.name, ["Ha! Down you go. Good bout though."]),
+                    { speech: "You Lose!" }
+                ], returnToExitPlace, undefined, true)
+            }
+        }, 250)
+    }
+
+    // Shared wrapper around every real skillEffects.js castEnemySkill() call
+    // in this file (runSkillCheck/runStandbyCastCheck/runHiddenComboStep) -
+    // plays the CASTING pose for the actual cast window (skill.castDuration)
+    // instead of leaving the opponent standing in whatever RUNNING/
+    // COMBAT_IDLE state chaseObserver last set, same "casting" animation
+    // read the player's own cast bar already gives (renderer.js's own
+    // player.mode==="casting" -> ANIM_STATE.CASTING). isCasting suppresses
+    // chaseObserver's own per-frame setState calls for the same window
+    // (same isDashStriking/isDodging suppression idea, see that flag's own
+    // comment) so this pose doesn't get immediately stomped the next frame.
+    function castOpponentSkill(skill, targetPlayer){
+        isCasting = true
+        opponent.characterAnimations.setState(ANIM_STATE.CASTING, 8)
+        castEnemySkill(scene, opponent, skill, targetPlayer)
+        setTimeout(() => {
+            isCasting = false
+            // chaseObserver's own next frame re-evaluates RUNNING/COMBAT_IDLE
+            // correctly on its own once isCasting is false again - this just
+            // avoids a one-frame flash of the CASTING pose still held
+            if(!opponentDefeated && !duelState.playerDefeated) opponent.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE)
+        }, (skill.castDuration ?? 0) * 1000)
+    }
+
     // nearSkill's own eligibility roll - own cooldown, own distance gate
     // (Vector3.Distance per spec, not the 2D-only `dist` runSkillCheck uses),
     // run on NEAR_SKILL_CHECK_MS's own fast interval below instead of
     // runSkillCheck's 5-6s cadence - see that constant's own comment for why
     function rollNearSkill(){
-        if(opponentDefeated || duelState.playerDefeated) return
+        if(opponentDefeated || duelState.playerDefeated || !isMeleeFighter) return
         if(!npcDet.skills?.nearSkill) return
         // dashstrike is a WEAPON skill - can't fire it with an empty hand.
         // hasDrawnWeapon only ever flips true once the attackInterval's own
@@ -893,7 +1134,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // fire - stepping straight back along a bolt's own travel line doesn't
     // reliably clear it, stepping off to the side does).
     function rollDodge(){
-        if(opponentDefeated || duelState.playerDefeated || isDodging) return
+        if(opponentDefeated || duelState.playerDefeated || isDodging || isBlocking) return
         const now = Date.now()
         if(now < dodgeCooldownUntil) return
 
@@ -907,12 +1148,65 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             Vector3.Distance(proj.body.position, opponent.body.position) <= DODGE_PROJECTILE_RANGE
         )
 
-        if((!meleeThreat && !projectileThreat) || Math.random() >= DODGE_CHANCE) return
+        // attitude.dodging (npcDetails.js) replaces the old flat DODGE_CHANCE -
+        // DEFAULT_ATTITUDE.dodging is literally DODGE_CHANCE itself, so a
+        // fighter with no attitude field at all behaves identically to before
+        if((!meleeThreat && !projectileThreat) || Math.random() >= attitude.dodging) return
 
         dodgeCooldownUntil = now + DODGE_COOLDOWN_MS
         performDodge(meleeThreat ? "back" : "side")
     }
     const dodgeCheckInterval = setInterval(rollDodge, DODGE_CHECK_MS)
+
+    // Blocking (attitude.blocking) - same melee-threat detection rollDodge
+    // just above already does, just a different reaction: hold a real
+    // weaponBlocking stance instead of hopping away. Mutually exclusive with
+    // dodge (both check the other's own flag) so a fighter with both sliders
+    // set doesn't try to do both at once against the same swing.
+    function rollBlock(){
+        if(opponentDefeated || duelState.playerDefeated || isDodging || isBlocking) return
+        const now = Date.now()
+        if(now < blockCooldownUntil) return
+
+        const atkCollider = scene.getMeshByName("atkCollider")
+        const meleeThreat = !!atkCollider
+            && Math.abs(atkCollider.position.y - ATK_COLLIDER_PARKED_Y) > 1
+            && Vector3.Distance(atkCollider.getAbsolutePosition(), opponent.body.position) <= DODGE_MELEE_RANGE
+
+        if(!meleeThreat || Math.random() >= attitude.blocking) return
+
+        blockCooldownUntil = now + BLOCK_COOLDOWN_MS
+        performBlock()
+    }
+    const blockCheckInterval = setInterval(rollBlock, BLOCK_CHECK_MS)
+
+    // opponent.weaponBlocking - the SAME live flag applyDamageToOpponent
+    // already reads (its own weaponblock branch, further up this file) and
+    // that the PLAYER's own r-click hold-to-block sets on themselves
+    // (inputMovement.js) - this is just an NPC setting the identical flag
+    // on ITS own rig for the same duration, no new damage-nullifying logic
+    // needed anywhere else.
+    function performBlock(){
+        isBlocking = true
+        opponent.weaponBlocking = true
+        playFirstAction(opponent.characterAnimations, opponent.anims, ["weaponblock"], { nextState: null })
+        setTimeout(() => {
+            isBlocking = false
+            opponent.weaponBlocking = false
+        }, BLOCK_DURATION_MS)
+    }
+
+    // Distancing (attitude.distancing, "running away") - re-rolled on its
+    // own slower cadence (DISTANCE_CHECK_MS) into wantsDistance, read by
+    // chaseObserver's own non-melee (caster) branch further down. Not
+    // gated on isMeleeFighter here - the roll itself is harmless either way,
+    // it's simply never CONSUMED by the melee branch (see DEFAULT_ATTITUDE's
+    // own comment on why this keeps Renarden's existing behavior untouched).
+    function rollDistance(){
+        if(opponentDefeated || duelState.playerDefeated) return
+        wantsDistance = Math.random() < attitude.distancing
+    }
+    const distanceCheckInterval = setInterval(rollDistance, DISTANCE_CHECK_MS)
 
     // direction: "back" (melee - away from the player, DODGE_MELEE_MIN/MAX_DIST -
     // just enough to clear the atkCollider's own reach) or "side" (projectile -
@@ -1070,9 +1364,140 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // this scene is never multiplayer (isMultiplayer:false, see the file
         // header), so it's always the local path, same as every other combat
         // call in this file
-        castEnemySkill(scene, opponent, skill, targetPlayer)
+        castOpponentSkill(skill, targetPlayer)
     }
-    scheduleNextSkillCheck()
+
+    // --- Standby-casting (attitude.standbycasting, isStandbyCaster rolled
+    // once at spawn) - a fighter who mostly just stands back and casts
+    // (Vesper) instead of the hp-tiered single-skill-per-roll model above
+    // (Renarden/Robin). Reads npcDet.skills' own KEYS dynamically (not
+    // hardcoded to "thunderclap"/"multishotskill"/"zoltraak" anywhere) so
+    // this works for any future standbycasting npcFighter's own skill set,
+    // not just Vesper's specific three.
+    function getCastableSkillEntries(){
+        return Object.entries(npcDet.skills || {}).filter(([key]) => key !== "nearSkill")
+    }
+
+    function scheduleNextStandbyCast(){
+        const delay = STANDBY_CAST_CHECK_MIN_MS + Math.random() * (STANDBY_CAST_CHECK_MAX_MS - STANDBY_CAST_CHECK_MIN_MS)
+        standbyCastTimeout = setTimeout(runStandbyCastCheck, delay)
+    }
+
+    // "she can even cast this three alltogether, but with style" - a short
+    // staggered flurry (STANDBY_CAST_STAGGER_MS apart) through a shuffled,
+    // randomly-sized subset of whatever's currently off cooldown (anywhere
+    // from just one skill to every castable one), not always exactly one
+    // skill the way the old hp-tiered roll works. isHiddenComboActive owns
+    // casting entirely once it latches (checkHiddenComboTrigger below) -
+    // this function backs off completely rather than firing alongside it.
+    function runStandbyCastCheck(){
+        if(opponentDefeated || duelState.playerDefeated || isHiddenComboActive) return
+
+        const dist = Math.hypot(
+            characterBody.position.x - opponent.body.position.x,
+            characterBody.position.z - opponent.body.position.z
+        )
+        if(dist > SKILL_RANGE){ scheduleNextStandbyCast(); return }
+
+        const now = Date.now()
+        const castable = getCastableSkillEntries().filter(([key]) => now >= (skillCooldownUntil[key] ?? 0))
+        const targetPlayer = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+        if(!castable.length || !targetPlayer){ scheduleNextStandbyCast(); return }
+
+        const shuffled = [...castable].sort(() => Math.random() - 0.5)
+        const flurryCount = 1 + Math.floor(Math.random() * shuffled.length) // 1..castable.length
+        const toFire = shuffled.slice(0, flurryCount)
+
+        toFire.forEach(([key, skill], i) => {
+            setTimeout(() => {
+                if(opponentDefeated || duelState.playerDefeated || isHiddenComboActive) return
+                skillCooldownUntil[key] = Date.now() + skill.skillCoolDown
+                castOpponentSkill(skill, targetPlayer)
+            }, i * STANDBY_CAST_STAGGER_MS)
+        })
+
+        // attitude.continuescast - chain another flurry soon instead of
+        // waiting out the normal randomized interval again
+        if(Math.random() < attitude.continuescast){
+            standbyCastTimeout = setTimeout(runStandbyCastCheck, CONTINUE_CAST_DELAY_MS + flurryCount * STANDBY_CAST_STAGGER_MS)
+        } else {
+            scheduleNextStandbyCast()
+        }
+    }
+
+    // --- Hidden combo (npcDet.hiddencombo, e.g. Vesper's own
+    // blinkstrike->massivedisintegration loop) - triggered once hp drops
+    // to/below HIDDEN_COMBO_HP_THRESHOLD (checkHiddenComboTrigger, called
+    // from applyDamageToOpponent right after hp changes) and never turns
+    // back off. Each entry is a FULL skill object with its own extra
+    // castAfterMs field merged in (npcDetails.js) - "loop the hiddenCombo...
+    // all this skill will get activated after the castAfterMs time" per
+    // spec: wait castAfterMs, cast that entry, move to the next one,
+    // wrapping back to the start indefinitely for the rest of the fight.
+    // Dispatch is data-driven (checks the entry's own effects array for an
+    // effectType:"blink" entry) rather than hardcoding "index 0 is always
+    // blinkstrike" - a future hiddencombo could reorder/add entries and this
+    // still routes each one correctly.
+    function checkHiddenComboTrigger(){
+        if(isHiddenComboActive || opponentDefeated || duelState.playerDefeated) return
+        if(!npcDet.hiddencombo?.length) return
+        if(hp / maxHp > HIDDEN_COMBO_HP_THRESHOLD) return
+
+        isHiddenComboActive = true
+        // hiddencombo owns casting entirely from here - stop whichever
+        // normal casting loop this fighter was using (only one of the two
+        // is ever actually running, per isStandbyCaster, but clearing both
+        // timeout handles is harmless either way)
+        clearTimeout(skillCheckTimeout)
+        clearTimeout(standbyCastTimeout)
+        runHiddenComboStep()
+    }
+
+    function runHiddenComboStep(){
+        if(opponentDefeated || duelState.playerDefeated) return
+        const step = npcDet.hiddencombo[hiddenComboIndex]
+        hiddenComboIndex = (hiddenComboIndex + 1) % npcDet.hiddencombo.length // loop back to the start past the end
+
+        hiddenComboTimeout = setTimeout(() => {
+            if(opponentDefeated || duelState.playerDefeated) return
+            const targetPlayer = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+            if(targetPlayer){
+                const isBlinkStep = step.effects?.some(e => e.effectType === "blink")
+                if(isBlinkStep) performOpponentBlinkstrike(step)
+                else castOpponentSkill(step, targetPlayer)
+            }
+            runHiddenComboStep() // keep looping for the rest of the fight
+        }, step.castAfterMs ?? 0)
+    }
+
+    // Non-melee fighters (isMeleeFighter false, e.g. Vesper) never run
+    // attackInterval at all, so its own "draw the weapon off your back
+    // before the first swing" sequence (equippedWeapon && !hasDrawnWeapon,
+    // further down) never fires for one either - she'd fight the entire
+    // duel with her staff still sheathed. A caster isn't drawing a weapon
+    // to SWING it though ("she should get equip her staff at the first
+    // place", not "the first time she gets close") - equips it once,
+    // immediately, right as the fight starts, instead of waiting on any
+    // proximity/attack trigger the way the melee draw sequence does.
+    if(!isMeleeFighter && equippedWeapon && !hasDrawnWeapon){
+        hasDrawnWeapon = true
+        playFirstAction(opponent.characterAnimations, opponent.anims, ["act_idletoready1"], { nextState: ANIM_STATE.COMBAT_IDLE })
+        setTimeout(() => {
+            if(opponentDefeated || duelState.playerDefeated) return
+            // full 5-arg shape (parts/weaponType/metalColor), same as every
+            // other real equipSword call site (areascene.js/itemInfoSystem.js) -
+            // equipSword's own weaponType param defaults to "sword" when
+            // omitted (createcharacter.js), which is WRONG for a staff -
+            // Vesper would end up wielding a generic default sword instead
+            // of wanderersstaff. Renarden's own weapon happens to already
+            // BE a sword, which is why the below (unfixed) 2-arg attackInterval
+            // draw call never surfaced this.
+            opponent.equipSword(equippedWeapon.name, true, equippedWeapon.parts, equippedWeapon.weaponType, equippedWeapon.metalColor)
+        }, 400)
+    }
+
+    if(isStandbyCaster) scheduleNextStandbyCast()
+    else scheduleNextSkillCheck()
 
     // player -> opponent: reuses the exact atkCollider mechanism already
     // wired up for tree-chopping (areascene.js), matched against this
@@ -1103,11 +1528,12 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // slower cadence, so it doesn't look like he's teleporting between beats.
     const chaseObserver = scene.onBeforeRenderObservable.add(() => {
         if(opponentDefeated || duelState.playerDefeated) return
-        // performOpponentDashStrike/performDodge own position/facing
-        // exclusively for their own windows - still tick the animation
-        // blend so whichever clip is playing keeps animating, just skip
-        // this loop's own movement/facing
-        if(isDashStriking || isDodging){
+        // performOpponentDashStrike/performOpponentBlinkstrike/performDodge/
+        // castOpponentSkill own position/facing (or just the animation pose,
+        // for casting) exclusively for their own windows - still tick the
+        // animation blend so whichever clip is playing keeps animating,
+        // just skip this loop's own movement/facing
+        if(isDashStriking || isDodging || isCasting){
             opponent.characterAnimations.tickBlend()
             return
         }
@@ -1121,6 +1547,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             opponent.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), Math.atan2(dx, dz))
         }
 
+        // isMeleeFighter (attitude.weapon, rolled once at spawn) splits
+        // movement into two completely different styles - see
+        // DEFAULT_ATTITUDE's own header comment for the full reasoning
+        if(isMeleeFighter){
         if(dist > ATTACK_RANGE){
             if(inCombatRange){
                 // just left attack range THIS frame - don't resume chasing
@@ -1186,6 +1616,37 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             clearTimeout(reengageTimeout)
             opponent.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE)
         }
+        } else {
+            // caster (isMeleeFighter false, e.g. Vesper - "she does not
+            // charge the player she only standby and casting") - never
+            // approaches ATTACK_RANGE/swings at all. inCombatRange here
+            // just means "close enough to actually be casting" (read by
+            // runStandbyCastCheck's own SKILL_RANGE gate), not "close
+            // enough to melee" the way it does in the isMeleeFighter branch
+            // above - the old attackInterval swing loop isn't even set up
+            // for a non-melee fighter (see its own isMeleeFighter gate below).
+            inCombatRange = dist <= SKILL_RANGE
+
+            if(dist > 0.05 && wantsDistance && dist < PREFERRED_CAST_RANGE){
+                // retreat straight away from the player - attitude.distancing,
+                // "sometimes she runs away from the character first" per spec
+                const step = Math.min(RETREAT_SPEED * dt, PREFERRED_CAST_RANGE - dist)
+                opponent.body.position.x -= (dx / dist) * step
+                opponent.body.position.z -= (dz / dist) * step
+                opponent.characterAnimations.setState(ANIM_STATE.RUNNING)
+                findAnimVariants(opponent.anims, "running").forEach(anim => anim.speedRatio = 0.9 + RETREAT_SPEED * 0.05)
+            } else if(dist > 0.05 && dist > SKILL_RANGE){
+                // drifted out of casting range entirely - close back in just
+                // far enough to cast again, never all the way to ATTACK_RANGE
+                const step = Math.min(CHASE_SPEED * dt, dist - SKILL_RANGE)
+                opponent.body.position.x += (dx / dist) * step
+                opponent.body.position.z += (dz / dist) * step
+                opponent.characterAnimations.setState(ANIM_STATE.RUNNING)
+                findAnimVariants(opponent.anims, "running").forEach(anim => anim.speedRatio = 0.9 + CHASE_SPEED * 0.05)
+            } else {
+                opponent.characterAnimations.setState(ANIM_STATE.COMBAT_IDLE)
+            }
+        }
         opponent.characterAnimations.tickBlend()
     })
 
@@ -1195,7 +1656,13 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // allowDeath:false is the soft-loss clamp (characterstate.js) - a duel
     // never actually kills the player. Gated on inCombatRange (kept in sync
     // by the chase loop above) rather than re-measuring distance here too.
-    attackInterval = setInterval(async () => {
+    //
+    // isMeleeFighter (attitude.weapon) - a caster (Vesper, weapon:0) never
+    // sets this interval up at all, so inCombatRange being true in the
+    // caster branch of chaseObserver above (a much looser "close enough to
+    // cast" meaning there) can never accidentally trigger a melee swing -
+    // there's simply no interval running to do it.
+    if(isMeleeFighter) attackInterval = setInterval(async () => {
         if(opponentDefeated || duelState.playerDefeated || !inCombatRange || isDodging) return
 
         // first attack while armed: draw the sword off his back before
@@ -1211,7 +1678,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             playFirstAction(opponent.characterAnimations, opponent.anims, ["act_idletoready1"], { nextState: ANIM_STATE.COMBAT_IDLE })
             setTimeout(() => {
                 if(opponentDefeated || duelState.playerDefeated) return
-                opponent.equipSword(equippedWeapon.name, true)
+                // full 5-arg shape - see the non-melee draw sequence's own
+                // comment above for why the 2-arg form silently defaults to
+                // the wrong weaponType ("sword") for anything else
+                opponent.equipSword(equippedWeapon.name, true, equippedWeapon.parts, equippedWeapon.weaponType, equippedWeapon.metalColor)
             }, 400)
             return // let the draw finish before the first real swing - next tick attacks for real
         }

@@ -2463,7 +2463,224 @@ export default [
             }
         ],
         titles: ['mage'],
-        skills: [],
+        // attitude (duelSystem.js's own DEFAULT_ATTITUDE header comment has
+        // the full breakdown of each slider) - a pure caster: never charges
+        // into melee (weapon:0 - "she does not charge the player she only
+        // standby and casting"), always reacts to a threat that does reach
+        // her (dodging/blocking:1), always uses the new "cast a flurry of
+        // whatever's off cooldown" AI (standbycasting:1) instead of the old
+        // hp-tiered single-skill model, always tries to hold her distance
+        // for effective casting (distancing:1), and always chains straight
+        // into another casting flurry instead of waiting out the normal
+        // interval (continuescast:1).
+        attitude: { weapon: 0, dodging: 1, blocking: 1, standbycasting: 1, distancing: 1, continuescast: 1 },
+        // her three normal-combat skills - duelSystem.js's own
+        // runStandbyCastCheck reads these object KEYS dynamically (not
+        // hardcoded by name anywhere), so "cast all three together, but
+        // with style" just falls out of that generic flurry logic. Full
+        // inline copies of skillsData.js's own thunderclapSkill/
+        // zoltraakSkill, plus a new multishotskill with no player-facing
+        // equivalent yet - same "independent copy, never a shared
+        // reference" convention every other npcFighter's own skills object
+        // in this file already follows (renardenSkills/Robin's inline
+        // skills:{}), since skill objects get mutated in place elsewhere
+        // (upgradeSkill/trackSkillUsage) and sharing the literal
+        // skillsData.js export would leak her own casts into the player's
+        // copy of the same skill if they ever separately acquire it.
+        skills: {
+            thunderclap: {
+                equiped: true,
+                isActive: false,
+                name: "thunderclap",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "lightning",
+                requireMode: "casting",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Thunderclap",
+                castDuration: 2.2,
+                returnModeDura: 900,
+                skillCoolDown: 6000,
+                demand: [{ name: "mp", minCost: 75, cost: 0 }],
+                effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.3, plusDmg: 260, chance: 1, bashPower: 0.6 }],
+                skillrank: 4,
+                upgradePlus: 24,
+                explosionColor: "yellow",
+                explosionScale: 1,
+                lightningStrike: { min: 1, max: 1, spread: 3, minDistance: 12, maxDistance: 20 },
+                onLevelUp: "growThunderclapStrike",
+                // lands as a real sky-to-ground bolt AT the player's own
+                // position (duelSystem.js/skillEffects.js's
+                // triggerEnemyLightningStrike) - see that function's own
+                // header comment for how this differs from the player-cast
+                // version's own "somewhere in a rough band ahead" targeting
+                projectileVisual: { useProjectile: false },
+                onHitVisual: [{ type: "burst", burst: { texture: "flare3", fireScale: 1.3, smokeScale: 0.8, emberEmitRate: 18, gravitySign: 1, includeSmoke: false }, impactSound: "electricHitS" }],
+                desc: "The sky itself answers her call - a searing bolt of lightning crashes down from above, splitting the earth where it lands.",
+            },
+            multishotskill: {
+                equiped: true,
+                isActive: false,
+                name: "multishotskill",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "dark",
+                requireMode: "casting",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Multishot",
+                castDuration: 1.6,
+                returnModeDura: 900,
+                skillCoolDown: 4000,
+                demand: [{ name: "mp", minCost: 45, cost: 0 }],
+                // curse chance:0.3, not shadowbolt's own always-curse (1) -
+                // this fires FIVE bolts per cast (burstCount below), any one
+                // connecting would otherwise curse on nearly every volley
+                effects: [
+                    { effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.15, plusDmg: 55, chance: 1, bashPower: 0.2 },
+                    { effectType: "curse", dmgPm: 0, plusDmg: 0, chance: 0.3, bashPower: 0 },
+                ],
+                skillrank: 2,
+                upgradePlus: 12,
+                explosionColor: "violet",
+                explosionScale: 1,
+                magicCircleImg: "apt_darkness",
+                // same fireProjectileVolley/burstCount mechanic
+                // quakeboltSkill uses on the player side (skillEffects.js) -
+                // now also wired up for an enemy/npcFighter cast, see
+                // castEnemySkill's own burstCount branch
+                projectileVisual: {
+                    useProjectile: true, visible: true, shape: "sphere",
+                    shapeParams: { diameter: 0.3, segments: 10 },
+                    material: { kind: "glow" },
+                    launchSound: "bulletS", speedMult: 1.6,
+                    burstCount: 5, burstIntervalMs: 100, spreadDeg: 30,
+                },
+                onHitVisual: [{ type: "implode", impactSound: "struckS" }],
+                desc: "A rapid volley of dark bolts fans out and peppers the target from multiple angles at once.",
+            },
+            zoltraak: {
+                equiped: true,
+                isActive: false,
+                name: "zoltraak",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "light",
+                requireMode: "casting",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Zoltraak",
+                castDuration: 2,
+                returnModeDura: 900,
+                skillCoolDown: 1800,
+                demand: [{ name: "mp", minCost: 25, cost: 0 }],
+                effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 110, chance: 1, bashPower: 0.4 }],
+                skillrank: 2,
+                upgradePlus: 20,
+                explosionColor: "white",
+                explosionScale: 1,
+                arcCount: 0,
+                laserChain: { segmentCount: 20, staggerMs: 100 / 6, spacing: 0.64 },
+                projectileVisual: {
+                    useProjectile: false,
+                    // fallback shape for the NPC-cast path only - see
+                    // skillsData.js's own zoltraakSkill.projectileVisual.shape
+                    // comment for the full reasoning (player casts always
+                    // take the real growing-laser path, castOffenseSkill
+                    // checks skill.laserChain before ever looking at this)
+                    shape: "cylinder",
+                    shapeParams: { diameter: 0.56, height: 0.6, tessellation: 12 },
+                    copies: [{ rotation: { x: Math.PI / 2, y: 0, z: 0 } }],
+                    material: { kind: "glow" },
+                    launchSound: "spearS1",
+                    speedMult: 8,
+                },
+                onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.7, smokeScale: 0.4, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
+                desc: "A chain of radiant segments extends forward one link at a time like a growing laser, punching through whatever the leading edge touches.",
+            },
+        },
+        // npcDet.hiddencombo (duelSystem.js's checkHiddenComboTrigger/
+        // runHiddenComboStep) - activates once and loops for the rest of
+        // the fight once her hp drops to/below 30%. Each entry is a FULL
+        // skill object with its own extra castAfterMs merged in: wait
+        // castAfterMs, cast that entry, move to the next, wrapping back to
+        // the start indefinitely. First entry is blinkstrike
+        // (effects:[{effectType:"blink"}] is what routes it to
+        // duelSystem.js's own performOpponentBlinkstrike instead of the
+        // generic castEnemySkill path), second is the same
+        // massivedisintegration Robin's own hiddenSkill already uses
+        // (groundTrap - lands flat on the ground, facing up, centered on
+        // herself - see triggerEnemyGroundTrap's own header comment in
+        // skillEffects.js for exactly how that's guaranteed).
+        hiddencombo: [
+            {
+                equiped: true,
+                isActive: false,
+                name: "blinkstrike",
+                lvl: 1,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "normal",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Blinkstrike",
+                requiresWeapon: true,
+                castDuration: 0,
+                returnModeDura: 900,
+                skillCoolDown: 4000,
+                demand: [{ name: "mp", minCost: 35, cost: 0 }],
+                effects: [
+                    { effectType: "blink", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.5 },
+                    { effectType: "critical", criticalPercent: 1 },
+                ],
+                blink: { range: 56, landOffset: 1.2 },
+                animationName: "dashstrike",
+                activationSound: { soundType: "blade", willPlayAfterSeconds: 200 },
+                impactSound: "struckS",
+                skillrank: 1,
+                upgradePlus: 20,
+                explosionColor: "red",
+                explosionScale: 1,
+                projectileVisual: { useProjectile: false },
+                desc: "Blink instantly to her foe and land a guaranteed critical strike.",
+                castAfterMs: 100,
+            },
+            {
+                equiped: true,
+                isActive: false,
+                name: "massivedisintegration",
+                lvl: 5,
+                pointsToClaim: 1,
+                pointsForUpgrade: 1,
+                element: "fire",
+                skillElementType: "na",
+                animationLoop: false,
+                displayName: "Massive Disintegration",
+                castDuration: 3,
+                returnModeDura: 900,
+                skillCoolDown: 14000,
+                demand: [{ name: "mp", minCost: 140, cost: 0 }],
+                effects: [{ effectType: "offense", dmgPm: 0, plusDmg: 220, chance: 1, bashPower: 0.55 }],
+                skillrank: 4,
+                upgradePlus: 40,
+                explosionColor: "fire",
+                explosionScale: 1,
+                // distance omitted - centered on herself
+                // (GROUND_TRAP_DEFAULT_DISTANCE), same as Robin's own
+                // hiddenSkill / the player-cast massivedisintegrationSkill
+                groundTrap: { radius: 10, duration: 8000, aoe: true },
+                magicCircleImg: "apt_fire_second",
+                onLevelUp: "growParticleAura",
+                projectileVisual: { useProjectile: false },
+                onHitVisual: [{ type: "burst", burst: { texture: "explodeTex", fireScale: 1, smokeScale: 1, emberEmitRate: 15, gravitySign: 1, includeSmoke: true } }],
+                desc: "Summons a massive circle of annihilation - anyone caught near or inside its radius is consumed by disintegrating flame.",
+                castAfterMs: 200,
+            },
+        ],
         status: [], // sickness //poisoned etc
         regens: {sp: 1, hp: 1, mana: 1},
         monsSoul: 2, // same like points system
@@ -3542,6 +3759,14 @@ export default [
         characterType:"npcFighter",// npcStandby//npcEnemy//npcFighter//npcWalk - npcFighter
         // automatically gets the duel-offer conversation after randomSpeech,
         // see createAllNpcInArea.js
+        // attitude (duelSystem.js's own DEFAULT_ATTITUDE header comment has
+        // the full breakdown of each slider) - a physical sword fighter who
+        // dodges and blocks reasonably often, occasionally chains a follow-up
+        // skill (continuescast), and always closes to melee (weapon:1) -
+        // no standby-casting, no running away, exactly today's existing
+        // fighting style, just now expressed as real per-fighter data
+        // instead of hardcoded constants.
+        attitude: { weapon: 1, dodging: 0.6, blocking: 0.5, standbycasting: 0, distancing: 0, continuescast: 0.5 },
         skills: renardenSkills,
         randomSpeech: [
             {name: "", message: "don't just keep on standing on my face talk. "}

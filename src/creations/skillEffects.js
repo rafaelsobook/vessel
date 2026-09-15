@@ -3969,6 +3969,29 @@ function computeEnemyCastOrigin(enemy, targetPos){
 export function castEnemySkill(scene, enemy, skill, targetPlayer){
     if(!enemy?.body || !targetPlayer?.body || !scene) return
     const targetOwner = targetPlayer.owner
+
+    // skill.groundTrap (e.g. massivedisintegrationSkill, Robin's own
+    // hiddenSkill and Vesper's hiddencombo entry) - without this branch,
+    // ANY enemy/npcFighter skill carrying a groundTrap field (no real
+    // projectile at all - useProjectile:false) fell straight through to
+    // the generic fireEnemySkillProjectile path below, which doesn't know
+    // about groundTrap/meteorRain/lightningStrike/laserChain at all (that
+    // dispatch only ever existed on the PLAYER-cast side, castOffenseSkill).
+    // It would still fly a completely INVISIBLE box toward the player and
+    // land one flat single-target hit - never the real ground AOE circle/
+    // radius this skill's own data actually describes. See
+    // triggerEnemyGroundTrap's own header comment just below for the fix.
+    if(skill.groundTrap){
+        triggerEnemyGroundTrap(scene, enemy, skill, targetPlayer)
+        return
+    }
+    // skill.lightningStrike (thunderclapSkill) - same gap/fix as groundTrap
+    // just above, see triggerEnemyLightningStrike's own header comment
+    if(skill.lightningStrike){
+        triggerEnemyLightningStrike(scene, enemy, skill, targetPlayer)
+        return
+    }
+
     // aim toward bodytarget (createcharacter.js - a box parented to the
     // spine bone, roughly chest height) rather than the raw capsule body's
     // own position (its center, which sits much lower - closer to the
@@ -3993,8 +4016,209 @@ export function castEnemySkill(scene, enemy, skill, targetPlayer){
         if(!liveTarget?.body) return
         const liveAimPos = liveTarget.bodytarget?.getAbsolutePosition() ?? liveTarget.body.absolutePosition
         const freshForward = liveAimPos.subtract(spawnPos).normalize()
-        fireEnemySkillProjectile(scene, enemy, skill, spawnPos, freshForward, targetOwner)
+
+        // skill.projectileVisual.burstCount (quakeboltSkill/Vesper's own
+        // multishotskill) - fireProjectileVolley's own player-side fan/stagger
+        // math (castOffenseSkill above) never runs for an enemy/npcFighter
+        // cast at all (castEnemySkill always fired exactly ONE bolt,
+        // regardless of burstCount) - same class of gap
+        // triggerEnemyGroundTrap/triggerEnemyLightningStrike's own header
+        // comments already cover for groundTrap/lightningStrike. Reproduces
+        // the exact same fan-across-spreadDeg/stagger-by-burstIntervalMs
+        // shape here instead, just firing fireEnemySkillProjectile per shot.
+        const burstCount = skill.projectileVisual?.burstCount ?? 1
+        if(burstCount <= 1){
+            fireEnemySkillProjectile(scene, enemy, skill, spawnPos, freshForward, targetOwner)
+            return
+        }
+
+        const burstIntervalMs = skill.projectileVisual?.burstIntervalMs ?? 100
+        const spreadRad = ((skill.projectileVisual?.spreadDeg ?? 0) * Math.PI) / 180
+        const angleStep = burstCount > 1 ? spreadRad / (burstCount - 1) : 0
+        const startAngle = -spreadRad / 2
+        for(let i = 0; i < burstCount; i++){
+            const angle = startAngle + angleStep * i
+            const shotForward = angle ? Vector3.TransformNormal(freshForward, Matrix.RotationY(angle)) : freshForward
+            setTimeout(() => fireEnemySkillProjectile(scene, enemy, skill, spawnPos, shotForward, targetOwner), burstIntervalMs * i)
+        }
     }, skill.castDuration * 1000)
+}
+
+// enemy/npcFighter version of castOffenseSkill's own groundTrap branch
+// (player-cast only, castOffenseSkill above) - lands flat ON THE GROUND,
+// facing up (createMagicCircle's facingDirection:null, same flag every
+// player-cast groundTrap circle already uses - NOT standing upright facing
+// the caster the way a normal aimed offense skill's circle does), centered
+// on the CASTER's own current position by default (skill.groundTrap.distance,
+// same GROUND_TRAP_DEFAULT_DISTANCE=0 the player-cast side defaults to -
+// massivedisintegrationSkill/disintegrationSkill both omit it, meaning "an
+// AOE nuke centered on yourself", not an aimed throw) rather than aimed at
+// the player - a duelSystem.js npcFighter using this as a "you got too
+// close" punish skill, matching how Robin's own hiddenSkill/Vesper's
+// hiddencombo massivedisintegration entry are actually used. One-shot
+// detonation after castDuration - the player takes damage once, only if
+// still standing within the trap's own radius at that exact moment
+// (no repeated ticking for skill.groundTrap.duration afterward - same
+// "single AOE check on detonation" shape the player-cast
+// spawnGroundTrap/spawnMassGroundTrap already have).
+function triggerEnemyGroundTrap(scene, enemy, skill, targetPlayer){
+    const targetOwner = targetPlayer.owner
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    const radius = getGroundTrapRadius(skill)
+
+    const distance = skill.groundTrap.distance ?? GROUND_TRAP_DEFAULT_DISTANCE
+    let groundPos = enemy.body.position.clone()
+    if(distance > 0){
+        // thrown out in front instead of centered on self - same forward
+        // vector computeEnemyCastOrigin already derives for this caster
+        const aimPos = targetPlayer.bodytarget?.getAbsolutePosition() ?? targetPlayer.body.absolutePosition
+        const { forward } = computeEnemyCastOrigin(enemy, aimPos)
+        groundPos = groundPos.add(forward.scale(distance))
+    }
+
+    createMagicCircle(groundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(radius))
+
+    setTimeout(() => {
+        playImpactSound(skill)
+        fireGenericBurst(scene, groundPos, 1, getOnHitEffects(skill)[0], skill.explosionColor || "red")
+
+        // re-resolve the target at DETONATION time, not cast-start time -
+        // same "recomputed at impact, not activation" principle
+        // fireEnemySkillProjectile's own comment already covers
+        const liveTarget = getPlayersOnScene().find(pl => pl.owner === targetOwner)
+        if(!liveTarget?.body) return
+
+        const dx = liveTarget.body.position.x - groundPos.x
+        const dz = liveTarget.body.position.z - groundPos.z
+        if((dx * dx + dz * dz) > radius * radius) return // player stepped out of the trap before it went off
+
+        const charState = getCharState()
+        if(!charState || targetOwner !== charState.owner) return
+
+        const sceneDet = getSceneDet()
+        if(sceneDet?.scene?.activeCamera) camShake(sceneDet.scene, sceneDet.scene.activeCamera, .01, true)
+
+        // same damage formula/cursed-caster redirect/curse+burn effect
+        // handling fireEnemySkillProjectile's own hit branch already uses -
+        // see that function's own comments for the full reasoning on each
+        const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + (enemy.det.stats?.magDmg || 0) * 20) * getElementDamageMultiplier(skill))
+
+        if(enemy._cursed){
+            if(enemy.applyDamage) enemy.applyDamage(totalDmg)
+            else emitEnemyIsHit({
+                playerId: charState.owner,
+                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                targetId: enemy._id,
+                currentPlaceId: charState.currentPlace.placeId,
+            })
+            return
+        }
+
+        const curseEffect = getSkillEffect(skill, "curse")
+        const burnEffect = getSkillEffect(skill, "burn")
+        const incomingEffects = [
+            ...(enemy.det.effects || []),
+            ...(curseEffect ? [curseStatusEffect(curseEffect.chance)] : []),
+            ...(burnEffect ? [burnEffect] : []),
+        ]
+
+        deductHp(totalDmg, incomingEffects).then(isDead => { if(isDead) emitDied() })
+    }, skill.castDuration * 1000)
+}
+
+// enemy/npcFighter version of thunderclapSkill's own lightningStrike
+// mechanic (triggerThunderclapStrike/spawnLightningStrike above, player-cast
+// only) - same fireEnemySkillProjectile-fallback gap triggerEnemyGroundTrap's
+// own header comment describes, just for skill.lightningStrike instead of
+// skill.groundTrap. Strikes AT the player's own current position (plus a
+// small skill.lightningStrike.spread scatter) rather than "some random spot
+// 12-20 units ahead of the caster" the player-cast version's own
+// computeGroundAOEPos uses (an intentionally uncertain-aim flavor for the
+// PLAYER's own skill) - an NPC AI should reliably threaten its actual
+// target instead of rolling a huge random miss distance against it.
+//
+// Telegraphed with the same flat ground circle every other AOE skill gets
+// (best-effort: centered on wherever the player stood at CAST start, not
+// live-updated through the cast window - simpler than groundTrap's own
+// circle, which never needs to track anyone since it's centered on the
+// caster instead).
+function triggerEnemyLightningStrike(scene, enemy, skill, targetPlayer){
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    const spread = skill.lightningStrike.spread ?? 3
+    createMagicCircle(targetPlayer.body.position.clone(), scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(spread))
+
+    const count = randBetween(skill.lightningStrike.min ?? 1, skill.lightningStrike.max ?? 1)
+    setTimeout(() => {
+        for(let i = 0; i < count; i++){
+            setTimeout(() => spawnEnemyLightningStrike(scene, enemy, skill, targetPlayer), i * THUNDERCLAP_STAGGER_MS)
+        }
+    }, skill.castDuration * 1000)
+}
+
+function spawnEnemyLightningStrike(scene, enemy, skill, targetPlayer){
+    const targetOwner = targetPlayer.owner
+    // re-resolved at STRIKE time, not cast-start - same "recomputed at
+    // impact, not activation" principle every other hit calc in this file
+    // already follows
+    const liveTarget = getPlayersOnScene().find(pl => pl.owner === targetOwner)
+    if(!liveTarget?.body) return
+
+    const spread = skill.lightningStrike.spread ?? 3
+    const landingPos = new Vector3(
+        liveTarget.body.position.x + randNum(-spread, spread),
+        liveTarget.body.position.y,
+        liveTarget.body.position.z + randNum(-spread, spread),
+    )
+    const skyPos = new Vector3(
+        landingPos.x + randNum(-THUNDERCLAP_ORIGIN_JITTER, THUNDERCLAP_ORIGIN_JITTER),
+        landingPos.y + THUNDERCLAP_SKY_HEIGHT,
+        landingPos.z + randNum(-THUNDERCLAP_ORIGIN_JITTER, THUNDERCLAP_ORIGIN_JITTER),
+    )
+
+    getAllSounds().electricHitS?.play()
+    createLightningBoltLine(scene, skyPos, landingPos, "yellow", { updateInterval: 15, lifetimeMs: THUNDERCLAP_BOLT_LIFETIME_MS })
+
+    setTimeout(() => {
+        playImpactSound(skill)
+        fireGenericBurst(scene, landingPos.clone(), 1, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
+
+        const freshTarget = getPlayersOnScene().find(pl => pl.owner === targetOwner)
+        if(!freshTarget?.body) return
+        const dx = freshTarget.body.position.x - landingPos.x
+        const dz = freshTarget.body.position.z - landingPos.z
+        if((dx * dx + dz * dz) > THUNDERCLAP_IMPACT_RADIUS * THUNDERCLAP_IMPACT_RADIUS) return // player stepped out of the bolt's own landing spot before it struck
+
+        const charState = getCharState()
+        if(!charState || targetOwner !== charState.owner) return
+
+        const sceneDet = getSceneDet()
+        if(sceneDet?.scene?.activeCamera) camShake(sceneDet.scene, sceneDet.scene.activeCamera, .01, true)
+
+        // same damage formula/cursed-caster redirect/curse+burn handling
+        // triggerEnemyGroundTrap's own identical block already uses
+        const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + (enemy.det.stats?.magDmg || 0) * 20) * getElementDamageMultiplier(skill))
+
+        if(enemy._cursed){
+            if(enemy.applyDamage) enemy.applyDamage(totalDmg)
+            else emitEnemyIsHit({
+                playerId: charState.owner,
+                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                targetId: enemy._id,
+                currentPlaceId: charState.currentPlace.placeId,
+            })
+            return
+        }
+
+        const curseEffect = getSkillEffect(skill, "curse")
+        const burnEffect = getSkillEffect(skill, "burn")
+        const incomingEffects = [
+            ...(enemy.det.effects || []),
+            ...(curseEffect ? [curseStatusEffect(curseEffect.chance)] : []),
+            ...(burnEffect ? [burnEffect] : []),
+        ]
+
+        deductHp(totalDmg, incomingEffects).then(isDead => { if(isDead) emitDied() })
+    }, THUNDERCLAP_STRIKE_DELAY_MS)
 }
 
 const ENEMY_SKILL_PROJECTILE_TIMEOUT = 3000

@@ -2006,7 +2006,27 @@ export const zoltraakSkill = {
     laserChain: { segmentCount: 20, staggerMs: 100 / 6, spacing: 0.64 },
     projectileVisual: {
         useProjectile: false,
+        // shape:"cylinder" here is a FALLBACK, not what a player cast
+        // actually renders - castOffenseSkill's own dispatch (skillEffects.js)
+        // checks skill.laserChain before ever looking at pv.shape, so a
+        // player cast always takes the real growing-laser path regardless.
+        // It only matters for an NPC/npcFighter cast (castEnemySkill has no
+        // laserChain dispatch of its own, same known gap
+        // triggerEnemyGroundTrap/triggerEnemyLightningStrike's own header
+        // comments already flag for groundTrap/lightningStrike - fixed for
+        // those two, not yet for laserChain) - without a real shape here,
+        // renderGenericProjectile would leave the box fully invisible for
+        // that path (no pv.shape to build anything from), so an NPC-cast
+        // zoltraak would deal correct, correctly-aimed damage but be
+        // completely impossible to see coming. This at least renders as one
+        // solid glowing cylinder bolt instead of the full segmented chain.
+        shape: "cylinder",
         shapeParams: { diameter: 0.56, height: 0.6, tessellation: 12 },
+        // same x:Math.PI/2 tilt triggerLaserChain's own segments use - lays
+        // the cylinder down pointing along its travel direction instead of
+        // standing upright (renderGenericProjectile's own default `copies`
+        // is a single untilted copy, which would otherwise fly sideways)
+        copies: [{ rotation: { x: Math.PI / 2, y: 0, z: 0 } }],
         material: { kind: "glow" },
         launchSound: "spearS1",
         // read by skillEffects.js's mergeIntoMovingProjectile (spd:
