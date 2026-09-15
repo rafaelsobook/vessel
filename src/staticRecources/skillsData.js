@@ -57,16 +57,26 @@
 //   - visible: does a real mesh/particle trail appear while it's actually in
 //     flight? false for "marker" (silent+invisible targeting box) and "beam"
 //     (nothing exists until impact)
-//   - shape: "sphere" | "box" | "cone" | "icosahedron" | "torus" | "plane" |
-//     "particle" | "weapon" | "custom" | undefined (no shape at all).
-//     "box" reuses the shared projectile box mesh itself directly (no extra
-//     child mesh) - shapeParams.boxScale is its own extra size multiplier on
-//     top of projectileScale, since that shared box starts pre-sized larger
-//     than any other shape's own dimensions. "weapon" loads a real GLB
-//     weapon asset via createWeapon (the `weapon` field: type/rarities/scale).
-//     "custom" is darkorb only - hand-built mesh/material too bespoke for the
-//     shape/material model, fully described via the `customMesh` field
-//     instead (still pure data, just a much bigger bucket of it).
+//   - shape: "sphere" | "box" | "cone" | "cylinder" | "icosahedron" | "torus" |
+//     "plane" | "particle" | "weapon" | "custom" | undefined (no shape at
+//     all). "box" reuses the shared projectile box mesh itself directly (no
+//     extra child mesh) - shapeParams.boxScale is its own extra size
+//     multiplier on top of projectileScale, since that shared box starts
+//     pre-sized larger than any other shape's own dimensions. "cylinder" is
+//     a true cylinder (diameterTop === diameterBottom, shapeParams.diameter/
+//     height/tessellation) - unlike "cone" (diameterTop:0, a spike), its
+//     head end has no taper of its own; rotate it x:Math.PI/2 to point that
+//     flat end along local +z (box's own forward axis) instead of standing
+//     up along y - used today by zoltraakSkill's laser-chain segments
+//     (skill.laserChain, built directly by triggerLaserChain rather than
+//     through this generic projectile path, since those segments are
+//     several independent STATIONARY meshes appearing over time, not one
+//     mesh riding a single moving projectile). "weapon" loads a real GLB
+//     weapon asset via createWeapon (the `weapon` field: type/rarities/
+//     scale). "custom" is darkorb only - hand-built mesh/material too
+//     bespoke for the shape/material model, fully described via the
+//     `customMesh` field instead (still pure data, just a much bigger
+//     bucket of it).
 //   - shapeParams: per-shape numeric dimensions (diameter/width/height/depth/
 //     thickness/tessellation/segments/size, whichever the chosen shape needs)
 //   - copies: array of { rotation:{x,y,z}, animation:{x,y,z}? } - one entry
@@ -1945,6 +1955,65 @@ export const aegiswardSkill = {
     desc: "Conjures a spinning barrier around you that intercepts incoming projectiles - anything it collides with strikes the barrier instead of you.",
 }
 
+// --- ZOLTRAAK (light) - Frieren's own signature offensive spell: a fast,
+// clean bolt rather than a binding/judgment spell like lightpierce/
+// radiantjudgment (this element's other two members) - no enemyBind entry
+// at all, deliberately, so it reads as a distinct playstyle within "light"
+// instead of a third bind-and-burst reskin.
+//
+// laserChain: { segmentCount, staggerMs, spacing } - this skill fires NO
+// moving projectile at all (useProjectile:false, same shape groundTrap/
+// groundSpikes/lightningStrike already use to skip fireElementalProjectile
+// entirely - see castOffenseSkill's own dispatch). Instead it grows a
+// straight line of stationary cylinder segments outward from the caster,
+// one every staggerMs, connecting nose-to-tail until segmentCount (20) is
+// reached or something's hit first - "like a laser" per spec, the beam
+// visibly extends in real time. EVERY segment stays live for hit-detection
+// the whole time it exists (not just the newest one) - see
+// triggerLaserChain's own header comment in skillEffects.js for exactly how
+// that works.
+// shapeParams/material here still describe what EACH segment looks like
+// (read directly by triggerLaserChain, not renderGenericProjectile).
+// staggerMs 100/6 (~16.7ms, x6 faster than the original 100), diameter 0.56
+// (x4 fatter than the original 0.14), height 0.6 (x2 longer than the
+// original 0.3) - spacing (skillEffects.js's own LASER_SEGMENT_SPACING
+// default, 0.64) scales right along with height so the fatter/longer
+// segments still sit flush nose-to-tail. 20 segments * 0.64 spacing = 12.8
+// units long at full extension (2x the original 6.4).
+export const zoltraakSkill = {
+    slotNumber: 39,
+    equiped: true,
+    isActive: false,
+    name: "zoltraak",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "light",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Zoltraak",
+    castDuration: 2,
+    returnModeDura: 900,
+    skillCoolDown: 1800,
+    demand: [{ name: "mp", minCost: 25, cost: 0 }],
+    effects: [{ effectType: "offense", dmgPm: 0, plusCasterMagicDmg: 0.2, plusDmg: 110, chance: 1, bashPower: 0.4 }],
+    skillrank: 2,
+    upgradePlus: 20,
+    explosionColor: "white",
+    explosionScale: 1,
+    arcCount: 0,
+    laserChain: { segmentCount: 20, staggerMs: 100 / 6, spacing: 0.64 },
+    projectileVisual: {
+        useProjectile: false,
+        shapeParams: { diameter: 0.56, height: 0.6, tessellation: 12 },
+        material: { kind: "glow" },
+        launchSound: "spearS1",
+    },
+    onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.7, smokeScale: 0.4, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
+    desc: "A chain of radiant segments extends forward one link at a time like a growing laser, punching through whatever the leading edge touches.",
+}
+
 export const skillsData = [
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
@@ -1967,6 +2036,7 @@ export const skillsData = [
     thunderclapSkill,
     wellspringSkill,
     aegiswardSkill,
+    zoltraakSkill,
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an

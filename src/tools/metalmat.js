@@ -48,6 +48,13 @@ export const MATERIAL_TEXTURES = {
     // phoenixore's own tintKey (itemDictionary.js) - reuses the existing
     // particle sprite rather than a new dedicated surface image, per request
     firecrystal: "./images/particles/smoke2.webp",
+    // real bark texture for the "wood" organic material (weaponmat.js's own
+    // ORGANIC_TINTS.wood was flat-tint-only until now) - added specifically
+    // for staff_wood (createweapon.js's createWholeMeshWeapon), which is a
+    // whole bare-wood weapon with nothing else to break up the surface, but
+    // this key is shared so any other wood-tinted part (sword handles etc,
+    // via createHandleMat) now also picks it up for free
+    wood: "./images/modeltex/tree1.jpg",
 }
 
 // Name-safe keys into METAL_TINTS/METAL_ROUGHNESS (derived, not hand-copied,

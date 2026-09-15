@@ -2387,9 +2387,13 @@ export default [
         // stats bumped above Colousa's own (1/1) - a harder duel than the
         // one that unlocked her, not a repeat of the exact same fight.
         // calcOpponentDmg (duelSystem.js) reads strength/weapon directly,
-        // nothing else - she's fought unarmed (items:[], same as Renarden)
-        // rather than guessing at a first-ever "staff" item shape with no
-        // existing data anywhere in the project to copy from.
+        // wanderersstaff (staticRecources/swordsdata.js) - staff_wood is a
+        // whole, undecomposed mesh (createweapon.js's createWholeMeshWeapon),
+        // no rarity/part tiers to pick from, same one-tier situation
+        // stormpiercer is in for spear - so this is just her equipping the
+        // only staff that currently exists. Leather Boots copied verbatim
+        // from Colousa's own items array above (same shape every other
+        // fighter-tier NPC's boots use).
         glbPath: null,
         gender: "female",
         currentPlaceId: 15,
@@ -2415,7 +2419,49 @@ export default [
         _dirTarg: {x:0, z:-4},
         hair: 'hair1',
         hairColor: ADVENTURER_COLORS.white,
-        items: [],
+        items: [
+            {
+                itemId: randomNum(),
+                name: "wanderersstaff",
+                dn: "Wanderer's Staff",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "staff",
+                equipAbilities: { dmg: 10, def: 0, magicDmg: 12, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 12 },
+                qnty: 1,
+                desc: "Wanderer's Staff, a simple staff carved whole from a single piece of wood.",
+                rarity: "common",
+                parts: {
+                    handleColor: "wood",
+                }
+            },
+            {
+                itemId: randomNum(),
+                name: "leatherboots",
+                dn: "Leather Boots",
+                itemCateg: "equipable",
+                itemType: "boots",
+                equipAbilities: { dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false,
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            }
+        ],
         titles: ['mage'],
         skills: [],
         status: [], // sickness //poisoned etc

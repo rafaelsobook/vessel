@@ -315,6 +315,15 @@ export function castOffenseSkill(scene, player, skill, charState){
             // check once each bolt actually lands, same as triggerMeteorRain.
             pendingCasts.delete(skill.name)
             triggerThunderclapStrike(scene, charState, skill, lightningGroundPos, powerScale)
+        } else if(skill.laserChain){
+            // zoltraakSkill - no projectile at all, see triggerLaserChain's
+            // own header comment. Doesn't own pendingCasts' timeoutIds the
+            // way fireProjectileVolley does below (nothing here is tracked
+            // for cancellation once it starts growing) - same "delete right
+            // away" shape groundSpikes/lightningLine/meteorRain/lightningStrike
+            // all already use just above.
+            pendingCasts.delete(skill.name)
+            triggerLaserChain(scene, charState, skill, player, spawnPos, forward, powerScale)
         } else {
             // fireProjectileVolley owns clearing pendingCasts itself here,
             // once its own LAST scheduled bolt actually fires - a volley
@@ -1147,6 +1156,14 @@ function buildProjectileShapeMesh(scene, shape, shapeParams = {}){
         case "cone":
             return getShapeClone(scene, `gen_cone_${shapeParams.diameterBottom}_${shapeParams.height}`, () =>
                 MeshBuilder.CreateCylinder("gen_cone_template", { diameterTop: 0, diameterBottom: shapeParams.diameterBottom ?? 0.15, height: shapeParams.height ?? 0.9, tessellation: shapeParams.tessellation ?? 10 }, scene))
+        // true cylinder (diameterTop === diameterBottom, unlike "cone" above)
+        // - added for zoltraakSkill's laser-chain segments (triggerLaserChain,
+        // just below this file's own castOffenseSkill dispatch), which
+        // builds each segment mesh directly through this function rather
+        // than going through the generic multi-copy projectile path
+        case "cylinder":
+            return getShapeClone(scene, `gen_cylinder_${shapeParams.diameter}_${shapeParams.height}`, () =>
+                MeshBuilder.CreateCylinder("gen_cylinder_template", { diameter: shapeParams.diameter ?? 0.15, height: shapeParams.height ?? 0.3, tessellation: shapeParams.tessellation ?? 12 }, scene))
         case "icosahedron":
             return getShapeClone(scene, `gen_poly_${shapeParams.size}`, () =>
                 MeshBuilder.CreatePolyhedron("gen_poly_template", { type: 3, size: shapeParams.size ?? 0.22 }, scene))
@@ -2879,6 +2896,188 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
         const groundPos = new Vector3(groundX, groundY, groundZ)
         setTimeout(() => spawnGroundSpike(scene, charState, skill, groundPos, powerScale), i * staggerMs)
     }
+}
+
+// --- ZOLTRAAK's own laser chain (skill.laserChain, see skillsData.js and
+// the branch in castOffenseSkill above) - unlike every other offense skill,
+// this fires no single moving projectile at all. It grows a straight line
+// of STATIONARY cylinder segments outward from the caster, one new segment
+// every staggerMs, connecting nose-to-tail until segmentCount is reached -
+// "like a laser" per spec, the beam visibly extends in real time instead of
+// a bolt flying the whole distance in one go.
+//
+// EVERY segment stays live for hit-detection the whole time it exists, not
+// just the newest one - each spawnSegment call registers its own trigger(s)
+// against whatever enemies/duel opponents are on scene right now, and that
+// registration is never torn down until the beam itself resolves. So
+// something that steps into an ALREADY-PLACED trailing segment (not just
+// the current growing tip) still gets hit. Growth stops (the still-pending
+// spawnSegment timeouts are cancelled) the instant ANY segment registers a
+// hit; if nothing's hit before segmentCount is reached, the full-length
+// beam just lingers briefly then clears itself out.
+const LASER_SEGMENT_COUNT = 20
+// x6 faster growth (was 100ms/segment)
+const LASER_STAGGER_MS = 100 / 6
+// each segment x2 longer (height, was 0.3) and x4 fatter (diameter, was
+// 0.14) - see zoltraakSkill's own projectileVisual.shapeParams, which is
+// what actually drives these two; spacing scales right along with height
+// (also x2, was 0.32) so the fatter/longer segments still sit flush
+// nose-to-tail instead of gapping apart or burying into each other
+const LASER_SEGMENT_SPACING = 0.64
+const LASER_LINGER_MS = 400
+
+function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, powerScale){
+    const cfg = skill.laserChain || {}
+    const segmentCount = cfg.segmentCount ?? LASER_SEGMENT_COUNT
+    const staggerMs = cfg.staggerMs ?? LASER_STAGGER_MS
+    const spacing = cfg.spacing ?? LASER_SEGMENT_SPACING
+    const shapeParams = skill.projectileVisual?.shapeParams || {}
+    const materialKind = skill.projectileVisual?.material?.kind ?? "glow"
+    const texturePath = skill.projectileVisual?.material?.texturePath
+    const color = skill.explosionColor || "white"
+
+    const dir = forward.clone()
+    if(dir.lengthSquared() < 0.0001) dir.set(0, 0, 1)
+    dir.normalize()
+    // same yaw/pitch-alignment convention fireElementalProjectile's own box
+    // uses to face its own forward - applied here to a TransformNode per
+    // segment (not the cylinder mesh directly), so the cylinder's own extra
+    // local tilt just below composes correctly through a real parent/child
+    // matrix instead of hand-adding Euler angles together
+    const rotY = Math.atan2(dir.x, dir.z)
+    const rotX = -Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z))
+
+    if(!skill.projectileVisual?.silentLaunch){
+        getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"]?.play()
+    }
+
+    const segments = []
+    let hasHit = false
+    // every segment's own trigger-removal fns pile up in here (never
+    // cleared mid-growth now that ALL segments stay live, not just the
+    // newest) - torn down together, all at once, whenever the beam
+    // actually resolves (hit or fully grown-and-expired)
+    const triggerRemovers = []
+    const timeoutIds = []
+
+    function clearAllTriggers(){
+        triggerRemovers.forEach(fn => fn())
+        triggerRemovers.length = 0
+    }
+
+    function disposeAll(){
+        clearAllTriggers()
+        segments.forEach(segRoot => segRoot.dispose(false, true))
+        segments.length = 0
+    }
+
+    // isDuelOpponent picks which damage path to use - duelSystem.js's own
+    // opponents apply damage locally (applyDamage), everything else goes
+    // through the normal server-relayed dealDamageToEnemy, same split
+    // fireElementalProjectile's own two hit branches already follow
+    function resolveHit(target, isDuelOpponent, hitPos){
+        if(hasHit) return
+        hasHit = true
+        timeoutIds.forEach(id => clearTimeout(id))
+        clearAllTriggers()
+
+        playImpactSound(skill)
+        fireGenericBurst(scene, hitPos, powerScale, getOnHitEffects(skill)[0], color)
+
+        if(isDuelOpponent){
+            const freshCharState = getCharState()
+            const abilityAdditions = getAdditionalsFromAbilities()
+            const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+            target.applyDamage(totalDmg, { skill })
+        } else if(charState.owner === getCharState()?.owner){
+            // same isCaster gate every other offense skill's real-enemy hit
+            // handler uses (fireElementalProjectile) - this function runs
+            // identically on every client watching the cast, only the real
+            // caster's own client is allowed to actually emit damage
+            const freshCharState = getCharState()
+            const abilityAdditions = getAdditionalsFromAbilities()
+            const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+            dealDamageToEnemy({
+                playerId: freshCharState.owner,
+                dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                targetId: target._id,
+                currentPlaceId: freshCharState.currentPlace.placeId,
+            })
+            registerSkillHitTarget(target, freshCharState)
+
+            const burnEffect = getSkillEffect(skill, "burn")
+            if(burnEffect){
+                startTargetBurn(burnEffect, target.body, scene, target.det?.bodyHeight, target.det?.bodyWidenes, dmg => dealDamageToEnemy({
+                    playerId: freshCharState.owner,
+                    dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                    targetId: target._id,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
+                }))
+            }
+        }
+
+        setTimeout(disposeAll, LASER_LINGER_MS)
+    }
+
+    // registers this ONE segment's own hit-test and appends its removers to
+    // the shared triggerRemovers list above - unlike the old "only the
+    // frontmost" version, this never tears down an earlier segment's own
+    // trigger, so a target standing in an already-placed part of the beam
+    // (not just wherever the tip currently is) can still trigger a hit
+    function registerSegmentTrigger(segMesh){
+        getEnemiesOnScene().forEach(enemy => {
+            if(!enemy.body) return
+            const action = onIntersecEnterTrig(segMesh, enemy.body, scene, () => {
+                // fresh re-check, same reasoning fireElementalProjectile's
+                // own enemy loop comment covers - the enemy this trigger
+                // was bound to may have died elsewhere since it registered
+                if(!getEnemiesOnScene().some(e => e._id === enemy._id)) return
+                resolveHit(enemy, false, segMesh.getAbsolutePosition())
+            })
+            triggerRemovers.push(() => removeIntersecTrig(segMesh, action))
+        })
+        getDuelOpponentsOnScene().forEach(duelOpp => {
+            if(!duelOpp.body) return
+            const action = onIntersecEnterTrig(segMesh, duelOpp.body, scene, () => {
+                resolveHit(duelOpp, true, segMesh.getAbsolutePosition())
+            })
+            triggerRemovers.push(() => removeIntersecTrig(segMesh, action))
+        })
+    }
+
+    function spawnSegment(i){
+        const segPos = spawnPos.add(dir.scale(spacing * (i + 1)))
+        const segRoot = new TransformNode(`laser_seg_root_${skill.name}_${i}_${Date.now()}`, scene)
+        segRoot.position.copyFrom(segPos)
+        segRoot.rotation.y = rotY
+        segRoot.rotation.x = rotX
+
+        const seg = buildProjectileShapeMesh(scene, "cylinder", shapeParams)
+        seg.parent = segRoot
+        seg.position.set(0, 0, 0)
+        // same local tilt zoltraakSkill's own projectileVisual.copies use -
+        // a cylinder's default axis stands up along y, this lays it down
+        // along segRoot's own local z (its forward, aligned above)
+        seg.rotation.set(Math.PI / 2, 0, 0)
+        seg.isPickable = false
+        applyPlainMaterial(scene, seg, materialKind, color, texturePath)
+
+        segments.push(segRoot)
+        registerSegmentTrigger(seg)
+    }
+
+    for(let i = 0; i < segmentCount; i++){
+        const id = setTimeout(() => { if(!hasHit) spawnSegment(i) }, i * staggerMs)
+        timeoutIds.push(id)
+    }
+    // nothing was hit for the whole length - the full beam lingers a beat
+    // then clears itself, same LASER_LINGER_MS read a successful hit gets,
+    // just with no impact burst (fireGenericBurst only ever runs from
+    // resolveHit above)
+    const clearId = setTimeout(() => { if(!hasHit) disposeAll() }, segmentCount * staggerMs + LASER_LINGER_MS)
+    timeoutIds.push(clearId)
 }
 
 function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){

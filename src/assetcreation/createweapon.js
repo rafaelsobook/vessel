@@ -32,16 +32,26 @@ function getPartMat(scene, part, rarity, materialName, instanceName) {
 
 // which weaponTypes are built from separate part meshes (blade/guard/
 // handle/pommel) isn't hardcoded to "sword" - it's whatever allweapons
-// (allswords.glb, see loadMeshOnlyParts) actually has a "<weaponType>_..."
-// entry for. Sword has 4 tiers per part; spear has just one (spear_blade_
-// rare1 etc, see swordsdata.js's stormpiercer). Any weaponType with NO
-// matching part meshes falls back to a single mesh instead - same pattern
-// as createHelmet/createPauldron in createcharacter.js - looked up from
-// containers.weapons by "<weaponType>.<itemName>".
+// (allswords.glb, see loadMeshOnlyParts) actually has a
+// "<weaponType>_<part>_..." entry for. Sword has 4 tiers per part; spear has
+// just one (spear_blade_rare1 etc, see swordsdata.js's stormpiercer). Any
+// weaponType with NO matching part meshes falls back to a whole/single mesh
+// instead (see createWeapon's own dispatch below).
+//
+// Checked against the real per-weaponType part list (blade/guard/handle/
+// pommel, or WEAPON_PART_LIST's override) rather than a bare
+// `${weaponType}_` prefix - staff_wood (models/swords/allswords.glb, added
+// alongside the sword/spear/axe part meshes per the artist's own outliner)
+// would otherwise false-positive here: "staff_wood".startsWith("staff_") is
+// true even though it's ONE WHOLE mesh, not a part. It doesn't match
+// "staff_blade_"/"staff_guard_"/"staff_handle_"/"staff_pommel_", so this
+// correctly returns false for it and lets createWeapon route it to
+// createWholeMeshWeapon instead.
 function hasPartMeshes(weaponType){
     const { allweapons } = getSocketContainers()
     if(!allweapons) return false
-    return Object.keys(allweapons).some(key => key.startsWith(`${weaponType}_`))
+    const parts = WEAPON_PART_LIST[weaponType] ?? DEFAULT_PART_LIST
+    return parts.some(part => Object.keys(allweapons).some(key => key.startsWith(`${weaponType}_${part}_`)))
 }
 
 // Which parts each weaponType actually has - sword and spear (both from
@@ -187,6 +197,49 @@ function createPartsWeapon(scene, weaponType, root, options, glowingColor) {
     }
 }
 
+// Whole-mesh weapons keyed by MATERIAL instead of by item name - staff_wood
+// is the first of these (models/swords/allswords.glb, per the artist's own
+// Blender outliner it sits right alongside the sword_*/spear_*/axe_* PART
+// meshes, just under a name with no recognized part suffix - see
+// hasPartMeshes' comment above). A staff has no blade/guard/handle/pommel to
+// decompose into: the material crafted into it IS the whole weapon, so
+// there's nothing to pick a color for beyond that one material - reuses
+// handleColor as that field (same as every other weapon's organic grip
+// material already does, e.g. stormpiercer's handleColor: "wood") rather
+// than inventing a new option name just for this. If a staff ever gets a
+// second modeled material (e.g. "staff_iron"), it'd need its own
+// "staff_iron" mesh added the same way and would just work - the lookup key
+// is fully data-driven, nothing here is hardcoded to "wood" specifically.
+function createWholeMeshWeapon(scene, weaponType, root, options, glowingColor) {
+    const { allweapons } = getSocketContainers()
+    if (!allweapons) return console.warn("allweapons not yet imported")
+
+    const { handleColor = "wood" } = options
+    const key = `${weaponType}_${handleColor}`
+    const template = allweapons[key]
+    if (!template) return console.warn(`createWeapon: missing whole-mesh weapon "${key}"`)
+
+    const inst = template.clone(`${key}_${root.name}`)
+    // same rotation fix every part mesh already needs (Blender's Z-up
+    // export), unverified until tested in-game against the real mesh but
+    // consistent with every other weapon mesh this file creates
+    inst.addRotation(Math.PI/2,0,0)
+    inst.isVisible = true
+    inst.parent = root
+    inst.position = Vector3.Zero()
+
+    if(glowingColor){
+        inst.material = createGlowingMat(scene, glowingColor)
+        addGlow(scene, inst, 0.4)
+    } else {
+        // same material fn the handle part already uses for organic
+        // materials (StandardMaterial, diffuseTexture from MATERIAL_TEXTURES)
+        // - "wood" now resolves to tree1.jpg (metalmat.js) so the staff
+        // picks up real bark detail instead of a flat brown tint
+        inst.material = createHandleMat(scene, "common1", handleColor)
+    }
+}
+
 function createSingleMeshWeapon(scene, weaponType, itemName, root, options, glowingColor) {
     const { weapons } = getSocketContainers()
     if (!weapons) return console.warn("weapons not yet imported")
@@ -226,8 +279,16 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
     if (parent) {
         root.parent = parent
     }
+    const { allweapons } = getSocketContainers()
+    const wholeMeshKey = `${weaponType}_${options.handleColor ?? "wood"}`
     if (hasPartMeshes(weaponType)) {
         createPartsWeapon(scene, weaponType, root, options, glowingColor)
+    } else if (allweapons?.[wholeMeshKey]) {
+        // e.g. staff_wood - checked by real key existence (same "ground
+        // truth from the glb" approach hasPartMeshes/getAvailableRarityVariants
+        // already use) rather than hardcoding weaponType === "staff", so any
+        // future material-keyed whole-mesh weapon just works
+        createWholeMeshWeapon(scene, weaponType, root, options, glowingColor)
     } else {
         createSingleMeshWeapon(scene, weaponType, itemName, root, options, glowingColor)
     }

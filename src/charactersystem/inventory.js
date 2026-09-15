@@ -395,6 +395,34 @@ export function giveAllItems(){
                 handleColor: "wood",
                 pommelColor: "silver",
             }
+        },
+        // wanderersstaff (swordsdata.js) - staff_wood is a whole mesh with
+        // no parts to vary (see createweapon.js's createWholeMeshWeapon), so
+        // just like stormpiercer above, this is the only staff that can
+        // currently exist. Added here so it's testable without hunting one
+        // down first.
+        {
+            itemId: randomNum(),
+            name: "wanderersstaff",
+            dn: "Wanderer's Staff",
+            itemCateg: "equipable",
+            itemType: "weapon",
+            weaponType: "staff",
+            equipAbilities: { dmg: 10, def: 0, magicDmg: 12, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 12 },
+            qnty: 1,
+            desc: "Wanderer's Staff, a simple staff carved whole from a single piece of wood.",
+            rarity: "common",
+            parts: {
+                handleColor: "wood",
+            }
         }
     ])
 }

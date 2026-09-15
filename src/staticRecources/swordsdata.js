@@ -454,5 +454,36 @@ export const swordsData = [
             handleColor: "wood",
             pommelColor: "silver",
         }
+    },
+    // staff_wood (models/swords/allswords.glb) is a whole, undecomposed
+    // mesh - no blade/guard/pommel parts exist for it at all, just this one
+    // material-keyed mesh (see createweapon.js's createWholeMeshWeapon). Only
+    // "wood" is modeled today, so this is the only staff that can exist,
+    // same one-tier situation stormpiercer above is in for spear.
+    {
+        itemId: randomNum(), // should be string also in client
+        name: "wanderersstaff",
+        dn: "Wanderer's Staff",
+        itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
+        itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
+        weaponType: "staff",
+        equipAbilities: {
+            dmg: 10, def: 0, magicDmg: 12, plusStr: 0, plusDex: 0, plusInt: 0,
+        }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, }, //for buffs foods potions
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true, // only for equipable items
+        enhancedLevel: 0,
+        slots: [],// { name, dn, equipAbilities } cores
+        durability: { current: 100, max: 100},
+        price: { coinType: "bronze", pieces: 12 },
+        qnty: 1,
+        desc: "Wanderer's Staff, a simple staff carved whole from a single piece of wood.",
+        rarity: "common",
+
+        parts: {
+            handleColor: "wood",
+        }
     }
 ]
