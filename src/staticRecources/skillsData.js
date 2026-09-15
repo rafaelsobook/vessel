@@ -1993,7 +1993,7 @@ export const zoltraakSkill = {
     skillElementType: "na",
     animationLoop: false,
     displayName: "Zoltraak",
-    castDuration: 2,
+    castDuration: 0.1,
     returnModeDura: 900,
     skillCoolDown: 1800,
     demand: [{ name: "mp", minCost: 25, cost: 0 }],
@@ -2009,6 +2009,14 @@ export const zoltraakSkill = {
         shapeParams: { diameter: 0.56, height: 0.6, tessellation: 12 },
         material: { kind: "glow" },
         launchSound: "spearS1",
+        // read by skillEffects.js's mergeIntoMovingProjectile (spd:
+        // PROJECTILE_SPEED * speedMult) once a miss merges the chain into a
+        // real flying projectile - x8 the shared PROJECTILE_SPEED baseline
+        // every other skill's own speedMult scales off of (quakeboltSkill
+        // is 2, the light family is 0.8 - this is deliberately far above
+        // both, so the missed beam reads as a fast continuation of the
+        // laser rather than crawling off at normal-bolt speed)
+        speedMult: 8,
     },
     onHitVisual: [{ type: "burst", burst: { texture: "flare2", fireScale: 0.7, smokeScale: 0.4, emberEmitRate: 8, gravitySign: 1, includeSmoke: false } }],
     desc: "A chain of radiant segments extends forward one link at a time like a growing laser, punching through whatever the leading edge touches.",

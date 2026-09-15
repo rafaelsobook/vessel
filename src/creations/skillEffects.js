@@ -18,7 +18,7 @@
 // not a new function here - skill.swordRain (astralrainSkill) is the one
 // exception, an opt-in branch inside fireElementalProjectile's hit handler
 // (its marker doesn't deal damage/explode itself, see that section).
-import { MeshBuilder, TransformNode, Vector3, Quaternion, Matrix, StandardMaterial, Color3, Color4, Texture, FresnelParameters, NoiseProceduralTexture, ParticleSystem } from "@babylonjs/core"
+import { Mesh, MeshBuilder, TransformNode, Vector3, Quaternion, Matrix, StandardMaterial, Color3, Color4, Texture, FresnelParameters, NoiseProceduralTexture, ParticleSystem } from "@babylonjs/core"
 import { createMagicCircle } from "./magiccircles.js"
 import { createParticleSystem, createExplosionBurst, createImplosionBurst, createParticle, createBodyFireParticles, createCometTrailParticles } from "../tools/particlesystem.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
@@ -2909,12 +2909,19 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
 // EVERY segment stays live for hit-detection the whole time it exists, not
 // just the newest one - each spawnSegment call registers its own trigger(s)
 // against whatever enemies/duel opponents are on scene right now, and that
-// registration is never torn down until the beam itself resolves. So
+// registration is never torn down until the growth phase resolves. So
 // something that steps into an ALREADY-PLACED trailing segment (not just
 // the current growing tip) still gets hit. Growth stops (the still-pending
 // spawnSegment timeouts are cancelled) the instant ANY segment registers a
-// hit; if nothing's hit before segmentCount is reached, the full-length
-// beam just lingers briefly then clears itself out.
+// hit.
+//
+// If nothing's hit before segmentCount is reached, the beam doesn't just
+// sit there and fade - mergeIntoMovingProjectile() fuses every placed
+// segment into ONE real mesh (Mesh.MergeMeshes) and hands it off to the
+// shared projectile-movement system (worldsocket.js's pushProjectile,
+// moved every frame by renderer.js's own locallyTranslate loop, same as
+// every other skill's bolt) so the missed beam keeps flying onward with its
+// own fresh hit-test, instead of despawning in place.
 const LASER_SEGMENT_COUNT = 20
 // x6 faster growth (was 100ms/segment)
 const LASER_STAGGER_MS = 100 / 6
@@ -2955,8 +2962,9 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
     let hasHit = false
     // every segment's own trigger-removal fns pile up in here (never
     // cleared mid-growth now that ALL segments stay live, not just the
-    // newest) - torn down together, all at once, whenever the beam
-    // actually resolves (hit or fully grown-and-expired)
+    // newest) - torn down together, all at once, whenever the growth phase
+    // actually resolves (a chain hit, or the merge-into-a-flying-projectile
+    // handoff below)
     const triggerRemovers = []
     const timeoutIds = []
 
@@ -2965,22 +2973,17 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
         triggerRemovers.length = 0
     }
 
-    function disposeAll(){
+    function disposeSegments(){
         clearAllTriggers()
         segments.forEach(segRoot => segRoot.dispose(false, true))
         segments.length = 0
     }
 
-    // isDuelOpponent picks which damage path to use - duelSystem.js's own
-    // opponents apply damage locally (applyDamage), everything else goes
-    // through the normal server-relayed dealDamageToEnemy, same split
-    // fireElementalProjectile's own two hit branches already follow
-    function resolveHit(target, isDuelOpponent, hitPos){
-        if(hasHit) return
-        hasHit = true
-        timeoutIds.forEach(id => clearTimeout(id))
-        clearAllTriggers()
-
+    // shared by both hit paths below (a still-growing chain segment, or the
+    // fully-grown merged mesh flying onward) - isDuelOpponent picks which
+    // damage path to use, same split fireElementalProjectile's own two hit
+    // branches already follow
+    function applyHitDamageAndVisual(target, isDuelOpponent, hitPos){
         playImpactSound(skill)
         fireGenericBurst(scene, hitPos, powerScale, getOnHitEffects(skill)[0], color)
 
@@ -3017,15 +3020,26 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
                 }))
             }
         }
+    }
 
-        setTimeout(disposeAll, LASER_LINGER_MS)
+    // a hit landed on one of the still-growing chain's own segments (not
+    // the merged flying mesh - that has its own separate hit path below,
+    // registerFlyingHitTest, since by then this whole chain-phase state is
+    // already torn down)
+    function resolveChainHit(target, isDuelOpponent, hitPos){
+        if(hasHit) return
+        hasHit = true
+        timeoutIds.forEach(id => clearTimeout(id))
+        clearAllTriggers()
+        applyHitDamageAndVisual(target, isDuelOpponent, hitPos)
+        setTimeout(disposeSegments, LASER_LINGER_MS)
     }
 
     // registers this ONE segment's own hit-test and appends its removers to
-    // the shared triggerRemovers list above - unlike the old "only the
-    // frontmost" version, this never tears down an earlier segment's own
-    // trigger, so a target standing in an already-placed part of the beam
-    // (not just wherever the tip currently is) can still trigger a hit
+    // the shared triggerRemovers list above - unlike an "only the frontmost"
+    // version, this never tears down an earlier segment's own trigger, so a
+    // target standing in an already-placed part of the beam (not just
+    // wherever the tip currently is) can still trigger a hit
     function registerSegmentTrigger(segMesh){
         getEnemiesOnScene().forEach(enemy => {
             if(!enemy.body) return
@@ -3034,14 +3048,14 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
                 // own enemy loop comment covers - the enemy this trigger
                 // was bound to may have died elsewhere since it registered
                 if(!getEnemiesOnScene().some(e => e._id === enemy._id)) return
-                resolveHit(enemy, false, segMesh.getAbsolutePosition())
+                resolveChainHit(enemy, false, segMesh.getAbsolutePosition())
             })
             triggerRemovers.push(() => removeIntersecTrig(segMesh, action))
         })
         getDuelOpponentsOnScene().forEach(duelOpp => {
             if(!duelOpp.body) return
             const action = onIntersecEnterTrig(segMesh, duelOpp.body, scene, () => {
-                resolveHit(duelOpp, true, segMesh.getAbsolutePosition())
+                resolveChainHit(duelOpp, true, segMesh.getAbsolutePosition())
             })
             triggerRemovers.push(() => removeIntersecTrig(segMesh, action))
         })
@@ -3068,16 +3082,140 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
         registerSegmentTrigger(seg)
     }
 
+    // nothing hit during growth - merge every placed segment into ONE real
+    // mesh and hand it off to the shared moving-projectile system
+    // (worldsocket.js's pushProjectile/renderer.js's own per-frame
+    // locallyTranslate loop, the exact same movement every other skill's
+    // own bolt already rides) so the missed beam keeps flying onward
+    // instead of just sitting there fully grown and fading out.
+    function mergeIntoMovingProjectile(){
+        clearAllTriggers() // chain-phase hit-tests no longer needed - about to become one single flying mesh with its own fresh hit-test below
+        if(segments.length === 0) return
+
+        // anchor = the frontmost (most recently placed) segment's own real
+        // world position - becomes the merged mesh's new pivot, and where
+        // it starts flying onward from
+        const anchor = segments[segments.length - 1].position.clone()
+
+        // one shared parent sitting exactly where/how the merged mesh
+        // SHOULD end up (anchor + the beam's own travel rotation). Every
+        // segment mesh gets reparented onto it via setParent (not a plain
+        // .parent= assignment) so each one's LOCAL offset is recomputed to
+        // keep its CURRENT world position exactly where it already visually
+        // is - then, right before merging, mergeRoot's own transform is
+        // zeroed out. Mesh.MergeMeshes bakes each source mesh's real WORLD
+        // matrix (full parent chain included) into the merged result, so
+        // with mergeRoot momentarily at identity, what actually gets baked
+        // is each segment's position/rotation RELATIVE TO mergeRoot's real
+        // (anchor + rotation) transform, not raw absolute world space -
+        // exactly the anchor-and-direction-relative geometry needed so the
+        // real transform can be reapplied to the merged mesh itself
+        // afterward and have locallyTranslate move it the right way.
+        const mergeRoot = new TransformNode(`laser_merge_root_${skill.name}_${Date.now()}`, scene)
+        mergeRoot.position.copyFrom(anchor)
+        mergeRoot.rotation.set(rotX, rotY, 0)
+
+        const segMeshes = segments.map(segRoot => segRoot.getChildMeshes()[0]).filter(Boolean)
+        // reparenting onto mergeRoot (setParent) moves each seg mesh OUT
+        // from under its own segRoot, leaving segRoot an empty, otherwise-
+        // never-disposed TransformNode - dispose those explicitly now
+        // rather than leaking one orphaned node per segment on every miss
+        const oldSegRoots = segments.slice()
+        segMeshes.forEach(seg => seg.setParent(mergeRoot))
+        oldSegRoots.forEach(segRoot => segRoot.dispose())
+        mergeRoot.position.set(0, 0, 0)
+        mergeRoot.rotation.set(0, 0, 0)
+
+        const mergedMesh = Mesh.MergeMeshes(segMeshes, true, true, undefined, false, false)
+        segments.length = 0
+        mergeRoot.dispose(false, true)
+        if(!mergedMesh) return
+
+        // restore the real transform onto the merged mesh now that its
+        // vertices are expressed relative to it - reproduces the exact same
+        // combined shape the placed segments had, but as ONE mesh whose own
+        // rotation genuinely represents the travel direction
+        mergedMesh.parent = null
+        mergedMesh.position.copyFrom(anchor)
+        mergedMesh.rotation.set(rotX, rotY, 0)
+        mergedMesh.isPickable = false
+        // MergeMeshes only carries over segMeshes[0]'s own MATERIAL
+        // reference (source.material) - it does NOT re-register the new
+        // mesh with the shared GlowLayer, which only ever glows meshes
+        // explicitly added via addGlow's own gl.addIncludedOnlyMesh
+        // (tools/glow.js - excludeByDefault:true). Every individual segment
+        // WAS added, but those meshes just got disposed by the merge above,
+        // so without this the merged mesh silently rendered with zero bloom
+        // despite still technically having the right emissive material -
+        // this is what "loses the glow" on merge. Reapplying the exact same
+        // material/glow call every segment already got (not just re-adding
+        // the old material to the layer) also gives the merged mesh its own
+        // fresh, independently-disposable material instead of still
+        // pointing at whatever segMeshes[0]'s material reference was.
+        applyPlainMaterial(scene, mergedMesh, materialKind, color, texturePath)
+
+        const itemId = `${skill.name}_miss_${randNum(1000, 9999)}`
+        pushProjectile({
+            itemId,
+            body: mergedMesh,
+            targetDirection: { x: dir.x, y: dir.y, z: dir.z },
+            spd: PROJECTILE_SPEED * (skill.projectileVisual?.speedMult ?? 1),
+            placeId: charState.currentPlace.placeId,
+            stuck: false,
+            willDetectSurface: true,
+            casterOwner: charState.owner,
+        })
+
+        registerFlyingHitTest(mergedMesh, itemId)
+    }
+
+    // fresh hit-test for the now-flying merged mesh - same per-enemy/per-
+    // duel-opponent registration registerSegmentTrigger used per segment
+    // above, just against the one merged mesh instead, and cleaning up via
+    // removeProjectile (worldsocket.js - disposes the body, which tears
+    // down its own ActionManager/ActionManager-registered triggers along
+    // with it) instead of the chain's own disposeSegments. Same
+    // PROJECTILE_RANGE_TIMEOUT miss-timeout every other real projectile in
+    // this file already gets, so a beam that never connects still cleans
+    // itself up instead of flying forever.
+    function registerFlyingHitTest(mergedMesh, itemId){
+        let flyingHit = false
+        const missTimeout = setTimeout(() => {
+            if(flyingHit) return
+            removeProjectile(itemId)
+        }, PROJECTILE_RANGE_TIMEOUT)
+
+        function onFlyingHit(target, isDuelOpponent){
+            if(flyingHit) return
+            flyingHit = true
+            clearTimeout(missTimeout)
+            applyHitDamageAndVisual(target, isDuelOpponent, mergedMesh.getAbsolutePosition())
+            removeProjectile(itemId)
+        }
+
+        getEnemiesOnScene().forEach(enemy => {
+            if(!enemy.body) return
+            onIntersecEnterTrig(mergedMesh, enemy.body, scene, () => {
+                if(!getEnemiesOnScene().some(e => e._id === enemy._id)) return
+                onFlyingHit(enemy, false)
+            })
+        })
+        getDuelOpponentsOnScene().forEach(duelOpp => {
+            if(!duelOpp.body) return
+            onIntersecEnterTrig(mergedMesh, duelOpp.body, scene, () => {
+                onFlyingHit(duelOpp, true)
+            })
+        })
+    }
+
     for(let i = 0; i < segmentCount; i++){
         const id = setTimeout(() => { if(!hasHit) spawnSegment(i) }, i * staggerMs)
         timeoutIds.push(id)
     }
-    // nothing was hit for the whole length - the full beam lingers a beat
-    // then clears itself, same LASER_LINGER_MS read a successful hit gets,
-    // just with no impact burst (fireGenericBurst only ever runs from
-    // resolveHit above)
-    const clearId = setTimeout(() => { if(!hasHit) disposeAll() }, segmentCount * staggerMs + LASER_LINGER_MS)
-    timeoutIds.push(clearId)
+    // nothing was hit for the whole length - merge and keep flying onward
+    // instead of just clearing out
+    const mergeId = setTimeout(() => { if(!hasHit) mergeIntoMovingProjectile() }, segmentCount * staggerMs)
+    timeoutIds.push(mergeId)
 }
 
 function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
