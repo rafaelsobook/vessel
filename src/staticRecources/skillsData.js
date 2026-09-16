@@ -1484,7 +1484,7 @@ export const massivedisintegrationSkill = {
     explosionScaleGrowth: 0.3,
     // distance omitted - defaults to 0, centered on the caster's own body,
     // same as disintegrationSkill's own trap
-    groundTrap: { radius: 10, duration: 8000, aoe: true },
+    groundTrap: { radius: 8, duration: 8000, aoe: true },
     magicCircleImg: "apt_fire_second",
     enemyBind: { effectType: "bind", shape: "torus", bindDuration: 6, bindChance: 1 },
     onLevelUp: "growParticleAura",

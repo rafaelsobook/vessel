@@ -24,6 +24,59 @@ const WALL_HEIGHT    = 0.5;
 const WALL_THICKNESS = 0.3;
 
 
+// Circular ring of wall segments (roomShape:"cylinder") - approximates a
+// circle as a regular polygon, same "roughly one brick per world unit"
+// density buildWall's own straight nsCount/ewCount already use for a
+// comparable brick size. Each segment is a straight chord
+// (2*radius*sin(π/count) long, so `count` of them tile the full
+// circumference edge-to-edge with no gaps/overlaps), rotated to face
+// outward at its own angle - same atan2(x,z)-is-yaw convention every other
+// facing calculation in this project already uses (duelSystem.js's own
+// chase-facing, the wagon, every skill projectile): since each segment
+// sits at (radius*sin(angle), radius*cos(angle)), rotation.y = angle
+// directly orients its own local +z (its thin/normal axis, same role
+// brickNS/brickEW's own `depth` plays for the straight walls) to point
+// radially outward, with its long "width" axis running tangentially.
+function buildCylinderWalls(name, radius, wh, wt, wallMat, scene, hasPhysics, shadowGenerator){
+    const circumference = 2 * Math.PI * radius;
+    const count = Math.max(8, Math.ceil(circumference)); // floor of 8 - a small room still reads as round, not a square/octagon
+    const chordWidth = 2 * radius * Math.sin(Math.PI / count);
+
+    const brick = MeshBuilder.CreateBox(`${name}_cylbrick`, { width: chordWidth, height: wh, depth: wt }, scene);
+    brick.material  = wallMat;
+    brick.isVisible = false;
+
+    const cap = MeshBuilder.CreateBox(`${name}_cylcap`, { height: 0.4, size: Math.min(0.6, chordWidth) }, scene);
+    cap.material  = wallMat;
+    cap.isVisible = false;
+
+    for(let i = 0; i < count; i++){
+        const angle = (2 * Math.PI / count) * i;
+        const px = radius * Math.sin(angle);
+        const pz = radius * Math.cos(angle);
+
+        const seg = brick.createInstance(`${name}_${i}`);
+        seg.position = new Vector3(px, wh / 2, pz);
+        seg.rotation.y = angle;
+        if(hasPhysics) createAggregate(seg, { mass: 0 }, "box", scene);
+
+        const segCap = cap.createInstance(`${name}_cap_${i}`);
+        segCap.position = new Vector3(px, wh / 2, pz);
+        segCap.rotation.y = angle;
+        if(hasPhysics) createAggregate(segCap, { mass: 0 }, "box", scene);
+
+        seg.isVisible    = true;
+        segCap.isVisible = true;
+
+        if(shadowGenerator){
+            shadowGenerator.addShadowCaster(seg);
+            shadowGenerator.addShadowCaster(segCap);
+            seg.receiveShadows    = true;
+            segCap.receiveShadows = true;
+        }
+    }
+}
+
 function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene, hasPhysics,shadowGenerator) {
     for (let i = 0; i < count; i++) {
         const px = startPos.x + stepVec.x * i;
@@ -78,21 +131,28 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     const floorMat = createMat("floorMat", false, "./images/modeltex/planks.jpg", scene, { uScale: 2, vScale: 2});
     const wallMat  = createMat(`${name}_mat_wall`, false, wallTexPath, scene,  { uScale: 0.5, vScale: 0.5 });
 
+    // shared by BOTH the floor and the walls below when roomShape is
+    // "cylinder" - a true circle now that the walls actually curve too
+    // (used to be an ellipse inscribed in the rectangle, floor-only, back
+    // when only the floor shape had changed - see this room's own git
+    // history/comment trail if that ever needs to come back). max(halfW,
+    // halfH), not min or an average - guarantees the new circular wall
+    // still fully contains everything that was already positioned relative
+    // to the ORIGINAL rectangular footprint along its LONGER axis (this
+    // room's own spawn/exitPlaceDetail door trigger, both z-positioned
+    // against halfH) - using the smaller half would leave those outside
+    // the new wall entirely. The tradeoff is open floor space near the
+    // shorter axis's own former wall line (the circle extends past it) -
+    // acceptable for a round room, unlike stranding the exit outside a
+    // solid wall.
+    const cylinderRadius = Math.max(halfW, halfH);
+
     scene.clearColor = new Color3(0,0,0);
     // ── Ground ────────────────────────────────────────────────────────────────
     let ground;
     if(roomShape === "cylinder"){
-        // a round floor inscribed in the room's own rectangular wall
-        // footprint - built as a unit-diameter disc, then non-uniformly
-        // scaled to width x height (an ellipse whose semi-axes are
-        // width/2 x height/2, exactly touching each wall at its own
-        // midpoint, same as the plane always did). The four corners are
-        // left open underneath - an ellipse inscribed in a rectangle can't
-        // reach them without also curving the walls, which wasn't asked
-        // for here, only the floor shape.
         const FLOOR_THICKNESS = 0.1;
-        ground = MeshBuilder.CreateCylinder(`${name}_ground`, { diameter: 1, height: FLOOR_THICKNESS, tessellation: 48 }, scene);
-        ground.scaling    = new Vector3(width, 1, height);
+        ground = MeshBuilder.CreateCylinder(`${name}_ground`, { diameter: cylinderRadius * 2, height: FLOOR_THICKNESS, tessellation: 48 }, scene);
         ground.position.y = -FLOOR_THICKNESS / 2; // top face sits at y=0, same as the plane
     } else {
         ground = MeshBuilder.CreateGround(`${name}_ground`, { width, height, subdivisions: 1 }, scene);
@@ -140,10 +200,14 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     ground.receiveShadows = true;
 
     // ── Walls ─────────────────────────────────────────────────────────────────
-    buildWall(`${name}_wall_n`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
-    buildWall(`${name}_wall_s`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
-    buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
-    buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
+    if(roomShape === "cylinder"){
+        buildCylinderWalls(`${name}_wall`, cylinderRadius, wh, wt, wallMat, scene, hasPhysics);
+    } else {
+        buildWall(`${name}_wall_n`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
+        buildWall(`${name}_wall_s`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
+        buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
+        buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
+    }
 
     // ── Painted planes — flat textured overlays laid onto the room (rugs,
     // wall maps, etc). Default rotation lies it flat facing up like a rug;

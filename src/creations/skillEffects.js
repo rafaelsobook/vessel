@@ -3446,6 +3446,13 @@ const GROUND_TRAP_DEFAULT_RADIUS = 1.8
 // actual thrown-out-in-front trap instead of one centered on the caster.
 const GROUND_TRAP_DEFAULT_DISTANCE = 0
 const GROUND_TRAP_DEFAULT_DURATION_MS = 8000
+// cap for any aoe:true groundTrap skill's own radius*lvl scaling (see
+// getGroundTrapRadius below) - massivedisintegrationSkill/wellspringSkill
+// both start at radius:8, uncapped that reaches 40 by lvl 5 (Robin's/
+// Vesper's own hardcoded-lvl:5 copies in npcDetails.js were already hitting
+// exactly that). 12 keeps the AOE readable/reasonable at any level instead
+// of eventually swallowing half the arena.
+const GROUND_TRAP_MAX_AOE_RADIUS = 12
 
 // createMagicCircle's own template is a fixed 2.5x2.5 plane (see
 // magiccircles.js's getCircleTemplate) - converts a real world-space radius
@@ -3459,13 +3466,15 @@ function groundTrapCircleScale(radius){
     return (radius * 2) / MAGIC_CIRCLE_BASE_DIAMETER
 }
 
-// massivedisintegrationSkill (skill.groundTrap.aoe) scales its radius
-// linearly with level - radius: 10 at lvl 1, exactly radius*lvl, matching
-// "10 at lvl1, 20 at lvl2" as given. disintegrationSkill's own small
-// single-target trap stays fixed regardless of level (aoe isn't set on it).
+// massivedisintegrationSkill/wellspringSkill (skill.groundTrap.aoe) scale
+// their radius linearly with level - radius*lvl, capped at
+// GROUND_TRAP_MAX_AOE_RADIUS so a high-level cast (or an npcFighter's own
+// hardcoded lvl, e.g. Robin/Vesper's lvl:5 massivedisintegration copies)
+// doesn't keep growing forever. disintegrationSkill's own small single-
+// target trap stays fixed regardless of level (aoe isn't set on it).
 function getGroundTrapRadius(skill){
     const baseRadius = skill.groundTrap?.radius ?? GROUND_TRAP_DEFAULT_RADIUS
-    return skill.groundTrap?.aoe ? baseRadius * skill.lvl : baseRadius
+    return skill.groundTrap?.aoe ? Math.min(baseRadius * skill.lvl, GROUND_TRAP_MAX_AOE_RADIUS) : baseRadius
 }
 
 // the actual "disintegrate this one enemy" hit - shared between
