@@ -57,6 +57,12 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         height      = 10,
         wallHeight  = WALL_HEIGHT,
         wallTexPath = "./images/modeltex/rockTex.jpg",
+        // "box" (default, every existing room) keeps today's flat
+        // CreateGround plane floor. "cylinder" (Vesper's own Witch House,
+        // localroomdb.js's placeId 15) swaps just the FLOOR mesh for a real
+        // cylinder instead - walls still build the same straight box-wall
+        // way (nsCount/ewCount below), only the ground shape changes.
+        roomShape   = "box",
         bedConfig,
         optionalObjects = [],
         paintedPlanes   = [],
@@ -74,9 +80,30 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
 
     scene.clearColor = new Color3(0,0,0);
     // ── Ground ────────────────────────────────────────────────────────────────
-    const ground = MeshBuilder.CreateGround(`${name}_ground`, { width, height, subdivisions: 1 }, scene);
-    ground.material   = floorMat;
-    ground.position.y = 0;
+    let ground;
+    if(roomShape === "cylinder"){
+        // a round floor inscribed in the room's own rectangular wall
+        // footprint - built as a unit-diameter disc, then non-uniformly
+        // scaled to width x height (an ellipse whose semi-axes are
+        // width/2 x height/2, exactly touching each wall at its own
+        // midpoint, same as the plane always did). The four corners are
+        // left open underneath - an ellipse inscribed in a rectangle can't
+        // reach them without also curving the walls, which wasn't asked
+        // for here, only the floor shape.
+        const FLOOR_THICKNESS = 0.1;
+        ground = MeshBuilder.CreateCylinder(`${name}_ground`, { diameter: 1, height: FLOOR_THICKNESS, tessellation: 48 }, scene);
+        ground.scaling    = new Vector3(width, 1, height);
+        ground.position.y = -FLOOR_THICKNESS / 2; // top face sits at y=0, same as the plane
+    } else {
+        ground = MeshBuilder.CreateGround(`${name}_ground`, { width, height, subdivisions: 1 }, scene);
+        ground.position.y = 0;
+    }
+    ground.material = floorMat;
+    // box collider either way - even the cylinder floor's own real shape is
+    // still just "solid ground you can walk on top of", same as the plane's
+    // existing box aggregate already approximates; a true CYLINDER physics
+    // shape (tools/physics.js does support one) isn't worth the risk here
+    // against this mesh's own non-uniform ellipse scaling
     if(hasPhysics) createAggregate(ground, { mass: 0 }, "box", scene);
 
     // ── Wall masters (hidden, used only for instancing) ───────────────────────

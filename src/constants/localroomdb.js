@@ -324,6 +324,11 @@ export const metaDatas = [
         width: 9, // ground width
         height: 12, // ground height
         areaType: "room",
+        // Vesper's own floor - a round disc inscribed in the room's usual
+        // rectangular wall footprint instead of the flat plane every other
+        // "room" areaType place gets (createroom.js's own roomShape option -
+        // walls are unaffected, still the same straight box-wall shape)
+        roomShape: "cylinder",
         layout: { cellSize: 1 },
         // just inside the south door (same door-adjacent spawn convention
         // "Simple Room"'s own spawn:{x:0,y:1,z:-2} uses)

@@ -2694,6 +2694,14 @@ export default [
             {name: "", message: "Different types of magic, she says, like it's a party trick. It's a lifetime of study she's flattening into one sentence, but she means well."},
             {name: "", message: "Come back once you've got a real question for me. I don't do idle chatter for its own sake."}
         ],
+        battleSpeech: {
+            whileFighting: [
+                "You're brave, but it's not enough",
+                "Know the difference in our strengths",
+                "I hope you can keep up with me"
+            ],
+            afterTheFightSpeech: "I guess you really are strong"
+        },
         forQuests: [
             { // storyInfo - same shape as Colousa's own "meet-colousa"
               // entry above, just her side of the same pattern
@@ -3777,7 +3785,8 @@ export default [
                 "Know the difference in our strengths",
                 "I hope you can keep up with me"
             ],
-            afterTheFightSpeech: "I guess you really are strong"
+            afterTheFightSpeech: "I guess you really are strong",
+            afterFightSpeechPlayerLoose: "gues I am still stronger"
         },
         // duelSystem.js grants these to the player on Renarden's defeat -
         // same renardenSkills object his own skills: field above points to,

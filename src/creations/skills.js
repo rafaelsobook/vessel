@@ -1,14 +1,27 @@
-import { getPlayersOnScene, getEnemiesOnScene, pushProjectile, removeProjectile } from "../sockets/worldsocket"
+import { getPlayersOnScene, getEnemiesOnScene, getDuelOpponentsOnScene, pushProjectile, removeProjectile } from "../sockets/worldsocket"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { MeshBuilder, Vector3 } from "@babylonjs/core"
-import { getCharState } from "../charactersystem/characterstate"
+import { getCharState, dealDamageToEnemy } from "../charactersystem/characterstate"
 import { randNum } from "../tools/random.js"
 import { getProjectilesOnScene } from "../sockets/worldsocket.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 
-export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword"){
+// dmgDetails ({physicalDmg, weaponDmg}, e.g. attackingSystem.js's own
+// calcDmg() return shape) - optional, defaults to null so every EXISTING
+// caller (astralrainSkill's own spawnFallingSword in skillEffects.js, which
+// deliberately deals no damage through this function at all - see the
+// enemies-loop's own header comment just below for why) keeps behaving
+// exactly as before. Only uimanagement.js's own throwSpearProjectile passes
+// one, so a thrown spear can actually hurt something instead of just
+// visually sticking into it. Captured ONCE by the caller at THROW time, not
+// recomputed here at hit time - calcDmg(charState) reads charState.items
+// for the currently-equipped weapon, and throwSpearProjectile immediately
+// unequips/removes the spear from the inventory right after this function
+// is called, so a hit-time recompute would see an unarmed player and silently
+// undercount the damage.
+export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword", dmgDetails = null){
     let weaponPartDetails = _weaponPartDetails;
 
     if(weaponPartDetails === "default"){
@@ -144,27 +157,43 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
         })
     })
 
-    // enemies - visual-only mirror of the player branch above (sticks the
-    // sword into whatever it hit, same 100ms wind-down + stuck flag), not
-    // a damage source on its own. Deals no damage here on purpose: callers
-    // that need enemies to actually take damage from this projectile (see
-    // astralrainSkill's spawnFallingSword in skillEffects.js) already run
-    // their own separate, analytically-timed hit check instead of relying
-    // on this trigger, and keep doing so unchanged - this only adds the
-    // matching VISUAL. Shares the same `hasHit` guard as the player loop,
-    // so whichever body (player or enemy) this sword reaches FIRST is the
-    // one it visually sticks to, never both.
+    // enemies - visual mirror of the player branch above (sticks the
+    // sword into whatever it hit, same 100ms wind-down + stuck flag). No
+    // damage dealt here UNLESS a caller actually passed dmgDetails (see
+    // that param's own header comment) - astralrainSkill's own
+    // spawnFallingSword (skillEffects.js) still runs its own separate,
+    // analytically-timed hit check instead of relying on this trigger, and
+    // keeps doing so unchanged (it never passes dmgDetails, so this stays a
+    // pure visual for it, exactly as before). Shares the same `hasHit`
+    // guard as the player loop, so whichever body (player or enemy) this
+    // sword reaches FIRST is the one it visually sticks to, never both.
     const enemies = getEnemiesOnScene()
     enemies.forEach(enem => {
         if(!enem.body) return
         const enterAction = onIntersecEnterTrig(instance, enem.body, scene, () => {
-            if(hasHit) return 
+            if(hasHit) return
             hasHit = true
             if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
             getAllSounds().struckS?.play()
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             theProjectile.spd = 2
             removeIntersecTrig(instance, enterAction)
+
+            // same weaponDmg-else-physicalDmg rule every other real hit
+            // resolution in this game already follows (tcp/index.ts's own
+            // enemyIsHit handler, duelSystem.js's own atkCollider handler)
+            if(dmgDetails){
+                const freshCharState = getCharState()
+                const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
+                dealDamageToEnemy({
+                    playerId: freshCharState.owner,
+                    dmgDetails: { physicalDmg: dmgToApply, weaponDmg: 0 },
+                    targetId: enem._id,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
+                    isPhysical: true,
+                })
+            }
+
             setTimeout(() => {
                 theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
                 if(!theProjectile) return
@@ -182,6 +211,48 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
 
         })
     })
+
+    // duelSystem.js's npcFighters (Renarden/Vesper etc, pushDuelOpponentOnScene) -
+    // never server-tracked (getEnemiesOnScene above never sees them), same
+    // parallel every other hit-registration loop in this game already adds
+    // for them (skillEffects.js's fireElementalProjectile/findNearestBlinkTarget).
+    // Only meaningful when dmgDetails was actually passed (thrown spear) -
+    // otherwise this is inert, matching every other caller's existing
+    // visual-only behavior. isPhysical:true - a blocking opponent
+    // (opponent.weaponBlocking, duelSystem.js's own performBlock) nullifies
+    // this the same way it nullifies a normal melee swing.
+    if(dmgDetails){
+        const duelOpponents = getDuelOpponentsOnScene()
+        duelOpponents.forEach(duelOpp => {
+            if(!duelOpp.body) return
+            const enterAction = onIntersecEnterTrig(instance, duelOpp.body, scene, () => {
+                if(hasHit) return
+                hasHit = true
+                if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
+                getAllSounds().struckS?.play()
+                let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
+                theProjectile.spd = 2
+                removeIntersecTrig(instance, enterAction)
+
+                const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
+                duelOpp.applyDamage(dmgToApply, { weaponType, hitSound: "spearS1", isPhysical: true })
+
+                setTimeout(() => {
+                    theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
+                    if(!theProjectile) return
+                    theProjectile.spd = 5
+                    theProjectile.stuck = true
+                    theProjectile.body.setParent(duelOpp.body)
+                    if(willDisposeCountDown){
+                        setTimeout(() => {
+                            removeProjectile(theProjectile.itemId)
+                        }, willDisposeCountDown)
+                    }
+                    if(cbAfterHitAnEnemy) cbAfterHitAnEnemy()
+                }, 100)
+            })
+        })
+    }
 
     // environment (ground/wall/tree/anything with a physics collider) - a
     // short physics raycast a hair ahead of the projectile, checked every

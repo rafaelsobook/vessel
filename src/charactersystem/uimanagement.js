@@ -73,14 +73,29 @@ function throwSpearProjectile(myChar, charState){
     const spawnPos = { x: pos.x, y: pos.y + 1, z: pos.z }
     const targetPos = { x: pos.x + forward.x, y: pos.y + 1, z: pos.z + forward.z }
 
+    // captured NOW, with the spear still actually equipped - calcDmg reads
+    // charState.items for the currently-equipped weapon (weaponDmg/
+    // equipAbilities.dmg included), and a few lines down this same spear
+    // gets unequipped AND filtered out of charState.items entirely. Passing
+    // this snapshot into spawnProjectile (instead of letting it recompute
+    // calcDmg at hit time, whenever that ends up being) is what makes the
+    // thrown spear actually deal real spear damage instead of silently
+    // falling back to bare-fisted damage once it lands.
+    const dmgDetails = calcDmg(charState)
+
     // always spawn locally first - the multiplayer relay (below) is
     // deliberately broadcast-excluding-sender (tcp/index.ts's own
     // "throwspear" handler uses socket.broadcast.emit, not io.emit), same
     // "I already applied it locally, this is just for everyone else
     // watching" pattern circle-spawned/spawncirc already use - so this
     // client's own copy has to come from here, it'll never come back
-    // through the socket
-    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear")
+    // through the socket. dmgDetails is only ever passed on THIS call - the
+    // "spear-thrown" relay listener (worldsocket.js) spawns everyone else's
+    // own visual-only copy with no dmgDetails at all, so only the actual
+    // thrower's own client ever applies real damage, same "I already
+    // applied it locally" split every other broadcast-excluding-sender
+    // relay in this game already follows.
+    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear", dmgDetails)
     if(getIsSocketOn()){
         emitThrowSpear(spawnPos, targetPos, spear.parts)
     }
