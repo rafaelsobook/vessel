@@ -2132,6 +2132,15 @@ export default [
         randomSpeech: [
             {name: "", message: "Keep your guard up out there. The road doesn't care how ready you feel."}
         ],
+        battleSpeech: {
+            whileFighting: [
+                "Feet first, blade second. You're leading with the wrong one.",
+                "Good - now do that again before I've already moved.",
+                "You hit like you mean it. Keep that up."
+            ],
+            afterTheFightSpeech: "Not bad. Go on, get moving - north, like I said.",
+            afterFightSpeechPlayerLoose: "Footwork first. Come back when you've fixed that."
+        },
         forQuests: [
             { // storyInfo - fires when the player talks to her holding the
               // "meet-colousa" quest Halric handed out. Same shape as Doran's
@@ -2694,13 +2703,18 @@ export default [
             {name: "", message: "Different types of magic, she says, like it's a party trick. It's a lifetime of study she's flattening into one sentence, but she means well."},
             {name: "", message: "Come back once you've got a real question for me. I don't do idle chatter for its own sake."}
         ],
+        // her own unique voice - this used to be a verbatim copy of
+        // Renarden's own battleSpeech (same three whileFighting lines, same
+        // afterTheFightSpeech), presumably a leftover placeholder from
+        // whenever her npcFighter data was first stood up
         battleSpeech: {
             whileFighting: [
-                "You're brave, but it's not enough",
-                "Know the difference in our strengths",
-                "I hope you can keep up with me"
+                "Magic isn't brute force. Watch the pattern, not just the light.",
+                "You're rushing. It shows.",
+                "Better. Still slow, but better."
             ],
-            afterTheFightSpeech: "I guess you really are strong"
+            afterTheFightSpeech: "Hm. You actually kept up. Fine - come inside, we'll talk.",
+            afterFightSpeechPlayerLoose: "You're not ready. Study the pattern, then come back."
         },
         forQuests: [
             { // storyInfo - same shape as Colousa's own "meet-colousa"

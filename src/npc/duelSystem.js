@@ -216,6 +216,23 @@ const DISTANCE_CHECK_MS     = 500
 const PREFERRED_CAST_RANGE  = 7
 const RETREAT_SPEED         = CHASE_SPEED // same read/speed as closing the gap, just the opposite direction
 
+// Safety-net poll for "has the player actually lost this duel" - the
+// existing hp<=1 checks (attackInterval's melee swing, performOpponentDashStrike,
+// performOpponentBlinkstrike) only ever fire immediately after THAT SPECIFIC
+// function's own applyDamageToPlayer call, which covers every way a MELEE
+// fighter can hurt the player. A pure caster (Vesper, attitude.weapon:0)
+// never runs attackInterval/dashstrike at all, and her real damage
+// (thunderclap/multishotskill/zoltraak/massivedisintegration) flows through
+// castOpponentSkill -> skillEffects.js's castEnemySkill -> deductHp directly -
+// a completely separate pipeline shared with real wild enemies, which has
+// no idea a "duel" even exists, let alone how to end one. Without this, a
+// caster-only npcFighter could whittle the player down to near-zero hp with
+// no way for the fight to ever actually resolve - reads as being
+// permanently stuck mid-duel. This just watches getCharState().hp directly,
+// so it catches the loss regardless of which mechanism actually dealt the
+// blow.
+const HP_LOSS_CHECK_MS = 200
+
 // Standby-casting (attitude.standbycasting) - a much more eager cadence
 // than the old SKILL_CHECK_MIN/MAX_MS (5-6s, tuned for an occasional-skill
 // melee fighter) - a fighter who ONLY casts is supposed to read as far
@@ -622,6 +639,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         clearInterval(dodgeCheckInterval)
         clearInterval(blockCheckInterval)
         clearInterval(distanceCheckInterval)
+        clearInterval(hpLossCheckInterval)
         scene.onBeforeRenderObservable.remove(chaseObserver)
         removeDuelOpponentOnScene(opponent.body)
     }
@@ -981,7 +999,12 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 // (the lines above run regardless of who landed the blow),
                 // just no dialogue from a non-main opponent
                 if(isMainOpponent) displaySpeech([
-                ...toLines(npcDet.name, ["Ha! Down you go. Good bout though."]),
+                // npcDet.battleSpeech.afterFightSpeechPlayerLoose (npcDetails.js) -
+                // same per-npc-with-a-fallback pattern the WIN path's own
+                // afterTheFightSpeech already uses just below/above, now
+                // mirrored for a loss too instead of every fighter sharing
+                // this one flat generic line regardless of who you fought
+                ...toLines(npcDet.name, [npcDet.battleSpeech?.afterFightSpeechPlayerLoose || "Ha! Down you go. Good bout though."]),
                 { speech: "You Lose!" }
             ], returnToExitPlace, undefined, true)
             }
@@ -1054,7 +1077,12 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 stopFight()
                 duelOpponents.forEach(o => o.stopFight())
                 if(isMainOpponent) displaySpeech([
-                    ...toLines(npcDet.name, ["Ha! Down you go. Good bout though."]),
+                    // npcDet.battleSpeech.afterFightSpeechPlayerLoose (npcDetails.js) -
+                // same per-npc-with-a-fallback pattern the WIN path's own
+                // afterTheFightSpeech already uses just below/above, now
+                // mirrored for a loss too instead of every fighter sharing
+                // this one flat generic line regardless of who you fought
+                ...toLines(npcDet.name, [npcDet.battleSpeech?.afterFightSpeechPlayerLoose || "Ha! Down you go. Good bout though."]),
                     { speech: "You Lose!" }
                 ], returnToExitPlace, undefined, true)
             }
@@ -1212,6 +1240,27 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         wantsDistance = Math.random() < attitude.distancing
     }
     const distanceCheckInterval = setInterval(rollDistance, DISTANCE_CHECK_MS)
+
+    // see HP_LOSS_CHECK_MS's own header comment - catches a loss caused by
+    // any SKILL cast (thunderclap/multishotskill/zoltraak/massivedisintegration,
+    // all routed through castOpponentSkill/skillEffects.js's castEnemySkill,
+    // which has no concept of duelState/stopFight/displaySpeech at all),
+    // not just this opponent's own local melee/dash/blink damage. Same
+    // duelState.playerDefeated guard every other loss check already uses,
+    // so this doesn't double-fire alongside one of those if a melee hit and
+    // this poll happen to land in the same ~200ms window.
+    const hpLossCheckInterval = setInterval(() => {
+        if(opponentDefeated || duelState.playerDefeated) return
+        if(getCharState().hp > 1) return
+
+        duelState.playerDefeated = true
+        stopFight()
+        duelOpponents.forEach(o => o.stopFight())
+        if(isMainOpponent) displaySpeech([
+            ...toLines(npcDet.name, [npcDet.battleSpeech?.afterFightSpeechPlayerLoose || "Ha! Down you go. Good bout though."]),
+            { speech: "You Lose!" }
+        ], returnToExitPlace, undefined, true)
+    }, HP_LOSS_CHECK_MS)
 
     // direction: "back" (melee - away from the player, DODGE_MELEE_MIN/MAX_DIST -
     // just enough to clear the atkCollider's own reach) or "side" (projectile -
@@ -1773,7 +1822,12 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             // (Renarden included) whittle the player down with plain swings
             // long before ever landing a skill hit.
             if(isMainOpponent) displaySpeech([
-                ...toLines(npcDet.name, ["Ha! Down you go. Good bout though."]),
+                // npcDet.battleSpeech.afterFightSpeechPlayerLoose (npcDetails.js) -
+                // same per-npc-with-a-fallback pattern the WIN path's own
+                // afterTheFightSpeech already uses just below/above, now
+                // mirrored for a loss too instead of every fighter sharing
+                // this one flat generic line regardless of who you fought
+                ...toLines(npcDet.name, [npcDet.battleSpeech?.afterFightSpeechPlayerLoose || "Ha! Down you go. Good bout though."]),
                 { speech: "You Lose!" }
             ], returnToExitPlace, undefined, true)
         }
