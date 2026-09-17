@@ -13,6 +13,7 @@ import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
 import { createCastle } from "../creations/createcastle.js";
+import { createStoneScriptures } from "../creations/createstonescripture.js";
 import { createDuelArena } from "../creations/createduelarena.js";
 import { startDuel } from "../npc/duelSystem.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
@@ -187,6 +188,15 @@ export async function areaScene(placeDetail){
             // hardcoded y guess for what that limitation looks like).
             if(placeDetail.placeId === 888){
                 createCastle(scene, { x: 0, z: 600 })
+                // four stone scriptures, one per cardinal direction, ringed
+                // 15 units out from the player's own spawn point (0, 500) -
+                // see createstonescripture.js's own header comment for the
+                // full "why" (ties into Vesper's post-duel warning about
+                // dark beasts guarding each direction, npcDetails.js).
+                // myCharacter.body - same characterBody param createRoom's
+                // own exit-door trigger already takes, wiring up each
+                // stone's own proximity/interact danger message.
+                createStoneScriptures(scene, myCharacter.body, 0, 500, 15)
             }
 
             // showGamePerformanceUI(scene.getEngine(), scene, chunks)

@@ -45,8 +45,15 @@ const MERLON_SIZE = 0.8         // crenellation block width/depth
 const MERLON_HEIGHT = 1
 const MERLON_GAP = 0.8          // gap between merlons along the wall top
 const FLOOR_THICKNESS = 0.2
+// gate threshold - a low stone sill spanning the entrance, short enough to
+// hop up onto/over rather than a real barrier. ~1ft: this project's own
+// human-scale convention (createcharacter.js's capsuleHeight, roughly a
+// 6ft person) puts 1 world unit at roughly 3ft, so 1ft lands at ~0.3.
+const GATE_STEP_HEIGHT = 0.3
+const GATE_STEP_DEPTH = 2
 
 let stoneMat = null
+let stepMat = null
 let roofMat = null
 let floorMat = null
 let matScene = null
@@ -60,6 +67,7 @@ function getMaterials(scene){
     // reads the PREVIOUS value at the moment of the check
     if(matScene !== scene){
         stoneMat = null
+        stepMat = null
         roofMat = null
         floorMat = null
     }
@@ -68,6 +76,21 @@ function getMaterials(scene){
         // same rockTex.jpg every room's own stone wall already uses
         // (createroom.js) - one consistent "castle stone" look across the game
         stoneMat = createMat("castleStoneMat", false, "./images/modeltex/rockTex.jpg", scene, { uScale: 4, vScale: 2 })
+    }
+    if(!stepMat){
+        // SAME rockTex.jpg as stoneMat, but its own material with a much
+        // smaller UV scale - MeshBuilder.CreateBox's default UV always
+        // spans a flat 0-1 per face regardless of the box's real size, so
+        // reusing stoneMat's uScale:4/vScale:2 (tuned for a ~40x8 wall,
+        // roughly a 10x4-unit texture repeat) on the gate step's own much
+        // smaller ~12x2 top face was squeezing that same 4x2 repeat count
+        // into a far smaller physical surface - the texture read as
+        // stretched/streaky instead of matching the walls' own stone-block
+        // scale. ~1.2/~0.5 targets that same rough "10 world-units per
+        // repeat" density instead of reusing the wall's fixed numbers
+        // as-is - worth a further tweak in-game if it still looks off, this
+        // wasn't checked against the real rendered result.
+        stepMat = createMat("castleStepMat", false, "./images/modeltex/rockTex.jpg", scene, { uScale: 1.2, vScale: 0.5 })
     }
     if(!roofMat){
         roofMat = new StandardMaterial("castleRoofMat", scene)
@@ -83,7 +106,7 @@ function getMaterials(scene){
         // not just a different scale of the same one.
         floorMat = createMat("castleFloorMat", false, "./images/modeltex/tile7.jpg", scene, { uScale: 6, vScale: 6 })
     }
-    return { stoneMat, roofMat, floorMat }
+    return { stoneMat, stepMat, roofMat, floorMat }
 }
 
 // one straight wall run centered at (centerX, centerZ), spanning `length`
@@ -177,6 +200,20 @@ function addFloor(meshes, floorMat){
     meshes.push(floor)
 }
 
+// gate threshold - a low stone sill spanning the GATE_WIDTH opening, sitting
+// right on the south wall line (same z as the south wall segments) with its
+// OWN box collider (returned separately, not merged into the visual mesh -
+// same "physics stays separate from the merged castle" reasoning every
+// other collider here already follows). Short enough to hop up onto/over
+// rather than actually blocking the entrance - "I can just jump so I can
+// enter" per spec, not a real barrier.
+function addGateStep(meshes, stepMat){
+    const step = MeshBuilder.CreateBox("castle_gatestep", { width: GATE_WIDTH, height: GATE_STEP_HEIGHT, depth: GATE_STEP_DEPTH }, matScene)
+    step.position.set(0, GATE_STEP_HEIGHT / 2, -HALF)
+    step.material = stepMat
+    meshes.push(step)
+}
+
 // createCastle(scene, {x, z}, hasPhysics=true) - y is IGNORED on purpose and
 // resampled live against the real openworld terrain (sampleTerrainSurfaceHeight,
 // same helper every other static openworld prop placed this session
@@ -192,7 +229,7 @@ export function createCastle(scene, position, hasPhysics = true){
     // build meshes in) - see that function's own comment for why this has
     // to be the one place that assigns it, not a second redundant
     // assignment here racing its own cache-invalidation check
-    const { stoneMat, roofMat, floorMat } = getMaterials(scene)
+    const { stoneMat, stepMat, roofMat, floorMat } = getMaterials(scene)
     const meshes = []
 
     // --- courtyard floor ---
@@ -220,6 +257,9 @@ export function createCastle(scene, position, hasPhysics = true){
     // --- central keep ---
     addKeep(meshes, stoneMat, roofMat, 0, 0)
 
+    // --- gate threshold ---
+    addGateStep(meshes, stepMat)
+
     // multiMultiMaterials:true - keeps the stone/roof material split alive
     // through the merge (see this file's own header comment for the full
     // reasoning) instead of collapsing to whichever material the first
@@ -237,9 +277,9 @@ export function createCastle(scene, position, hasPhysics = true){
         // see this file's own header comment for why this is separate from
         // (and simpler than) trying to collide against the merged castle
         // mesh's own real shape
-        const collider = (width, depth, x, z) => {
-            const box = MeshBuilder.CreateBox("castle_wall_collider", { width, height: WALL_HEIGHT, depth }, scene)
-            box.position = new Vector3(position.x + x, groundY + WALL_HEIGHT / 2, position.z + z)
+        const collider = (width, depth, x, z, height = WALL_HEIGHT) => {
+            const box = MeshBuilder.CreateBox("castle_wall_collider", { width, height, depth }, scene)
+            box.position = new Vector3(position.x + x, groundY + height / 2, position.z + z)
             box.isVisible = false
             createAggregate(box, { mass: 0 }, "box", scene)
             return box
@@ -249,6 +289,9 @@ export function createCastle(scene, position, hasPhysics = true){
         collider(WALL_THICKNESS, HALF * 2, -HALF, 0)                         // west
         collider(southSegmentLength, WALL_THICKNESS, southSegmentCenter, -HALF)
         collider(southSegmentLength, WALL_THICKNESS, -southSegmentCenter, -HALF)
+        // gate step - short enough to hop up onto/over, not a real barrier
+        // (see addGateStep's own comment)
+        collider(GATE_WIDTH, GATE_STEP_DEPTH, 0, -HALF, GATE_STEP_HEIGHT)
     }
 
     return castle
