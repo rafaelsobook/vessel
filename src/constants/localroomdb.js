@@ -333,7 +333,15 @@ export const metaDatas = [
         // just inside the south door (same door-adjacent spawn convention
         // "Simple Room"'s own spawn:{x:0,y:1,z:-2} uses)
         spawn: {x: 0, y: 1, z: -4, rotation: 0},
-
+        roomPaths: [
+            {
+                placeId: 888,
+                name: "openworld",
+                areaType: "openworld",
+                pos: {x: 0, y: 1, z: -5},
+                startingPos: {x: -1893, y:7.5, z: 563},
+            },
+        ],
         optionalObjects: [
             // {
             //     itemId: randNum(0,9999).toString(),
@@ -471,19 +479,6 @@ export const metaDatas = [
             //     functionBeforeMerge: null
             // },
         ],
-        exit: "south",
-        exitPlaceDetail: {
-            placeId: 888,
-            name: "Wilderness",
-            areaType: "openworld",
-        },
-        entryExitPlaceId: {
-            exit: {
-                placeId: 888,
-                name: "Wilderness",
-                areaType: "openworld",
-            }
-        },
         sceneTemp: {
             // a shade purpler than "Simple Room"'s own green-tinted fog -
             // reads as a mystical hut rather than a plain lived-in room
@@ -492,6 +487,76 @@ export const metaDatas = [
 
             lights: [
                 {name:"directional", intensity: 0.9},
+            ],
+        },
+        isMultiplayer: false
+    },
+    {
+        // Ilvara's Tower interior - entered via placeId 888's own roomPaths
+        // entry ({x:1200,z:800} in the openworld), same round-room shape as
+        // Vesper's own Witch House (placeId 15) above, just a different
+        // witch living in it - see npcDetails.js's "118_ilvara".
+        placeId: 16,
+        name: "Ilvara's Tower",
+        width: 8,
+        height: 10,
+        areaType: "room",
+        roomShape: "cylinder",
+        layout: { cellSize: 1 },
+        spawn: {x: 0, y: 1, z: -4, rotation: 0},
+        roomPaths: [
+            {
+                placeId: 888,
+                name: "openworld",
+                areaType: "openworld",
+                pos: {x: 0, y: 1, z: -5},
+                startingPos: {x: 1200, y: 7.5, z: 800},
+            },
+        ],
+        optionalObjects: [],
+        sceneTemp: {
+            // warm ember-orange tint - a fire witch's own hearth-lit tower,
+            // contrasting Vesper's cooler purple
+            fogDensity: 0.1,
+            fogColor: { r: 0.2, g: 0.08, b: 0.04 },
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+            ],
+        },
+        isMultiplayer: false
+    },
+    {
+        // Sable's Tower interior - entered via placeId 888's own roomPaths
+        // entry ({x:-600,z:-1400} in the openworld), same round-room shape
+        // as Vesper's own Witch House (placeId 15) above, just a different
+        // witch living in it - see npcDetails.js's "119_sable".
+        placeId: 17,
+        name: "Sable's Tower",
+        width: 8,
+        height: 10,
+        areaType: "room",
+        roomShape: "cylinder",
+        layout: { cellSize: 1 },
+        spawn: {x: 0, y: 1, z: -4, rotation: 0},
+        roomPaths: [
+            {
+                placeId: 888,
+                name: "openworld",
+                areaType: "openworld",
+                pos: {x: 0, y: 1, z: -5},
+                startingPos: {x: -600, y: 7.5, z: -1400},
+            },
+        ],
+        optionalObjects: [],
+        sceneTemp: {
+            // near-black, barely-there fog - a shadow witch's own dim tower,
+            // darker than Vesper's own purple-tinted one
+            fogDensity: 0.12,
+            fogColor: { r: 0.03, g: 0.02, b: 0.05 },
+
+            lights: [
+                {name:"directional", intensity: 0.5},
             ],
         },
         isMultiplayer: false
@@ -1040,6 +1105,47 @@ export const metaDatas = [
                     type: "cylinder"
                 },
                 functionBeforeMerge: null
+            },
+            // Two more witch towers scattered elsewhere across this same
+            // 300x300 openworld, same tower.glb/rotation/physics as
+            // Vesper's own above - just a different witch inside each one
+            // (see npcDetails.js's "118_ilvara"/"119_sable" and the matching
+            // interior rooms, placeId 16/17, below). y:7.5 reused as a
+            // starting guess from Vesper's own tower, NOT independently
+            // sampled against the terrain at these new x/z spots - this is
+            // procedurally generated ground (generateArea, seed:12365), so
+            // there's no way to know the real height here without actually
+            // loading the game at these coordinates. Flagging this
+            // explicitly: if either tower ends up floating or sunk into the
+            // ground, adjust its own y (and the matching door-trigger/
+            // startingPos y values below) after checking in-game.
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "Witch Tower",
+                position: {x: 1200, y: 7.5, z: 800},
+                scale: null,
+                rotation: -Math.PI/2,
+                glbPath: "./models/outdors/tower.glb",
+                diffuseTexPath: null,
+                physics: {
+                    opt: {mass: 0},
+                    type: "cylinder"
+                },
+                functionBeforeMerge: null
+            },
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "Witch Tower",
+                position: {x: -600, y: 7.5, z: -1400},
+                scale: null,
+                rotation: -Math.PI/2,
+                glbPath: "./models/outdors/tower.glb",
+                diffuseTexPath: null,
+                physics: {
+                    opt: {mass: 0},
+                    type: "cylinder"
+                },
+                functionBeforeMerge: null
             }
         ],
         roomPaths: [
@@ -1074,6 +1180,24 @@ export const metaDatas = [
                 name: "Witch House",
                 areaType: "room",
                 pos: {x: -1888.8, y: 7.5, z: 562.9},
+                startingPos: {x: 0, y: 1, z: -4}
+            },
+            // doors into the two new witch towers above - same +4.2/-0.1
+            // offset from each tower's own base position Vesper's own door
+            // trigger uses relative to HER tower (same glb, same rotation,
+            // so the modeled door sits at the same relative spot every time)
+            {
+                placeId: 16,
+                name: "Ilvara's Tower",
+                areaType: "room",
+                pos: {x: 1204.2, y: 7.5, z: 799.9},
+                startingPos: {x: 0, y: 1, z: -4}
+            },
+            {
+                placeId: 17,
+                name: "Sable's Tower",
+                areaType: "room",
+                pos: {x: -595.8, y: 7.5, z: -1400.1},
                 startingPos: {x: 0, y: 1, z: -4}
             },
         ],

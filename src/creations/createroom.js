@@ -286,6 +286,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
                     x: tcpCharPlaceMD.spawn.x,
                     y: tcpCharPlaceMD.spawn.y,
                     z: tcpCharPlaceMD.spawn.z,
+                    startingPos: tcpCharPlaceMD.spawn
                 })
             })
         })

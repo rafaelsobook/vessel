@@ -158,7 +158,17 @@ export function updateStatUI(){
     // HEART STATUS
     let statusLength = state.status.length
     heartStatus.style.color = "limegreen"
-    if(!statusLength) return heartStatus.innerHTML = "STABLE"
+    // heartStatusDef.innerHTML only ever gets WRITTEN inside the
+    // statusLength>=1 branch below, never reset back once status clears -
+    // this early return used to skip right past it, leaving the stale
+    // "Heart Core is cursed"/etc text on screen forever even after a real
+    // cure (Purification skill/Vesper's own service both clear
+    // charState.status fine - this was purely a UI-refresh gap, not a sign
+    // the cure itself didn't work)
+    if(!statusLength){
+        heartStatusDef.innerHTML = ""
+        return heartStatus.innerHTML = "STABLE"
+    }
     if(statusLength >= 1){
         let statusNames = []
         state.status.forEach(effect =>{

@@ -331,6 +331,7 @@ async function acceptDuel(npcDet){
         x: duelGrounds.spawn.x,
         y: duelGrounds.spawn.y,
         z: duelGrounds.spawn.z,
+        startingPos: duelGrounds.spawn
     })
 }
 
@@ -667,6 +668,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             x: destMeta.spawn.x,
             y: destMeta.spawn.y,
             z: destMeta.spawn.z,
+            startingPos: destMeta.spawn
         })
     }
 

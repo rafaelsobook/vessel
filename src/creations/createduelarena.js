@@ -117,6 +117,7 @@ export async function createDuelArena(scene, room, characterBody, hasPhysics = t
                     x: tcpCharPlaceMD.spawn.x,
                     y: tcpCharPlaceMD.spawn.y,
                     z: tcpCharPlaceMD.spawn.z,
+                    startingPos: tcpCharPlaceMD.spawn
                 })
             })
         })

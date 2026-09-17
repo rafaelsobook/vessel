@@ -2,7 +2,7 @@ import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
 import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd, updateMyDetailsOL } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 import { getSceneDet } from "../main/main"
-import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, castHealSkill, castBarrierSkill, castBlinkstrikeSkill, cancelPendingCast } from "../creations/skillEffects"
+import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, castHealSkill, castPurificationSkill, castBarrierSkill, castBlinkstrikeSkill, cancelPendingCast } from "../creations/skillEffects"
 import { UPGRADE_TEMPLATES } from "../staticRecources/skillUpgrades"
 import { onIntersecEnterTrig } from "../components/actionManager"
 import { trackAptitudeUsage } from "./aptitudeSystem"
@@ -201,6 +201,16 @@ export function activateSkill(ownerId, skillDetail, casterStats){
                 // this off mid-charge)
                 if(skillDetail.isActive){
                     castHealSkill(getSceneDet().scene, player, skillDetail, casterState)
+                } else {
+                    cancelPendingCast(skillDetail.name)
+                }
+            } else if(getSkillEffect(skillDetail, "cure")){
+                // a "cure" element skill (purificationSkill - an AOE ground
+                // circle that clears status effects instead of restoring
+                // hp, same delivery mechanism "heal" uses just above, see
+                // castPurificationSkill's own header comment)
+                if(skillDetail.isActive){
+                    castPurificationSkill(getSceneDet().scene, player, skillDetail, casterState)
                 } else {
                     cancelPendingCast(skillDetail.name)
                 }

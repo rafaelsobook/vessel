@@ -75,7 +75,8 @@ export function wagonData(){
                 // travelToPlace (tools/travel.js) - same transition procedure
                 // areascene.js's roomPaths trigger uses
                 const { placeId, meta, areaType, spawn } = findPlaceMetaData(888)
-                await travelToPlace({ placeId, name: meta.name, areaType, x: spawn.x, y: spawn.y, z: spawn.z })
+                const startingPos = spawn
+                await travelToPlace({ placeId, name: meta.name, areaType, startingPos })
             }
         },
         {

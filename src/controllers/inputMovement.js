@@ -668,8 +668,8 @@ function setupControls(scene, allsounds) {
             case "shift": currentSpeed = walkSpeed; break;
             case "c":
                 clearLocTimeOut()
-                myPlayer.body.position.x = 0
-                myPlayer.body.position.z = 600
+                myPlayer.body.position.x = -1880
+                myPlayer.body.position.z = 500
                 myPlayer.body.position.y = 20
                 hideShowAllScreenUI(hideUIToggle)
                 hideUIToggle = !hideUIToggle

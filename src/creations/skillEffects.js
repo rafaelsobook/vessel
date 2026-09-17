@@ -38,6 +38,7 @@ import { openClosePopup } from "../tools/popupUI.js"
 import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
+import { updateStatUI } from "../charactersystem/statsSystem.js"
 import { camShake } from "../tools/camera.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
@@ -3810,6 +3811,78 @@ function spawnHealingCircle(scene, skill, groundPos, powerScale){
         // path here already uses (createEnemy.js's enemyIsHit,
         // duelSystem.js's applyDamageToOpponent) just positive and green
         poppingTextMesh(`+${healAmount}`, "#2ecc71", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
+        getAllSounds().healS?.play()
+    }, MASS_TRAP_ACTIVATE_DELAY_MS)
+}
+
+// --- PURIFICATION GROUND CIRCLE (effectType "cure", purificationSkill) -
+// the exact same two-phase groundTrap shape castHealSkill/spawnHealingCircle
+// just above already use (an AOE "similar to wellspring" per spec), just
+// clearing status effects instead of restoring hp. Deliberately its OWN
+// effectType/functions rather than folding a "also clears status" flag into
+// the existing "heal" branch - keeps the two skills meaningfully different
+// (a caster can't get both from one cast) and matches how Vesper's own NPC
+// service menu already treats "Purification" and "Full heal" as two
+// separate, single-purpose choices (constants/vesperdata.js) rather than
+// one skill that does both.
+export function castPurificationSkill(scene, player, skill, charState){
+    cancelPendingCast(skill.name)
+    if(!player?.body || !scene) return
+
+    const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
+    const groundPos = computeGroundAOEPos(charState, player, skill.groundTrap?.distance ?? GROUND_TRAP_DEFAULT_DISTANCE, forward)
+    const radius = getGroundTrapRadius(skill)
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+
+    createMagicCircle(groundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(radius))
+
+    const timeoutId = setTimeout(() => {
+        pendingCasts.delete(skill.name)
+        spawnPurificationCircle(scene, skill, groundPos)
+    }, skill.castDuration * 1000)
+
+    pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
+}
+
+function spawnPurificationCircle(scene, skill, groundPos){
+    const radius = getGroundTrapRadius(skill)
+    const durationMs = skill.groundTrap?.duration ?? GROUND_TRAP_DEFAULT_DURATION_MS
+
+    const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    createMagicCircle(groundPos, scene, circleImg, 0.8, durationMs, null, groundTrapCircleScale(radius))
+
+    setTimeout(() => {
+        // MY OWN local player, not the caster - same reasoning
+        // spawnHealingCircle's own header comment gives in full
+        const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
+        if(!myPlayer?.body) return
+
+        const dx = myPlayer.body.position.x - groundPos.x
+        const dz = myPlayer.body.position.z - groundPos.z
+        if((dx * dx + dz * dz) > radius * radius) return
+
+        const cureEffect = getSkillEffect(skill, "cure")
+        if(!cureEffect) return
+
+        const charState = getCharState()
+        if(!charState.status.length) return // nothing to cure - skip the popup/sound for a no-op cast
+
+        // a full cleanse, not a specific named-effect list - same "wipes
+        // whatever's clinging to you entirely" reasoning Vesper's own
+        // Purification service already uses (constants/vesperdata.js),
+        // now available as a real player skill too. Clears poisoned/cursed
+        // both - both are just passive characterState.status entries with
+        // no ongoing tick of their own (unlike fire's burn, a self-expiring
+        // interval with no status entry at all) - see characterstate.js's
+        // own deductHp for the full breakdown.
+        charState.status = []
+        // heart-status-def UI ("Heart Core is cursed" etc, statsSystem.js) -
+        // only ever refreshes when this runs; without it the stale text
+        // would sit there until something UNRELATED happened to call
+        // updateStatUI() next (opening the stats panel, etc), well after
+        // the actual cure already took effect
+        updateStatUI()
+        poppingTextMesh("Purified!", "#e0d0ff", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
         getAllSounds().healS?.play()
     }, MASS_TRAP_ACTIVATE_DELAY_MS)
 }

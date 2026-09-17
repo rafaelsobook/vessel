@@ -11,13 +11,14 @@ import { changeScene } from "../main/main.js"
 // sequence: update charState's place + position, save it, exitScene,
 // changeScene. One shared function instead of retyping it at every call
 // site - update the sequence once here and every caller gets the fix.
-export async function travelToPlace({ placeId, name, areaType, x, y, z }){
+export async function travelToPlace({ placeId, name, areaType, startingPos}){
     const charState = getCharState()
 
     charState.currentPlace.placeId = placeId
     charState.currentPlace.name = name
     charState.currentPlace.areaType = areaType
-
+    const {x,y,z} = startingPos
+    console.log(`new place starting pos `, startingPos)
     charState.x = x
     charState.y = y
     charState.z = z

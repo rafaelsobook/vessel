@@ -456,8 +456,27 @@ export function activateLifeSystem(){
             // emitDied() uncomment if everything is ready
             // gameOver() uncomment if everything is ready
         }
+        // hp/mp/sp had no floor at all in this tick, unlike every other
+        // interval in this file that touches them (castingDrainInterval/
+        // spRegenInterval/blockingDrainInterval above all clamp to 0
+        // immediately) - a permanent status effect with a nonzero
+        // hpcost/mpcost/spcost (poisoned/spdrain, tcp's own enemyData.ts)
+        // just kept draining past zero forever on this 6.2s cadence,
+        // exactly what let sp show as a negative number in the UI. Doesn't
+        // touch the hp<=0 branch just above (death handling is deliberately
+        // still disabled there, not something to enable as a side effect
+        // of this fix) - just stops the raw numbers from going negative.
+        if(characterState.hp <= 0) characterState.hp = 0
+        if(characterState.mp <= 0) characterState.mp = 0
+        if(characterState.sp <= 0) characterState.sp = 0
         if(characterState.survival.sleep <=0)characterState.survival.sleep = 0
         if(characterState.survival.hunger <=0)characterState.survival.hunger = 0
+        // none of hp/mp/sp had their own UI refresh call in this tick
+        // either - updateSurvival_UI() above only covers hunger/sleep, so a
+        // status-effect drain here could change the underlying numbers
+        // without the hp/mp/sp bars ever visibly updating until something
+        // else incidentally refreshed them
+        updateHpMpSp_UI()
     }, 6.2 * 1000)
 }
 export function summarizeStats(){

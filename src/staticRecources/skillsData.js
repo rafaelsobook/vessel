@@ -1901,6 +1901,57 @@ export const wellspringSkill = {
     desc: "Summons a wide circle of restorative earth-magic from the ground - anyone standing inside it when it blooms is mended.",
 }
 
+// --- PURIFICATION (healing) - an AOE ground circle "similar to wellspring"
+// per spec: same exact groundTrap/two-phase-cast delivery mechanism (see
+// skillEffects.js's castPurificationSkill/spawnPurificationCircle, which
+// mirror castHealSkill/spawnHealingCircle almost line for line), just a
+// "cure" effect instead of a "heal" one - clears status effects (poisoned,
+// cursed, etc - charState.status, a full wipe) rather than restoring hp.
+// Deliberately its own skill/effectType rather than folding both into
+// wellspring - keeps the two single-purpose, same split Vesper's own NPC
+// service menu already treats "Purification" and "Full heal" as two
+// separate choices, not one skill that does both (constants/vesperdata.js).
+//
+// element: "healing" - same "not a real rollable aptitude" caveat
+// wellspringSkill's own header comment already covers - needs a direct
+// grant (giveSkill), can't be offered through the normal aptitude-gated
+// skill wheel. magicCircleImg: "apt_darkness" (not the earth circle
+// wellspring uses) - matches the exact circle Vesper's own Purification
+// service already spawns (constants/vesperdata.js's circleAtMe call), so
+// the visual reads the same everywhere "Purification" appears in the game.
+export const purificationSkill = {
+    slotNumber: 40,
+    equiped: true,
+    isActive: false,
+    name: "purification",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "healing",
+    requireMode: "casting",
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Purification",
+    castDuration: 2,
+    returnModeDura: 900,
+    skillCoolDown: 12000,
+    demand: [{ name: "mp", minCost: 60, cost: 0 }],
+    effects: [{ effectType: "cure", chance: 1 }],
+    skillrank: 3,
+    upgradePlus: 20,
+    explosionColor: "violet",
+    explosionScale: 1,
+    // same radius/duration/aoe shape wellspringSkill's own groundTrap uses -
+    // capped the same way at GROUND_TRAP_MAX_AOE_RADIUS (skillEffects.js)
+    groundTrap: { radius: 8, duration: 6000, aoe: true },
+    magicCircleImg: "apt_darkness",
+    onLevelUp: "growParticleAura",
+    // no projectile - ground circle instead, same shape wellspring/
+    // disintegration/massivedisintegration/meteor/thunderclap all use
+    projectileVisual: { useProjectile: false },
+    desc: "Summons a wide circle of cleansing magic from the ground - anyone standing inside it when it blooms is purged of poison, curses, and anything else clinging to them.",
+}
+
 // --- AEGIS WARD (Elite Skill, healing element) - a rotating projectile
 // barrier: conjures a TransformNode parented to the caster's own body,
 // spinning it continuously (skillEffects.js's castBarrierSkill/
@@ -2065,6 +2116,7 @@ export const skillsData = [
     wellspringSkill,
     aegiswardSkill,
     zoltraakSkill,
+    purificationSkill,
 ]
 
 // name -> skill object, e.g. skillsData.js's own exports plus anything an

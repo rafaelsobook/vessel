@@ -1,7 +1,7 @@
 import { receiveAbilities } from "../charactersystem/abilitySystem.js"
-import { evaluateRank, getCharState } from "../charactersystem/characterstate.js"
+import { evaluateRank, getCharState, addTempBuff, removeTempBuff } from "../charactersystem/characterstate.js"
 import { updateStoryQuestUI } from "../charactersystem/storyQuestSystem.js"
-import { startQuestionare } from "../components/conversations.js"
+import { startQuestionare, startConv } from "../components/conversations.js"
 // import { openCloseShop, updateShopItem } from "../charactersystem/shopSystem.js"
 // import { activateCinemaOne } from "../tools/cameraTools.js"
 import { randomNum, getNumUntil } from "../tools/tools.js"
@@ -387,6 +387,7 @@ export default [
                         x: guildmasterOffice.spawn.x,
                         y: guildmasterOffice.spawn.y,
                         z: guildmasterOffice.spawn.z,
+                        startingPos: guildmasterOffice.spawn
                     })
                 }
             },
@@ -483,8 +484,8 @@ export default [
                     // fresh once the player lands in the village.
                     const village = findPlaceMetaData(1)
                     if(!village) return console.warn("village metadata not found")
-
-                    await travelToPlace({ placeId: village.placeId, name: village.name, areaType: village.areaType, x: 27, y: 0.01, z: -42 })
+                    const startingPos = {x: 27, y: 0.01, z: -42}
+                    await travelToPlace({ placeId: village.placeId, name: village.name, areaType: village.areaType, startingPos })
                 }
             },
             { // storyInfo
@@ -641,7 +642,7 @@ export default [
                         const village = findPlaceMetaData(1)
                         if(!village) return console.warn("village metadata not found")
 
-                        await travelToPlace({ placeId: village.placeId, name: village.name, areaType: village.areaType, x: 6, y: 0.01, z: -2 })
+                        await travelToPlace({ placeId: village.placeId, name: village.name, areaType: village.areaType, startingPos: { x: 6, y: 0.01, z: -2} })
                     }, 10000)
                 }
             },
@@ -1986,6 +1987,7 @@ export default [
                         x: openworld.spawn.x,
                         y: openworld.spawn.y,
                         z: openworld.spawn.z,
+                        startingPos: openworld.spawn
                     })
                 }
             },
@@ -2225,6 +2227,7 @@ export default [
                         x: duelGrounds.spawn.x,
                         y: duelGrounds.spawn.y,
                         z: duelGrounds.spawn.z,
+                        startingPos: duelGrounds.spawn
                     })
                 }
             },
@@ -2703,6 +2706,14 @@ export default [
             {name: "", message: "Different types of magic, she says, like it's a party trick. It's a lifetime of study she's flattening into one sentence, but she means well."},
             {name: "", message: "Come back once you've got a real question for me. I don't do idle chatter for its own sake."}
         ],
+        // same createAllNpcInArea.js hook every other NPC with a real
+        // questionare uses (Bram/Maela/etc) - fires right after
+        // randomSpeech plays, opening her own "what do you actually need"
+        // menu (Purification/Full heal/Let's talk - see constants/
+        // vesperdata.js's own questionId:500)
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(500)
+        },
         // her own unique voice - this used to be a verbatim copy of
         // Renarden's own battleSpeech (same three whileFighting lines, same
         // afterTheFightSpeech), presumably a leftover placeholder from
@@ -2752,10 +2763,138 @@ export default [
                         x: duelGrounds.spawn.x,
                         y: duelGrounds.spawn.y,
                         z: duelGrounds.spawn.z,
+                        startingPos: duelGrounds.spawn
                     })
                 }
             },
         ]
+    },
+    {
+        // Ilvara - lives in her own witch tower ({x:1200,z:800} in the
+        // openworld, placeId 888), reached through her own interior
+        // (placeId 16 - localroomdb.js). Same "witch tower in the
+        // wilderness" archetype Vesper's own is, deliberately a different
+        // witch inside: fire-tempered and blunt where Vesper is composed
+        // and dry. No duel/skill kit or quest chain of her own - a simpler
+        // flavor NPC with one direct mechanical hook (a temporary combat
+        // buff, granted immediately, no menu/branching needed for it).
+        glbPath: null,
+        gender: "female",
+        currentPlaceId: 16,
+        mode: "idle",
+        _id: "118_ilvara",
+        name: "Ilvara",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 2, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 150,
+        maxMp: 150,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        // standing at the same relative spot Vesper's own centerpiece prop
+        // sits at, facing the door - same room layout (placeId 16, 8x10)
+        x: 0,
+        y: 0.01,
+        z: 1.5,
+        _dirTarg: {x:0, z:-4},
+        hair: 'hair2',
+        hairColor: ADVENTURER_COLORS.maroon,
+        items: [],
+        titles: [],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 50,
+        aptitude: ['fire'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "Careful with that door - it sticks unless you mean to open it."},
+            {name: "", message: "Vesper sent you? Figures. She always finds the polite ones."},
+            {name: "", message: "Fire doesn't wait for permission. Neither do I."}
+        ],
+        // direct, no-menu service - a short-lived combat buff, granted the
+        // instant her randomSpeech finishes, no questionare needed for a
+        // single one-shot effect like this (contrast Vesper's own
+        // Purification/Full heal, which live behind a real menu because
+        // there are three choices to pick between)
+        callbackAfterRandomSpeech: () => {
+            const buffId = "ilvara_ember_blessing"
+            addTempBuff({
+                id: buffId,
+                stat: "meeleeDmg",
+                toAdd: 15,
+                percent: 0,
+                expiresAt: Date.now() + 5 * 60 * 1000,
+            })
+            setTimeout(() => removeTempBuff(buffId), 5 * 60 * 1000)
+            startConv([
+                { name: "Ilvara", isLeft: false, message: "There. Something to warm your swing for a while. Don't waste it." }
+            ], () => {})
+        },
+        forQuests: []
+    },
+    {
+        // Sable - lives in her own witch tower ({x:-600,z:-1400} in the
+        // openworld, placeId 888), reached through her own interior
+        // (placeId 17 - localroomdb.js). A third distinct witch archetype:
+        // cryptic and unreadable where Vesper is composed and Ilvara is
+        // blunt. Purely narrative interaction (a "reading") - no mechanical
+        // effect at all, deliberately, so not every witch tower resolves
+        // into a stat buff.
+        glbPath: null,
+        gender: "female",
+        currentPlaceId: 17,
+        mode: "idle",
+        _id: "119_sable",
+        name: "Sable",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 2, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 150,
+        maxMp: 150,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x: 0,
+        y: 0.01,
+        z: 1.5,
+        _dirTarg: {x:0, z:-4},
+        hair: 'hair1',
+        hairColor: ADVENTURER_COLORS.black,
+        items: [],
+        titles: [],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 50,
+        aptitude: ['dark'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "You found me. Or I let you. It's rarely clear which, even to me."},
+            {name: "", message: "Vesper deals in what magic does. I deal in what it hasn't done yet."},
+            {name: "", message: "Sit still a moment. I'm not reading your future, I'm reading you."}
+        ],
+        callbackAfterRandomSpeech: () => {
+            startConv([
+                { name: "Sable", isLeft: false, message: "..." },
+                { name: "Sable", isLeft: false, message: "You're carrying something you haven't put down yet. You'll know it when you feel it lift." },
+                { name: "Sable", isLeft: false, message: "That's all I have for you today. Come back when the shape of it changes." },
+            ], () => {})
+        },
+        forQuests: []
     },
     {
         glbPath: null,
@@ -3579,6 +3718,7 @@ export default [
                         x: guildmasterOffice.spawn.x,
                         y: guildmasterOffice.spawn.y,
                         z: guildmasterOffice.spawn.z,
+                        startingPos: guildmasterOffice.spawn
                     })
                 }
             },

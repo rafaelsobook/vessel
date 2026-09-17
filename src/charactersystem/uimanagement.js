@@ -452,7 +452,7 @@ export function activateBtnOnce(){
                     // spear-only (uimanagement.js's own updateThrowButtonVisibility
                     // already hides this button unless one's equipped - this
                     // check is just a defensive backstop, not the real gate)
-                    if(attackInfo.weaponType !== "spear") break
+                    if(attackInfo.weaponType !== "spear") return
 
                     // release point - the actual spear leaves the hand once
                     // the "spearthrow" clip is 90% through, not when it
@@ -464,22 +464,22 @@ export function activateBtnOnce(){
                     // divide by the SAME ratio attack() itself uses, or the
                     // spear would visibly leave the hand early/late whenever
                     // atkSpd isn't exactly 0.
-                    {
-                        const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
-                        const spearThrowAnim = myChar?.anims.find(a => a.name.toLowerCase() === "spearthrow")
-                        if(spearThrowAnim){
-                            const fps = spearThrowAnim.targetedAnimations?.[0]?.animation.framePerSecond ?? 30
-                            const frames = spearThrowAnim.to - spearThrowAnim.from
-            
-                            const releaseDelayMs = (frames / fps ) * 0.7 * 1000
-                            setTimeout(() => {
-                                throwSpearProjectile(myChar, charState)
+                    
+                    const myChar = getPlayersOnScene().find(pl => pl.owner === charState.owner)
+                    const spearThrowAnim = myChar?.anims.find(a => a.name.toLowerCase() === "spearthrow")
+                    if(spearThrowAnim){
+                        const fps = spearThrowAnim.targetedAnimations?.[0]?.animation.framePerSecond ?? 30
+                        const frames = spearThrowAnim.to - spearThrowAnim.from
+        
+                        const releaseDelayMs = (frames / fps ) * 0.7 * 1000
+                        setTimeout(() => {
+                            throwSpearProjectile(myChar, charState)
 
-                            }, releaseDelayMs)
-                        } else {
-                            console.warn(`[spearthrow] no "spearthrow" clip found on this rig's own animation groups - projectile never released`)
-                        }
+                        }, releaseDelayMs)
+                    } else {
+                        console.warn(`[spearthrow] no "spearthrow" clip found on this rig's own animation groups - projectile never released`)
                     }
+                    
 
                     clickedTimeOut = setTimeout(() => {
                         disableEnableWalkRunButtons(true)
