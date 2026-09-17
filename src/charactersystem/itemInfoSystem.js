@@ -1,9 +1,12 @@
+import { Vector3 } from "@babylonjs/core"
 import { createElement } from "../tools/GUITools.js"
 import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
 import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL } from "./characterstate.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
 import { getSceneDet } from "../main/main.js"
+import { capsuleHeight } from "./createcharacter.js"
+import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
 // import { getAllSounds } from "./soundSystem.js"
 import { APIURL } from "../constants/constants.js" //validGatePlaces
 // import { deleteGate, saveNewGate } from "./gatesSystem.js"
@@ -55,6 +58,7 @@ const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots"]
 const claimContainer = document.querySelector(".claim-container")
 
 const equipOrOpenBtn = document.getElementById("equipItemBtn")
+const struckItemBtn = document.getElementById("struckItemBtn")
 // const weaponAccessoryList = document.querySelector(".weapon-accessory")
 const weaponAccessoryList = document.querySelectorAll(".eqpd-slot")
 
@@ -127,6 +131,46 @@ let unequipItemFunc = () => {
     }else if(myChar){
         myChar.unEquip(itemType)
     }
+}
+// "struck" - plant the currently-inspected weapon in the ground right in
+// front of you as real, permanent, walk-up-and-reclaim loot, using the exact
+// same createGroundWeapon (assetcreation/creategroundweapon.js) the thrown-
+// spear env-hit case and localroomdb.js's own placeId 200 swordsStrucked
+// entries both already use - one shared "a real weapon mesh stuck into an
+// invisible collider box" mechanic instead of a third one-off.
+let struckItemFunc = () => {
+    if(!itemDetail) return
+    if(itemDetail.itemCateg !== "equipable" || itemDetail.itemType !== "weapon") return
+
+    const state = getCharState()
+    const myChar = getPlayersOnScene().find(pl => pl.owner === state.owner)
+    if(!myChar?.body) return
+
+    // dropping an equipped weapon unequips it first - same mesh-hide/
+    // throw-button-recheck/mining-mode-drop/multiplayer-relay cleanup
+    // unequipItemFunc already does, so you don't end up still visibly
+    // holding a weapon that's also lying on the ground
+    if(itemDetail.equiped) unequipItemFunc()
+
+    const pos = myChar.body.position
+    const forward = myChar.body.getDirection(Vector3.Forward())
+    const lootPosition = {
+        x: pos.x + forward.x * 1.2,
+        // myChar.body.position is the capsule's own CENTER, not its feet -
+        // same -capsuleHeight/2 offset createcharacter.js's own
+        // putFakeShadow already uses to find real ground level under a
+        // character, plus the same +0.02 z-fighting margin
+        y: pos.y - capsuleHeight / 2 + 0.02,
+        z: pos.z + forward.z * 1.2,
+    }
+
+    removeItem(itemDetail)
+    createGroundWeapon(getSceneDet().scene, { ...itemDetail, equiped: false, lootPosition }, myChar.body)
+
+    updateMyDetailsOL(state, checkIfTokenSaved()).then(() => {
+        openUpdateInventory(false)
+    })
+    closeItemInfo()
 }
 // let emitAddGateFunc = async () => {
 //     if(!itemDetail) return
@@ -356,6 +400,10 @@ export function showItemInfo(_itemDet){
     }else itemQnty.style.display="none"
 
     equipOrOpenBtn.style.display = "none"
+    // only weapons (sword/spear/axe/pickaxe/staff...) get a "struck" option -
+    // armor/helmet/etc have no ground-loot mesh convention to stick into the
+    // world (createGroundWeapon only ever renders via createWeapon)
+    struckItemBtn.style.display = itemType === "weapon" ? "block" : "none"
     switch(_itemDet.itemCateg){
         case "equipable":
             equipOrOpenBtn.style.display = "block"
@@ -436,6 +484,7 @@ export function removeItem(_invItem, updateDetailOnline){
     }
 }
 equipOrOpenBtn.addEventListener("click", () => activateFunc())
+struckItemBtn.addEventListener("click", () => struckItemFunc())
 armorybx.addEventListener("click", e => {
     const className = e.target.className;
     const state = getCharState()
