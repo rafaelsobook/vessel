@@ -95,7 +95,16 @@ function throwSpearProjectile(myChar, charState){
     // thrower's own client ever applies real damage, same "I already
     // applied it locally" split every other broadcast-excluding-sender
     // relay in this game already follows.
-    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear", dmgDetails)
+    //
+    // spear itself (the full original item, captured above BEFORE it gets
+    // unequipped/filtered out below) is also passed as spawnProjectile's own
+    // groundWeaponItem - a miss that lands in natural terrain (ground/chunk/
+    // tree) turns into real, permanent ground loot instead of just visually
+    // sticking and despawning 3s later. Same broadcast-excluding-sender
+    // scoping as dmgDetails just above - the relay listener never passes
+    // this, so other clients just see the decorative stick, no race to pick
+    // it up.
+    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear", dmgDetails, spear)
     if(getIsSocketOn()){
         emitThrowSpear(spawnPos, targetPos, spear.parts)
     }

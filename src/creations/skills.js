@@ -5,9 +5,30 @@ import { getCharState, dealDamageToEnemy } from "../charactersystem/charactersta
 import { randNum } from "../tools/random.js"
 import { getProjectilesOnScene } from "../sockets/worldsocket.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
+import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 
+// mesh-name substrings (case-insensitive) that count as "natural terrain" for
+// groundWeaponItem's own env-hit check below - openworld chunk meshes
+// (infterrain), any mesh literally named "ground", and trees. Deliberately
+// narrower than "anything the raycast can hit" - a spear that sticks into a
+// WALL or building still just behaves like every other env hit always has
+// (decorative, disposed after willDisposeCountDown), only a natural-terrain
+// hit is recoverable as real ground loot.
+const GROUND_WEAPON_TERRAIN_KEYWORDS = ["ground", "chunk", "tree"]
+
+// groundWeaponItem - optional, defaults to null so every EXISTING caller is
+// unaffected. When passed (only uimanagement.js's own throwSpearProjectile
+// does, with the full spear item it just unequipped), a MISS that the env
+// raycast branch below resolves against natural terrain (see
+// GROUND_WEAPON_TERRAIN_KEYWORDS above) doesn't just stick decoratively and
+// later despawn like every other env hit - it becomes a real, permanent,
+// walk-up-and-reclaim pickup via assetcreation/creategroundweapon.js's own
+// createGroundWeapon, same mechanic localroomdb.js's own placeId 200
+// swordsStrucked entries already use. A miss against anything else (a wall,
+// a building) still just behaves like a normal env hit always has.
+//
 // dmgDetails ({physicalDmg, weaponDmg}, e.g. attackingSystem.js's own
 // calcDmg() return shape) - optional, defaults to null so every EXISTING
 // caller (astralrainSkill's own spawnFallingSword in skillEffects.js, which
@@ -21,7 +42,7 @@ import { poppingTextMesh } from "../tools/GUITools.js"
 // unequips/removes the spear from the inventory right after this function
 // is called, so a hit-time recompute would see an unarmed player and silently
 // undercount the damage.
-export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword", dmgDetails = null){
+export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword", dmgDetails = null, groundWeaponItem = null){
     let weaponPartDetails = _weaponPartDetails;
 
     if(weaponPartDetails === "default"){
@@ -286,6 +307,28 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             hasHit = true
             scene.onBeforeRenderObservable.remove(envHitObserver)
             getAllSounds().struckS?.play()
+
+            // groundWeaponItem + a natural-terrain hit - becomes real,
+            // permanent ground loot instead of the generic decorative
+            // stick-then-despawn below. Resolved against the LOCAL player
+            // only (getPlayersOnScene().find on getCharState().owner), same
+            // "purely a local pickup, no other client needs to race for it"
+            // scope creategroundweapon.js's own header comment already
+            // settled on - matches dmgDetails' own precedent just above of
+            // only ever doing the "real" thing on the thrower's own client.
+            const hitMeshName = (hitMesh.name || "").toLowerCase()
+            const isNaturalTerrain = GROUND_WEAPON_TERRAIN_KEYWORDS.some(kw => hitMeshName.includes(kw))
+            if(groundWeaponItem && isNaturalTerrain){
+                const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
+                createGroundWeapon(scene, {
+                    ...groundWeaponItem,
+                    equiped: false,
+                    lootPosition: { x: instance.position.x, y: instance.position.y, z: instance.position.z },
+                }, myPlayer?.body)
+                removeProjectile(projectile.itemId)
+                return
+            }
+
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             if(!theProjectile) return
             theProjectile.spd = 2
