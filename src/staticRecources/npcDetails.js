@@ -2741,6 +2741,9 @@ export default [
                     {name:"", message: "But there's more out there than steel can answer. Fire that thinks. Water that remembers. Shadow that waits for you to blink."},
                     {name:"", message: "I won't pretend I can hand you mastery in one afternoon. What I can do is make sure you're not walking toward it blind."},
                     {name:"", message: "Keep at your skills. Every one you actually use enough will grow on its own - that's not a lesson, that's just how it works. I'm only here to make sure you survive long enough to see it happen."},
+                    {name:"", message: "One more thing, since you've earned the honesty. There are Lordz beyond here - I won't claim to know everything about them, but I know enough to tell you the road to them isn't just open ground."},
+                    {name:"", message: "Four dark beasts stand over it, one to each direction - north, south, east, west. Not the kind of guard you talk your way past."},
+                    {name:"", message: "That's from what I've faced myself, not a story someone handed me. Whatever's out there, far from here, isn't scaled to how strong you feel right now. Don't treat it like a joke."},
                     {name:"", message: "Go on, then. The door's behind you, same as it was."},
                 ],
                 notCompletedSpeech: [

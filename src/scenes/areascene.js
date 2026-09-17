@@ -12,6 +12,7 @@ import { getSpawnPos } from "../tools/position.js";
 import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
+import { createCastle } from "../creations/createcastle.js";
 import { createDuelArena } from "../creations/createduelarena.js";
 import { startDuel } from "../npc/duelSystem.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
@@ -173,6 +174,20 @@ export async function areaScene(placeDetail){
                 { texturePath: "./images/textures/grass/grass2_black.jpg", qnty: 10, size: "medium" },
                 { texturePath: "./images/textures/grass/bush1.jpg", qnty: 10, size: "large" },
             ], { viewRadius: 1, verts: 12 })
+
+            // medieval castle (placeId 888 only), ~100 units north of the
+            // player's own openworld spawn (0, 500) - see createcastle.js's
+            // own header comment for the full build/merge/physics rundown.
+            // Called here (not from a data-driven optionalObjects entry) so
+            // it can sample the REAL terrain height at (0, 600) live via
+            // sampleTerrainSurfaceHeight, now that createOpenWorld above has
+            // actually generated the chunk covering it - a plain
+            // localroomdb.js data entry has no scene/terrain access at
+            // author time to do that itself (see the witch towers' own
+            // hardcoded y guess for what that limitation looks like).
+            if(placeDetail.placeId === 888){
+                createCastle(scene, { x: 0, z: 600 })
+            }
 
             // showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
