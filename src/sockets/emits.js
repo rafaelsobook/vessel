@@ -150,13 +150,22 @@ export function emitCraftBonfire({ craftId, position, placeId }){
 // before any of its 3 callers reach this. item is the full obtain()-ready
 // inventory item (no lootPosition on it - position travels separately as
 // `pos`, same split tcp/index.ts's own Ttreasure uses).
-export function emitStrikeWeapon(item, pos){
+//
+// targetEnemyId (optional) - set only for the enemy-stick case (creations/
+// skills.js's own enemy-hit branch, registerStuckWeaponPickup), the id of
+// the enemy this weapon is stuck in. worldsocket.js's own struck-weapon
+// sync uses it to parent every OTHER client's copy directly to that
+// enemy's bodytarget (assetcreation/creategroundweapon.js's own
+// createEnemyStuckWeapon) instead of rendering a floating static copy at
+// `pos` - pos is still sent either way, as the fallback for whenever that
+// enemy isn't (yet, or anymore) on the receiving client's own scene.
+export function emitStrikeWeapon(item, pos, targetEnemyId){
     if (!getIsSocketOn()) return
     const socket = getSocket()
     if(!socket) return
     const placeId = getCharState().currentPlace.placeId
     const ownerId = getCharState().owner
-    socket.emit("strike-weapon", { itemId: item.itemId, pos, placeId, itemDetail: item, ownerId })
+    socket.emit("strike-weapon", { itemId: item.itemId, pos, placeId, itemDetail: item, ownerId, targetEnemyId })
 }
 // tcp/index.ts's "pickup-struck-weapon" handler - same bare-id-string shape
 // as emitRemoveTreasure above, same reasoning (tell the server FIRST, so no

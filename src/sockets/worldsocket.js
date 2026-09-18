@@ -30,7 +30,7 @@ import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import createWagon, { positionWagonBehindDeer } from "../assetcreation/createwagon.js"
 import createHarnessDeer, { computeHarnessDeerPosition } from "../assetcreation/createharnessdeer.js"
 import { spawnProjectile } from "../creations/skills.js"
-import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
+import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -1180,16 +1180,44 @@ export function reCreateMeshesInScene() {
         if (characterState.currentPlace.placeId !== weaponTcpInfo.currentPlaceId) return
         if (weaponTcpInfo.ownerId === characterState.owner) return
 
-        const isAlreadyHere = struckWeaponsInScene.find(w => w.itemId === weaponTcpInfo.itemId)
-        if (isAlreadyHere) return
+        // enemy-stick case (creations/skills.js's own enemy-hit branch) -
+        // looked up UP FRONT (not just at first-creation time) so the
+        // isAlreadyHere/weaponMesh branch just below can also use it to fix
+        // up a weapon that got created BEFORE its target enemy was on this
+        // client's own scene yet (openworld's distance-gated enemy
+        // creation - the enemies loop above only creates enemies within
+        // OPENWORLD_ENEMY_CREATE_DIST of this player, so a weapon struck on
+        // a still-out-of-range enemy falls back to the static ground
+        // rendering below, floating at that enemy's mid-body height until
+        // this catches up and reparents it properly)
+        const struckEnemy = weaponTcpInfo.targetEnemyId && enemiez.find(en => en._id === weaponTcpInfo.targetEnemyId)
 
+        const isAlreadyHere = struckWeaponsInScene.find(w => w.itemId === weaponTcpInfo.itemId)
         const weaponMesh = sceneDet.scene.getMeshByName(`swordstuck_${weaponTcpInfo.itemId}`)
-        if(weaponMesh) return
+        if(isAlreadyHere || weaponMesh){
+            // already created on an earlier pass - if we now know it
+            // should be riding on a specific enemy and it isn't parented
+            // there yet, fix it up instead of leaving it wherever the
+            // earlier fallback pass put it
+            if(weaponMesh && struckEnemy?.bodytarget && weaponMesh.parent !== struckEnemy.bodytarget){
+                weaponMesh.parent = struckEnemy.bodytarget
+                weaponMesh.position.set(0, 0, 0.4)
+            }
+            return
+        }
 
         const myPlayer = playersOnScene.find(pl => pl.owner === characterState.owner)
         if(!myPlayer) return
 
-        const lootBox = createGroundWeapon(scene, { ...weaponTcpInfo.itemDetail, lootPosition: weaponTcpInfo.pos }, myPlayer.body, true)
+        // enemy-stick case - parent directly to that enemy's own bodytarget
+        // so it visually rides along with them, matching what the striking
+        // player's own client already sees locally, instead of a floating
+        // static copy. Falls back to the plain ground-stick rendering
+        // below if that enemy isn't (yet, or anymore) on THIS client's own
+        // scene - see this block's own struckEnemy comment above.
+        const lootBox = struckEnemy?.bodytarget
+            ? createEnemyStuckWeapon(scene, weaponTcpInfo.itemDetail, struckEnemy.bodytarget, myPlayer.body, true)
+            : createGroundWeapon(scene, { ...weaponTcpInfo.itemDetail, lootPosition: weaponTcpInfo.pos }, myPlayer.body, true)
         if(lootBox) struckWeaponsInScene.push({ itemId: weaponTcpInfo.itemId })
     })
     // same three-guard shape as tcpTreasures/tcpBonfires above (place

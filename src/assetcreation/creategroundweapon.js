@@ -114,3 +114,68 @@ export function createGroundWeapon(scene, item, characterBody, isMultiplayerSync
 
     return lootBox
 }
+
+// A weapon visually stuck INTO an enemy's body (creations/skills.js's own
+// enemy-hit branch, registerStuckWeaponPickup) - unlike createGroundWeapon
+// above (a vertical stick into a fixed WORLD position), this parents
+// directly to enemyBodyTarget so it rides along with that enemy wherever it
+// moves, instead of floating statically at wherever the enemy happened to
+// be standing the instant it got struck (which is also wrong for another
+// reason: enemy.body.position is roughly mid-body height, not ground level,
+// so createGroundWeapon's own "stand vertically at this Y" logic put it
+// hanging in mid-air there). Called by worldsocket.js's own struck-weapon
+// sync for every OTHER connected client's copy of an enemy-stick, so it
+// visually matches what the striking player's own client already sees
+// locally instead of a mismatched floating duplicate.
+//
+// Same shared 'swordstuckbox' template/instancing as createGroundWeapon
+// (just reparented instead of world-positioned), and the SAME
+// `swordstuck_${item.itemId}` mesh name - so worldsocket.js's
+// "struck-weapon-removed" cleanup can find and dispose either kind of
+// stuck weapon by that one name, regardless of which of these two
+// functions actually built it.
+//
+// The exact stuck angle here is a fixed approximation (a modest outward
+// poke + a little rotational variety), not a real replay of the original
+// throw's own flight-angle-at-impact (spawnProjectile's own instance
+// rotation) - that value never gets synced over the network, and isn't
+// worth adding a field for just to shave a few degrees off a cosmetic
+// detail nobody but the striker will ever compare side by side.
+export function createEnemyStuckWeapon(scene, item, enemyBodyTarget, characterBody, isMultiplayerSynced = false){
+    let templateLootBox = scene.getMeshByName('swordstuckbox')
+    if(!templateLootBox){
+        templateLootBox = MeshBuilder.CreateBox('swordstuckbox', { size: 1.4 }, scene)
+        templateLootBox.isVisible = false
+        templateLootBox.setEnabled(false)
+    }
+    const lootBox = templateLootBox.createInstance(`swordstuck_${item.itemId}`)
+    lootBox.parent = enemyBodyTarget
+    lootBox.position = new Vector3(0, 0, 0.4)
+    lootBox.rotation = new Vector3(Math.PI / 2, (Math.random() - 0.5) * 0.6, 0)
+    lootBox.isVisible = false
+    lootBox.isPickable = false
+
+    const weaponRoot = createWeapon(scene, item.weaponType, { x: 0, y: 0, z: 0 }, lootBox, item.name, { ...item.parts, metalColor: item.metalColor })
+    weaponRoot.scaling = new Vector3(0.2, 0.2, 0.2)
+
+    let pickedUp = false
+    onIntersecEnterTrig(lootBox, characterBody, scene, () => {
+        if(pickedUp) return
+        openCloseInteractBtn("normal", true, () => {
+            if(pickedUp) return
+            pickedUp = true
+            openCloseInteractBtn(false)
+
+            const { lootPosition: _drop, ...itemToObtain } = item
+            obtain(itemToObtain)
+            if(isMultiplayerSynced) emitPickupStruckWeapon(item.itemId)
+            lootBox.dispose()
+        })
+    })
+    onIntersecExitTrig(lootBox, characterBody, scene, () => {
+        if(pickedUp) return
+        openCloseInteractBtn(false, false)
+    })
+
+    return lootBox
+}

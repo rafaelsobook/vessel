@@ -279,14 +279,6 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                     currentPlaceId: freshCharState.currentPlace.placeId,
                     isPhysical: true,
                 })
-            }
-
-            setTimeout(() => {
-                theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
-                if(!theProjectile) return
-
-                theProjectile.stuck = true
-                theProjectile.body.setParent(enem.bodytarget)
                 // groundWeaponItem (thrown spear) - stays stuck in the enemy
                 // for good and becomes a real pickup (registerStuckWeaponPickup
                 // above) instead of despawning on willDisposeCountDown. Every
@@ -295,17 +287,16 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                 if(groundWeaponItem){
                     registerStuckWeaponPickup(scene, theProjectile.body, groundWeaponItem, theProjectile.itemId)
                     // tells every other connected client (and any future
-                    // joiner) this weapon exists too - sent as a STATIC
-                    // snapshot of the enemy's position right now, not a live
-                    // follow: other clients render their own copy via
-                    // createGroundWeapon (a fixed ground stick), which
-                    // doesn't track the enemy moving afterward the way this
-                    // striking client's own registerStuckWeaponPickup mesh
-                    // does (still parented to enem.bodytarget). A known,
-                    // accepted tradeoff - continuously re-broadcasting this
-                    // enemy's position isn't worth it for a weapon that's
-                    // usually reclaimed (or the enemy killed) shortly after.
-                    emitStrikeWeapon(groundWeaponItem, { x: enem.body.position.x, y: enem.body.position.y, z: enem.body.position.z })
+                    // joiner) this weapon exists too - targetEnemyId lets
+                    // worldsocket.js's own struck-weapon sync parent every
+                    // OTHER client's copy directly to this SAME enemy's
+                    // bodytarget (assetcreation/creategroundweapon.js's own
+                    // createEnemyStuckWeapon), matching what this striking
+                    // client already sees locally, instead of a floating
+                    // static copy. pos is still sent as the fallback for a
+                    // client where this enemy isn't on scene (openworld's
+                    // distance-gated enemy creation).
+                    emitStrikeWeapon(groundWeaponItem, { x: enem.body.position.x, y: enem.body.position.y, z: enem.body.position.z }, enem._id)
                 }else if(willDisposeCountDown){
                     setTimeout(() => {
                         removeProjectile(theProjectile.itemId)
@@ -313,6 +304,15 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                     }, willDisposeCountDown)
                 }
                 if(cbAfterHitAnEnemy) cbAfterHitAnEnemy(enem._id, "monster")
+            }
+
+            setTimeout(() => {
+                theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
+                if(!theProjectile) return
+
+                theProjectile.stuck = true
+                theProjectile.body.setParent(enem.bodytarget)
+
             }, 100)
 
         })
