@@ -22,6 +22,7 @@ import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.
 import { receiveAchievement } from "../charactersystem/achievement.js"
 import { createSlimeMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
+import { createBloodSplatter } from "../tools/particlesystem.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
@@ -581,6 +582,15 @@ export default function createEnemy(scene, det) {
     //  sounds
     const  { runSound, deathSound, hitSound, attackSound } = monsterSounds(scene, det, body)
 
+    // blood splatter on hit - same createBloodSplatter (tools/particlesystem.js)
+    // createcharacter.js's own player bloodps already uses, just emitting
+    // from `body` itself instead of a spine bone (enemies have no rigged
+    // skeleton bone to attach to) - body's own position already sits at
+    // roughly mid-height (spawned at groundY + bodyHeight/2, see yPos
+    // above), so this lands around torso height with no extra offset needed.
+    const bloodps = createBloodSplatter(scene)
+    bloodps.ps.emitter = body
+
     return {
         det,
         _id: det._id,
@@ -634,6 +644,7 @@ export default function createEnemy(scene, det) {
         deathSound,
         hitSound,
         attackSound,
+        bloodps,
 
         intervalWillAttack
     }
@@ -791,6 +802,7 @@ export function enemyIsHit(data){
     enemy.det.hp = data.hp
     playRandomAnim(enemy.anims, "hit")
     enemy.hitSound?.play()
+    enemy.bloodps?.play()
 
     // weapon-on-hit effects (npcDetails.js item data's own effectsWhenHit,
     // e.g. the Majestic Sword's burn) - data.effectsWhenHit rode here for

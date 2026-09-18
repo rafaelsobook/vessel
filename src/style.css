@@ -81,8 +81,7 @@ canvas {
   display: none;
 }
 .walk-run-icons-container .rest {
-  right: 0;
-  top: 20%;
+  right: -20%;
   z-index: 2;
   width: 70px;
   height: 70px;

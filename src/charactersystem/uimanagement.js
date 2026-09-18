@@ -115,26 +115,27 @@ function throwSpearProjectile(myChar, charState){
     // its CHILD meshes actually render), so unEquip("weapon") -> that
     // file's own showHideSword is what actually hides those children -
     // same helper equipSword/createSword already use for this exact job.
-    myChar.unEquip("weapon")
-    unEquip("weapon")
-    // and actually gone from the bag too - filtered out, not just flipped
-    // to equiped:false, same "this item is genuinely gone now" pattern
-    // itemBroke()/the sell flow (buyorsell.js) already use
-    charState.items = charState.items.filter(itm => itm.itemId !== spear.itemId)
+    
+    // myChar.unEquip("weapon")
+    // unEquip("weapon")
+    // // and actually gone from the bag too - filtered out, not just flipped
+    // // to equiped:false, same "this item is genuinely gone now" pattern
+    // // itemBroke()/the sell flow (buyorsell.js) already use
+    // charState.items = charState.items.filter(itm => itm.itemId !== spear.itemId)
 
-    updateThrowButtonVisibility()
+    // updateThrowButtonVisibility()
 
-    // same emitUnEquip relay itemInfoSystem.js's own unequipItemFunc
-    // already uses - tells the server to drop its own authoritative
-    // equiped flag AND every other client to hide this player's weapon
-    // mesh too (worldsocket.js's "unequiped-item" -> theEquipingPlayer.unEquip)
-    if(getIsSocketOn()){
-        getSocket()?.emit("emitUnEquip", {
-            ownerId: charState.owner,
-            itemType: "weapon",
-            currentPlaceId: charState.currentPlace.placeId
-        })
-    }
+    // // same emitUnEquip relay itemInfoSystem.js's own unequipItemFunc
+    // // already uses - tells the server to drop its own authoritative
+    // // equiped flag AND every other client to hide this player's weapon
+    // // mesh too (worldsocket.js's "unequiped-item" -> theEquipingPlayer.unEquip)
+    // if(getIsSocketOn()){
+    //     getSocket()?.emit("emitUnEquip", {
+    //         ownerId: charState.owner,
+    //         itemType: "weapon",
+    //         currentPlaceId: charState.currentPlace.placeId
+    //     })
+    // }
 
     updateMyDetailsOL(charState, checkIfTokenSaved()).then(() => {
         openUpdateInventory(false)
@@ -482,8 +483,7 @@ export function activateBtnOnce(){
         
                         const releaseDelayMs = (frames / fps ) * 0.7 * 1000
                         setTimeout(() => {
-                            throwSpearProjectile(myChar, charState)
-
+                            throwSpearProjectile(myChar, charState);
                         }, releaseDelayMs)
                     } else {
                         console.warn(`[spearthrow] no "spearthrow" clip found on this rig's own animation groups - projectile never released`)

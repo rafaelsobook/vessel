@@ -87,7 +87,9 @@ export function initSounds(scene){
     {volume: 1, autoplay: false, loop: false})
 
     const struckS = createSoundSafe("struckS", "./sounds/effects/struckS.mp3", scene,
-    {volume: 1, spatialSound: true, maxDistance: 50, autoplay: false, loop: false})
+    {volume: 1, autoplay: false, loop: false})
+    struckS.setPlaybackRate(1.2)
+    // {volume: 1, spatialSound: false, maxDistance: 50, autoplay: false, loop: false})
 
     const rockSmashS = createSoundSafe("rockSmashS", "./sounds/effects/rockSmashS.mp3", scene,
     {volume: 1, autoplay: false, loop: false})

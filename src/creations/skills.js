@@ -1,13 +1,15 @@
 import { getPlayersOnScene, getEnemiesOnScene, getDuelOpponentsOnScene, pushProjectile, removeProjectile } from "../sockets/worldsocket"
-import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
+import { onIntersecEnterTrig, onIntersecExitTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { MeshBuilder, Vector3 } from "@babylonjs/core"
 import { getCharState, dealDamageToEnemy } from "../charactersystem/characterstate"
 import { randNum } from "../tools/random.js"
 import { getProjectilesOnScene } from "../sockets/worldsocket.js"
 import { createWeapon } from "../assetcreation/createweapon.js"
 import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
-import { getAllSounds } from "../components/soundSystem.js"
+import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
+import { openCloseInteractBtn } from "../tools/popupUI.js"
+import { obtain } from "../charactersystem/inventory.js"
 
 // mesh-name substrings (case-insensitive) that count as "natural terrain" for
 // groundWeaponItem's own env-hit check below - openworld chunk meshes
@@ -17,6 +19,37 @@ import { poppingTextMesh } from "../tools/GUITools.js"
 // (decorative, disposed after willDisposeCountDown), only a natural-terrain
 // hit is recoverable as real ground loot.
 const GROUND_WEAPON_TERRAIN_KEYWORDS = ["ground", "chunk", "tree"]
+
+// a thrown weapon that stuck into an ENEMY (not the env raycast branch,
+// which already gets its own createGroundWeapon treatment above) - rather
+// than despawning after willDisposeCountDown, it stays parented to that
+// enemy indefinitely and becomes a real walk-up pickup, same
+// interact-button pattern creategroundweapon.js's own onIntersecEnterTrig/
+// onIntersecExitTrig pair already uses, just registered directly against
+// the still-flying projectileMesh (already following the enemy's own body
+// via setParent) instead of a fresh static collider box - it has no fixed
+// lootPosition to build one at, it's riding around on whatever the enemy
+// does next. Resolved against the LOCAL player only, same scoping
+// groundWeaponItem's env-hit case above already settled on.
+function registerStuckWeaponPickup(scene, projectileMesh, item, projectileId){
+    const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
+    if(!myPlayer?.body) return
+    let pickedUp = false
+    onIntersecEnterTrig(projectileMesh, myPlayer.body, scene, () => {
+        if(pickedUp) return
+        openCloseInteractBtn("normal", true, () => {
+            if(pickedUp) return
+            pickedUp = true
+            openCloseInteractBtn(false)
+            obtain({ ...item, equiped: false })
+            removeProjectile(projectileId)
+        })
+    })
+    onIntersecExitTrig(projectileMesh, myPlayer.body, scene, () => {
+        if(pickedUp) return
+        openCloseInteractBtn(false, false)
+    })
+}
 
 // groundWeaponItem - optional, defaults to null so every EXISTING caller is
 // unaffected. When passed (only uimanagement.js's own throwSpearProjectile
@@ -172,7 +205,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
 
                     }, willDisposeCountDown)
                 }
-                if(cbAfterHitAPlayer) cbAfterHitAPlayer()
+                if(cbAfterHitAPlayer) cbAfterHitAPlayer(pl.owner)
             }, 100)
 
         })
@@ -195,7 +228,9 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             if(hasHit) return
             hasHit = true
             if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
-            getAllSounds().struckS?.play()
+            
+            // playSound()
+            getAllSounds().struckS.play()
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             theProjectile.spd = 2
             removeIntersecTrig(instance, enterAction)
@@ -206,13 +241,13 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             if(dmgDetails){
                 const freshCharState = getCharState()
                 const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
-                dealDamageToEnemy({
-                    playerId: freshCharState.owner,
-                    dmgDetails: { physicalDmg: dmgToApply, weaponDmg: 0 },
-                    targetId: enem._id,
-                    currentPlaceId: freshCharState.currentPlace.placeId,
-                    isPhysical: true,
-                })
+                // dealDamageToEnemy({
+                //     playerId: freshCharState.owner,
+                //     dmgDetails: { physicalDmg: dmgToApply, weaponDmg: 0 },
+                //     targetId: enem._id,
+                //     currentPlaceId: freshCharState.currentPlace.placeId,
+                //     isPhysical: true,
+                // })
             }
 
             setTimeout(() => {
@@ -221,13 +256,20 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                 theProjectile.spd = 5
                 theProjectile.stuck = true
                 theProjectile.body.setParent(enem.body)
-                if(willDisposeCountDown){
+                // groundWeaponItem (thrown spear) - stays stuck in the enemy
+                // for good and becomes a real pickup (registerStuckWeaponPickup
+                // above) instead of despawning on willDisposeCountDown. Every
+                // other caller (no groundWeaponItem passed) keeps the old
+                // despawn-after-a-few-seconds behavior unchanged.
+                if(groundWeaponItem){
+                    registerStuckWeaponPickup(scene, theProjectile.body, groundWeaponItem, theProjectile.itemId)
+                }else if(willDisposeCountDown){
                     setTimeout(() => {
                         removeProjectile(theProjectile.itemId)
 
                     }, willDisposeCountDown)
                 }
-                if(cbAfterHitAnEnemy) cbAfterHitAnEnemy()
+                if(cbAfterHitAnEnemy) cbAfterHitAnEnemy(enem._id, "monster")
             }, 100)
 
         })
@@ -245,8 +287,8 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     if(dmgDetails){
         const duelOpponents = getDuelOpponentsOnScene()
         duelOpponents.forEach(duelOpp => {
-            if(!duelOpp.body) return
-            const enterAction = onIntersecEnterTrig(instance, duelOpp.body, scene, () => {
+            if(!duelOpp.bodytarget) return console.log(`${duelOpp.name} has no mesh bodytarget`)
+            const enterAction = onIntersecEnterTrig(instance, duelOpp.bodytarget, scene, () => {
                 if(hasHit) return
                 hasHit = true
                 if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
@@ -269,7 +311,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                             removeProjectile(theProjectile.itemId)
                         }, willDisposeCountDown)
                     }
-                    if(cbAfterHitAnEnemy) cbAfterHitAnEnemy()
+                    if(cbAfterHitAnEnemy) cbAfterHitAnEnemy(duelOpp._id, "character")
                 }, 100)
             })
         })
