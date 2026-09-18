@@ -142,8 +142,35 @@ function computeCasterMagicDmg(skill, charState, abilityAdditions){
 // header comment describes - add another entry here the same way if/when
 // another element gets one.
 const ELEMENT_DAMAGE_MULTIPLIER = { dark: 2.5 }
-function getElementDamageMultiplier(skill){
-    return ELEMENT_DAMAGE_MULTIPLIER[skill?.element] ?? 1
+// Elemental WEAKNESS (different from the intrinsic per-element multiplier
+// above) - an enemy-DATA field (tcp/generate-datas/genenemy.ts's own
+// det.weakness, e.g. deerBase's "fire"), not a per-element engine rule. A
+// skill whose own element matches its target's weakness deals bonus
+// damage. Stacks multiplicatively with ELEMENT_DAMAGE_MULTIPLIER above (a
+// dark skill against a dark-weak target would be 2.5 * 1.5), which is fine -
+// no enemy has a dark weakness today, so this never actually compounds in
+// practice yet.
+const WEAKNESS_DAMAGE_MULTIPLIER = 1.5
+// target (optional) - the enemy/duel-opponent object this damage is about
+// to land on. Only real wild enemies carry a det.weakness (duel opponents/
+// npcFighters don't - see duelSystem.js's own spawnDuelOpponent, nothing
+// there ever sets .det.weakness), so passing a duelOpp here is harmless,
+// it just never matches. Omit entirely (every enemy-CASTING-at-a-player
+// call site does) to skip the weakness check altogether - that damage is
+// never about a skill hitting an enemy in the first place.
+function getWeaknessMultiplier(skill, target){
+    return skill?.element && target?.det?.weakness === skill.element ? WEAKNESS_DAMAGE_MULTIPLIER : 1
+}
+// composes the two - most call sites (a single known target at the moment
+// totalDmg itself gets computed) just want this one combined number. The
+// one exception is triggerLightningStrike's own multi-target line hit
+// (every enemy standing along the bolt takes the SAME totalDmg, computed
+// once before the per-enemy loop even starts) - that one calls
+// getWeaknessMultiplier directly, per enemy, inside its own loop instead,
+// since a single shared value can't already bake in a per-target weakness
+// check that varies enemy to enemy.
+function getElementDamageMultiplier(skill, target){
+    return (ELEMENT_DAMAGE_MULTIPLIER[skill?.element] ?? 1) * getWeaknessMultiplier(skill, target)
 }
 
 // FIRE'S BURN, for a target that ISN'T the local player (a real wild enemy
@@ -2133,7 +2160,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
                 // scaled by how much mana was actually committed at cast time,
                 // same ratio the mp cost itself was charged at (see castOffenseSkill)
-                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, enemy))
 
                 // server's enemyIsHit handler only ever reads weaponDmg (if
                 // truthy) or physicalDmg - there's no separate magic-damage
@@ -2448,7 +2475,7 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
 
                 const abilityAdditions = getAdditionalsFromAbilities()
                 const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
-                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, enemy))
 
                 dealDamageToEnemy({
                     playerId: freshCharState.owner,
@@ -2656,7 +2683,7 @@ function spawnFallingMeteor(scene, charState, skill, groundPos, powerScale){
 
                 const abilityAdditions = getAdditionalsFromAbilities()
                 const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
-                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, enemy))
 
                 dealDamageToEnemy({
                     playerId: freshCharState.owner,
@@ -2762,7 +2789,7 @@ function spawnLightningStrike(scene, charState, skill, groundPos, powerScale){
 
                 const abilityAdditions = getAdditionalsFromAbilities()
                 const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
-                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+                const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, enemy))
 
                 dealDamageToEnemy({
                     playerId: freshCharState.owner,
@@ -3002,7 +3029,7 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
             const freshCharState = getCharState()
             const abilityAdditions = getAdditionalsFromAbilities()
             const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
-            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, target))
             dealDamageToEnemy({
                 playerId: freshCharState.owner,
                 dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
@@ -3282,7 +3309,7 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
 
             const abilityAdditions = getAdditionalsFromAbilities()
             const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
-            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+            const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, enemy))
 
             dealDamageToEnemy({
                 playerId: freshCharState.owner,
@@ -3399,10 +3426,18 @@ function triggerLightningStrike(scene, charState, skill, player, spawnPos, forwa
         if(!enemy.body) return
         if(!isWithinLine(enemy.body.position)) return
 
+        // totalDmg above is a single shared value (computed once, before
+        // this multi-target loop even starts, since every enemy along the
+        // bolt takes the same base hit) - weakness has to be applied HERE,
+        // per enemy, instead (see getElementDamageMultiplier's own header
+        // comment on why this is the one exception to just passing a
+        // target into that function directly)
+        const finalDmg = Math.round(totalDmg * getWeaknessMultiplier(skill, enemy))
+
         fireGenericBurst(scene, enemy.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
         dealDamageToEnemy({
             playerId: freshCharState.owner,
-            dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+            dmgDetails: { physicalDmg: finalDmg, weaponDmg: 0 },
             targetId: enemy._id,
             currentPlaceId: freshCharState.currentPlace.placeId,
         })
@@ -3513,7 +3548,7 @@ function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, dura
         const freshCharState = getCharState()
         const abilityAdditions = getAdditionalsFromAbilities()
         const magicDmg = computeCasterMagicDmg(skill, freshCharState, abilityAdditions)
-        const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill))
+        const totalDmg = Math.round(((getSkillEffect(skill, "offense")?.plusDmg || 0) + magicDmg) * powerScale * getElementDamageMultiplier(skill, enemy))
 
         dealDamageToEnemy({
             playerId: freshCharState.owner,
