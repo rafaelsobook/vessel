@@ -46,6 +46,17 @@ export function updateThrowButtonVisibility(){
     throwBtn.style.display = hasSpearEquipped ? "block" : "none"
 }
 
+// nose-down pitch (radians) applied to the thrown spear's own facing/flight
+// axis (spawnProjectile's own pitchOffset param) - see that param's header
+// comment in creations/skills.js for why this is a real flight-angle change,
+// not just a cosmetic tilt. ~14 degrees - enough to visibly read as
+// "already falling" without looking like it's diving into the ground a
+// step after release.
+const SPEAR_THROW_PITCH_DOWN = Math.PI/80
+// "make the spear three times faster" - spawnProjectile's own speedMult,
+// multiplies its base flight speed (10)
+const SPEAR_THROW_SPEED_MULT = 3
+
 // the actual projectile release - called from case "throw" below once the
 // "spearthrow" clip is 90% through (see that block's own comment on the
 // timing). Spawns a real flying copy of whatever spear is currently
@@ -107,7 +118,13 @@ function throwSpearProjectile(myChar, charState){
     // scoping as dmgDetails just above - the relay listener never passes
     // this, so other clients just see the decorative stick, no race to pick
     // it up.
-    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear", dmgDetails, spear)
+    //
+    // SPEAR_THROW_PITCH_DOWN - a modest nose-down tilt (spawnProjectile's own
+    // pitchOffset), purely so the spear LEAVES the hand already angled like
+    // it's falling instead of dead-level - spawnPos/targetPos above are both
+    // at the same y (a flat throw), so without this the real target-direction
+    // pitch would be exactly 0.
+    spawnProjectile(spawnPos, targetPos, null, getSceneDet().scene, spear.parts, null, 3000, null, false, "spear", dmgDetails, spear, SPEAR_THROW_PITCH_DOWN, SPEAR_THROW_SPEED_MULT)
     if(getIsSocketOn()){
         emitThrowSpear(spawnPos, targetPos, spear.parts)
     }

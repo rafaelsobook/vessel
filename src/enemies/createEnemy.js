@@ -95,22 +95,37 @@ export default function createEnemy(scene, det) {
     }
     chaseDetector.isVisible = false
 
+
+
     let entries
+    let bodytarget
+    const size = 3
     switch(det.modelStyle){
         case "goblin":
             entries = goblinRoot?.instantiateModelsToScene()
+            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size }, scene)
         break
         case "monolith":
             entries = monolithRoot?.instantiateModelsToScene()
+            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size }, scene)
         break
         case "slime":
             entries = slimeRoot?.instantiateModelsToScene()
+            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size: 1}, scene)
+
         break
         case "lesserdemon":
             entries = lesserDemonRoot?.instantiateModelsToScene()
+            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size }, scene)
         break
         case "deer":
             entries = deerRoot?.instantiateModelsToScene()
+            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size: 2, depth: 2.7 }, scene)
+
+            
+        break
+        default:
+
         break
     }
     // model container failed to load (missing glb) or modelStyle has no case
@@ -124,13 +139,43 @@ export default function createEnemy(scene, det) {
     }
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
     const mainBodyMeshes = entries.rootNodes[0]
+
     mainBodyMeshes.parent = body
     mainBodyMeshes.position.y -= det.bodyHeight/2
     mainBodyMeshes.rotationQuaternion = Quaternion.Identity()
 
     if (det._dirTarg) body.lookAt(new Vector3(det._dirTarg.x, yPos, det._dirTarg.z))
+    
+    if(det.modelStyle === "deer"){
+        let spineBone = entries.skeletons[0]?.bones.find(bne => bne.name.toLowerCase().includes("spine"))
+        bodytarget.attachToBone(spineBone, mainBodyMeshes)
+    }else{
+            let pelvisBone = entries.skeletons[0]?.bones.find(bne => bne.name.toLowerCase().includes("pelvis"))
+    
+            console.log(`[createEnemy] "${det.modelStyle}" pelvis bone:`, pelvisBone)
+            if(pelvisBone){
+                bodytarget.attachToBone(pelvisBone, mainBodyMeshes)
+            }
+    }
 
-        
+
+    // Skeleton has no getChildren() (it's not a Node) - .bones is the real
+    // flat array of every Bone in the rig. Same name-substring convention
+    // createcharacter.js's own findDeepByName(mainBodyMeshes, bne =>
+    // bne.name.includes("pelvis")) already uses for the player rig - `?.`
+    // guarded because not every enemy model necessarily has a skeleton at
+    // all (a simple unrigged mesh has an empty/undefined entries.skeletons).
+
+    // mesh.parent = bone does NOT work in Babylon.js - Bone/Skeleton don't
+    // update through the normal scene-graph parent/child transform pass a
+    // TransformNode does, so the mesh silently stops following the bone (or,
+    // if pelvisBone was undefined, `.parent = undefined` just clears the
+    // parent entirely and the box sits at world origin instead of near the
+    // enemy - either way, invisible in practice). attachToBone(bone, mesh)
+    // is Babylon's real, documented API for this - mainBodyMeshes is the
+    // skinned model root this skeleton actually belongs to (same node this
+    // function already treats as "the" body mesh just above).
+
     // const fshadow = putFakeShadow(body, fakeShadowRoot, det.bodyHeight * .7, -yPos + .01)
     // nameMesh/hpmesh are both parented to body (see createTextMesh/createHpBar),
     // so their own .position.y is a LOCAL offset relative to body's own
@@ -155,6 +200,7 @@ export default function createEnemy(scene, det) {
     mainBodyMeshes.getChildMeshes().forEach(enemyasset => {
         enemyasset.name = enemyasset.name.split(" ")[2].toLowerCase()
         enemyasset.isPickable = false
+
         if (enemyasset.name === 'slime') {
             // det.elementType (water/fire/electric - see SLIME_ELEMENT_COLORS
             // in skins.js) was never actually passed through here before,

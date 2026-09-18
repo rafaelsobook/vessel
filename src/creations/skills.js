@@ -76,7 +76,26 @@ function registerStuckWeaponPickup(scene, projectileMesh, item, projectileId){
 // unequips/removes the spear from the inventory right after this function
 // is called, so a hit-time recompute would see an unarmed player and silently
 // undercount the damage.
-export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword", dmgDetails = null, groundWeaponItem = null){
+// pitchOffset (radians, default 0) - added on top of the real target-direction
+// pitch below. NOT purely cosmetic: this mesh has no separate "visual facing"
+// vs "movement direction" - renderer.js's own per-frame projectile loop moves
+// it via `body.locallyTranslate(0,0,spd*dt)`, i.e. straight along whatever
+// its CURRENT local Z axis (set once here, at spawn, and never touched again)
+// happens to point, and the env-hit raycast a few dozen lines below reads the
+// same axis via `instance.getDirection(Vector3.Forward())`. So tilting this
+// down doesn't just make the spear LOOK like it's diving - it genuinely
+// flies in a straight line angled downward from release, and the env
+// raycast tilts down with it. That's exactly what makes it usable for "bend
+// the spear down a little so it looks like it's already falling" - a small
+// positive value here is a nose-down pitch (positive rotation.x = downward,
+// same sign the real dy branch below already uses for an actually-descending
+// targetDirection).
+//
+// speedMult (default 1, every EXISTING caller unaffected) - multiplies the
+// base flight speed (10) the projectile object below spawns with. Only
+// uimanagement.js's own throwSpearProjectile passes one (SPEAR_THROW_SPEED_MULT,
+// 3 - "make the spear three times faster").
+export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, _weaponPartDetails = "default", cbAfterHitAPlayer, willDisposeCountDown, cbAfterHitAnEnemy, willNotHitTheGround, weaponType = "sword", dmgDetails = null, groundWeaponItem = null, pitchOffset = 0, speedMult = 1){
     let weaponPartDetails = _weaponPartDetails;
 
     if(weaponPartDetails === "default"){
@@ -130,15 +149,18 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     const dz = targetDirection.z - instance.position.z
 
     instance.rotation.y = Math.atan2(dx, dz)
-    instance.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
-
+    // instance.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) + pitchOffset
+    instance.addRotation( -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) + pitchOffset,0,0)
 
 
     const projectile = {
         itemId,
         body: instance,
         targetDirection: {x:dx, y:dy, z:dz},
-        spd: 10,
+        // speedMult (default 1) - only scales this base flight speed, not
+        // the brief 2/5 wind-down speeds the hit branches below switch to
+        // while the projectile settles into whatever it struck
+        spd: 10 * speedMult,
         placeId: getCharState().currentPlace.placeId,
         stuck: false,
         // this file's own env branch below already does real ground/wall/
