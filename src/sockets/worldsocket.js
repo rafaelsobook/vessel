@@ -30,12 +30,20 @@ import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import createWagon, { positionWagonBehindDeer } from "../assetcreation/createwagon.js"
 import createHarnessDeer, { computeHarnessDeerPosition } from "../assetcreation/createharnessdeer.js"
 import { spawnProjectile } from "../creations/skills.js"
+import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
 let allQuests = []
 let tcpTreasures = []
 let tcpBonfires = []
+// weapons struck into the ground or an enemy body at runtime (see
+// itemInfoSystem.js's struckItemFunc, creations/skills.js's spawnProjectile
+// env-hit/enemy-hit cases) - server-tracked (tcp/index.ts's struckWeapons),
+// same permanence/removal model as tcpTreasures below (pickup-able,
+// filtered out on "struck-weapon-removed"), just player-created at runtime
+// like tcpBonfires instead of seeded.
+let tcpStruckWeapons = []
 // openworld ambient wagon traffic (tcp/recources/wagons.ts's own Twagon) -
 // a wagon has no movement law of its own - each entry only references
 // which harness deer pulls it via deerId, and client-side it just trails
@@ -67,6 +75,9 @@ let treasuresInScene = []
 // are never removed once placed (no "bonfire-removed" counterpart to
 // treasure-removed), so this only ever grows, never gets spliced
 let bonfiresInScene = []
+// { itemId } entries - same idea as treasuresInScene, dropped once
+// "struck-weapon-removed" comes in for it
+let struckWeaponsInScene = []
 // npcFighter duel opponents (npc/duelSystem.js) - purely local combat, never
 // server-tracked (duels are always isMultiplayer:false). Mirrors enemiez so
 // creations/skillEffects.js's hit-registration sites can target duel
@@ -284,7 +295,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer } = allDataFromServer
+        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer, struckWeapons } = allDataFromServer
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
         allQuests = quests
@@ -292,6 +303,7 @@ export function activateOnSocketListeners(socket){
         tcpBonfires = bonfires ?? []
         tcpWagons = wagons ?? []
         tcpHarnessDeer = harnessDeer ?? []
+        tcpStruckWeapons = struckWeapons ?? []
         
         const characterState = getCharState()
         const gameStat = getGameStatus()
@@ -866,6 +878,36 @@ export function activateOnSocketListeners(socket){
         reCreateMeshesInScene()
     })
 
+    // tcp/index.ts's own "strike-weapon" handler echoes this to EVERY
+    // connected client, including whoever struck it (bare io.emit there,
+    // not socket.broadcast.emit) - same reasoning "bonfire-crafted" above
+    // already documents. reCreateMeshesInScene's own tcpStruckWeapons loop
+    // skips the striker's own ownerId (it already has its own local copy,
+    // rendered the instant it struck), so pushing this in and re-running
+    // that loop is safe for the striker's own echo too, not just everyone
+    // else.
+    socket.on("weapon-struck", weapon => {
+        if (!isSocketOn) return
+        if (tcpStruckWeapons.some(w => w.itemId === weapon.itemId)) return
+        tcpStruckWeapons.push(weapon)
+        reCreateMeshesInScene()
+    })
+    // mirrors "treasure-removed" above - fires for EVERY client (including
+    // whoever picked it up, echoed back), safe to run redundantly against a
+    // weapon this same client already disposed itself
+    // (creategroundweapon.js's own pickup callback already
+    // emitPickupStruckWeapon()'d and disposed its local mesh before this
+    // round-trips back).
+    socket.on("struck-weapon-removed", weaponId => {
+        if (!isSocketOn) return
+
+        struckWeaponsInScene = struckWeaponsInScene.filter(w => w.itemId !== weaponId)
+        tcpStruckWeapons = tcpStruckWeapons.filter(w => w.itemId !== weaponId)
+
+        const weaponMesh = getSceneDet().scene.getMeshByName(`swordstuck_${weaponId}`)
+        if (weaponMesh) weaponMesh.dispose()
+    })
+
     // Movement
     socket.on("emitted-moving", data => {
         const { ownerId, pos, dirTarg, mode} = data
@@ -1122,6 +1164,33 @@ export function reCreateMeshesInScene() {
 
         const bonfire = createBonfireMesh(scene, bonfireTcpInfo.pos, bonfireTcpInfo.craftId)
         if(bonfire) bonfiresInScene.push({ craftId: bonfireTcpInfo.craftId })
+    })
+    // same three-guard shape as tcpTreasures/tcpBonfires above, PLUS an
+    // ownerId self-exclusion (same idea allPlayersFromTCP's own loop at the
+    // top of this function already uses for `tcpCharDet.owner === characterState.owner`) -
+    // the striker's own client already rendered its own local copy the
+    // instant it struck (itemInfoSystem.js's struckItemFunc / creations/
+    // skills.js's spawnProjectile), so this only ever needs to create one
+    // for every OTHER player's client. characterBody is resolved fresh per
+    // client (myOwnBody, computed above for the enemy loop) rather than
+    // passed through the server payload - same "purely a local pickup
+    // trigger, every client wires its own" reasoning
+    // creategroundweapon.js's own header comment settles.
+    tcpStruckWeapons.length && tcpStruckWeapons.forEach(weaponTcpInfo => {
+        if (characterState.currentPlace.placeId !== weaponTcpInfo.currentPlaceId) return
+        if (weaponTcpInfo.ownerId === characterState.owner) return
+
+        const isAlreadyHere = struckWeaponsInScene.find(w => w.itemId === weaponTcpInfo.itemId)
+        if (isAlreadyHere) return
+
+        const weaponMesh = sceneDet.scene.getMeshByName(`swordstuck_${weaponTcpInfo.itemId}`)
+        if(weaponMesh) return
+
+        const myPlayer = playersOnScene.find(pl => pl.owner === characterState.owner)
+        if(!myPlayer) return
+
+        const lootBox = createGroundWeapon(scene, { ...weaponTcpInfo.itemDetail, lootPosition: weaponTcpInfo.pos }, myPlayer.body, true)
+        if(lootBox) struckWeaponsInScene.push({ itemId: weaponTcpInfo.itemId })
     })
     // same three-guard shape as tcpTreasures/tcpBonfires above (place
     // filter, local tracking array, getMeshByName fallback) - unlike those

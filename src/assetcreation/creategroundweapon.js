@@ -3,6 +3,7 @@ import { createWeapon } from "./createweapon.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain } from "../charactersystem/inventory.js"
+import { emitPickupStruckWeapon } from "../sockets/emits.js"
 
 // GROUND WEAPON LOOT (placeDetail.swordsStrucked, e.g. placeId 200's duel
 // grounds - localroomdb.js) - a real weapon mesh (createWeapon, same call
@@ -25,9 +26,24 @@ import { obtain } from "../charactersystem/inventory.js"
 // (sideways, or blade pointing UP instead of down into the floor), try
 // z: Math.PI / 2 instead of x, or flip the sign (-Math.PI / 2).
 //
+// characterBody is purely a local pickup TRIGGER target - no other client's
+// own onIntersecEnterTrig races against this one, since every connected
+// client runs createGroundWeapon separately against its OWN local player
+// (see worldsocket.js's reCreateMeshesInScene, and this file's own
+// isMultiplayerSynced param below), the same way createtreasure.js's
+// createTreasureMesh already does for chests.
+//
+// isMultiplayerSynced (default false) - true for a weapon that's also a
+// real server-tracked entry (tcp/index.ts's struckWeapons array via
+// emitStrikeWeapon), so picking it up here also has to tell the server
+// (emitPickupStruckWeapon) that no one else can loot it anymore. Left false
+// for the original, purely local/scripted case (areascene.js's own
+// placeDetail.swordsStrucked replay, e.g. placeId 200's duel grounds
+// Frostbite sword) - that one has no server record at all to remove.
+//
 // Called once per placeDetail.swordsStrucked entry - areascene.js's own
 // setup does `placeDetail.swordsStrucked?.forEach(item => createGroundWeapon(scene, item, myCharacter.body))`.
-export function createGroundWeapon(scene, item, characterBody){
+export function createGroundWeapon(scene, item, characterBody, isMultiplayerSynced = false){
     const { lootPosition } = item
 
     // shared geometry template, same "build once, reuse via clone/instance"
@@ -83,6 +99,11 @@ export function createGroundWeapon(scene, item, characterBody){
             // it before this becomes a real charState.items entry
             const { lootPosition: _drop, ...itemToObtain } = item
             obtain(itemToObtain)
+            // tell the server FIRST, before disposing locally - same
+            // "so no one else can loot the same one" reasoning
+            // createtreasure.js's own emitRemoveTreasure call already
+            // follows
+            if(isMultiplayerSynced) emitPickupStruckWeapon(item.itemId)
             lootBox.dispose()
         })
     })

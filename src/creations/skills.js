@@ -11,6 +11,7 @@ import { poppingTextMesh } from "../tools/GUITools.js"
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { calcDmg } from "../charactersystem/attackingSystem.js"
+import { emitStrikeWeapon, emitPickupStruckWeapon } from "../sockets/emits.js"
 
 // mesh-name substrings (case-insensitive) that count as "natural terrain" for
 // groundWeaponItem's own env-hit check below - openworld chunk meshes
@@ -43,6 +44,12 @@ function registerStuckWeaponPickup(scene, projectileMesh, item, projectileId){
             pickedUp = true
             openCloseInteractBtn(false)
             obtain({ ...item, equiped: false })
+            // tells every other connected client (which only ever gets a
+            // static createGroundWeapon copy at the enemy's position at the
+            // moment it was struck, not this same following-the-enemy
+            // mesh - see the enemy-hit branch's own emitStrikeWeapon call
+            // below) that it's gone
+            emitPickupStruckWeapon(item.itemId)
             removeProjectile(projectileId)
         })
     })
@@ -287,6 +294,18 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                 // despawn-after-a-few-seconds behavior unchanged.
                 if(groundWeaponItem){
                     registerStuckWeaponPickup(scene, theProjectile.body, groundWeaponItem, theProjectile.itemId)
+                    // tells every other connected client (and any future
+                    // joiner) this weapon exists too - sent as a STATIC
+                    // snapshot of the enemy's position right now, not a live
+                    // follow: other clients render their own copy via
+                    // createGroundWeapon (a fixed ground stick), which
+                    // doesn't track the enemy moving afterward the way this
+                    // striking client's own registerStuckWeaponPickup mesh
+                    // does (still parented to enem.bodytarget). A known,
+                    // accepted tradeoff - continuously re-broadcasting this
+                    // enemy's position isn't worth it for a weapon that's
+                    // usually reclaimed (or the enemy killed) shortly after.
+                    emitStrikeWeapon(groundWeaponItem, { x: enem.body.position.x, y: enem.body.position.y, z: enem.body.position.z })
                 }else if(willDisposeCountDown){
                     setTimeout(() => {
                         removeProjectile(theProjectile.itemId)
@@ -386,11 +405,13 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             const isNaturalTerrain = GROUND_WEAPON_TERRAIN_KEYWORDS.some(kw => hitMeshName.includes(kw))
             if(groundWeaponItem && isNaturalTerrain){
                 const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
-                createGroundWeapon(scene, {
-                    ...groundWeaponItem,
-                    equiped: false,
-                    lootPosition: { x: instance.position.x, y: instance.position.y, z: instance.position.z },
-                }, myPlayer?.body)
+                const struckLootPosition = { x: instance.position.x, y: instance.position.y, z: instance.position.z }
+                const struckItem = { ...groundWeaponItem, equiped: false, lootPosition: struckLootPosition }
+                createGroundWeapon(scene, struckItem, myPlayer?.body, true)
+                // tells every other connected client (and any future
+                // joiner, via userJoined's own struckWeapons array) that
+                // this weapon is here too
+                emitStrikeWeapon(struckItem, struckLootPosition)
                 removeProjectile(projectile.itemId)
                 return
             }

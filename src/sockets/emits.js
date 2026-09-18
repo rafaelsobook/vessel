@@ -143,6 +143,30 @@ export function emitCraftBonfire({ craftId, position, placeId }){
     if(!socket) return
     socket.emit("craft-bonfire", { craftId, position, placeId })
 }
+// tcp/index.ts's "strike-weapon" handler - same "act locally first, this
+// just syncs everyone else + what a fresh joiner's own userJoined payload
+// replays it from" pattern emitCraftBonfire right above uses.
+// assetcreation/creategroundweapon.js already rendered this weapon LOCALLY
+// before any of its 3 callers reach this. item is the full obtain()-ready
+// inventory item (no lootPosition on it - position travels separately as
+// `pos`, same split tcp/index.ts's own Ttreasure uses).
+export function emitStrikeWeapon(item, pos){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    const placeId = getCharState().currentPlace.placeId
+    const ownerId = getCharState().owner
+    socket.emit("strike-weapon", { itemId: item.itemId, pos, placeId, itemDetail: item, ownerId })
+}
+// tcp/index.ts's "pickup-struck-weapon" handler - same bare-id-string shape
+// as emitRemoveTreasure above, same reasoning (tell the server FIRST, so no
+// other player can also loot the same one).
+export function emitPickupStruckWeapon(weaponId){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("pickup-struck-weapon", weaponId)
+}
 // Attack Actions
 export function emitSpawnCircle(pos, element){
     const socket = getSocket()

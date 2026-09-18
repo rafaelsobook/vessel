@@ -7,6 +7,7 @@ import { obtain, openUpdateInventory } from "./inventory.js"
 import { getSceneDet } from "../main/main.js"
 import { capsuleHeight } from "./createcharacter.js"
 import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
+import { emitStrikeWeapon } from "../sockets/emits.js"
 // import { getAllSounds } from "./soundSystem.js"
 import { APIURL } from "../constants/constants.js" //validGatePlaces
 // import { deleteGate, saveNewGate } from "./gatesSystem.js"
@@ -165,7 +166,12 @@ let struckItemFunc = () => {
     }
 
     removeItem(itemDetail)
-    createGroundWeapon(getSceneDet().scene, { ...itemDetail, equiped: false, lootPosition }, myChar.body)
+    const struckItem = { ...itemDetail, equiped: false, lootPosition }
+    createGroundWeapon(getSceneDet().scene, struckItem, myChar.body, true)
+    // tells every other connected client (and any future joiner, via
+    // userJoined's own struckWeapons array) that this weapon is here too -
+    // see emitStrikeWeapon's own header comment
+    emitStrikeWeapon(struckItem, lootPosition)
 
     updateMyDetailsOL(state, checkIfTokenSaved()).then(() => {
         openUpdateInventory(false)
