@@ -246,8 +246,8 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
     // sword reaches FIRST is the one it visually sticks to, never both.
     const enemies = getEnemiesOnScene()
     enemies.forEach(enem => {
-        if(!enem.body) return
-        const enterAction = onIntersecEnterTrig(instance, enem.body, scene, () => {
+        if(!enem.bodytarget) return
+        const enterAction = onIntersecEnterTrig(instance, enem.bodytarget, scene, () => {
             if(hasHit) return
             hasHit = true
             if(envHitObserver) scene.onBeforeRenderObservable.remove(envHitObserver)
@@ -255,7 +255,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             // playSound()
             getAllSounds().struckS.play()
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
-            theProjectile.spd = 2
+            theProjectile.spd = 1
             removeIntersecTrig(instance, enterAction)
             
             // same weaponDmg-else-physicalDmg rule every other real hit
@@ -267,7 +267,7 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                 // const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
                 dealDamageToEnemy({
                     playerId: freshCharState.owner,
-                    dmgDetails: calcDmg(freshCharState),
+                    dmgDetails: {...calcDmg(freshCharState), weaponDmg:dmgDetails.weaponDmg*10 },
                     targetId: enem._id,
                     currentPlaceId: freshCharState.currentPlace.placeId,
                     isPhysical: true,
@@ -277,9 +277,9 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             setTimeout(() => {
                 theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
                 if(!theProjectile) return
-                theProjectile.spd = 5
+
                 theProjectile.stuck = true
-                theProjectile.body.setParent(enem.body)
+                theProjectile.body.setParent(enem.bodytarget)
                 // groundWeaponItem (thrown spear) - stays stuck in the enemy
                 // for good and becomes a real pickup (registerStuckWeaponPickup
                 // above) instead of despawning on willDisposeCountDown. Every

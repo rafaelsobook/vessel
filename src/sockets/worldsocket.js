@@ -746,7 +746,7 @@ export function activateOnSocketListeners(socket){
         const charState = getCharState()
         if (getGameStatus() === "loading") return
         if (!charState || data.placeId !== charState.currentPlace.placeId) return
-        spawnProjectile(data.spawnPos, data.targetPos, null, scene, data.parts, null, 3000, null, false, "spear")
+        spawnProjectile(data.spawnPos, data.targetPos, null, scene, data.parts, null, false, null, false, "spear")
     })
     // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
     // hit handler, tcp/index.ts's enemyBind handler) - server is the actual

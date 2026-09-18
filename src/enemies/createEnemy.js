@@ -29,7 +29,11 @@ import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 
-
+// modelStyles that don't bleed at all (see this file's own bloodps setup
+// below) - slime is gooey, not fleshy. Add others here later if it turns
+// out they shouldn't bleed either (e.g. monolith, being stone) - not added
+// yet since not asked for.
+const BLOODLESS_MODEL_STYLES = new Set(["slime"])
 
 export default function createEnemy(scene, det) {
     // guards the actual mesh-creation choke point itself, not just whatever
@@ -103,31 +107,29 @@ export default function createEnemy(scene, det) {
     switch(det.modelStyle){
         case "goblin":
             entries = goblinRoot?.instantiateModelsToScene()
-            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size }, scene)
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size }, det._id)
         break
         case "monolith":
             entries = monolithRoot?.instantiateModelsToScene()
-            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size }, scene)
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size }, det._id)
         break
         case "slime":
             entries = slimeRoot?.instantiateModelsToScene()
-            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size: 1}, scene)
-
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1 }, det._id)
         break
         case "lesserdemon":
             entries = lesserDemonRoot?.instantiateModelsToScene()
-            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size }, scene)
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size }, det._id)
         break
         case "deer":
             entries = deerRoot?.instantiateModelsToScene()
-            bodytarget = MeshBuilder.CreateBox(`${det.modelStyle}.bodytarget`, { size: 2, depth: 2.7 }, scene)
-
-            
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1.6, height: 2.8 }, det._id)
         break
         default:
 
         break
     }
+    if(bodytarget) bodytarget.isVisible = false
     // model container failed to load (missing glb) or modelStyle has no case
     // above - skip rendering this enemy instead of crashing the whole scene
     if(!entries){
@@ -634,8 +636,11 @@ export default function createEnemy(scene, det) {
     // skeleton bone to attach to) - body's own position already sits at
     // roughly mid-height (spawned at groundY + bodyHeight/2, see yPos
     // above), so this lands around torso height with no extra offset needed.
-    const bloodps = createBloodSplatter(scene)
-    bloodps.ps.emitter = body
+    // BLOODLESS_MODEL_STYLES (below) skips it entirely for modelStyles that
+    // shouldn't bleed at all (slime is gooey, not fleshy) - null there, not
+    // just invisible, so enemyIsHit's `enemy.bloodps?.play()` cleanly no-ops.
+    const bloodps = BLOODLESS_MODEL_STYLES.has(det.modelStyle) ? null : createBloodSplatter(scene)
+    if(bloodps) bloodps.ps.emitter = body
 
     return {
         det,
@@ -644,7 +649,7 @@ export default function createEnemy(scene, det) {
         spd: det.stats.spd,
         currentPlace: det.currentPlace,
         chaseDetector,
-        body,
+        body,bodytarget,
 
         // fshadow,
         nameMesh,
@@ -734,6 +739,22 @@ function createChaseDetector(scene){
     const detector = createMesh(scene, "chasedetector", { size: 19, height: 0.1 }, { x: 0, y: 0, z: 0 }, 1, false, false)
     detector.isPickable = false
     return detector
+}
+// one real MeshBuilder.CreateBox per modelStyle (its own dimensions - goblin/
+// monolith/lesserdemon share the plain {size} box, slime and deer each need
+// their own), reused via createInstance() for every enemy of that style from
+// then on - same "build once, instance forever" precedent this file's own
+// chaseDetector (above) and getMeshByName/createInstance already establish,
+// instead of createEnemy paying for a brand new CreateBox (its own geometry +
+// vertex buffers) on every single enemy spawn.
+function getBodyTargetInstance(scene, modelStyle, options, enemyId){
+    const templateName = `${modelStyle}.bodytarget.template`
+    let template = scene.getMeshByName(templateName)
+    if(!template){
+        template = MeshBuilder.CreateBox(templateName, options, scene)
+        template.isPickable = false
+    }
+    return template.createInstance(`${modelStyle}.bodytarget.${enemyId}`)
 }
 // tools
 function emitAttack(detail, enemId, targetId, placeId, pos, anims) {

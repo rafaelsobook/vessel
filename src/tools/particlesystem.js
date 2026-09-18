@@ -621,7 +621,11 @@ export function createBloodParticle(scene,  monsFos, particleType = "sphere", ta
     setTimeout(() => ps.start(), 2000)
     return ps
 }
-export function createBloodSplatter(scene, pos,burst){
+// color ({r,g,b}, optional) - defaults to buildBloodSystem's own red, so
+// every EXISTING caller (createcharacter.js's player bloodps) is unaffected.
+// createEnemy.js's own per-modelStyle blood is the one caller that passes
+// something else.
+export function createBloodSplatter(scene, pos, burst, color){
     const capacity = 15
     const ps = buildBloodSystem(scene,
         `blood_${Date.now()}`, capacity, pos ? pos : Vector3.Zero(),
@@ -632,6 +636,7 @@ export function createBloodSplatter(scene, pos,burst){
             maxLife:  burst ? 2.0 : 1.3,
             minSize: 0.25,
             maxSize: 1.50,
+            color,
         }
     );
 
@@ -763,10 +768,16 @@ function buildBloodSystem(scene, name, capacity, position, opts = {}){
     ps.direction1 = new Vector3(d.x - 1.2, d.y + 0.1, d.z - 1.2);
     ps.direction2 = new Vector3(d.x + 1.2, d.y + 0.8, d.z + 1.2);
 
-    ps.addColorGradient(0,   new Color4(0.88, 0.05, 0.05, 1.0));
-    ps.addColorGradient(0.3, new Color4(0.65, 0.02, 0.02, 0.85));
-    ps.addColorGradient(0.7, new Color4(0.3,  0.01, 0.01, 0.5));
-    ps.addColorGradient(1,   new Color4(0.08, 0.0,  0.0,  0.0));
+    // opts.color (default: the original red) - the peak/brightest tint,
+    // darkened toward black at the same 3 falloff stops this system always
+    // had, alpha fade unchanged. Lets a caller reuse this whole "burst of
+    // spatter that fades out" system for a non-red fluid (createEnemy.js's
+    // own per-modelStyle blood color) without duplicating the rest of it.
+    const { r, g, b } = opts.color ?? { r: 0.88, g: 0.05, b: 0.05 }
+    ps.addColorGradient(0,   new Color4(r,        g,        b,        1.0));
+    ps.addColorGradient(0.3, new Color4(r * 0.7,  g * 0.7,  b * 0.7,  0.85));
+    ps.addColorGradient(0.7, new Color4(r * 0.34, g * 0.34, b * 0.34, 0.5));
+    ps.addColorGradient(1,   new Color4(r * 0.09, g * 0.09, b * 0.09, 0.0));
 
     ps.blendMode = ParticleSystem.BLENDMODE_ADD
 
