@@ -66,6 +66,9 @@ function throwSpearProjectile(myChar, charState){
     const spear = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped && itm.weaponType === "spear")
     if(!spear) return
 
+    
+    playSound(getAllSounds().throwSpearS)
+
     const pos = myChar.body.position
     const forward = myChar.body.getDirection(Vector3.Forward())
     // roughly hand/shoulder height, not the capsule's own center - a flat
@@ -115,7 +118,7 @@ function throwSpearProjectile(myChar, charState){
     // its CHILD meshes actually render), so unEquip("weapon") -> that
     // file's own showHideSword is what actually hides those children -
     // same helper equipSword/createSword already use for this exact job.
-    
+
     // myChar.unEquip("weapon")
     // unEquip("weapon")
     // // and actually gone from the bag too - filtered out, not just flipped

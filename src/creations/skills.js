@@ -10,6 +10,7 @@ import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain } from "../charactersystem/inventory.js"
+import { calcDmg } from "../charactersystem/attackingSystem.js"
 
 // mesh-name substrings (case-insensitive) that count as "natural terrain" for
 // groundWeaponItem's own env-hit check below - openworld chunk meshes
@@ -234,20 +235,21 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             let theProjectile = getProjectilesOnScene().find(proj => proj.itemId === projectile.itemId)
             theProjectile.spd = 2
             removeIntersecTrig(instance, enterAction)
-
+            
             // same weaponDmg-else-physicalDmg rule every other real hit
             // resolution in this game already follows (tcp/index.ts's own
             // enemyIsHit handler, duelSystem.js's own atkCollider handler)
             if(dmgDetails){
+                console.log(dmgDetails)
                 const freshCharState = getCharState()
-                const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
-                // dealDamageToEnemy({
-                //     playerId: freshCharState.owner,
-                //     dmgDetails: { physicalDmg: dmgToApply, weaponDmg: 0 },
-                //     targetId: enem._id,
-                //     currentPlaceId: freshCharState.currentPlace.placeId,
-                //     isPhysical: true,
-                // })
+                // const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
+                dealDamageToEnemy({
+                    playerId: freshCharState.owner,
+                    dmgDetails: calcDmg(freshCharState),
+                    targetId: enem._id,
+                    currentPlaceId: freshCharState.currentPlace.placeId,
+                    isPhysical: true,
+                })
             }
 
             setTimeout(() => {

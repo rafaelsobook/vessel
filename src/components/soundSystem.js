@@ -46,6 +46,9 @@ export function initSounds(scene){
     const weaponblockS = createSoundSafe("weaponblockS", "./sounds/weapons/weaponblock.mp3", scene,
     {volume: .5, autoplay: false, loop: false})
 
+    const throwSpearS = createSoundSafe("throwSpearS", "./sounds/weapons/throwspear.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const goblinDeathS = createSoundSafe("goblinDeathS", "./sounds/monsters/goblindeath.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
@@ -171,7 +174,8 @@ export function initSounds(scene){
         pickItemS,
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
         staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
-        weaponblockS
+        weaponblockS,
+        throwSpearS
     }
     return allSounds;
 }
