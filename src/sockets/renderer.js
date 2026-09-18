@@ -53,13 +53,90 @@ const PROJECTILE_GROUND_HIGH = 0.95
 const PROJECTILE_GROUND_FAR = 3
 const PROJECTILE_GROUND_ADJUST_SPEED = 8 // units/sec of vertical nudge
 
+// ENEMY SEPARATION - same problem, same fix duelSystem.js's own
+// separationInterval already solved for npcFighter gauntlets: every enemy
+// chasing the SAME player beelines straight for that player's exact
+// position, so with 2+ enemies on one target they visually converge into
+// one merged mesh (reported from an actual in-game screenshot - a Lucifer
+// Deer standing on top of the player). This is the openworld-enemy
+// equivalent - a periodic reactive nudge, not a targeting/pathing change,
+// so it costs nothing when nobody's ganging up on anyone.
+//
+// Multiplayer note (this is NOT server-synced, and that's deliberate, not
+// an oversight): enemy chase movement is already purely LOCAL per client -
+// the chase loop below moves en.body via locallyTranslate() on THIS
+// client's own frame, only ever snapped back in sync at key moments
+// (worldsocket.js's "enemy-attacked"/"enemy-teleported" handlers), same as
+// every other enemy in this file. What IS server-authoritative and synced
+// to everyone is _targetId itself (set from socket data - see
+// worldsocket.js's "enemy-attacked"/"newTargetId"/"enemy-attacking-me"
+// handlers), so every client groups enemies by shared target identically
+// even though the exact per-frame nudge amounts can drift slightly client
+// to client - the visible result (enemies spread out instead of stacking)
+// stays consistent on every screen without a new network message, the same
+// tradeoff this file's own local chase movement already makes.
+const ENEMY_SEPARATION_CHECK_MS = 200
+// extra clearance on top of each pair's own combined bodyWidenes (their
+// real box "size" - see createEnemy.js's own body creation) - a fixed
+// distance would be too tight for a big monolith and too loose for a small
+// slime, so this scales per-pair instead of duelSystem's single constant
+// (every player-shaped fighter there is roughly the same size, enemies
+// aren't).
+const ENEMY_SEPARATION_MARGIN = 0.6
+let enemySeparationInterval = null
+
+function runEnemySeparationPass(){
+    const chasers = getEnemiesOnScene().filter(en => en._isMoving && en._targetId && en.body && !en._disabled)
+    if(chasers.length < 2) return
+
+    // grouped by target FIRST - the pairwise check below only ever runs
+    // WITHIN one group, so this stays bounded by however many enemies are
+    // actually piled onto any one player, never the whole scene's enemy
+    // count squared
+    const groups = new Map()
+    chasers.forEach(en => {
+        const group = groups.get(en._targetId)
+        if(group) group.push(en)
+        else groups.set(en._targetId, [en])
+    })
+
+    groups.forEach(group => {
+        if(group.length < 2) return
+        for(let i = 0; i < group.length; i++){
+            const a = group[i]
+            for(let j = i + 1; j < group.length; j++){
+                const b = group[j]
+                const dx = b.body.position.x - a.body.position.x
+                const dz = b.body.position.z - a.body.position.z
+                const dist = Math.hypot(dx, dz)
+                const minSeparation = (a.det.bodyWidenes + b.det.bodyWidenes) / 2 + ENEMY_SEPARATION_MARGIN
+                if(dist >= minSeparation || dist < 0.001) continue
+
+                // split the correction evenly, same as duelSystem.js's own
+                const overlap = (minSeparation - dist) / 2
+                const nx = dx / dist
+                const nz = dz / dist
+                a.body.position.x -= nx * overlap
+                a.body.position.z -= nz * overlap
+                b.body.position.x += nx * overlap
+                b.body.position.z += nz * overlap
+            }
+        }
+    })
+}
 
 export function removeRenderObservable(_scene){
     if(_scene) _scene.onBeforeRenderObservable.remove(renderCallback)
+    if(enemySeparationInterval){
+        clearInterval(enemySeparationInterval)
+        enemySeparationInterval = null
+    }
 }
 export function addRenderObservable(_scene){
     scene = _scene;
     scene.onBeforeRenderObservable.add(renderCallback)
+    if(enemySeparationInterval) clearInterval(enemySeparationInterval)
+    enemySeparationInterval = setInterval(runEnemySeparationPass, ENEMY_SEPARATION_CHECK_MS)
 }
 
 
