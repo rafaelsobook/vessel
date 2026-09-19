@@ -6,7 +6,7 @@ import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetai
 import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn, getSocketContainers } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim, randomNum } from '../tools/tools';
 import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
-import { emitMove, emitStop, emitMode, emitWeaponBlock } from '../sockets/emits';
+import { emitMove, emitStop, emitMode, emitWeaponBlock, emitToggleSpawnBots } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
@@ -21,6 +21,7 @@ import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagemen
 import { attachLightning } from '../effects/lightning';
 import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
+import { sendWorldMessage } from '../components/worldChatSystem';
 
 
 // the most recent enemy MY OWN melee attack actually landed on (see
@@ -690,6 +691,8 @@ function setupControls(scene, allsounds) {
             case " ":
                 // updateStoryQuestUI()
                 console.log(myPlayer.body.position)
+                // sendWorldMessage(`${getCharState().name} joined !`)
+                
                 // createWagonRoot()
             break
             case "x":
@@ -785,6 +788,16 @@ function setupControls(scene, allsounds) {
             break
             case "r":
                 reCreateMeshesInScene()
+            break
+            case "v":
+                // tcp/index.ts's own "toggle-spawn-bots" handler - flips a
+                // server-side flag its BOT PLAYERS spawn interval checks
+                // every 5s (recources/npcBrain.ts's Brain class). No local
+                // state to flip here - the bots themselves arrive the exact
+                // same way any other player's own join-world does
+                // ("userJoined" -> reCreateMeshesInScene), nothing to
+                // render differently client-side.
+                emitToggleSpawnBots()
             break
             case "i":
                 giveAllItems()

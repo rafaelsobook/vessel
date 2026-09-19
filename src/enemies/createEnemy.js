@@ -154,7 +154,7 @@ export default function createEnemy(scene, det) {
     }else{
             let pelvisBone = entries.skeletons[0]?.bones.find(bne => bne.name.toLowerCase().includes("pelvis"))
     
-            console.log(`[createEnemy] "${det.modelStyle}" pelvis bone:`, pelvisBone)
+            // console.log(`[createEnemy] "${det.modelStyle}" pelvis bone:`, pelvisBone)
             if(pelvisBone){
                 bodytarget.attachToBone(pelvisBone, mainBodyMeshes)
             }

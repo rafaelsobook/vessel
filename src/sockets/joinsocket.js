@@ -1,7 +1,8 @@
 import { io } from "socket.io-client";
-import { getCharSocket } from "../charactersystem/characterstate.js";
+import { getCharSocket, getCharState } from "../charactersystem/characterstate.js";
 import { activateOnSocketListeners, getIsSocketOn, setSocketOn } from "./worldsocket.js";
 import { webSocketURL } from "../constants/constants.js";
+import { sendWorldMessage } from "../components/worldChatSystem.js";
 
 let socket = null;
 let socketId = null
@@ -39,5 +40,8 @@ export const joinWorld = (roomId) => {
     socket.emit("join-world", playerSocket, (response) => {
         socketId = response.socketId;
         socketPlacesMD = response.placesMD;
+
+        
     });
+    sendWorldMessage(`${getCharState().name} joined !`)
 };

@@ -43,6 +43,22 @@ export function appendSystemMessage(text){
     chatsList.scrollTop = chatsList.scrollHeight
 }
 
+// same "full sentence, no name: prefix" shape as appendSystemMessage above,
+// but two separately-colored spans instead of one flat message - the name
+// itself highlighted (limegreen) apart from the "has joined" text around it
+// (white). Its own function rather than teaching appendSystemMessage to
+// take rich text, so "PlayerName died!" (that function's own existing
+// caller) keeps its current single-color styling untouched.
+export function appendJoinMessage(name){
+    const bx = createElement("div", "chat-bx chat-system")
+    bx.append(
+        createElement("span", "chat-join-name", name),
+        createElement("span", "chat-join-text", " has joined")
+    )
+    chatsList.append(bx)
+    chatsList.scrollTop = chatsList.scrollHeight
+}
+
 // world chat has no rooms/parties - just the full history so far, capped
 // client-side since the DB collection has no pagination yet
 async function loadChatHistory(){
@@ -52,30 +68,34 @@ async function loadChatHistory(){
     messages.slice(-50).forEach(appendChatMessage)
 }
 
-function sendChatMessage(){
-    const message = chatInp.value.trim()
+function sendChatMessage(_messageNotFromChatInput){
+    const chatInpTxt = chatInp.value.trim() 
     chatInp.value = ''
-    if(!message) return
-    if(!getIsSocketOn()) return
+    if(!chatInpTxt && !_messageNotFromChatInput) return console.log(chatInpTxt, _messageNotFromChatInput)
+    if(!getIsSocketOn()) return console.log(getIsSocketOn())
 
     const charState = getCharState()
     const socket = getSocket()
-    if(!charState || !socket) return
+    if(!charState || !socket) return console.log('no socket or charstate ', socket)
 
     const chatData = {
         playerId: charState.owner,
         name: charState.name,
-        message,
+        message: _messageNotFromChatInput ? _messageNotFromChatInput : chatInpTxt,
         place: `${charState.currentPlace.placeId}`,
         msgType: "world"
     }
+    console.log("pass")
 
     // realtime broadcast goes through the tcp socket server, persistence
     // goes straight to the server's own REST api (tcp has no db access)
     socket.emit("worldChatMessage", chatData)
     useFetch(`${APIURL}/worldmessage/save`, "POST", checkIfTokenSaved().token, chatData)
 }
-
+export function sendWorldMessage(_messageNotFromChatInput){
+    console.log(_messageNotFromChatInput)
+    sendChatMessage(_messageNotFromChatInput)
+}
 export function initOnceWorldChatSystem(){
     if(chatSystemInitiated) return
     chatSystemInitiated = true

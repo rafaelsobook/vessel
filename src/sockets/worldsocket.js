@@ -21,7 +21,7 @@ import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
-import { receiveWorldChatMessage, appendSystemMessage } from "../components/worldChatSystem"
+import { receiveWorldChatMessage, appendSystemMessage, appendJoinMessage } from "../components/worldChatSystem"
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
@@ -299,7 +299,17 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer, struckWeapons } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer, struckWeapons } = allDataFromServer
+        // isBot:true only ever rides on tcp/index.ts's own bot-spawn
+        // broadcast (recources/npcBrain.ts's Brain), never a real player's
+        // own join-world (which fires on every PLACE CHANGE too, not just
+        // first login - announcing THOSE would spam "X has joined" every
+        // time any real player walks through a door). World chat is global
+        // (see worldsocket.js's own "player-death" handler comment) - this
+        // runs before the currentPlaceId/place-match guard below on
+        // purpose, so every connected client sees it regardless of which
+        // place they're currently in, same as a death announcement does.
+        if(isBot && newPlayerName) appendJoinMessage(newPlayerName)
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
         allQuests = quests

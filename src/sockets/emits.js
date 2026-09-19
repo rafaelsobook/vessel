@@ -176,6 +176,16 @@ export function emitPickupStruckWeapon(weaponId){
     if(!socket) return
     socket.emit("pickup-struck-weapon", weaponId)
 }
+// tcp/index.ts's "toggle-spawn-bots" handler - flips a server-side flag
+// only (no payload, nothing to remember per-player), bound to
+// inputMovement.js's own "v" debug key. See tcp/recources/npcBrain.ts for
+// what actually happens once it's on.
+export function emitToggleSpawnBots(){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("toggle-spawn-bots")
+}
 // Attack Actions
 export function emitSpawnCircle(pos, element){
     const socket = getSocket()

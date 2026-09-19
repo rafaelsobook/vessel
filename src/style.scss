@@ -1345,6 +1345,18 @@ canvas {
         color: rgba(235, 16, 16, 0.8);
         font-style: italic;
       }
+      // "X has joined" (worldChatSystem.js's own appendJoinMessage) - two
+      // separately-colored spans instead of one flat chat-system-message,
+      // so the name reads as a distinct highlight from the "has joined"
+      // sentence around it
+      &.chat-system .chat-join-name {
+        color: limegreen;
+        font-style: italic;
+      }
+      &.chat-system .chat-join-text {
+        color: white;
+        font-style: italic;
+      }
     }
   }
   .chat-form {

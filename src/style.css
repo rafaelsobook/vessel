@@ -1275,6 +1275,14 @@ canvas {
   color: rgba(235, 16, 16, 0.8);
   font-style: italic;
 }
+.chat-container .chats-list .chat-bx.chat-system .chat-join-name {
+  color: limegreen;
+  font-style: italic;
+}
+.chat-container .chats-list .chat-bx.chat-system .chat-join-text {
+  color: white;
+  font-style: italic;
+}
 .chat-container .chat-form {
   width: 100%;
   display: flex;
