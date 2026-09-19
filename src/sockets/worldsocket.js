@@ -21,7 +21,7 @@ import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
-import { receiveWorldChatMessage, appendSystemMessage, appendJoinMessage } from "../components/worldChatSystem"
+import { receiveWorldChatMessage, appendSystemMessage, appendJoinMessage, sendWorldMessage } from "../components/worldChatSystem"
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
@@ -309,6 +309,7 @@ export function activateOnSocketListeners(socket){
         // runs before the currentPlaceId/place-match guard below on
         // purpose, so every connected client sees it regardless of which
         // place they're currently in, same as a death announcement does.
+        // if(isBot && newPlayerName) appendJoinMessage(newPlayerName)
         if(isBot && newPlayerName) appendJoinMessage(newPlayerName)
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
@@ -968,6 +969,35 @@ export function activateOnSocketListeners(socket){
         // player.body.rotation.y = Math.atan2(dx, dz)
         // player.body.rotation.x = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz))
 
+    })
+    // tcp/recources/npcBrain.ts's own bots - moved like npc/enemy movement
+    // now (renderer.js's own new bot-movement branch does the actual
+    // per-frame body.locallyTranslate() stepping), NOT the real-player
+    // snap-to-exact-position model "emitted-moving"/"stopped" above still
+    // use. Only y/direction/moving actually ride over the wire - no x/z at
+    // all, so this only ever sets facing + moving/mode state, same as
+    // enemy-wander's own client handler does for _wanderTarget.
+    socket.on("bot-moving", data => {
+        if (!isSocketOn) return
+        const { ownerId, y, dirTarg, mode } = data
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if(!player) return
+
+        player._moving = true
+        player.mode = mode
+        player.body.position.y = y
+        player.body.lookAt(new Vector3(dirTarg.x, player.body.position.y, dirTarg.z), 0, 0, 0)
+    })
+    socket.on("bot-stopped", data => {
+        if (!isSocketOn) return
+        const { ownerId, y, dirTarg, mode } = data
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if(!player) return
+
+        player._moving = false
+        player.mode = mode
+        player.body.position.y = y
+        player.body.lookAt(new Vector3(dirTarg.x, player.body.position.y, dirTarg.z), 0, 0, 0)
     })
     socket.on("emitted-mode", data => {
         const { ownerId, mode, weaponName} = data

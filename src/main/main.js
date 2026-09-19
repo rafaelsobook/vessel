@@ -2,6 +2,9 @@
 import { Engine, WebGPUEngine, Scene } from "@babylonjs/core"
 import loadScene from "./loadScene.js"
 import "@babylonjs/loaders"
+// self-starting side effect only (its own module-level setInterval) - see
+// that file's own header comment for what it does and why
+import "../sockets/botSensor.js"
 import { getSocketPlacesMD, initSocket, joinWorld } from "../sockets/joinsocket.js";
 import { metaDatas } from "../constants/localroomdb.js";
 import { setCharState } from "../charactersystem/characterstate.js"

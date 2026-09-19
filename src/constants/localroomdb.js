@@ -134,19 +134,36 @@ export const metaDatas = [
                 resourceId: randNum(0,9999).toString(),
                 resourceType: "ore", // procedurally generated, see createOre() in createRock.js
                 name: "ore",
-                position: {x: 3, y: 0, z: -5},
+                position: {x: -16, y: 0, z: 108},
                 scale: null,
                 rotation: 0,
                 loots: [
                     {name: "stone", chance: 0.2},
-                    {name: "solarore", chance: 0.02},
+                    {name: "solarore", chance: 0.045},
                     {name: "bronzeore", chance: 0.1},
                 ],
                 physics: {
                     opt: {mass: 0},
                     type: "box"
                 }
-            }
+            },
+            {
+                resourceId: randNum(0,9999).toString(),
+                resourceType: "ore", // procedurally generated, see createOre() in createRock.js
+                name: "ore",
+                position: {x: 30, y: 0, z: -100},
+                scale: null,
+                rotation: 0,
+                loots: [
+                    {name: "stone", chance: 0.2},
+                    {name: "solarore", chance: 0.045},
+                    {name: "bronzeore", chance: 0.1},
+                ],
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                }
+            },
         ],
 
         ...generateArea({

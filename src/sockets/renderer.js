@@ -48,6 +48,16 @@ const OPENWORLD_ENEMY_SHOW_DIST_SQ = OPENWORLD_ENEMY_SHOW_DIST * OPENWORLD_ENEMY
 // intentional fall path - pushing a sword back up out of PROJECTILE_GROUND_LOW
 // right as it was trying to embed into the ground kept it from ever actually
 // reaching it, so it never registered a hit at all.
+// BOT MOVEMENT (see the getPlayersOnScene loop below) - BOT_WALK_SPEED
+// matches real players' own controllers/inputMovement.js walkSpeed:1.
+// BOT_SPRINT_SPEED is real sprintSpeed:20 cut 80% (20*0.2 = 4) on request -
+// full speed read as too fast/frantic. MUST match tcp/recources/npcBrain.ts's
+// own SPRINT_SPEED exactly, that file's the one actually deciding
+// arrival/combat timing based on this same number, this is only what steps
+// a bot's position each frame client-side.
+const BOT_WALK_SPEED = 1
+const BOT_SPRINT_SPEED = 4
+
 const PROJECTILE_GROUND_LOW = 0.4
 const PROJECTILE_GROUND_HIGH = 0.95
 const PROJECTILE_GROUND_FAR = 3
@@ -178,6 +188,25 @@ let renderCallback = function () {
 
         if(charState.currentPlace.placeId !== player.currentPlaceId) return
         if(!player.body) return
+
+        // BOT MOVEMENT (tcp/recources/npcBrain.ts) - moved like npc/enemy
+        // movement, not the real-player snap-to-exact-position model every
+        // other playersOnScene entry uses. worldsocket.js's own
+        // "bot-moving"/"bot-stopped" handlers only ever set facing
+        // (body.lookAt) + _moving/mode - no x/z ever rides over the wire
+        // for a bot, so actually covering ground is this client's own job,
+        // every frame, independently - same "the server just says which
+        // way, my own client does the stepping" trust level a real
+        // enemy's own wander/chase already runs on. Bot-detection is a
+        // plain owner-prefix check (bot_<id>, spawnBot's own id scheme) -
+        // no dedicated isBot flag exists on the synced player data, this
+        // is the cheapest way to tell without adding one.
+        if(player.owner?.startsWith("bot_") && player._moving){
+            const spd = player.mode === "fighting" ? BOT_SPRINT_SPEED : BOT_WALK_SPEED
+            _moveVec.set(0, 0, spd * dt)
+            player.body.locallyTranslate(_moveVec)
+        }
+
         if(!player.characterAnimations) return
 
         if(player.mode === "death") return

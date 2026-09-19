@@ -43,9 +43,9 @@ export function createArcCam(scene, placeDetail, head){
     // 1000 - see enemyDetails.ts) - larger world coordinates compound
     // floating-point rounding error through the same already-thin depth
     // precision budget, on top of whatever the ratio alone already cost.
-    camera.minZ = 0.5
-    camera.checkCollisions = true;
-    camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
+    camera.minZ = 0.01
+    // camera.checkCollisions = true;
+    // camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
 
     if(head) attachCam(head);
     return camera

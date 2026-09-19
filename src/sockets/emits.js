@@ -186,6 +186,18 @@ export function emitToggleSpawnBots(){
     if(!socket) return
     socket.emit("toggle-spawn-bots")
 }
+// sockets/botSensor.js's own periodic scan - tcp/index.ts has no idea
+// where trees/buildings/decorations are (all client-only scene data), so
+// this reports a snapshot of nearby static-physics obstacles for bot
+// pathing (recources/npcBrain.ts) to route around. No per-player state
+// kept server-side beyond "the latest report for this place" - see that
+// handler's own comment.
+export function emitBotObstacleReport(obstacles, currentPlaceId){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("bot-obstacle-report", { obstacles, currentPlaceId })
+}
 // Attack Actions
 export function emitSpawnCircle(pos, element){
     const socket = getSocket()

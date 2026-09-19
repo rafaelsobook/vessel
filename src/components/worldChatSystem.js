@@ -68,9 +68,27 @@ async function loadChatHistory(){
     messages.slice(-50).forEach(appendChatMessage)
 }
 
+// server/routes/worldMessageR.js's own "DELETE /worldmessage/clear" -
+// wipes every persisted world chat message, no undo (that route is a
+// straight Messages.deleteMany({}), same "no soft-delete" style its own
+// POST /save already has). Only clears THIS client's own local chat box
+// after a successful call - every other connected client still has
+// whatever it already rendered until its own next loadChatHistory() (e.g.
+// reopening the chat panel), since there's no live "chat was cleared"
+// broadcast wired up for this yet.
+export async function clearWorldChatHistory(){
+    if(!getIsSocketOn()) return console.log(getIsSocketOn())
+    const result = await useFetch(`${APIURL}/worldmessage/clear`, "DELETE", checkIfTokenSaved().token, false)
+    if(!result) return console.log("failed to clear world chat history")
+    chatsList.innerHTML = ''
+    return result
+}
+
 function sendChatMessage(_messageNotFromChatInput){
     const chatInpTxt = chatInp.value.trim() 
     chatInp.value = ''
+    console.log(chatInpTxt)
+    if(chatInpTxt === "adminclear") return clearWorldChatHistory()
     if(!chatInpTxt && !_messageNotFromChatInput) return console.log(chatInpTxt, _messageNotFromChatInput)
     if(!getIsSocketOn()) return console.log(getIsSocketOn())
 
@@ -85,15 +103,14 @@ function sendChatMessage(_messageNotFromChatInput){
         place: `${charState.currentPlace.placeId}`,
         msgType: "world"
     }
-    console.log("pass")
 
     // realtime broadcast goes through the tcp socket server, persistence
     // goes straight to the server's own REST api (tcp has no db access)
     socket.emit("worldChatMessage", chatData)
     useFetch(`${APIURL}/worldmessage/save`, "POST", checkIfTokenSaved().token, chatData)
 }
+
 export function sendWorldMessage(_messageNotFromChatInput){
-    console.log(_messageNotFromChatInput)
     sendChatMessage(_messageNotFromChatInput)
 }
 export function initOnceWorldChatSystem(){
