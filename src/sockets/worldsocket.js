@@ -110,6 +110,10 @@ let harnessDeerOnScene = []
 // never a problem, and gating them too just adds risk for no benefit.
 const OPENWORLD_ENEMY_CREATE_DIST = 300
 const OPENWORLD_ENEMY_CREATE_DIST_SQ = OPENWORLD_ENEMY_CREATE_DIST * OPENWORLD_ENEMY_CREATE_DIST
+// "enemy-attacked"'s own weaponBlocking check below - a hit under this
+// deals so little it reads as deflected rather than a real wound, so it
+// gets the same weaponblockS-instead-of-blood treatment as an actual block
+const LOW_DAMAGE_NO_BLOOD_THRESHOLD = 10
 // reCreateMeshesInScene only ever runs off "userJoined"/"enemy-respawned"
 // broadcasts (see this file's own socket.on calls) - neither fires just
 // because YOUR OWN character walked closer to a not-yet-created enemy, so
@@ -499,7 +503,15 @@ export function activateOnSocketListeners(socket){
         // own "emitted-weaponblock" handler above), not charState - so
         // EVERY client watching this fight sees the same outcome, not just
         // the victim's own client.
-        if(victimPlayer.weaponBlocking){
+        //
+        // data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD - a hit this weak reads
+        // as deflected/absorbed rather than a real wound, same visual
+        // treatment as an actual block (weaponblockS, no blood), just
+        // triggered by the damage number instead of the player's own
+        // blocking state. Unconditional/everyone-sees-it, same reasoning as
+        // weaponBlocking right above - this is armor/toughness reading as
+        // "shrugged off", not something only the victim's own client knows.
+        if(victimPlayer.weaponBlocking || data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD){
             getAllSounds().weaponblockS?.play()
         } else {
             // bloodps (createcharacter.js's createBloodSplatter, emitter

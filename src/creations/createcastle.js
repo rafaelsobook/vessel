@@ -78,19 +78,23 @@ function getMaterials(scene){
         stoneMat = createMat("castleStoneMat", false, "./images/modeltex/rockTex.jpg", scene, { uScale: 4, vScale: 2 })
     }
     if(!stepMat){
-        // SAME rockTex.jpg as stoneMat, but its own material with a much
-        // smaller UV scale - MeshBuilder.CreateBox's default UV always
-        // spans a flat 0-1 per face regardless of the box's real size, so
-        // reusing stoneMat's uScale:4/vScale:2 (tuned for a ~40x8 wall,
-        // roughly a 10x4-unit texture repeat) on the gate step's own much
-        // smaller ~12x2 top face was squeezing that same 4x2 repeat count
-        // into a far smaller physical surface - the texture read as
-        // stretched/streaky instead of matching the walls' own stone-block
-        // scale. ~1.2/~0.5 targets that same rough "10 world-units per
-        // repeat" density instead of reusing the wall's fixed numbers
-        // as-is - worth a further tweak in-game if it still looks off, this
-        // wasn't checked against the real rendered result.
-        stepMat = createMat("castleStepMat", false, "./images/modeltex/rockTex.jpg", scene, { uScale: 1.2, vScale: 0.5 })
+        // SAME rockTex.jpg as stoneMat, its own material with a UV scale
+        // tuned for the step box's FRONT/RISER face, not its top -
+        // MeshBuilder.CreateBox applies one uScale/vScale to every face
+        // alike, but this box's faces are wildly different shapes: the top
+        // is 12x2 (width x depth), the front riser you actually walk
+        // toward and see is 12x0.3 (width x GATE_STEP_HEIGHT) - a much
+        // thinner face. A vScale picked for the top's "depth" of 2 (this
+        // used to be 0.5) squeezes way more vertical texture than a
+        // 0.3-tall face can show without smearing - confirmed stretched
+        // in-game from straight-on, which is the dominant view walking
+        // through the gate. vScale: 0.075 targets the walls' own ~4-world-
+        // units-per-repeat density (WALL_HEIGHT:8 / stoneMat's vScale:2)
+        // against the riser's real 0.3-unit height instead
+        // (0.3/4 = 0.075), trading a busier/more-tiled look on the
+        // rarely-seen top face for a correct one on the face that's
+        // actually in view.
+        stepMat = createMat("castleStepMat", false, "./images/modeltex/rockTex.jpg", scene, { uScale: 1.2, vScale: 3 })
     }
     if(!roofMat){
         roofMat = new StandardMaterial("castleRoofMat", scene)

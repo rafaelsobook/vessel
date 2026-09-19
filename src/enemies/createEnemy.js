@@ -753,6 +753,7 @@ function getBodyTargetInstance(scene, modelStyle, options, enemyId){
     if(!template){
         template = MeshBuilder.CreateBox(templateName, options, scene)
         template.isPickable = false
+        template.isVisible = false
     }
     return template.createInstance(`${modelStyle}.bodytarget.${enemyId}`)
 }
