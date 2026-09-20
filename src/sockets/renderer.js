@@ -8,6 +8,7 @@ import { Vector3 } from "@babylonjs/core";
 import { updateNpcPatrol } from "../npc/npcPatrol.js";
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
+import { emitEnemyChasePosition } from "./emits.js";
 
 let scene;
 
@@ -57,6 +58,13 @@ const OPENWORLD_ENEMY_SHOW_DIST_SQ = OPENWORLD_ENEMY_SHOW_DIST * OPENWORLD_ENEMY
 // a bot's position each frame client-side.
 const BOT_WALK_SPEED = 1
 const BOT_SPRINT_SPEED = 4
+
+// how often a chasing enemy pings its own live x/z back to tcp (see
+// emitEnemyChasePosition's own header comment, sockets/emits.js) - close to
+// npcBrain.ts's own COMBAT_CHECK_MS (1000ms), so a bot's next combat
+// re-check is never working off more than about one report-cycle of
+// staleness, without reporting anywhere near every frame
+const CHASE_POS_REPORT_INTERVAL_MS = 1200
 
 const PROJECTILE_GROUND_LOW = 0.4
 const PROJECTILE_GROUND_HIGH = 0.95
@@ -201,10 +209,23 @@ let renderCallback = function () {
         // plain owner-prefix check (bot_<id>, spawnBot's own id scheme) -
         // no dedicated isBot flag exists on the synced player data, this
         // is the cheapest way to tell without adding one.
-        if(player.owner?.startsWith("bot_") && player._moving){
-            const spd = player.mode === "fighting" ? BOT_SPRINT_SPEED : BOT_WALK_SPEED
-            _moveVec.set(0, 0, spd * dt)
-            player.body.locallyTranslate(_moveVec)
+        if(player.owner?.startsWith("bot_")){
+            // "bot-dashing" (worldsocket.js, dashstrikeSkill's own melee
+            // bots) - takes priority over the plain _moving check below and
+            // runs regardless of it, since a dash fires from the "holding
+            // still in attack range" state (_moving already false there) -
+            // same locallyTranslate-ramp idea client/src/npc/duelSystem.js's
+            // own performOpponentDashStrike uses for its dashstrike-using
+            // npcFighters, just driven by a broadcast speed/duration instead
+            // of a local scene.onBeforeRenderObservable
+            if(player._dashUntil && performance.now() < player._dashUntil){
+                _moveVec.set(0, 0, player._dashSpeedPerSec * dt)
+                player.body.locallyTranslate(_moveVec)
+            } else if(player._moving){
+                const spd = player.mode === "fighting" ? BOT_SPRINT_SPEED : BOT_WALK_SPEED
+                _moveVec.set(0, 0, spd * dt)
+                player.body.locallyTranslate(_moveVec)
+            }
         }
 
         if(!player.characterAnimations) return
@@ -406,6 +427,17 @@ let renderCallback = function () {
                 // at its last pre-attack height and visibly float/sink while attacking.
                 if(en.det.currentPlaceId === OPENWORLD_PLACE_ID){
                     en.body.position.y = sampleTerrainSurfaceHeight(en.body.position.x, en.body.position.z, OPENWORLD_TERRAIN_VERTS) + en.det.bodyHeight / 2 + 0.05
+                }
+
+                // see emitEnemyChasePosition's own header comment
+                // (sockets/emits.js) - keeps tcpEnemies' x/z reasonably
+                // fresh while this enemy is actively chasing anyone (a
+                // real player or a bot), not just at the next attack/
+                // wander report. Throttled per-enemy, not every frame.
+                const now = performance.now()
+                if(!en._lastChasePosReportAt || now - en._lastChasePosReportAt > CHASE_POS_REPORT_INTERVAL_MS){
+                    en._lastChasePosReportAt = now
+                    emitEnemyChasePosition(en._id, en.body.position.x, en.body.position.z)
                 }
 
                 if(dist < en.det.maxDistance) return

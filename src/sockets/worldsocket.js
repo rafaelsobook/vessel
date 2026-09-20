@@ -4,7 +4,7 @@ import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
 import { attachCam, camShake } from "../tools/camera"
 import { getSpawnPos } from "../tools/position"
-import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction } from "@babylonjs/core"
+import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction, Quaternion } from "@babylonjs/core"
 import { createTransparentMat } from "../tools/materials"
 import { createTextMesh } from "../gui/textmesh"
 import { showGuildQuest, questToItem } from "../charactersystem/guildQuest"
@@ -429,12 +429,48 @@ export function activateOnSocketListeners(socket){
         // client, caster included, so activateSkill needs to know the
         // actual caster's stats rather than assuming "me". See
         // activateSkill's own comment for why this matters.
-        const { ownerId, skill, currentPlaceId, casterStats } = data
+        const { ownerId, skill, currentPlaceId, casterStats, dirYaw, debugTargetId, debugTargetPos } = data
         const charState = getCharState()
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
-        activateSkill(ownerId, skill, casterStats)
 
+        // dirYaw (tcp/index.ts's own dealDamage callback, bot casters only -
+        // a real player's own skillsui.js click never sends this, so this is
+        // a no-op for every real cast) - re-faces the caster ONE more time,
+        // synchronously, in this exact handler, immediately before
+        // activateSkill reads the body's CURRENT rotation to aim the cast
+        // (computeCastOrigin, creations/skillEffects.js). A plain angle, not
+        // a dirTarg point - see "bot-moving"/"bot-stopped"'s own header
+        // comment above for why a point silently breaks once this bot's
+        // client-rendered position has drifted from what the server
+        // believes it is (confirmed via live matching server/client
+        // console logs - a lookAt(point) computed from THIS body's own
+        // drifted position produced a badly wrong angle even though the
+        // server's own reported point was correct).
+        if(typeof dirYaw === "number"){
+            const player = playersOnScene.find(pl => pl.owner === ownerId)
+            if(player?.body){
+                if(data.botTcpPos){
+                    console.log(data.botTcpPos)
+                    player.body.position.x = data.botTcpPos.x
+                    player.body.position.z = data.botTcpPos.z
+                }
+                
+                player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
+
+                // debug only - matches tcp/index.ts's own [botAim] log
+                // (same debugTargetId/debugTargetPos, sent verbatim in this
+                // same payload) so the two can be diffed side by side to
+                // confirm the fix - forward should now point from THIS
+                // body's own position toward targetPos, not off at
+                // whatever angle the old drift-sensitive lookAt(point)
+                // produced.
+                const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
+                console.log(`[clientBotAim] ${ownerId} bodyPos=(${player.body.position.x.toFixed(2)},${player.body.position.z.toFixed(2)}) dirYaw=${dirYaw.toFixed(3)} forward=(${forward.x.toFixed(2)},${forward.z.toFixed(2)}) target=${debugTargetId} targetPos=(${debugTargetPos?.x?.toFixed(2)},${debugTargetPos?.z?.toFixed(2)})`)
+            }
+        }
+
+        activateSkill(ownerId, skill, casterStats)
     })
     socket.on("player-attacked", data => {
         if (!isSocketOn) return
@@ -647,10 +683,34 @@ export function activateOnSocketListeners(socket){
         enemiez.forEach(enem => {
             allEnemiez.forEach(enemDetail => {
                 if (enemDetail._id === enem._id) {
+                    // captured BEFORE overwriting below - createEnemy.js's
+                    // own initAttack() (the thing that actually starts the
+                    // repeating attack() interval) is ONLY ever called from
+                    // one place: onIntersecEnterTrig(atkDetection,
+                    // myChar.body, ...), hardcoded to the LOCAL real
+                    // player's own body. A bot has no client of its own to
+                    // ever trigger that, so an enemy whose target is a bot
+                    // would otherwise sit there marked as targeting it
+                    // forever, never actually swinging (confirmed - "the
+                    // deers are not attacking them"). This only fires once
+                    // per enemy (tcp/index.ts's own registerTargetIfNone
+                    // never re-registers once _targetId is already set, so
+                    // !enem._targetId here can only be true on this
+                    // enemy's very first acquisition). Real-player
+                    // registrations are untouched (gated on the bot_
+                    // prefix) - their own atkDetection trigger already
+                    // calls initAttack() directly, synchronously, before
+                    // this broadcast even round-trips back; calling
+                    // resumeAttack() again here would just restart their
+                    // attack cadence for no reason.
+                    const justAcquiredBotTarget = !enem._targetId && typeof enemDetail._targetId === "string" && enemDetail._targetId.startsWith("bot_")
+
                     enem._targetId = enemDetail._targetId
                     enem._dirTarg = enemDetail._dirTarg
                     // enem._isMoving = enemDetail._isMoving
                     enem._attacking = enemDetail._attacking
+
+                    if(justAcquiredBotTarget) enem.resumeAttack?.()
                 }
             })
         })
@@ -977,27 +1037,72 @@ export function activateOnSocketListeners(socket){
     // use. Only y/direction/moving actually ride over the wire - no x/z at
     // all, so this only ever sets facing + moving/mode state, same as
     // enemy-wander's own client handler does for _wanderTarget.
+    //
+    // dirYaw (a plain Y-axis angle, radians) - NOT a dirTarg point/lookAt.
+    // A real player's own "emitted-moving"/"stopped" can safely lookAt a
+    // point because their body.position is SNAPPED directly from the same
+    // server-reported pos that point was computed relative to - always in
+    // sync. A bot's never is: this client steps its OWN position forward
+    // every frame via a simple constant-speed locallyTranslate
+    // (renderer.js), completely independent of npcBrain.ts's own richer
+    // yuka steering/deceleration/obstacle-avoidance simulation, so this
+    // body's position visibly drifts from what the server believes it is.
+    // lookAt(dirTargPoint) computed from THIS body's own (drifted)
+    // position was producing a badly wrong angle - confirmed via live
+    // matching server/client console logs, worse the closer the target
+    // since CAST_RANGE is only 10 units. Applying a pure angle directly
+    // (Quaternion.RotationAxis, same convention createcharacter.js's own
+    // creation-time facing already uses) needs no position of any kind to
+    // reconstruct the rotation, so this drift can't corrupt it anymore.
     socket.on("bot-moving", data => {
         if (!isSocketOn) return
-        const { ownerId, y, dirTarg, mode } = data
+        const { ownerId, y, dirYaw, mode } = data
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
 
         player._moving = true
         player.mode = mode
         player.body.position.y = y
-        player.body.lookAt(new Vector3(dirTarg.x, player.body.position.y, dirTarg.z), 0, 0, 0)
+        player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
     })
     socket.on("bot-stopped", data => {
         if (!isSocketOn) return
-        const { ownerId, y, dirTarg, mode } = data
+        const { ownerId, y, dirYaw, mode } = data
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
 
         player._moving = false
         player.mode = mode
         player.body.position.y = y
-        player.body.lookAt(new Vector3(dirTarg.x, player.body.position.y, dirTarg.z), 0, 0, 0)
+        player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
+    })
+    // tcp/index.ts's own dealDamage callback (melee-style bots, dashstrikeSkill) -
+    // castDashSkill (creations/skillEffects.js) is entirely PLAYER-shaped
+    // (physics impulse, isCaster-gated), same reason client/src/npc/
+    // duelSystem.js's own dashstrike-using npcFighters never reuse it either
+    // and instead run their own dedicated locallyTranslate ramp
+    // (performOpponentDashStrike) - this is that same idea for a bot: no
+    // position/direction rides along at all (the bot is already facing the
+    // right way from "bot-stopped"/the "skillactivated" dirTarg above), just
+    // "translate yourself forward this fast for this long," consumed by
+    // renderer.js's own per-frame bot-stepping loop every frame until
+    // _dashUntil elapses.
+    socket.on("bot-dashing", data => {
+        if (!isSocketOn) return
+        const { ownerId, distance, durationMs, weaponName, parts, weaponType, metalColor } = data
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if(!player) return
+
+        player._dashUntil = performance.now() + durationMs
+        player._dashSpeedPerSec = (distance / durationMs) * 1000
+
+        // re-parents the sword mesh createCharacter already built for this
+        // bot back onto rHand (onHand:true) - see this handler's own header
+        // comment above for why nothing else was ever doing this for a bot.
+        // weaponName undefined (attitude.weapon>0.5 guaranteed a real
+        // equipped weapon server-side, but defensive here regardless) skips
+        // the call entirely rather than handing equipSword a broken name.
+        if(weaponName) player.equipSword(weaponName, true, parts, weaponType, metalColor)
     })
     socket.on("emitted-mode", data => {
         const { ownerId, mode, weaponName} = data

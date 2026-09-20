@@ -174,7 +174,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const {root, animationGroups, rHand, belts, cloaks, 
         armors, boots, spineBone, headBone, lowerArmL, lowerArmR, 
-        shoulderL, shoulderR, characterHairs} = createAnimeBody(containers, body, bodytarget, det, scene)
+        shoulderL, shoulderR, characterHairs, mainBodyLegs} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
@@ -204,6 +204,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         boots.forEach(boot => {
             if(boot.name === itemName){
                 boot.mesh.isVisible = true
+                mainBodyLegs.isVisible = false
             } else boot.mesh.isVisible = false
         })
     }
@@ -424,6 +425,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             break
             case "boots":
                 boots.forEach(boot => boot.mesh.isVisible = false)
+                mainBodyLegs.isVisible = true
             break
             case "armor":
                 armors.forEach(arm => arm.mesh.isVisible = false)
@@ -640,6 +642,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     let armors = []
     let boots = []
     let characterHairs = []
+    let mainBodyLegs = undefined
     const {hairMat,femaleHair1Mat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
    
     const entries = animeBody.instantiateModelsToScene()
@@ -755,6 +758,9 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         // "eyes" is shared by both bodies (parented under the common head
         // bone, not part of either body's own node group) - handle it before
         // the gender-exclusivity dispose below so it survives for both
+        if(mes.name === "mainbodylegs"){
+            mainBodyLegs = mes;
+        }
         if(mes.name === "eyes") {
             if(isFemale) return mes.dispose()
             // instantiateModelsToScene() above doesn't clone materials, so every
@@ -907,7 +913,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         lowerArmR,
         shoulderL,
         shoulderR,
-        characterHairs
+        characterHairs,
+        mainBodyLegs
     }
 }
 function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {

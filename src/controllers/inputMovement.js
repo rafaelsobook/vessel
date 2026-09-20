@@ -6,7 +6,7 @@ import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetai
 import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn, getSocketContainers } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim, randomNum } from '../tools/tools';
 import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
-import { emitMove, emitStop, emitMode, emitWeaponBlock, emitToggleSpawnBots } from '../sockets/emits';
+import { emitMove, emitStop, emitMode, emitWeaponBlock, emitToggleSpawnBots, emitSpawnBotNearMe } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound, playHalfSound } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
@@ -798,6 +798,15 @@ function setupControls(scene, allsounds) {
                 // ("userJoined" -> reCreateMeshesInScene), nothing to
                 // render differently client-side.
                 emitToggleSpawnBots()
+            break
+            case "g":
+                // tcp/index.ts's own "spawn-bot-near-me" handler - drops
+                // exactly one caster-attitude bot right beside wherever
+                // this character currently is, for quick on-demand
+                // testing without waiting on "v"'s own random 5s
+                // interval/random place/random attitude. "b" was already
+                // taken (giveRandomSkill()), hence "g" instead.
+                emitSpawnBotNearMe()
             break
             case "i":
                 giveAllItems()

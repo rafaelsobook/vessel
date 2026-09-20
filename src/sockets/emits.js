@@ -186,6 +186,24 @@ export function emitToggleSpawnBots(){
     if(!socket) return
     socket.emit("toggle-spawn-bots")
 }
+// tcp/index.ts's own "spawn-bot-near-me" handler - drops exactly one
+// caster-attitude bot right next to wherever the local player currently
+// is, for quick on-demand testing instead of waiting on the "v" toggle's
+// own random 5s interval/random place/random attitude. Bound to
+// inputMovement.js's own "g" debug key ("b" was already taken by
+// giveRandomSkill()).
+export function emitSpawnBotNearMe(){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    const charState = getCharState()
+    if(!charState) return
+    const { pos } = getPlayerCoord(charState.owner)
+    socket.emit("spawn-bot-near-me", {
+        pos: { x: pos.x, z: pos.z },
+        currentPlace: charState.currentPlace,
+    })
+}
 // sockets/botSensor.js's own periodic scan - tcp/index.ts has no idea
 // where trees/buildings/decorations are (all client-only scene data), so
 // this reports a snapshot of nearby static-physics obstacles for bot
@@ -395,4 +413,21 @@ export function emitEnemyYCorrection(enemyId, y, x, z){
     // x/z included so receivers can tell if this correction is stale by the time
     // it arrives (the enemy may have kept moving) instead of blindly applying it
     socket.emit("correctEnemyY", { _id: enemyId, y, x, z })
+}
+// tcpEnemies' own x/z is otherwise only refreshed at explicit report
+// moments (an attack/skill-cast landing, or a wander tick - tcp/index.ts) -
+// never continuously while an enemy is simply CHASING (chase movement is
+// deliberately client-local/unsynced - renderer.js's own chase loop header
+// comment explains why). Anything that reads tcpEnemies to decide who/where
+// to hunt (getNearestEnemy, tcp/recources/npcBrain.ts's bot combat) was
+// aiming at wherever a chasing enemy last attacked/wandered FROM, not where
+// it's actually walking to right now - this is a coarse, THROTTLED ping
+// (renderer.js's own chase loop calls it on its own interval, nowhere near
+// every frame) that keeps that data close enough without turning chase
+// into a real synced-every-frame movement system.
+export function emitEnemyChasePosition(enemyId, x, z){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("enemyChasePosition", { _id: enemyId, x, z })
 }
