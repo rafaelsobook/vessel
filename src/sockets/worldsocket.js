@@ -710,7 +710,26 @@ export function activateOnSocketListeners(socket){
                     // enem._isMoving = enemDetail._isMoving
                     enem._attacking = enemDetail._attacking
 
-                    if(justAcquiredBotTarget) enem.resumeAttack?.()
+                    if(justAcquiredBotTarget){
+                        enem.resumeAttack?.()
+                        // _isMoving is the ONLY gate on renderer.js's own
+                        // chase-movement branch (en._isMoving && en._targetId
+                        // && en.det.actionType==="chasing") - the SAME branch
+                        // that both walks the enemy toward its target AND
+                        // periodically reports its own live position back to
+                        // tcp (emitEnemyChasePosition). Never true here
+                        // before, so a bot-targeted enemy just stood frozen
+                        // at whatever position it last had - it never
+                        // physically moved, so tcpEnemies' own x/z (and
+                        // therefore any dirYaw a bot computes off it) never
+                        // updated even while the real enemy should have been
+                        // closing in. Only ever set true otherwise via a
+                        // real player's own atkDetection EXIT trigger
+                        // ("enemyWillChase") - a bot has no such trigger to
+                        // ever fire it, same reasoning resumeAttack's own
+                        // comment gives for the attack loop.
+                        enem._isMoving = true
+                    }
                 }
             })
         })
