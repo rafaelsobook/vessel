@@ -437,7 +437,7 @@ let renderCallback = function () {
                 const now = performance.now()
                 if(!en._lastChasePosReportAt || now - en._lastChasePosReportAt > CHASE_POS_REPORT_INTERVAL_MS){
                     en._lastChasePosReportAt = now
-                    emitEnemyChasePosition(en._id, en.body.position.x, en.body.position.z)
+                    // emitEnemyChasePosition(en._id, en.body.position.x, en.body.position.z)
                 }
 
                 if(dist < en.det.maxDistance) return

@@ -730,6 +730,24 @@ export function activateOnSocketListeners(socket){
                         // comment gives for the attack loop.
                         enem._isMoving = true
                     }
+
+                    // the flip side of the same problem - tcp/index.ts's own
+                    // death-handling (both "will-die" for a real player and
+                    // the bot-death branch in "enemyWillAttack") resets
+                    // _isMoving/_targetId on tcpEnemies the instant this
+                    // enemy's target dies, but that reset used to never
+                    // reach any already-connected client at all. Without
+                    // this, an enemy that just killed its target kept
+                    // _isMoving stuck at whatever it was BEFORE the kill -
+                    // renderer.js's own chase branch gates purely on that
+                    // flag, not on whether its target lookup still resolves
+                    // to anything, so it kept replaying the running
+                    // animation forever even though the actual translate/
+                    // lookAt beneath it had already gone silently inert
+                    // (its target vanished from playersOnScene). Confirmed
+                    // from an actual report: a deer that had just killed a
+                    // bot stayed "running" in place, never moving again.
+                    if(!enemDetail._targetId) enem._isMoving = false
                 }
             })
         })
@@ -1111,7 +1129,10 @@ export function activateOnSocketListeners(socket){
         const { ownerId, distance, durationMs, weaponName, parts, weaponType, metalColor } = data
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
-
+        if(data.botTcpPos){
+            player.body.position.x = data.botTcpPos.x
+            player.body.position.z = data.botTcpPos.z
+        }
         player._dashUntil = performance.now() + durationMs
         player._dashSpeedPerSec = (distance / durationMs) * 1000
 

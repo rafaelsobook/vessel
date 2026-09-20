@@ -49,6 +49,8 @@ export function attack(_attackInfo, attackAnimName){
     const { physicalDmg, weaponDmg, magicDmg, accuracy } = dmgDetails
     const playerAttacked = getPlayersOnScene().find(pl => pl.owner === owner)
     if (!playerAttacked) return
+    playerAttacked.body.position.x = pos.x
+    playerAttacked.body.position.z = pos.z
     playerAttacked._attacking = true
     if(hasWeapon) playerAttacked.equipSword(hasWeapon, true)
     const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)
