@@ -14,6 +14,14 @@ const chatToggleBtn = document.querySelector(".chat-toggle-btn")
 let chatSystemInitiated = false
 let isChatOpen = false
 
+// sendWorldMessage's own override for sendChatMessage's normal "read
+// whatever's actually typed in the chat textbox" behavior (see both
+// functions below) - a join announcement has no textbox input to read at
+// all, so this substitutes a fixed message instead. Set immediately before
+// calling sendChatMessage and cleared right after, so it can never leak
+// into the NEXT real message a player actually types and sends.
+let _messageNotFromChatInput = null
+
 export function appendChatMessage({ name, message }){
     const bx = createElement("div", "chat-bx")
     bx.append(
@@ -43,22 +51,6 @@ export function appendSystemMessage(text){
     chatsList.scrollTop = chatsList.scrollHeight
 }
 
-// same "full sentence, no name: prefix" shape as appendSystemMessage above,
-// but two separately-colored spans instead of one flat message - the name
-// itself highlighted (limegreen) apart from the "has joined" text around it
-// (white). Its own function rather than teaching appendSystemMessage to
-// take rich text, so "PlayerName died!" (that function's own existing
-// caller) keeps its current single-color styling untouched.
-export function appendJoinMessage(name){
-    const bx = createElement("div", "chat-bx chat-system")
-    bx.append(
-        createElement("span", "chat-join-name", name),
-        createElement("span", "chat-join-text", " has joined")
-    )
-    chatsList.append(bx)
-    chatsList.scrollTop = chatsList.scrollHeight
-}
-
 // world chat has no rooms/parties - just the full history so far, capped
 // client-side since the DB collection has no pagination yet
 async function loadChatHistory(){
@@ -84,10 +76,14 @@ export async function clearWorldChatHistory(){
     return result
 }
 
-function sendChatMessage(_messageNotFromChatInput){
-    const chatInpTxt = chatInp.value.trim() 
-    chatInp.value = ''
-    console.log(chatInpTxt)
+function sendChatMessage(playerDetail){
+    // a synthesized message (sendWorldMessage's own _messageNotFromChatInput
+    // override, e.g. a bot's join announcement) has nothing to do with
+    // whatever a real player currently has sitting in the actual chat
+    // textbox - reading/clearing it here too would wipe out a message
+    // someone was still mid-typing the instant an unrelated bot spawns.
+    const chatInpTxt = _messageNotFromChatInput ? "" : chatInp.value.trim()
+    if(!_messageNotFromChatInput) chatInp.value = ''
     if(chatInpTxt === "adminclear") return clearWorldChatHistory()
     if(!chatInpTxt && !_messageNotFromChatInput) return console.log(chatInpTxt, _messageNotFromChatInput)
     if(!getIsSocketOn()) return console.log(getIsSocketOn())
@@ -97,10 +93,10 @@ function sendChatMessage(_messageNotFromChatInput){
     if(!charState || !socket) return console.log('no socket or charstate ', socket)
 
     const chatData = {
-        playerId: charState.owner,
-        name: charState.name,
+        playerId: playerDetail.owner,
+        name: playerDetail.name,
         message: _messageNotFromChatInput ? _messageNotFromChatInput : chatInpTxt,
-        place: `${charState.currentPlace.placeId}`,
+        place: `${playerDetail.currentPlace.placeId ? playerDetail.currentPlace.placeId : playerDetail.currentPlaceId}`,
         msgType: "world"
     }
 
@@ -110,16 +106,28 @@ function sendChatMessage(_messageNotFromChatInput){
     useFetch(`${APIURL}/worldmessage/save`, "POST", checkIfTokenSaved().token, chatData)
 }
 
-export function sendWorldMessage(_messageNotFromChatInput){
-    sendChatMessage(_messageNotFromChatInput)
+// join announcement (worldsocket.js's "userJoined" handler, bot spawns only -
+// see that handler's own comment for why a real player's own join never
+// goes through this, unlike a bot's) - playerDetail is the newly-joined
+// player/bot's own full record (owner/name/currentPlace), same shape
+// sendChatMessage already expects from a real typed message's own charState.
+// Goes through the exact same real chat pipeline as a typed message
+// (realtime broadcast + persisted to the world chat history), not a
+// local-only rendered line - every connected client (not just whoever's
+// online at that exact moment) sees "BotName: has joined!" in their chat
+// log, including anyone who opens the chat and loads history later.
+export function sendWorldMessage(playerDetail){
+    _messageNotFromChatInput = "has joined!"
+    sendChatMessage(playerDetail)
+    _messageNotFromChatInput = null
 }
 export function initOnceWorldChatSystem(){
     if(chatSystemInitiated) return
     chatSystemInitiated = true
-
-    chatSendBtn.addEventListener("click", sendChatMessage)
+    const charState = getCharState()
+    chatSendBtn.addEventListener("click", () => sendChatMessage(charState))
     chatInp.addEventListener("keydown", e => {
-        if(e.key === "Enter") sendChatMessage()
+        if(e.key === "Enter") sendChatMessage(charState)
     })
     chatToggleBtn.addEventListener("click", toggleChatContainer)
 }

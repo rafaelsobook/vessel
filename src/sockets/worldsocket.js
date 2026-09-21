@@ -1,5 +1,5 @@
 import { deductHp, getCharState } from "../charactersystem/characterstate"
-import { createCharacter } from "../charactersystem/createcharacter"
+import { createCharacter, capsuleHeight } from "../charactersystem/createcharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
 import { attachCam, camShake } from "../tools/camera"
@@ -21,7 +21,7 @@ import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
-import { receiveWorldChatMessage, appendSystemMessage, appendJoinMessage, sendWorldMessage } from "../components/worldChatSystem"
+import { receiveWorldChatMessage, appendSystemMessage, sendWorldMessage } from "../components/worldChatSystem"
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
@@ -310,8 +310,16 @@ export function activateOnSocketListeners(socket){
         // runs before the currentPlaceId/place-match guard below on
         // purpose, so every connected client sees it regardless of which
         // place they're currently in, same as a death announcement does.
-        // if(isBot && newPlayerName) appendJoinMessage(newPlayerName)
-        if(isBot && newPlayerName) appendJoinMessage(newPlayerName)
+        // players already has this bot's full entry (tcp just pushed it
+        // server-side before broadcasting) - looked up by name since this
+        // payload only ever sends the bare newPlayerName, not an owner id,
+        // alongside it. Name lookup is safe/unique here the same way
+        // pickBotName's own retry-for-uniqueness (tcp/index.ts) and a real
+        // player's own name-uniqueness check at creation already guarantee.
+        if(isBot && newPlayerName){
+            const newBot = players.find(pl => pl.name === newPlayerName)
+            if(newBot) sendWorldMessage(newBot)
+        }
         allPlayersFromTCP = players
         allEnemiez = tcpEnemies
         allQuests = quests
@@ -456,8 +464,25 @@ export function activateOnSocketListeners(socket){
                     // console.log(data.botTcpPos)
                     player.body.position.x = data.botTcpPos.x
                     player.body.position.z = data.botTcpPos.z
+                    // openworld terrain-follow (same sampleTerrainSurfaceHeight()
+                    // correction renderer.js's own per-frame bot-stepping loop
+                    // applies) - without this, the snap above moves x/z to
+                    // wherever the bot actually is server-side, but leaves y
+                    // sitting at whatever it was BEFORE the snap (last frame's
+                    // correction, computed for the OLD x/z). On flat ground
+                    // (village) that's still numerically correct everywhere, so
+                    // it never showed - but openworld's uneven terrain means the
+                    // old y can be very wrong for the new spot. This runs
+                    // synchronously, right before computeCastOrigin
+                    // (skillEffects.js) reads player.rHand's absolute position
+                    // to place the magic circle - without correcting y here
+                    // first, the circle spawns using that stale height instead
+                    // of waiting for the next render frame's own correction.
+                    if(player.currentPlaceId === OPENWORLD_PLACE_ID){
+                        player.body.position.y = sampleTerrainSurfaceHeight(player.body.position.x, player.body.position.z, OPENWORLD_TERRAIN_VERTS) + capsuleHeight / 2 + 0.05
+                    }
                 }
-                
+
                 player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
 
                 // re-parents the caster's own weapon (a staff) onto rHand -

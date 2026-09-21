@@ -89,7 +89,11 @@ export function insertItemOnInventory(itm){
     }else{
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
-    if(itm.weaponType === "sword" || itm.weaponType === "spear" || itm.weaponType === "pickaxe") itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
+    if(itm.weaponType === "sword" || 
+        itm.weaponType === "spear" || 
+        itm.weaponType === "pickaxe" ||
+        itm.weaponType === "staff"
+    ) itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
     // axe is still the one weaponType with no singular "axe.webp" of its
     // own - overridden to the shared "axes.webp" instead of the
     // per-weaponType line above (which pickaxe now uses, alongside

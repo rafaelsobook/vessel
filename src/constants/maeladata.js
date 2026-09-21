@@ -29,8 +29,8 @@ export function maelaData(){
             questionId: 320,
             conversationWithQuestion: toLines(pick(maelaGreetings)),
             answers: [
-                { text: "Show me your wares", cb: () => buyOrSell(false, "115_maela") },
-                { text: "Just looking around.", cb: () => startQuestionare(321) },
+                { text: "Something to eat", cb: () => buyOrSell(false, "115_maela") },
+                { text: "Just wondering around.", cb: () => startQuestionare(321) },
             ],
             cb: () => {}
         },

@@ -491,7 +491,6 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     // sec.emitter =spineBone
     // bloodps.position.y += 1
     
-    nameMesh.isVisible =false
 
     // OPEN PVP - same atkCollider exit-trigger mechanism createEnemy.js
     // already wires up per world enemy (see that file's own header comment

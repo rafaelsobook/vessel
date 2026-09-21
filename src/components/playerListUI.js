@@ -97,7 +97,7 @@ function buildRow(index, name, lvl, className, mapName, isSelf, isBot){
     row.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
 
     const nameColor = isSelf ? GOLD_BRIGHT : (isBot ? TEXT_MUTED : TEXT_BODY)
-    const label = name + (isSelf ? " (You)" : "") + (isBot ? " (Bot)" : "")
+    const label = name + (isSelf ? " (You)" : "") + (isBot ? "" : "")
 
     row.addControl(createText("idx", `${index}`, { fontSize: 13, color: TEXT_MUTED, width: COL_WIDTH.index }))
     row.addControl(createText("name", label, { fontSize: 14, color: nameColor, width: COL_WIDTH.name }))
@@ -129,26 +129,47 @@ function buildPanel(scene){
 
     const root = new GUI.Rectangle("playerlist_root")
     // wide enough for #/Name/Level/Class/Map-Area side by side (COL_WIDTH
-    // above sums to exactly 536 = this minus the 20px left/right padding)
-    root.width = "576px"
+    // above sums to exactly 536 = this minus the 40px/24px left/right padding)
+    root.width = "600px"
     // grown/shrunk per-refresh below (rows.length * rowHeight + header) -
     // starts at a single-row height so an empty place doesn't flash a tall
     // empty box before the first refresh sizes it properly
     root.height = "80px"
-    root.thickness = 2
-    root.color = GOLD
-    root.cornerRadius = 6
-    root.background = "rgba(10,10,10,0.72)"
+    root.thickness = 0
     root.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER
     root.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER
     root.left = "20px"
-    root.paddingLeft = "20px"
-    root.paddingRight = "20px"
-    root.paddingTop = "10px"
-    root.paddingBottom = "10px"
+
+    // ornate frame art instead of a flat rgba fill - same asset
+    // style.scss's own .craft-container uses for a right-side panel
+    // (stretched 100%/100% there too, not nine-patch - its 1081x799 native
+    // aspect only really holds at that fixed CSS size; here the panel's
+    // own height changes with the row count, so the frame stretches
+    // non-uniformly to match whatever height refreshRows() lands on).
+    // Added before `inner` so it renders behind every other control on
+    // root (Babylon GUI stacks children in the order they're added).
+    // Deliberately NOT inset via root's own padding - a Container's padding
+    // shrinks the area every CHILD gets measured against, this image
+    // included, so padding on root just shrank the frame graphic itself
+    // inward and left the same tight gap between its (now smaller) border
+    // and the text next to it. root stays padding-free so this fills its
+    // true full bounds edge-to-edge; the breathing room instead lives on
+    // `inner` below, which only insets the actual text content.
+    const bgImage = new GUI.Image("playerlist_bg", "./images/UI/frames/rightbigcont.webp")
+    bgImage.stretch = GUI.Image.STRETCH_FILL
+    bgImage.width = "100%"
+    bgImage.height = "100%"
+    root.addControl(bgImage)
 
     const inner = new GUI.StackPanel("playerlist_inner")
     inner.width = "100%"
+    // left padding bumped well past the others - the frame art's own
+    // decorative border eats into the left edge more than the flat rgba
+    // fill it replaced did, crowding the "#" column against it otherwise
+    inner.paddingLeft = "40px"
+    inner.paddingRight = "24px"
+    inner.paddingTop = "20px"
+    inner.paddingBottom = "20px"
     root.addControl(inner)
 
     // title ("Players (N)") + "Press Tab to close" hint, side by side -
@@ -204,7 +225,12 @@ function buildPanel(scene){
     closeBtn.height = "20px"
     closeBtn.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT
     closeBtn.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
-    closeBtn.top = "4px"
+    // added straight to root (see comment above), which is deliberately
+    // padding-free now - so unlike everything inside `inner`, this needs
+    // its own explicit inset from root's true edges instead of getting one
+    // for free from a parent's padding
+    closeBtn.left = "-20px"
+    closeBtn.top = "18px"
     closeBtn.isPointerBlocker = true
     closeBtn.onPointerClickObservable.add(() => openClosePlayerListUI(false))
     closeBtn.onPointerEnterObservable.add(() => closeBtn.color = GOLD_BRIGHT)
@@ -274,8 +300,8 @@ function refreshRows(){
         ))
     })
 
-    // title row (28+8) + column-header row (22+4) + root's own
-    // paddingTop/Bottom (10px each) + one row per VISIBLE player (24px
+    // title row (28+8) + column-header row (22+4) + inner's own
+    // paddingTop/Bottom (20px each) + one row per VISIBLE player (24px
     // content + 2px paddingBottom each, capped at MAX_VISIBLE_ROWS) -
     // matches buildRow/buildColumnHeaderRow's own fixed sizes above, so the
     // panel always hugs exactly however many rows it's actually showing
@@ -284,7 +310,7 @@ function refreshRows(){
     const rowCount = rowsPanel.children.length
     const visibleRows = Math.min(rowCount, MAX_VISIBLE_ROWS)
     rowsScrollViewer.height = `${visibleRows * ROW_HEIGHT_PX}px`
-    panelRoot.height = `${(28 + 8) + (22 + 4) + 20 + visibleRows * ROW_HEIGHT_PX}px`
+    panelRoot.height = `${(28 + 8) + (22 + 4) + 40 + visibleRows * ROW_HEIGHT_PX}px`
 }
 
 // Exported toggle, same shape as campcraft.js's own openCloseCampcraftUI -

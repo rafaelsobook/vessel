@@ -43,5 +43,5 @@ export const joinWorld = (roomId) => {
 
         
     });
-    sendWorldMessage(`${getCharState().name} joined !`)
+    // sendWorldMessage(`${getCharState().name} joined !`)
 };
