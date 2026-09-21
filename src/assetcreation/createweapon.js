@@ -215,7 +215,15 @@ function createWholeMeshWeapon(scene, weaponType, root, options, glowingColor) {
     if (!allweapons) return console.warn("allweapons not yet imported")
 
     const { handleColor = "wood" } = options
-    const key = `${weaponType}_${handleColor}`
+    // real mesh name (Blender outliner) is "staff_wood_1", not "staff_wood" -
+    // a trailing "_1" the artist gave even this one-and-only tier, unlike
+    // every OTHER rarity-numbered mesh in this glb (sword_blade_common1 etc,
+    // no underscore before the digit). Not a rarity/variant this file
+    // actually tracks for a whole-mesh weapon (see this function's own
+    // header comment - there's nothing to pick beyond the one material), so
+    // hardcoded here rather than added as a real option, unless/until a
+    // second tier (e.g. "staff_iron_1") actually shows up needing one.
+    const key = `${weaponType}_${handleColor}_1`
     const template = allweapons[key]
     if (!template) return console.warn(`createWeapon: missing whole-mesh weapon "${key}"`)
 
@@ -283,15 +291,18 @@ export function createWeapon(scene, weaponType = "sword", pos = {x:0,y:0,z:0}, p
     const wholeMeshKey = `${weaponType}_${options.handleColor ?? "wood"}`
     if (hasPartMeshes(weaponType)) {
         createPartsWeapon(scene, weaponType, root, options, glowingColor)
-    } else if (allweapons?.[wholeMeshKey]) {
+    }else{
+        createWholeMeshWeapon(scene, weaponType, root, options, glowingColor)
+    }
+    // } else if (allweapons?.[wholeMeshKey]) {
         // e.g. staff_wood - checked by real key existence (same "ground
         // truth from the glb" approach hasPartMeshes/getAvailableRarityVariants
         // already use) rather than hardcoding weaponType === "staff", so any
         // future material-keyed whole-mesh weapon just works
-        createWholeMeshWeapon(scene, weaponType, root, options, glowingColor)
-    } else {
-        createSingleMeshWeapon(scene, weaponType, itemName, root, options, glowingColor)
-    }
+        
+    // } else {
+    //     createSingleMeshWeapon(scene, weaponType, itemName, root, options, glowingColor)
+    // }
 
     return root
 }

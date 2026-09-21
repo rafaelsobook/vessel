@@ -696,6 +696,22 @@ export function activateOnSocketListeners(socket){
             })
         }
     })
+    // SERVANTS - tcp/index.ts's own "recruit-bot"/"dismiss-bot" handlers
+    // both broadcast this regardless of who asked or whether it actually
+    // changed anything - every connected client (not just whoever clicked
+    // the prompt) needs its own local copy of this bot's det.servantOfOwnerId
+    // kept current, since npc/botInteraction.js's own choice list reads it
+    // fresh off `det` every time the interact button is clicked to decide
+    // "invite" vs "dismiss" vs "already someone else's". Mutated in place on
+    // the existing det object (not replaced) so botInteraction.js's own
+    // closure over that same object sees the update with no extra wiring.
+    socket.on("bot-servant-updated", data => {
+        if (!isSocketOn) return
+        const { botOwnerId, servantOfOwnerId } = data
+        const bot = playersOnScene.find(pl => pl.owner === botOwnerId)
+        if(!bot) return
+        bot.det.servantOfOwnerId = servantOfOwnerId
+    })
     socket.on("enemy-attacked-range", data => {
         const {pos, _id, targetPos, dmg, attackAnimName, effects, rangeAtkDetails} = data
         const meshModelName = rangeAtkDetails.modelName
@@ -1178,24 +1194,41 @@ export function activateOnSocketListeners(socket){
     // reconstruct the rotation, so this drift can't corrupt it anymore.
     socket.on("bot-moving", data => {
         if (!isSocketOn) return
-        const { ownerId, y, dirYaw, mode } = data
+        const { ownerId, y, dirYaw, mode, pos } = data
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
 
         player._moving = true
         player.mode = mode
         player.body.position.y = y
+        // SERVANTS - tcp/index.ts's own onMove callback only ever includes
+        // this for a bot that's currently someone's servant (see its own
+        // comment for the full "why" - this client's own locallyTranslate
+        // dead-reckoning has nothing correcting it during pure following
+        // the way combat's own attack-triggered botTcpPos snaps already
+        // do, so drift from the server's real position accumulates
+        // unchecked without it). undefined for every other bot-moving
+        // broadcast, unchanged from before.
+        if(pos){
+            player.body.position.x = pos.x
+            player.body.position.z = pos.z
+        }
         player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
     })
     socket.on("bot-stopped", data => {
         if (!isSocketOn) return
-        const { ownerId, y, dirYaw, mode } = data
+        const { ownerId, y, dirYaw, mode, pos } = data
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         if(!player) return
 
         player._moving = false
         player.mode = mode
         player.body.position.y = y
+        // see "bot-moving"'s own identical comment just above
+        if(pos){
+            player.body.position.x = pos.x
+            player.body.position.z = pos.z
+        }
         player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
     })
     // tcp/index.ts's own dealDamage callback (melee-style bots, dashstrikeSkill) -

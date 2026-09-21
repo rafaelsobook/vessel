@@ -361,6 +361,27 @@ export function emitPlayerIsHit(data){
     if(!socket) return
     socket.emit("playerIsHit", data)
 }
+// SERVANTS - npc/botInteraction.js's own "invite to follow you"/"dismiss"
+// choices. tcp/index.ts's "recruit-bot"/"dismiss-bot" handlers are the
+// actual authority on whether this succeeds (a bot already serving someone
+// else can't be re-recruited by a different owner, and only a bot's own
+// current servant-owner can dismiss it) - both broadcast "bot-servant-
+// updated" back out regardless of who asked, which is what every client
+// (including this one) actually reacts to.
+export function emitRecruitBot(botOwnerId){
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("recruit-bot", { botOwnerId, ownerId: charState.owner })
+}
+export function emitDismissBot(botOwnerId){
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("dismiss-bot", { botOwnerId, ownerId: charState.owner })
+}
 // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
 // hit handler) - bindChance is rolled client-side before this is ever called,
 // same as every other hit-resolution decision in this game (server is only

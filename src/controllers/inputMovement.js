@@ -22,7 +22,6 @@ import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagemen
 import { attachLightning } from '../effects/lightning';
 import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
-import { sendWorldMessage } from '../components/worldChatSystem';
 
 
 // the most recent enemy MY OWN melee attack actually landed on (see

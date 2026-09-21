@@ -26,6 +26,7 @@ import { onIntersecExitTrig } from '../components/actionManager';
 import { getCharState } from './characterstate';
 import { calcDmg } from './attackingSystem';
 import { emitPlayerIsHit } from '../sockets/emits';
+import { registerBotInteraction } from '../npc/botInteraction';
 
 export let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -528,6 +529,16 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                     effectsWhenHit: equippedWeapon?.effectsWhenHit,
                 })
             })
+        }
+
+        // SERVANTS - bot-only (det.attitudeName is set exclusively by
+        // tcp/index.ts's own spawnBot(), never present on a real player or
+        // a duel/fighter npc) - "invite to follow you" doesn't make sense
+        // for either of those. npc/botInteraction.js's own header comment
+        // has the full reasoning for why this lives here rather than
+        // npc/createAllNpcInArea.js.
+        if(det.attitudeName !== undefined){
+            registerBotInteraction(scene, body, det)
         }
     }
 
