@@ -9,6 +9,7 @@ import { updateNpcPatrol } from "../npc/npcPatrol.js";
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { emitEnemyChasePosition } from "./emits.js";
+import { capsuleHeight } from "../charactersystem/createcharacter.js";
 
 let scene;
 
@@ -226,6 +227,26 @@ let renderCallback = function () {
                 _moveVec.set(0, 0, spd * dt)
                 player.body.locallyTranslate(_moveVec)
             }
+
+            // openworld terrain-follow - same sampleTerrainSurfaceHeight()
+            // correction every enemy already gets above (see this file's own
+            // en.body.position.y lines in the wander/chase branches) - a
+            // bot's own y only ever arrives as tcp's flat RESTING_Y constant
+            // (spawnBot's own pos.y, tcp/index.ts - never resampled against
+            // real terrain server-side, same reasoning enemies handle this
+            // entirely client-side too), so without this every bot sits
+            // wherever RESTING_Y happens to land relative to whatever's
+            // actually under it on openworld's uneven ground - usually
+            // buried below it. Applied unconditionally here (not gated to
+            // _moving like the enemy branches, which only need it while
+            // actively translating) so a bot that's simply standing still
+            // the moment this client first renders it - never having moved
+            // at all yet on THIS client - still gets corrected on its very
+            // first frame instead of staying stuck underground until it
+            // happens to move again.
+            if(player.currentPlaceId === OPENWORLD_PLACE_ID){
+                player.body.position.y = sampleTerrainSurfaceHeight(player.body.position.x, player.body.position.z, OPENWORLD_TERRAIN_VERTS) + capsuleHeight / 2 + 0.05
+            }
         }
 
         if(!player.characterAnimations) return
@@ -437,7 +458,7 @@ let renderCallback = function () {
                 const now = performance.now()
                 if(!en._lastChasePosReportAt || now - en._lastChasePosReportAt > CHASE_POS_REPORT_INTERVAL_MS){
                     en._lastChasePosReportAt = now
-                    // emitEnemyChasePosition(en._id, en.body.position.x, en.body.position.z)
+                    emitEnemyChasePosition(en._id, en.body.position.x, en.body.position.z)
                 }
 
                 if(dist < en.det.maxDistance) return

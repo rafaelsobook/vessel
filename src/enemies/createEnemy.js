@@ -569,7 +569,7 @@ export default function createEnemy(scene, det) {
     // for my attack
     const atkCollider = scene.getMeshByName(`atkCollider`)
     if(atkCollider){
-        onIntersecExitTrig(atkCollider, body, scene, () => {
+        onIntersecEnterTrig(atkCollider, body, scene, () => {
             const enemy = getEnemiesOnScene().find(ene => ene._id === det._id)
             if (!enemy) return
             // Handle attack collision logic

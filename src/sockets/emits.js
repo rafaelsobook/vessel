@@ -347,6 +347,20 @@ export function emitEnemyIsHit(data){
     if(!socket) return
     socket.emit("enemyIsHit", data)
 }
+// OPEN PVP - createcharacter.js's own atkCollider exit trigger (mirrors
+// createEnemy.js's identical mechanism for world enemies) calls this the
+// moment my swing's hitbox clears another player's or bot's body. Same
+// shape emitEnemyIsHit's own data already has, just a different target
+// pool (a real player/bot's owner id, not a tcpEnemies._id) - see
+// tcp/index.ts's own "playerIsHit" handler for how each target type is
+// actually resolved.
+export function emitPlayerIsHit(data){
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("playerIsHit", data)
+}
 // skill.enemyBind (see skillsData.js's radiantjudgmentSkill, skillEffects.js's
 // hit handler) - bindChance is rolled client-side before this is ever called,
 // same as every other hit-resolution decision in this game (server is only

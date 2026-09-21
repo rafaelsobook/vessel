@@ -16,6 +16,7 @@ import { giveAllItems, wipeAllItems, obtainAll } from '../charactersystem/invent
 import { giveSkill, giveAllSkills, giveRandomSkill, upgradeAllOwnedSkills } from '../components/skillsui';
 import { displaySpeech } from '../tools/speechgui';
 import { giveRandomTitle } from '../components/titleUI';
+import { openClosePlayerListUI } from '../components/playerListUI';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
@@ -649,6 +650,20 @@ function setupControls(scene, allsounds) {
                 if(!isTypingInField) e.preventDefault()
                 if (!e.repeat) performJump()
             } break;
+            // hold-to-show player list (components/playerListUI.js) - same
+            // "skip while typing" guard Space uses above, since Tab's
+            // default browser behavior (cycling focus between the game's
+            // own real <button> elements, see that comment) is exactly what
+            // a chat box typist still wants, not this overlay stealing the
+            // key. e.repeat guarded too - holding Tab down fires keydown
+            // repeatedly, but there's nothing to redo once it's already open
+            case "tab": {
+                const target = document.activeElement
+                const isTypingInField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+                if(isTypingInField) break
+                e.preventDefault()
+                if(!e.repeat) openClosePlayerListUI(true)
+            } break;
         }
 
         if (isMoving) {
@@ -658,9 +673,17 @@ function setupControls(scene, allsounds) {
     }
     let hideUIToggle = true
     function handleKeyUp(e) {
+        // closes the player list regardless of getCanPress() - checked
+        // before that gate the same way keydown's own resting/w-a-s-d check
+        // is (see its comment). Without this, canPress flipping false WHILE
+        // Tab was still held (a dialogue/menu opening mid-hold) would
+        // swallow this exact keyup and leave the overlay stuck open with no
+        // way to close it, since Tab's own keydown case never fires again
+        // for an already-held key.
+        if(e.key.toLowerCase() === "tab") openClosePlayerListUI(false)
         if(!getCanPress()) return
         const key = e.key.toLowerCase();
-        
+
         switch (key) {
             case "w": input.forward = 0; break;
             case "s": input.forward = 0; break;

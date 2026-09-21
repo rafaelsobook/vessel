@@ -22,6 +22,10 @@ import { CharacterAnimations } from '../tools/animation';
 import { createMesh, putFakeShadow } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 import { attachLightning } from '../effects/lightning';
+import { onIntersecExitTrig } from '../components/actionManager';
+import { getCharState } from './characterstate';
+import { calcDmg } from './attackingSystem';
+import { emitPlayerIsHit } from '../sockets/emits';
 
 export let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -488,6 +492,46 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     // bloodps.position.y += 1
     
     nameMesh.isVisible =false
+
+    // OPEN PVP - same atkCollider exit-trigger mechanism createEnemy.js
+    // already wires up per world enemy (see that file's own header comment
+    // on why EXIT, not enter), just registered against another PLAYER's or
+    // BOT's body instead of an enemy's. det.socketId excludes the two other
+    // things this same createCharacter() builds: a duel/training "fighter"
+    // npc (npc/createnpc.js's createFighterNpc, npcDet never carries a real
+    // socketId) already has its OWN local-only atkCollider registration
+    // (duelSystem.js's registerToAtkCollider call) - without this guard,
+    // a duel would double-damage on every single hit, once from each
+    // registration. det.owner !== charState.owner is the actual "not
+    // myself" check - reCreateMeshesInScene (worldsocket.js) already skips
+    // ever calling createCharacter() for my own owner, but that guard only
+    // protects THIS one call site, not this function itself, so it's
+    // checked again here directly rather than trusted blindly.
+    if(det.socketId){
+        const atkCollider = scene.getMeshByName(`atkCollider`)
+        if(atkCollider){
+            onIntersecExitTrig(atkCollider, body, scene, () => {
+                const charState = getCharState()
+                if(!charState || charState.owner === det.owner) return
+
+                // same dealDamageToEnemy-adjacent shape createEnemy.js's own
+                // melee hit handler builds - effectsWhenHit (e.g. the
+                // Majestic Sword's burn) rides along the exact same way,
+                // just relayed through tcp's new "playerIsHit" handler
+                // instead of "enemyIsHit" (a player/bot isn't in tcpEnemies)
+                const equippedWeapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                emitPlayerIsHit({
+                    playerId: charState.owner,
+                    dmgDetails: calcDmg(charState),
+                    targetId: det.owner,
+                    currentPlaceId: det.currentPlace.placeId,
+                    isPhysical: true,
+                    effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                })
+            })
+        }
+    }
+
     return {
         det,
         owner: det.owner,

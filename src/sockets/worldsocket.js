@@ -31,6 +31,7 @@ import createWagon, { positionWagonBehindDeer } from "../assetcreation/createwag
 import createHarnessDeer, { computeHarnessDeerPosition } from "../assetcreation/createharnessdeer.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
+import { refreshPlayerListIfOpen } from "../components/playerListUI"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -330,6 +331,7 @@ export function activateOnSocketListeners(socket){
 
         if (gameStat === "running") {
             reCreateMeshesInScene()
+            refreshPlayerListIfOpen()
         }
     })
     // equiping
@@ -429,7 +431,7 @@ export function activateOnSocketListeners(socket){
         // client, caster included, so activateSkill needs to know the
         // actual caster's stats rather than assuming "me". See
         // activateSkill's own comment for why this matters.
-        const { ownerId, skill, currentPlaceId, casterStats, dirYaw, debugTargetId, debugTargetPos } = data
+        const { ownerId, skill, currentPlaceId, casterStats, dirYaw, weaponName, parts, weaponType, metalColor, debugTargetId, debugTargetPos } = data
         const charState = getCharState()
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
@@ -451,12 +453,21 @@ export function activateOnSocketListeners(socket){
             const player = playersOnScene.find(pl => pl.owner === ownerId)
             if(player?.body){
                 if(data.botTcpPos){
-                    console.log(data.botTcpPos)
+                    // console.log(data.botTcpPos)
                     player.body.position.x = data.botTcpPos.x
                     player.body.position.z = data.botTcpPos.z
                 }
                 
                 player.body.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), dirYaw)
+
+                // re-parents the caster's own weapon (a staff) onto rHand -
+                // createcharacter.js only ever equips a weapon onto rHand
+                // if mode==="fighting" AT CREATION TIME (see "bot-dashing"'s
+                // own identical comment for the full reasoning); a caster
+                // bot's mode is "casting", never "fighting", so without
+                // this its staff would stay sheathed on its back forever,
+                // never actually held while casting
+                if(weaponName) player.equipSword(weaponName, true, parts, weaponType, metalColor)
 
                 // debug only - matches tcp/index.ts's own [botAim] log
                 // (same debugTargetId/debugTargetPos, sent verbatim in this
@@ -466,7 +477,7 @@ export function activateOnSocketListeners(socket){
                 // whatever angle the old drift-sensitive lookAt(point)
                 // produced.
                 const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
-                console.log(`[clientBotAim] ${ownerId} bodyPos=(${player.body.position.x.toFixed(2)},${player.body.position.z.toFixed(2)}) dirYaw=${dirYaw.toFixed(3)} forward=(${forward.x.toFixed(2)},${forward.z.toFixed(2)}) target=${debugTargetId} targetPos=(${debugTargetPos?.x?.toFixed(2)},${debugTargetPos?.z?.toFixed(2)})`)
+                // console.log(`[clientBotAim] ${ownerId} bodyPos=(${player.body.position.x.toFixed(2)},${player.body.position.z.toFixed(2)}) dirYaw=${dirYaw.toFixed(3)} forward=(${forward.x.toFixed(2)},${forward.z.toFixed(2)}) target=${debugTargetId} targetPos=(${debugTargetPos?.x?.toFixed(2)},${debugTargetPos?.z?.toFixed(2)})`)
             }
         }
 
@@ -609,6 +620,55 @@ export function activateOnSocketListeners(socket){
                 if (isDead) emitDied()
 
             }, data.atkSpd / 5)
+        }
+    })
+    // OPEN PVP - tcp/index.ts's own "playerIsHit" handler relays this the
+    // moment ANY player's own atkCollider exit trigger (createcharacter.js's
+    // new one, mirroring createEnemy.js's identical mechanism) lands on
+    // another player's or bot's body. Same blood/block-sound-then-
+    // self-deductHp shape as "enemy-attacked" above, just without that
+    // handler's own enemy-side animation/lookAt (the ATTACKER's own swing
+    // animation already plays through the existing separate
+    // "player-attacked" relay regardless of whether it actually hit anyone)
+    // or its setTimeout(atkSpd/5) sync delay (that exists to line the hit up
+    // with an enemy's OWN attack animation playing out over time - this
+    // event only ever fires from the exit trigger already firing right as
+    // the swing visually connects, so applying it immediately is already
+    // in sync).
+    //
+    // A bot victim has no real client of its own to ever satisfy the
+    // "owner === charState.owner" check below (nor even necessarily a
+    // rendered body on THIS particular client's scene at all) - its hp/
+    // death is already fully handled server-side (applyDamageToBot, tcp/
+    // index.ts), broadcast the same "player-death" way a real death already
+    // is. This handler's own job is purely: show a hit reaction to whoever's
+    // actually watching it land, and apply it to MY OWN hp if I'm the one
+    // who got hit.
+    socket.on("player-is-hit", data => {
+        if (!isSocketOn) return
+        const { currentPlaceId, targetId, dmgToApply } = data
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (currentPlaceId !== charState.currentPlace.placeId) return
+        const victimPlayer = playersOnScene.find(pl => pl.owner === targetId)
+        if (!victimPlayer) return
+
+        if(victimPlayer.weaponBlocking || dmgToApply < LOW_DAMAGE_NO_BLOOD_THRESHOLD){
+            getAllSounds().weaponblockS?.play()
+        } else {
+            victimPlayer.bloodps?.play()
+        }
+
+        if (victimPlayer.owner === charState.owner && !victimPlayer.weaponBlocking) {
+            camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
+            // no effects array yet - effectsWhenHit (a weapon's own on-hit
+            // status, e.g. burn) rides along in `data` the same inert way
+            // it already does for a real enemy target (see npcDetails.js's
+            // own comment: "nothing currently reads a WEAPON item's own
+            // effectsWhenHit on a melee swing" - not a gap unique to PvP)
+            deductHp(dmgToApply, []).then(isDead => {
+                if (isDead) emitDied()
+            })
         }
     })
     socket.on("enemy-attacked-range", data => {
@@ -1563,6 +1623,8 @@ export function removePlayer({ ownerId, playerName, placeId }){
     const { scene } = getSceneDet()
     const bodyOfPlayer = scene.getMeshByName(`player.${ownerId}`)
     if (bodyOfPlayer) bodyOfPlayer.dispose()
+
+    refreshPlayerListIfOpen()
 }
 export function setPlayerMode(ownerId, _newMode, weaponName){
     const player = playersOnScene.find(pl => pl.owner === ownerId)

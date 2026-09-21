@@ -269,7 +269,10 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
             // resolution in this game already follows (tcp/index.ts's own
             // enemyIsHit handler, duelSystem.js's own atkCollider handler)
             if(dmgDetails){
-                console.log(dmgDetails)
+                console.log(`_targetId: ${enem._targetId}`)
+                console.log(`_attacking: ${enem._attacking}`)
+                console.log(`_isMoving: ${enem._isMoving}`)
+                console.log(`_isDead: ${enem._isDead}`)
                 const freshCharState = getCharState()
                 // const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
                 dealDamageToEnemy({
