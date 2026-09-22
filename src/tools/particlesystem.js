@@ -788,3 +788,109 @@ function buildBloodSystem(scene, name, capacity, position, opts = {}){
 
     return ps;
 }
+// ============================================================
+// REFERENCE EXAMPLE - a plain Babylon ParticleSystem, start to finish.
+// ============================================================
+// Written to be read rather than reused: every property that matters is set
+// explicitly and in the order you'd normally think about them, so this doubles
+// as a walkthrough of the API. Called from areascene.js's "village" branch,
+// gated to placeId 1, and returns the system so the caller can stop/dispose it.
+//
+// This is the CPU-side particle API - the opposite approach from
+// effects/weather.js, which hand-writes a shader because rain needs thousands
+// of particles. For anything in the low hundreds, this is the right tool: far
+// less code, and Babylon handles billboarding, fading and sorting for you.
+export function createDemoParticles(scene, position = { x: 0, y: 0.5, z: 0 }) {
+
+    // 1. CAPACITY - the max particles alive at once. Allocated up front as one
+    //    fixed buffer, so this is the real memory/CPU cost knob. It is a
+    //    CEILING, not a rate: emitRate and lifetime below decide how many
+    //    actually exist at any moment.
+    const particles = new ParticleSystem("demoParticles", 300, scene)
+
+    // 2. TEXTURE - the sprite each particle draws. Routed through
+    //    getParticleTexture (this file's own cache) rather than `new Texture`,
+    //    so repeated calls share one GPU upload. A wrong path here renders
+    //    NOTHING and logs nothing, so it's worth double-checking against
+    //    public/images/particles/.
+    particles.particleTexture = getParticleTexture(scene, particleTexturePath("flare"))
+
+    // 3. BLEND MODE - ADD makes overlapping particles brighten and reads as
+    //    light/energy (what a fire or a spell wants). BLENDMODE_STANDARD is
+    //    normal alpha blending, for smoke, dust or anything solid.
+    particles.blendMode = ParticleSystem.BLENDMODE_ADD
+
+    // 4. WHERE THEY SPAWN. emitter can be a Vector3 (a fixed point in the
+    //    world, as here) OR a mesh - pass a mesh and the emitter follows it
+    //    every frame for free, which is how createBodyFireParticles tracks a
+    //    moving enemy.
+    //    min/maxEmitBox is a box AROUND the emitter that spawn points are
+    //    picked from at random. Leave both at zero and every particle is born
+    //    at exactly the same point, which looks like a jet rather than a
+    //    volume.
+    particles.emitter = new Vector3(position.x, position.y, position.z)
+    particles.minEmitBox = new Vector3(-0.2, 0, -0.2)
+    particles.maxEmitBox = new Vector3(0.2, 0, 0.2)
+
+    // 5. COLOUR OVER LIFE. Each particle picks a random mix of color1 and
+    //    color2 at birth, then fades toward colorDead as it ages. The 4th
+    //    component is alpha - colorDead usually ends at 0 so particles fade
+    //    out instead of popping.
+    particles.color1 = new Color4(0.4, 0.8, 1.0, 1.0)
+    particles.color2 = new Color4(0.2, 0.4, 1.0, 1.0)
+    particles.colorDead = new Color4(0.0, 0.0, 0.2, 0.0)
+
+    // 6. SIZE - a random value per particle between the two. A spread rather
+    //    than one value is most of what stops a system looking mechanical.
+    particles.minSize = 0.1
+    particles.maxSize = 0.4
+
+    // 7. LIFETIME in seconds. Together with emitRate this decides how many are
+    //    alive at once: roughly emitRate * average lifetime. Here 80 * ~1.2 is
+    //    about 96 live particles, comfortably under the 300 capacity. Push
+    //    that product past capacity and emission silently starts throttling.
+    particles.minLifeTime = 0.8
+    particles.maxLifeTime = 1.6
+
+    // 8. EMIT RATE - new particles per second.
+    particles.emitRate = 80
+
+    // 9. DIRECTION - each particle picks a random vector between these two.
+    //    Both mostly +Y here, so everything drifts upward with some sideways
+    //    spread. Widen the x/z values for a fountain, narrow them for a beam.
+    particles.direction1 = new Vector3(-0.4, 1.5, -0.4)
+    particles.direction2 = new Vector3(0.4, 2.5, 0.4)
+
+    // 10. EMIT POWER scales that direction vector - the launch speed.
+    particles.minEmitPower = 0.5
+    particles.maxEmitPower = 1.2
+
+    // 11. GRAVITY, in world units/sec^2. Applied continuously, so particles
+    //     launched upward arc and fall back. Leave it zero and they travel in
+    //     straight lines forever.
+    particles.gravity = new Vector3(0, -1.2, 0)
+
+    // 12. SPIN - radians/sec, randomised per particle. Negative-to-positive
+    //     means some spin each way, which stops the sprite repetition from
+    //     being obvious.
+    particles.minAngularSpeed = -Math.PI / 4
+    particles.maxAngularSpeed = Math.PI / 4
+
+    // 13. UPDATE SPEED - the simulation step. Higher is faster but coarser;
+    //     0.01 is Babylon's default and 0.02 is what createFireParticles above
+    //     uses. This is NOT the same as emitRate - it scales the whole
+    //     simulation, including how fast particles age.
+    particles.updateSpeed = 0.01
+
+    // 14. START. Nothing renders until this is called - a fully configured
+    //     system that was never started is the single most common reason a
+    //     particle system appears to do nothing.
+    particles.start()
+
+    // Returned so the caller owns the lifetime. scene.dispose() on a place
+    // change takes this with it anyway, but an explicit
+    // particles.stop() / particles.dispose(false) is how you'd kill it early.
+    // dispose(false) - NOT dispose() - because the texture came from the
+    // shared cache above and is not this system's to destroy.
+    return particles
+}

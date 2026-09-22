@@ -272,9 +272,11 @@ function refreshRows(){
     // getPlayersOnScene() anyway (two tabs on the same account, a leftover
     // session that never disconnected, etc.), this list is the one place
     // that actually has to not show me twice regardless of the cause
-    const others = getPlayersOnScene().filter(pl => pl.currentPlaceId === myPlaceId && pl.owner !== charState.owner)
 
-    if(titleText) titleText.text = `Players (${others.length + 1})`
+    // const others = getPlayersOnScene().filter(pl => pl.currentPlaceId === myPlaceId && pl.owner !== charState.owner)
+    const others = getPlayersOnScene()
+
+    if(titleText) titleText.text = `People`
 
     let index = 1
     // charState.owner/lvl/name/characterclass is what THIS client actually
@@ -287,8 +289,6 @@ function refreshRows(){
         getClassLabel(charState.characterclass), charState.currentPlace?.name ?? "-",
         true, false,
     ))
-
-    console.log(charState)
 
     others.forEach(pl => {
         const isBot = Boolean(pl.det?.attitudeName)

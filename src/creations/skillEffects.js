@@ -36,7 +36,7 @@ import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, update
 import { poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { randNum, randBetween } from "../tools/random.js"
-import { getAllSounds } from "../components/soundSystem.js"
+import { getAllSounds, playSoundNear } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
 import { updateStatUI } from "../charactersystem/statsSystem.js"
 import { camShake } from "../tools/camera.js"
@@ -205,7 +205,7 @@ export function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyW
         // burnEffect.soundPlayPerDmg (skillsData.js's fire family) - same
         // plain-key-plus-"S" convention characterstate.js's own startBurnDamage
         // (the player's own burn) already follows
-        if(burnEffect.soundPlayPerDmg) getAllSounds()[`${burnEffect.soundPlayPerDmg}S`]?.play()
+        if(burnEffect.soundPlayPerDmg) playSoundNear(getAllSounds()[`${burnEffect.soundPlayPerDmg}S`], targetBody?.position)
         if(ticksDone >= totalTicks) clearInterval(burnInterval)
     }, 1000)
 
@@ -651,7 +651,12 @@ export function castDashSkill(scene, player, skill, charState){
 
     if(skill.activationSound){
         const soundKey = SOUND_TYPE_MAP[skill.activationSound.soundType] || skill.activationSound.soundType
-        setTimeout(() => getAllSounds()[soundKey]?.play(), skill.activationSound.willPlayAfterSeconds ?? 0)
+        // playSoundNear, not a bare play() - these sounds are not spatial
+        // (soundSystem.js builds them with no spatialSound/maxDistance), so a
+        // bot casting far across the openworld used to be exactly as loud as
+        // one beside you. player.body is the CASTER, which for a remote cast is
+        // whoever the skillactivated broadcast named.
+        setTimeout(() => playSoundNear(getAllSounds()[soundKey], player.body?.position), skill.activationSound.willPlayAfterSeconds ?? 0)
     }
 
     if(charState.owner !== getCharState()?.owner) return
@@ -824,7 +829,7 @@ const originalZ = atkCollider.scaling.z
         const playImpactOnce = () => {
             if(hasConnected) return
             hasConnected = true
-            getAllSounds()[skill.impactSound]?.play()
+            playSoundNear(getAllSounds()[skill.impactSound], player.body?.position)
         }
         getEnemiesOnScene().forEach(enemy => {
             if(!enemy.body) return
@@ -910,7 +915,12 @@ export function castBlinkstrikeSkill(scene, player, skill, charState){
 
     if(skill.activationSound){
         const soundKey = SOUND_TYPE_MAP[skill.activationSound.soundType] || skill.activationSound.soundType
-        setTimeout(() => getAllSounds()[soundKey]?.play(), skill.activationSound.willPlayAfterSeconds ?? 0)
+        // playSoundNear, not a bare play() - these sounds are not spatial
+        // (soundSystem.js builds them with no spatialSound/maxDistance), so a
+        // bot casting far across the openworld used to be exactly as loud as
+        // one beside you. player.body is the CASTER, which for a remote cast is
+        // whoever the skillactivated broadcast named.
+        setTimeout(() => playSoundNear(getAllSounds()[soundKey], player.body?.position), skill.activationSound.willPlayAfterSeconds ?? 0)
     }
 
     if(charState.owner !== getCharState()?.owner) return
@@ -1826,9 +1836,13 @@ function getOnHitEffects(skill){
     return Array.isArray(onHitVisual) ? onHitVisual : (onHitVisual ? [onHitVisual] : [])
 }
 
-function playImpactSound(skill){
+// atPosition is where the hit actually happened, so distant impacts stay
+// silent (playSoundNear, soundSystem.js). Optional on purpose - a caller with
+// no meaningful position left out still plays, matching the old behaviour
+// rather than silently losing its sound.
+function playImpactSound(skill, atPosition){
     const withSound = getOnHitEffects(skill).find(e => e.impactSound)
-    getAllSounds()[withSound?.impactSound || "fireHitS"]?.play()
+    playSoundNear(getAllSounds()[withSound?.impactSound || "fireHitS"], atPosition)
 }
 
 // shared by runSingleOnHitEffect's own "burst"/"implode" branch AND the two
@@ -2010,7 +2024,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     // point of it. Explicit flag, not inferred from visible/shape - "beam"
     // (tidalspike) is ALSO invisible in flight but still launches with sound.
     if(!skill.projectileVisual?.silentLaunch){
-        getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"]?.play()
+        playSoundNear(getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"], spawnPos)
     }
 
     const dx = targetPoint.x - box.position.x
@@ -2105,7 +2119,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 return
             }
 
-            playImpactSound(skill)
+            playImpactSound(skill, enemy.body?.position)
 
             // "stickAndGrow"/"beam" onHitVisual types stick to (or hang
             // around near) the enemy instead of a one-shot burst - stop the
@@ -2265,7 +2279,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 return
             }
 
-            playImpactSound(skill)
+            playImpactSound(skill, duelOpp.body?.position)
             if(getOnHitEffects(skill).some(e => e.type === "stickAndGrow" || e.type === "beam")) projectile.stuck = true
 
             // same magic-damage formula/freshCharState convention the real-
@@ -2448,7 +2462,7 @@ function spawnFallingSword(scene, charState, skill, originPos, groundPos, powerS
         // a physical blade landing, not an elemental bolt detonating - same
         // struckS sound melee/blade-style projectiles use, no burst/flare
         // at all (EXPLOSION_STYLES intentionally isn't called here)
-        getAllSounds().struckS?.play()
+        playSoundNear(getAllSounds().struckS, groundPos)
 
         // whatever enemy is actually standing near the landing spot NOW
         // (re-queried at impact time, not the enemy the marker originally
@@ -2662,7 +2676,7 @@ function spawnFallingMeteor(scene, charState, skill, groundPos, powerScale){
     })
 
     setTimeout(() => {
-        playImpactSound(skill)
+        playImpactSound(skill, groundPos)
         fireGenericBurst(scene, new Vector3(landingPos.x, landingPos.y, landingPos.z), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
 
         scene.onBeforeRenderObservable.remove(moveObserver)
@@ -2766,14 +2780,14 @@ function spawnLightningStrike(scene, charState, skill, groundPos, powerScale){
         landingPos.z + randNum(-THUNDERCLAP_ORIGIN_JITTER, THUNDERCLAP_ORIGIN_JITTER),
     )
 
-    getAllSounds().electricHitS?.play()
+    playSoundNear(getAllSounds().electricHitS, groundPos)
     createLightningBoltLine(scene, skyPos, landingPos, "yellow", {
         updateInterval: 15,
         lifetimeMs: THUNDERCLAP_BOLT_LIFETIME_MS,
     })
 
     setTimeout(() => {
-        playImpactSound(skill)
+        playImpactSound(skill, groundPos)
         fireGenericBurst(scene, landingPos.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
 
         // same "only the real caster's own client emits the actual hit"
@@ -2983,7 +2997,7 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
     const rotX = -Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z))
 
     if(!skill.projectileVisual?.silentLaunch){
-        getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"]?.play()
+        playSoundNear(getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"], spawnPos)
     }
 
     const segments = []
@@ -3012,7 +3026,7 @@ function triggerLaserChain(scene, charState, skill, player, spawnPos, forward, p
     // damage path to use, same split fireElementalProjectile's own two hit
     // branches already follow
     function applyHitDamageAndVisual(target, isDuelOpponent, hitPos){
-        playImpactSound(skill)
+        playImpactSound(skill, spawnPos)
         fireGenericBurst(scene, hitPos, powerScale, getOnHitEffects(skill)[0], color)
 
         if(isDuelOpponent){
@@ -3284,7 +3298,7 @@ function spawnGroundSpike(scene, charState, skill, groundPos, powerScale){
         if(t >= 1) scene.onBeforeRenderObservable.remove(eruptObserver)
     })
 
-    getAllSounds().rockSmashS?.play()
+    playSoundNear(getAllSounds().rockSmashS, groundPos)
     // continentalrend's own onHitVisual burst entry (earth-style: debris
     // FALLS, gravitySign -1, instead of rising like fire/embers do) -
     // groundSpikes bypasses projectileVisual entirely (no projectile fires),
@@ -3389,7 +3403,7 @@ function triggerLightningStrike(scene, charState, skill, player, spawnPos, forwa
     flatForward.normalize()
 
     const endPos = spawnPos.add(flatForward.scale(maxDistance))
-    getAllSounds().electricHitS?.play()
+    playSoundNear(getAllSounds().electricHitS, spawnPos)
     createLightningBoltLine(scene, spawnPos.clone(), endPos, "yellow", {
         updateInterval: 20,
         lifetimeMs: LIGHTNING_LINE_VISUAL_LIFETIME_MS,
@@ -3526,7 +3540,7 @@ function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, dura
     // no projectile fires for a ground trap (projectileVisual.useProjectile:false),
     // but the burst itself still reads its onHitVisual entry like every other burst
     fireGenericBurst(scene, enemy.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
-    playImpactSound(skill)
+    playImpactSound(skill, enemy?.body?.position)
 
     // persistent "burning" fire, ON the enemy's own body - see
     // createBodyFireParticles' own comment in particlesystem.js for why
@@ -3596,7 +3610,7 @@ function applyDisintegrationHit(scene, charState, skill, enemy, powerScale, dura
 // branch here already sets.
 function applyDisintegrationHitToDuelOpponent(scene, skill, duelOpp, powerScale, durationMs){
     fireGenericBurst(scene, duelOpp.body.position.clone(), powerScale, getOnHitEffects(skill)[0], skill.explosionColor || "red")
-    playImpactSound(skill)
+    playImpactSound(skill, duelOpp?.body?.position)
 
     const burnMs = (skill.enemyBind?.bindDuration ?? durationMs / 1000) * 1000
     const burnParticles = createBodyFireParticles(duelOpp.body, scene)
@@ -3846,7 +3860,7 @@ function spawnHealingCircle(scene, skill, groundPos, powerScale){
         // path here already uses (createEnemy.js's enemyIsHit,
         // duelSystem.js's applyDamageToOpponent) just positive and green
         poppingTextMesh(`+${healAmount}`, "#2ecc71", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
-        getAllSounds().healS?.play()
+        playSoundNear(getAllSounds().healS, groundPos)
     }, MASS_TRAP_ACTIVATE_DELAY_MS)
 }
 
@@ -3918,7 +3932,7 @@ function spawnPurificationCircle(scene, skill, groundPos){
         // the actual cure already took effect
         updateStatUI()
         poppingTextMesh("Purified!", "#e0d0ff", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
-        getAllSounds().healS?.play()
+        playSoundNear(getAllSounds().healS, groundPos)
     }, MASS_TRAP_ACTIVATE_DELAY_MS)
 }
 
@@ -4046,7 +4060,7 @@ function disposeBarrier(scene, player, rotateObserver, box, node){
 // same reasoning spawnBarrier's own header comment gives) - purely
 // feedback, nothing here mutates any state.
 function triggerBarrierBlock(barrierBox){
-    getAllSounds().weaponblockS?.play()
+    playSoundNear(getAllSounds().weaponblockS, barrierBox?.position)
     poppingTextMesh("Blocked!", "cyan", 40 + Math.random() * 25, Math.random() * 1, { x: -0.3 + Math.random() * 0.6, y: 0.3, z: -0.3 + Math.random() * 0.6 }, barrierBox, true)
 }
 
@@ -4196,7 +4210,7 @@ function triggerEnemyGroundTrap(scene, enemy, skill, targetPlayer){
     createMagicCircle(groundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(radius))
 
     setTimeout(() => {
-        playImpactSound(skill)
+        playImpactSound(skill, targetPlayer?.body?.position)
         fireGenericBurst(scene, groundPos, 1, getOnHitEffects(skill)[0], skill.explosionColor || "red")
 
         // re-resolve the target at DETONATION time, not cast-start time -
@@ -4292,11 +4306,11 @@ function spawnEnemyLightningStrike(scene, enemy, skill, targetPlayer){
         landingPos.z + randNum(-THUNDERCLAP_ORIGIN_JITTER, THUNDERCLAP_ORIGIN_JITTER),
     )
 
-    getAllSounds().electricHitS?.play()
+    playSoundNear(getAllSounds().electricHitS, targetPlayer?.body?.position)
     createLightningBoltLine(scene, skyPos, landingPos, "yellow", { updateInterval: 15, lifetimeMs: THUNDERCLAP_BOLT_LIFETIME_MS })
 
     setTimeout(() => {
-        playImpactSound(skill)
+        playImpactSound(skill, targetPlayer?.body?.position)
         fireGenericBurst(scene, landingPos.clone(), 1, getOnHitEffects(skill)[0], skill.explosionColor || "yellow")
 
         const freshTarget = getPlayersOnScene().find(pl => pl.owner === targetOwner)
@@ -4378,7 +4392,7 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
     const { cleanup: cleanupStyle, onHit } = renderGenericProjectile(scene, box, skill)
 
     if(!skill.projectileVisual?.silentLaunch){
-        getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"]?.play()
+        playSoundNear(getAllSounds()[skill.projectileVisual?.launchSound || "fireBallS"], spawnPos)
     }
 
     const targetPoint = spawnPos.add(forward.scale(10))
@@ -4493,7 +4507,7 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
             targetPlayer.bloodps?.play()
         }
 
-        playImpactSound(skill)
+        playImpactSound(skill, spawnPos)
         // onHit (renderGenericProjectile's own return) owns the actual burst/
         // stick dispatch from here - stickBriefly skills embed into the
         // target's bodytarget for MARKER_STICK_DURATION_MS instead of

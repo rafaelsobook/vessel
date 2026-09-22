@@ -184,7 +184,7 @@ export function giveAllItems(){
         {
             itemId: randomNum(),
             name: "knightscale",
-            dn: "Knight's Scale",
+            dn: "Iron Knight's Scale",
             itemCateg: "equipable",
             itemType: "armor",
             weaponType: undefined,
@@ -200,7 +200,7 @@ export function giveAllItems(){
             qnty: 1,
             desc: "Sturdy scale armor, fresh off Bram's anvil.",
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         {
             itemId: randomNum(),
@@ -221,12 +221,12 @@ export function giveAllItems(){
             qnty: 1,
             desc: "A solid iron pauldron, hammered to shape by Bram himself.",
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         {
             itemId: randomNum(),
             name: "gauntler",
-            dn: "Gauntlet",
+            dn: "Iron Gauntlet",
             itemCateg: "equipable",
             itemType: "gauntlet",
             weaponType: undefined,
@@ -242,7 +242,7 @@ export function giveAllItems(){
             qnty: 1,
             desc: "A well-fitted gauntlet, straight from the forge.",
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         // orionhelm (npcDetails.js) and ironjaw (toSell.js's sellerBram
         // stall, dn "Knight's Helm III") - the two helmets missing from this
@@ -274,7 +274,7 @@ export function giveAllItems(){
             itemId: randomNum(),
             name: "ironjaw",
             modelName: "ironjaw",
-            dn: "Knight's Helm III",
+            dn: "Iron Knight's Helm III",
             itemCateg: "equipable",
             itemType: "helmet",
             weaponType: undefined,
@@ -290,7 +290,7 @@ export function giveAllItems(){
             qnty: 1,
             desc: "A full iron helm, dented once and re-forged since.",
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         {
             itemId: randomNum(), // should be string also in client
@@ -314,8 +314,7 @@ export function giveAllItems(){
             price: { coinType: "bronze", pieces: 10 },
             qnty: 1,
             desc: undefined,
-            rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            rarity: "rare"
         },
         {
             itemId: randomNum(), // should be string also in client

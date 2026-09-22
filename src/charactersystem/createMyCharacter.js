@@ -23,6 +23,7 @@
 /**
  * @param {TcpCharDet} tcpCharDet
  */
+import { setSoundListener } from "../components/soundSystem.js"
 import { sceneCleanupReady } from "../components/cleanup.js"
 import { attachControllerToThisCharacter, activateMouseControls, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
 import { getSceneDet } from "../main/main.js"
@@ -50,6 +51,14 @@ export function createMyCharacter(charState, scene, allsounds){
     }, true)
     if(!player) return
     attachCam(player.camParent)
+
+    // soundSystem.js measures "is this close enough to hear" against this body
+    // (playSoundNear). Registered here, on the one character that is actually
+    // mine, rather than soundSystem importing the socket/character layers to
+    // find it - that module currently imports nothing but Babylon, and reaching
+    // into them from there would close an import cycle back through main.js.
+    // Re-registered on every scene load, since changeScene builds a new body.
+    setSoundListener(player.body)
 
     const controls = attachControllerToThisCharacter(player, scene, allsounds)
     // r-click hold-to-block - myPlayer (inputMovement.js's own module-level

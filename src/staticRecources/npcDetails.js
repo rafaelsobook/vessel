@@ -817,7 +817,7 @@ export default [
         {
             itemId: randomNum(), // should be string also in client
             name: "knightscale", // is also the image name
-            dn: "Knight's Scale",
+            dn: "Iron Knight's Scale",
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: undefined,
@@ -836,7 +836,7 @@ export default [
             qnty: 1,
             desc: undefined,
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         {
             itemId: randomNum(), // should be string also in client
@@ -860,12 +860,12 @@ export default [
             qnty: 1,
             desc: undefined,
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         {
         itemId: randomNum(), // should be string also in client
         name: "gauntler", // is also the image name
-        dn: "Gauntlet",
+        dn: "Iron Gauntlet",
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
         weaponType: undefined,
@@ -884,7 +884,7 @@ export default [
         qnty: 1,
         desc: undefined,
         rarity: "rare",
-        metalColor: METAL_COLOR.ADAMANTINE
+        metalColor: METAL_COLOR.IRON
     },
         {
             itemId: randomNum(), // should be string also in client
@@ -911,7 +911,7 @@ export default [
             itemId: randomNum(), // should be string also in client
             name: "ironjaw", // is also the image name
             modelName: "ironjaw",
-            dn: "Knight's Helm III",
+            dn: "Iron Knight's Helm III",
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: undefined,
@@ -930,7 +930,7 @@ export default [
             qnty: 1,
             desc: undefined,
             rarity: "rare",
-            metalColor: METAL_COLOR.ADAMANTINE
+            metalColor: METAL_COLOR.IRON
         },
         {
             itemId: randomNum(), // should be string also in client
@@ -1846,8 +1846,7 @@ export default [
                 price: { coinType: "bronze", pieces: 10 },
                 qnty: 1,
                 desc: undefined,
-                rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                rarity: "rare"
             },
             {
                 itemId: randomNum(), // should be string also in client
@@ -2951,8 +2950,7 @@ export default [
                 price: { coinType: "bronze", pieces: 10 },
                 qnty: 1,
                 desc: undefined,
-                rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                rarity: "rare"
             },
             {
                 itemId: randomNum(), // should be string also in client
@@ -3096,8 +3094,7 @@ export default [
                 price: { coinType: "bronze", pieces: 10 },
                 qnty: 1,
                 desc: undefined,
-                rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                rarity: "rare"
             },
             {
                 itemId: randomNum(), // should be string also in client
@@ -3409,7 +3406,7 @@ export default [
             {
                 itemId: randomNum(),
                 name: "knightscale",
-                dn: "Knight's Scale",
+                dn: "Iron Knight's Scale",
                 itemCateg: "equipable",
                 itemType: "armor",
                 weaponType: undefined,
@@ -3425,7 +3422,7 @@ export default [
                 qnty: 1,
                 desc: "Sturdy scale armor, fresh off Bram's anvil.",
                 rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE,
+                metalColor: METAL_COLOR.IRON,
                 // Weather protection, summed across everything equipped by
                 // characterstate.js's getTotalTempResistance. cold:N means
                 // "safe down to -N degrees", heat:N means "safe up to 35+N"
@@ -3457,12 +3454,12 @@ export default [
                 qnty: 1,
                 desc: "A solid iron pauldron, hammered to shape by Bram himself.",
                 rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                metalColor: METAL_COLOR.IRON
             },
             {
                 itemId: randomNum(),
                 name: "gauntler",
-                dn: "Gauntlet",
+                dn: "Iron Gauntlet",
                 itemCateg: "equipable",
                 itemType: "gauntlet",
                 weaponType: undefined,
@@ -3478,13 +3475,13 @@ export default [
                 qnty: 1,
                 desc: "A well-fitted gauntlet, straight from the forge.",
                 rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                metalColor: METAL_COLOR.IRON
             },
             {
                 itemId: randomNum(),
                 name: "ironjaw",
                 modelName: "ironjaw",
-                dn: "Knight's Helm III",
+                dn: "Iron Knight's Helm III",
                 itemCateg: "equipable",
                 itemType: "helmet",
                 weaponType: undefined,
@@ -3500,7 +3497,43 @@ export default [
                 qnty: 1,
                 desc: "A full iron helm, dented once and re-forged since.",
                 rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                metalColor: METAL_COLOR.IRON
+            },
+            {
+                itemId: randomNum(),
+                name: "kraunmask",
+                // modelName is what createHelmet matches against, via
+                // msh.name.split(".")[1] on the meshes from helmets.glb. The
+                // mesh there is "helmet.kraunmask.rare4", so segment [1] is
+                // "kraunmask" - matches. (Note that mesh's name ends "rare4",
+                // not "rare.4" like the others; only segment [1] is read, so
+                // the inconsistency is harmless here.)
+                modelName: "kraunmask",
+                dn: "Iron Kraun Mask",
+                itemCateg: "equipable",
+                itemType: "helmet",
+                // a mask covers the face, not the skull - same reasoning as
+                // ironmask, the only other helmet that sets this. Omitting it
+                // would default to false (equipHelmet's `?? false`) and hide
+                // the hair like a full helm does.
+                hairVisible: true,
+                weaponType: undefined,
+                equipAbilities: { dmg: 0, def: 18, resistance: 8, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 30 },
+                qnty: 1,
+                desc: "A grim faceplate hammered from plain iron, sold cheap and asked about rarely.",
+                rarity: "rare",
+                // no "hat" in the name, so createHelmet tints it with
+                // createMetalMat rather than looking for a cloth texture at
+                // ./images/modeltex/helmets/<name>.jpg
+                metalColor: METAL_COLOR.IRON
             },
             {
                 itemId: randomNum(),

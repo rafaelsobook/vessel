@@ -2,7 +2,7 @@ import { Animation, MeshBuilder, StandardMaterial, Texture, Color3, Vector3,
     BackEase, EasingFunction, GlowLayer } from "@babylonjs/core"
 import { createParticlesForMesh } from "../tools/particlesystem.js";
 import { addGlow } from "../tools/glow.js";
-import { getAllSounds } from "../components/soundSystem.js";
+import { getAllSounds, playSoundNear } from "../components/soundSystem.js";
 
 // persistent texture cache (at most ~9 imgName values, see ./images/circles,
 // x2 for the two alpha modes below - small, fixed, bounded, not a leak) -
@@ -146,7 +146,11 @@ export function spawnMagicCircle(position, scene, imgName, intensity = 0.5, time
         despawnMagicCircle(disc, scene)
     }, timeOut)
 
-    getAllSounds().magicCircle?.play()
+    // spawnMagicCircle already receives the world position it is drawn at, so
+    // the distance gate costs nothing extra here. This is fired on EVERY skill
+    // cast by every player and enemy in the place, which is why it was one of
+    // the loudest offenders from casters far outside view range.
+    playSoundNear(getAllSounds().magicCircle, position)
     return disc
 }
 // facingDirection (optional Vector3): when omitted, the circle lies flat
@@ -225,7 +229,8 @@ export function createMagicCircle(position, scene, imgName, intensity = 0.5, tim
     // itself was long gone
     disc._sparkles = createParticlesForMesh(disc, scene, "thin1")
 
-    getAllSounds().magicCircle?.play()
+    // getAllSounds().magicCircle?.play()
+    playSoundNear(getAllSounds().magicCircle, position)
     setTimeout(() => {
         despawnMagicCircle(disc, scene)
     }, timeOut)

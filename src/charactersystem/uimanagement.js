@@ -467,27 +467,41 @@ export function activateBtnOnce(){
                     // was too short to still catch the target in time)
                     const isRunningAttack = !!(equippedWeaponType && getIsGrounded() && getIsMoving())
 
-                    // air-attack and running-attack clips only exist for
-                    // weaponType "sword" on the rig (swordattack_1_air,
-                    // running_sword1/running_sword2) - axe/pickaxe have no
-                    // dedicated versions of either, so BOTH alias to "sword"
-                    // for just these two special clips. Their own grounded
-                    // combo (animName above) is untouched by this - it
-                    // already correctly plays axeattack1/2 via
-                    // equippedWeaponType's own pickaxe->axe alias.
-                    const airRunWeaponType = (equippedWeaponType === "axe" || equippedWeaponType === "pickaxe" || equippedWeaponType === "staff")
-                        ? "sword"
-                        : equippedWeaponType
+                    // Air and running used to share ONE alias, which was wrong
+                    // because the rig does not carry the same set for both.
+                    // Verified against avatar.glb's own 39 clips:
+                    //   air:     swordattack_1_air is the ONLY one. No
+                    //            spear/axe/pickaxe/staff version exists.
+                    //   running: running_sword1 AND running_spear1 exist.
+                    //            No axe/pickaxe/staff version.
+                    // Sharing one alias therefore had to be wrong for
+                    // somebody: spear asked for spearattack_1_air, which does
+                    // not exist, so an airborne spear swing silently played no
+                    // attack animation at all - the same failure the old
+                    // "swordattackair" guess hit, and invisible for the same
+                    // reason (a missing clip is a no-op, not an error).
+                    //
+                    // AIR: always the sword clip, since it is the only one
+                    // that exists. Not an alias table - there is nothing to
+                    // choose between.
+                    const airWeaponType = "sword"
+
+                    // RUNNING: spear keeps its own clip, everything without a
+                    // dedicated one falls back to sword. Deliberately NOT
+                    // collapsed into the line above - aliasing spear here too
+                    // would throw away running_spear1, a clip that exists and
+                    // currently plays correctly.
+                    const runWeaponType = equippedWeaponType === "spear" ? "spear" : "sword"
 
                     if(equippedWeaponType && !getIsGrounded()){
-                        animName = `${airRunWeaponType}attack_1_air`
+                        animName = `${airWeaponType}attack_1_air`
                     } else if(isRunningAttack){
-                        // grounded + weapon equipped + actually running -
-                        // now has its own 2-clip combo (running_sword1/
-                        // running_sword2) same as the grounded swing does,
-                        // so it alternates on the same swordAnimNum toggle
-                        // instead of always playing the "1" variant
-                        animName = `running_${airRunWeaponType}1`
+                        // grounded + weapon equipped + actually running.
+                        // Always the "1" variant - running_sword2/
+                        // running_spear2 do NOT exist on the rig, so unlike
+                        // the grounded combo above there is no second clip to
+                        // alternate to on swordAnimNum.
+                        animName = `running_${runWeaponType}1`
                     }
 
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1

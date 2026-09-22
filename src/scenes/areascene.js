@@ -33,7 +33,7 @@ import { disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLife
 import { obtain, reduceDurability } from "../charactersystem/inventory.js";
 import createAllNpcInArea from "../npc/createAllNpcInArea.js";
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js";
-import { createFireParticles } from "../tools/particlesystem.js";
+import { createFireParticles, createDemoParticles } from "../tools/particlesystem.js";
 import { initSounds, getAllSounds, playSound } from "../components/soundSystem.js";
 import { createOriginal, createSky, createMainShadow, putFakeShadow } from "../creations/creationTools.js";
 import { setWorldChatAvailable } from "../components/worldChatSystem.js";
@@ -47,6 +47,7 @@ import { setStartingContainers } from "./containers.js";
 import { registerToAtkCollider } from "../charactersystem/attackingSystem.js";
 import { createGroundWeapon } from "../assetcreation/creategroundweapon.js";
 import { createTreasureMesh } from "../assetcreation/createtreasure.js";
+import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { receiveAchievement } from "../charactersystem/achievement.js";
 
 export async function areaScene(placeDetail){
@@ -91,6 +92,13 @@ export async function areaScene(placeDetail){
             createSky(lights[0], scene, false)
             createVillage(scene, placeDetail, reg, myCharacter.body)
             // createSky(light, scene, false)
+            // REFERENCE EXAMPLE, safe to delete - a plain Babylon
+            // ParticleSystem at the village origin, written to be read as a
+            // walkthrough of the API (see createDemoParticles' own numbered
+            // comments in tools/particlesystem.js). Gated to placeId 1
+            // specifically rather than every "village" areaType, so it only
+            // ever appears in the one place it was asked for.
+            if(placeId === 1) createDemoParticles(scene, { x: 0, y: 0.5, z: 0 })
         break;
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
@@ -127,7 +135,11 @@ export async function areaScene(placeDetail){
             
                 {
                     viewRadius: 1,
-                    verts: 17,//12 // 17 // 36
+                    // the ONE source of truth for this number - sampleTerrainSurfaceHeight
+                    // callers (renderer.js, createEnemy.js, createcastle.js,
+                    // createharnessdeer.js, createstonescripture.js) all read the same
+                    // constant, and a literal here is what let them drift apart before
+                    verts: OPENWORLD_TERRAIN_VERTS,
                 // 'mesh' shape never collides in this Havok build (confirmed: raycast
                 // AND real dynamic-body contact both fail on every chunk). 'box' DOES
                 // collide (confirmed) but createAggregate's box auto-fit uses the
@@ -174,7 +186,11 @@ export async function areaScene(placeDetail){
                 { texturePath: "./images/textures/grass/flower1.jpg", qnty: 10, size: "small" },
                 { texturePath: "./images/textures/grass/grass2_black.jpg", qnty: 10, size: "medium" },
                 { texturePath: "./images/textures/grass/bush1.jpg", qnty: 10, size: "large" },
-            ], { viewRadius: 1, verts: 12 })
+            // same constant as the terrain above - infterrain grounds grass with
+            // sampleTerrainSurfaceHeight too, so a grass verts that disagrees with
+            // the terrain verts floats or buries every grass card the same way it
+            // was burying enemies
+            ], { viewRadius: 1, verts: OPENWORLD_TERRAIN_VERTS })
 
             // medieval castle (placeId 888 only), ~100 units north of the
             // player's own openworld spawn (0, 500) - see createcastle.js's

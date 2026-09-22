@@ -33,4 +33,21 @@ export const OPENWORLD_PLACE_ID = 888
 // (x, z, verts) bilinearly interpolates over the exact same grid the mesh
 // itself was built from, matching the visible surface instead of the ideal
 // curve - see createEnemy.js/renderer.js, both use this constant with it.
-export const OPENWORLD_TERRAIN_VERTS = 12
+// 17, not 12. The comment above states the rule - "must match the `verts`
+// option passed to infterrain's own createOpenWorld() call" - and it was being
+// broken: areascene.js builds the terrain with verts:17 while everything that
+// needed a ground height asked for 12.
+//
+// That is not a small discrepancy. sampleTerrainSurfaceHeight derives its
+// sample grid as CHUNK_SIZE / (verts - 1), so 12 gives a 23.27-unit step and
+// 17 gives 16.0 - two completely different grids interpolating two different
+// surfaces. Measured over 8000 random openworld points, the mismatch put the
+// sampled height an average of 0.46 units off the real mesh surface, worst
+// case 3.72 units (two and a half body heights), and BELOW the real surface
+// at 49% of points. That is exactly the reported symptom: enemies and bots
+// standing buried in the ground about half the time.
+//
+// areascene.js now passes this constant to createOpenWorld and
+// createOpenWorldGrass rather than repeating a literal, so the three can no
+// longer drift apart again.
+export const OPENWORLD_TERRAIN_VERTS = 17

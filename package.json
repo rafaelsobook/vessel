@@ -21,7 +21,7 @@
     "@babylonjs/materials": "^9.10.1",
     "babyloncamtricks": "^1.0.1",
     "babylonstats": "^1.0.0",
-    "infterrain": "^1.0.0",
+    "infterrain": "file:../../../web/module/infterrain",
     "socket.io-client": "^4.8.3"
   }
 }

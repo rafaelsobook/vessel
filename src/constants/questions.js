@@ -287,8 +287,7 @@ var farmhatItem = {
     price: { coinType: "bronze", pieces: 10 },
     qnty: 1,
     desc: undefined,
-    rarity: "rare",
-    metalColor: METAL_COLOR.ADAMANTINE
+    rarity: "rare"
 }
 var laurietsHatItem = {
     itemId: randomNum(), // should be string also in client
@@ -312,13 +311,12 @@ var laurietsHatItem = {
     price: { coinType: "bronze", pieces: 10 },
     qnty: 1,
     desc: undefined,
-    rarity: "rare",
-    metalColor: METAL_COLOR.ADAMANTINE
+    rarity: "rare"
 }
 var armorItem = {
     itemId: randomNum(), // should be string also in client
     name: "knightscale", // is also the image name
-    dn: "Knight's Scale",
+    dn: "Iron Knight's Scale",
     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
     itemType: "armor", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
     weaponType: undefined,
@@ -337,7 +335,7 @@ var armorItem = {
     qnty: 1,
     desc: undefined,
     rarity: "rare",
-    metalColor: METAL_COLOR.ADAMANTINE
+    metalColor: METAL_COLOR.IRON
 }
 var lightArmorItem = {
     itemId: randomNum(), // should be string also in client
@@ -366,7 +364,7 @@ var lightArmorItem = {
 var pauldronItem = {
     itemId: randomNum(), // should be string also in client
     name: "ironpaul", // is also the image name
-    dn: "Arms Plate",
+    dn: "Iron Arms Plate",
     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
     itemType: "pauldron", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
     weaponType: undefined,
@@ -385,12 +383,12 @@ var pauldronItem = {
     qnty: 1,
     desc: undefined,
     rarity: "rare",
-    metalColor: METAL_COLOR.ADAMANTINE
+    metalColor: METAL_COLOR.IRON
 }
 var gauntletItem = {
         itemId: randomNum(), // should be string also in client
         name: "gauntler", // is also the image name
-        dn: "Gauntlet",
+        dn: "Iron Gauntlet",
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "gauntlet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
         weaponType: undefined,
@@ -409,13 +407,13 @@ var gauntletItem = {
         qnty: 1,
         desc: undefined,
         rarity: "rare",
-        metalColor: METAL_COLOR.ADAMANTINE
+        metalColor: METAL_COLOR.IRON
     }
 var helmetItem = {
         itemId: randomNum(), // should be string also in client
         name: "ironjaw", // is also the image name
         modelName: "ironjaw",
-        dn: "Knight's Helm III",
+        dn: "Iron Knight's Helm III",
         itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
         itemType: "helmet", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
         weaponType: undefined,
@@ -434,7 +432,7 @@ var helmetItem = {
         qnty: 1,
         desc: undefined,
         rarity: "rare",
-        metalColor: METAL_COLOR.ADAMANTINE
+        metalColor: METAL_COLOR.IRON
     }
 var orionHelmItem = {
         itemId: randomNum(), // should be string also in client

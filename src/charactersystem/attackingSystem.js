@@ -382,9 +382,11 @@ export function calcDmg(charState){
     // with no active buff at all doesn't need its own separate branch below.
     const buffAdditions = getActiveBuffAdditions().meeleeDmg || { toAdd: 0, percent: 0 }
     let weaponDet = undefined
+    let weaponType = undefined
     charState.items.forEach(itm => {
         if(itm.itemType === "weapon" && itm.equiped) {
             weaponDet = itm
+            weaponType = itm.weaponType
         }
     })
 
@@ -440,7 +442,7 @@ export function calcDmg(charState){
         magicDmg = Math.round(magicDmg * critMultiplier)
     }
 
-    return { physicalDmg, weaponDmg, magicDmg, accuracy, isCritical }
+    return { physicalDmg, weaponDmg, magicDmg, accuracy, isCritical, weaponType }
 }
 export function calcPercent(currentNum, totalNum){
     return currentNum/totalNum * 100

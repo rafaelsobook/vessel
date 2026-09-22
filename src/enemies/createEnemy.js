@@ -850,7 +850,7 @@ function emitEnemyTeleport(enemId, dest, placeId) {
 export function enemyIsHit(data){
     const charState = getCharState()
     if(!charState) return
-    const { playerId, targetId, dmgToApply, currentPlaceId, hp, maxHp } = data
+    const { playerId, targetId, dmgToApply, currentPlaceId, hp, maxHp, dmgDetails } = data
     const enemy = getEnemiesOnScene().find(ene => ene._id === targetId)
     if (!enemy) return
     // for weapon when hit something sound
@@ -870,6 +870,7 @@ export function enemyIsHit(data){
     enemy.det.hp = data.hp
     playRandomAnim(enemy.anims, "hit")
     enemy.hitSound?.play()
+    console.log(enemy.hitSound.name)
     enemy.bloodps?.play()
 
     // weapon-on-hit effects (npcDetails.js item data's own effectsWhenHit,
@@ -927,9 +928,20 @@ export function enemyIsHit(data){
     // getting this exact swordS1/punchedS on top, which is what made every
     // burn tick sound like a fresh sword swing landing once a second.
     if (playerId === getCharState().owner && data.isPhysical){
-        const { hasWeapon } = getAttackInfo()
+        const { hasWeapon, weaponType } = getAttackInfo()
         if(hasWeapon) {
-            playSound(getAllSounds().swordS1)
+            console.log(weaponType)
+            switch(weaponType){
+                case "staff":
+                    playSound(getAllSounds().staffS1)
+                break
+                case "spear":
+                    playSound(getAllSounds().spearS1)
+                break
+                default:
+                    playSound(getAllSounds().swordS1)
+                break
+            }            
         }else playSound(getAllSounds().punchedS)
     }
 

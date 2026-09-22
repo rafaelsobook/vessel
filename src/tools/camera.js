@@ -43,7 +43,13 @@ export function createArcCam(scene, placeDetail, head){
     // 1000 - see enemyDetails.ts) - larger world coordinates compound
     // floating-point rounding error through the same already-thin depth
     // precision budget, on top of whatever the ratio alone already cost.
-    camera.minZ = 0.01
+    // 0.5, not 0.01 - the whole comment block above describes this fix, but
+    // the value underneath it was still the broken one it says it "was", so
+    // the analysis landed and the one-line change never did. Symptom is
+    // exactly what that block predicts: mottled patches where a cloth mesh
+    // sits a millimetre off the skin mesh beneath it, worse the further the
+    // character is from world origin.
+    camera.minZ = 0.5
     // camera.checkCollisions = true;
     // camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
 

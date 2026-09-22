@@ -1,4 +1,4 @@
-import { Sound } from "@babylonjs/core"
+import { Sound, Vector3 } from "@babylonjs/core"
 let allSounds = {}
 
 // Missing/corrupt sound files don't throw synchronously - Sound fetches
@@ -182,6 +182,45 @@ export function initSounds(scene){
 
 export function getAllSounds(){
     return allSounds
+}
+
+// How far away a world sound can still be heard, in world units. ~27 player
+// heights (capsuleHeight is 1.5), so roughly "in view and nearby" rather than
+// "somewhere in this place".
+//
+// This gate exists because these sounds are NOT spatial. createSoundSafe above
+// builds each one with only {volume, autoplay, loop} - no spatialSound, no
+// maxDistance - so Babylon plays every one at full volume no matter where the
+// thing that triggered it actually is. Combined with openworld being one huge
+// place, that meant a bot casting 2000 units away (far past the 200-unit
+// distance at which its body is hidden entirely, see renderer.js) was as loud
+// as one standing next to you: audible casting from something you cannot see.
+export const EARSHOT_DISTANCE = 20
+
+// The local player's body, supplied by whoever knows it. Set from
+// createMyCharacter so this module stays free of imports from the character/
+// socket layers - it currently imports nothing but Babylon, and reaching into
+// worldsocket.js or characterstate.js from here would close an import cycle
+// through main.js.
+let listenerBody = null
+export function setSoundListener(body){
+    listenerBody = body
+}
+
+/**
+ * Play `sound` only if `position` is close enough to the local player to
+ * plausibly be heard. Distant callers are dropped silently.
+ *
+ * Falls back to playing unconditionally when there is no listener yet (early
+ * scene load, before the player's body exists) - better a sound that is too
+ * loud than one that never plays because setup order changed.
+ */
+export function playSoundNear(sound, position, maxDistance = EARSHOT_DISTANCE){
+    if(!sound) return
+    if(!listenerBody || !position) return sound.play()
+    if(Vector3.Distance(listenerBody.position, position) > maxDistance) return
+    console.log("playing ", sound.name)
+    sound.play()
 }
 export function playSound(sound){
     if(sound){
