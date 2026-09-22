@@ -32,8 +32,8 @@ async function renderLeaderboard(){
     lbMyRankValue.textContent = "-"
 
     const accountDet = checkIfTokenSaved()
-    const characters = await getAllCharacters(accountDet ? accountDet.token : null)
-
+    let characters = await getAllCharacters(accountDet ? accountDet.token : null)
+    console.log(characters)
     lbList.innerHTML = ""
 
     if(!characters.length){
@@ -42,6 +42,7 @@ async function renderLeaderboard(){
     }
 
     const sorted = [...characters].sort((a, b) => {
+        if(!b.rank.rankLabel) return
         if(b.lvl !== a.lvl) return b.lvl - a.lvl
         return (b.rank?.rankNumber || 0) - (a.rank?.rankNumber || 0)
     })
@@ -49,6 +50,7 @@ async function renderLeaderboard(){
     const myId = getCharState()?._id
 
     sorted.forEach((char, i) => {
+        if(!char.rank.rankLabel) return
         const rank = i + 1
         const isMe = char._id === myId
         if(isMe) lbMyRankValue.textContent = rank

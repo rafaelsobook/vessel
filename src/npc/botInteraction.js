@@ -51,7 +51,7 @@ function showBotChoices(det){
     if(det.servantOfOwnerId === charState.owner){
         choices.push({ text: "Dismiss", cb: () => emitDismissBot(det.owner) })
     } else if(!det.servantOfOwnerId){
-        choices.push({ text: "Invite to follow you", cb: () => emitRecruitBot(det.owner) })
+        choices.push({ text: "Hire", cb: () => emitRecruitBot(det.owner) })
     }
     choices.push({ text: "Never mind", cb: () => {} })
 

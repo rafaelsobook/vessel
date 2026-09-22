@@ -1,3 +1,4 @@
+import { setWorldWeather } from "../components/weatherSystem.js";
 import { deductHp, getCharState } from "../charactersystem/characterstate"
 import { createCharacter, capsuleHeight } from "../charactersystem/createcharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
@@ -293,6 +294,15 @@ export function getProjectilesOnScene(){
 export function activateOnSocketListeners(socket){
 
     // WORLD CHAT - no rooms/parties, this is just a global relay
+    // tcp's weather clock (recources/weather.ts) - one weather for the whole
+    // world, so there's no placeId to filter on here. Every client records it;
+    // weatherSystem.js decides whether THIS player's current place actually
+    // shows it and whether they feel the temperature.
+    socket.on("weather-changed", data => {
+        if(!data?.weather) return
+        setWorldWeather(data.weather)
+    })
+
     socket.on("worldChatMessage", data => {
         if (!isSocketOn) return
         receiveWorldChatMessage(data)
@@ -300,7 +310,15 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer, struckWeapons } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer, struckWeapons, weather } = allDataFromServer
+        // weather rides on every snapshot, not just its own "weather-changed"
+        // broadcast - this handler also fires on every PLACE CHANGE, so a
+        // player walking out of a dungeon into a blizzard gets the current sky
+        // immediately instead of standing in clear weather until tcp's next
+        // roll. Applied before the place-match guard below, since world
+        // weather is global and this client needs it recorded even while it's
+        // somewhere the weather isn't drawn.
+        if(weather?.weather) setWorldWeather(weather.weather)
         // isBot:true only ever rides on tcp/index.ts's own bot-spawn
         // broadcast (recources/npcBrain.ts's Brain), never a real player's
         // own join-world (which fires on every PLACE CHANGE too, not just

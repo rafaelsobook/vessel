@@ -2,7 +2,8 @@ import * as GUI from "@babylonjs/gui"
 import { Vector3 } from "@babylonjs/core"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { getSceneDet } from "../main/main.js"
-import { getPlayersOnScene } from "../sockets/worldsocket.js"
+import { getPlayersOnScene, getSocketContainers } from "../sockets/worldsocket.js"
+import { startPlacementMode, cancelPlacement } from "./placementMode.js"
 import { checkIfTokenSaved, randomNum } from "../tools/tools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
@@ -27,7 +28,13 @@ export const campcrafts = [
         requiredItems: [
             { name: "wood", qnty: 10 },
             { name: "stone", qnty: 5 }
-        ]
+        ],
+        // opts this craft into click-to-place (components/placementMode.js)
+        // instead of spawning instantly in front of the player. Needs a
+        // matching CRAFT_GHOSTS entry for the preview mesh. A future craft
+        // that isn't a world structure - a potion, a tool - just leaves this
+        // off and keeps the old immediate behaviour.
+        needsPlacement: true
     }
 ]
 
@@ -78,7 +85,18 @@ let uiTexture = null
 let uiTextureScene = null
 function getUITexture(scene){
     if(!uiTexture || uiTextureScene !== scene){
-        uiTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("campcraftUI", true, scene)
+        // 5th arg (adaptiveScaling) true, not the default false - it sets the
+        // ADT's own adjustToEngineHardwareScalingLevel. Left false, this panel
+        // lays out correctly ONLY while the engine's hardware scaling level is
+        // exactly 1, which today it is (main.js's own Engine opts pass
+        // adaptToDeviceRatio:false, so nothing ever moves it off 1). That makes
+        // it a trap rather than a bug: engine.setHardwareScalingLevel() is the
+        // one knob worth reaching for to claw back GPU time on weak devices
+        // (render fewer pixels, keep the CSS canvas size), and the moment
+        // anything sets it, this panel's layout silently goes wrong. Turning it
+        // on now costs nothing at scaling level 1 and means that change stays a
+        // one-liner later instead of dragging a GUI regression along with it.
+        uiTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("campcraftUI", true, scene, undefined, true)
         uiTextureScene = scene
     }
     return uiTexture
@@ -199,7 +217,13 @@ function createGoldButton(name, label, onClick){
 }
 
 function setButtonDisabled(btn, disabled){
-    btn.metadata = { disabled }
+    // merge into whatever metadata the control already carries rather than
+    // replacing the object outright - createGoldButton's hover handlers only
+    // read metadata.disabled today, so a wholesale `= { disabled }` happens to
+    // be harmless right now, but Control.metadata is Babylon GUI's one general
+    // "stash your own state here" slot and the next thing to use it on a
+    // button would get silently wiped every time affordability changed
+    btn.metadata = { ...btn.metadata, disabled }
     btn.alpha = disabled ? 0.4 : 1
     btn.isPointerBlocker = !disabled
     btn.background = BTN_BG_IDLE
@@ -267,6 +291,14 @@ const CRAFT_HANDLERS = {
     }
 }
 
+// The mesh placementMode clones for the click-to-place preview, keyed the same
+// way CRAFT_HANDLERS is. Looked up lazily (a function, not the mesh itself)
+// because containers.js loads these roots per-scene - grabbing one at module
+// load would capture a mesh belonging to a scene that's since been disposed.
+const CRAFT_GHOSTS = {
+    bonfire: () => getSocketContainers()?.bonfireRoot
+}
+
 function handleCraftClick(craft, refreshCard){
     const charState = getCharState()
     if(!charState) return
@@ -289,21 +321,70 @@ function handleCraftClick(craft, refreshCard){
         return
     }
 
+    // craft.needsPlacement (see the campcrafts entry's own comment) - hand the
+    // player the cursor and let them choose the spot, instead of dropping it
+    // 2 units ahead of wherever they happen to be facing. The panel closes
+    // first: it's a fullscreen Babylon GUI layer, so leaving it up would mean
+    // aiming at the scene through it.
+    if(craft.needsPlacement){
+        const ghostSource = CRAFT_GHOSTS[craft.name]?.()
+        if(!ghostSource){
+            // same missing-model case createBonfireMesh's own bonfireRoot
+            // check already bails on - no preview mesh means no model to
+            // place either, so this would fail on confirm anyway
+            openClosePopup(`Couldn't build ${craft.dn}`, true, 1500)
+            return
+        }
+
+        openCloseCampcraftUI(false)
+        openClosePopup(`Choose where to build the ${craft.dn}`, true, 2200)
+
+        const started = startPlacementMode(sceneDet.scene, {
+            ghostSource,
+            onConfirm: (point) => finishCraft(craft, sceneDet.scene, point, refreshCard),
+            onCancel: () => openClosePopup(`${craft.dn} cancelled`, true, 1200),
+        })
+        if(!started) openClosePopup("Can't build that right now", true, 1500)
+        return
+    }
+
+    // no-placement fallback, kept for any future craft that doesn't opt in:
     // spawn a little in front of the player, not exactly on top of them -
     // same "forward" direction attackingSystem.js's own melee range checks
-    // already read off the body
+    // already read off the body.
     const forward = myPlayer.body.getDirection(Vector3.Forward())
     const pos = myPlayer.body.position.add(forward.scale(2))
-    // was myPlayer.body.position.y - the player's own Y is the capsule's
+    // NOT myPlayer.body.position.y - the player's own Y is the capsule's
     // pivot (center-ish, not ground level - createcharacter.js's own
-    // capsuleHeight), so the bonfire was never actually reading real
-    // ground height at all, just wherever the player's mid-body happened
-    // to sit. findGroundY ray-picks the real ground/chunk mesh under this
-    // exact spawn spot instead (which can differ from directly under the
-    // player on sloped/uneven terrain, since this point is 2 units ahead
-    // of them) - falls back to the player's own Y only if no ground mesh
-    // is found at all, so this still never leaves pos.y undefined.
+    // capsuleHeight). findGroundY ray-picks the real ground/chunk mesh under
+    // this exact spawn spot instead (which can differ from directly under the
+    // player on sloped terrain, since this point is 2 units ahead of them) -
+    // falls back to the player's own Y only if no ground mesh is found at
+    // all, so this still never leaves pos.y undefined.
     pos.y = findGroundY(sceneDet.scene, pos.x, pos.z, myPlayer.body.position.y)
+
+    finishCraft(craft, sceneDet.scene, pos, refreshCard)
+}
+
+// Everything that happens once a spot is settled - shared by the immediate
+// path above and placementMode's own onConfirm, so a placed craft and an
+// instant one can't drift apart on what "successfully built" means.
+function finishCraft(craft, scene, pos, refreshCard){
+    // re-read rather than closing over the charState handleCraftClick already
+    // had: with click-to-place there's now real time between pressing Craft
+    // and committing a spot, and anything that consumes materials in between
+    // (another craft, a quest turn-in) has to be reflected here
+    const charState = getCharState()
+    if(!charState) return
+
+    if(!canAffordCraft(charState, craft)){
+        openClosePopup("Not enough materials", true, 1500)
+        refreshCard()
+        return
+    }
+
+    const handler = CRAFT_HANDLERS[craft.name]
+    if(!handler) return
 
     // generated here (not inside a handler) so it's the SAME id used both
     // for this mesh's own name (createBonfireMesh's craftId param) and for
@@ -312,7 +393,7 @@ function handleCraftClick(craft, refreshCard){
     // this exact craft again later (the server's own echo of this same
     // event coming back to THIS client included) instead of double-spawning
     const craftId = randomNum()
-    const built = handler(sceneDet.scene, pos, craftId, charState.currentPlace.placeId)
+    const built = handler(scene, pos, craftId, charState.currentPlace.placeId)
     if(!built){
         // handler itself already warned (e.g. containers.js's own
         // "prop model missing/failed to load" log) - just tell the player
@@ -344,7 +425,14 @@ const CARD_HEIGHT = "310px"
 // refresh() needs to update the qty text in place later, and reaching for
 // it via row.children[N] would silently break the moment this function's
 // own internal child order ever changes
-function buildResourceRow(req, owned){
+// no `owned` parameter - buildCraftCard is the only caller and it always
+// passed a literal 0, then called its own refresh() before returning, which
+// re-reads the real owned count and overwrites both this text and its color.
+// So the count/color computed here were never the ones the player actually
+// saw, and the parameter only made it look like this row was responsible for
+// initial state when refresh() has always been the single source of truth for
+// it. Placeholder text instead, to make that ordering explicit.
+function buildResourceRow(req){
     const row = new GUI.StackPanel(`${req.name}_row`)
     row.isVertical = false
     row.height = "20px"
@@ -356,9 +444,8 @@ function buildResourceRow(req, owned){
     icon.paddingRight = "4px"
     row.addControl(icon)
 
-    const hasEnough = owned >= req.qnty
-    const qtyText = createText(`${req.name}_qty`, `${owned}/${req.qnty}`, {
-        fontFamily: FONT_NUM, fontSize: 13, color: hasEnough ? GOLD_BRIGHT : "rgba(220,90,90,0.9)",
+    const qtyText = createText(`${req.name}_qty`, `0/${req.qnty}`, {
+        fontFamily: FONT_NUM, fontSize: 13, color: TEXT_MUTED,
         width: "60px", height: "20px", align: GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
     })
     qtyText.resizeToFit = false
@@ -436,7 +523,7 @@ function buildCraftCard(craft){
     content.addControl(desc)
 
     const costRows = craft.requiredItems.map(req => {
-        const { row, qtyText } = buildResourceRow(req, 0)
+        const { row, qtyText } = buildResourceRow(req)
         content.addControl(row)
         return { req, qtyText }
     })
@@ -648,8 +735,31 @@ export function openCloseCampcraftUI(forceOpen){
     }
 
     const willOpen = forceOpen !== undefined ? forceOpen : !panelRoot.isVisible
+
+    // reopening the panel abandons any placement already in progress - this
+    // panel is a fullscreen GUI layer, so leaving a ghost live underneath it
+    // would mean clicks landing on both at once. Only on open: handleCraftClick
+    // closes the panel itself right before starting placement, and cancelling
+    // there would kill the placement it just started.
+    if(willOpen) cancelPlacement()
+
     panelRoot.isVisible = willOpen
     if(willOpen) cardRefreshers.forEach(refresh => refresh())
+
+    // panelRoot.isVisible alone is NOT enough to stop this panel costing
+    // anything while it's closed. CreateFullscreenUI doesn't just make a
+    // texture - it also attaches a core Layer (advancedDynamicTexture.js's
+    // own CreateFullscreenUI: `new Layer(name + "_layer", ...)`), and
+    // Layer.render()'s only early-out is `if (!this.isEnabled)` - it never
+    // consults whether the controls drawn on that texture are visible.
+    // isVisible:false stops the ADT REDRAWING itself (no controls to draw),
+    // but the layer still composites a fullscreen alpha-blended quad of that
+    // now-empty texture every single frame, and the canvas-sized RGBA texture
+    // (~8MB at 1080p) stays resident, for as long as the scene lives. So
+    // before this, a player who opened campcraft once paid that cost for the
+    // rest of their time in that place. Toggling the layer itself is what
+    // actually makes a closed panel free.
+    if(uiTexture?.layer) uiTexture.layer.isEnabled = willOpen
 
     // this panel is canvas-rendered (Babylon GUI), not a DOM element, so it
     // has no z-index relationship with the DOM-based HUD (story tracker,

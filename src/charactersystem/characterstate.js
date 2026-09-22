@@ -18,6 +18,12 @@ import { getGameStatus, setGameStatus, getSceneDet } from "../main/main.js";
 import { createBodyFireParticles } from "../tools/particlesystem.js";
 import { updateSkillListUI } from "../components/skillsui.js";
 import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
+import { getAmbientTemperature } from "../components/weatherSystem.js";
+import {
+    temperatureStrain, BODY_TEMP_NORMAL, BODY_TEMP_MIN_SAFE, BODY_TEMP_MAX_SAFE,
+    BODY_TEMP_DRIFT_PER_TICK, BODY_TEMP_RECOVER_PER_TICK, TEMP_DAMAGE_PER_TICK,
+    STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING
+} from "../constants/weather.js";
 import { triggerSkillWheel } from "./skillWheel.js";
 
 // LIFE MANA STAMINA
@@ -32,6 +38,7 @@ const allUiContainer = document.querySelectorAll(".cont")
 
 const hungStat = document.querySelector(".hungStat")
 const restStat = document.querySelector(".restStat")
+const tempStat = document.querySelector(".tempStat")
 // negative stats
 const negativeStatCont = document.querySelector(".negative-stats")
 
@@ -205,6 +212,26 @@ export function getTotal(){
 
     return { hp,maxHp, mp,maxMp, sp,maxSp, hpRegen, mpRegen, spRegen, }
 }
+// Summed `tempResistance: { cold, heat }` across everything equipped - armors,
+// pauldrons, helmets, gauntlets, boots. Same iteration shape getTotalDefense
+// below already uses for equipAbilities.def, and the same tolerance for items
+// that simply don't carry the field: most gear has no tempResistance at all
+// and contributes 0 rather than needing the property added everywhere.
+//
+// Meaning of the numbers is in constants/weather.js's temperatureStrain -
+// cold:40 means "safe down to -40", heat:N means "safe up to 35 + N".
+export function getTotalTempResistance(){
+    const total = { cold: 0, heat: 0 }
+    characterState.items.forEach(itm => {
+        if(itm.itemCateg !== 'equipable' || !itm.equiped) return
+        const res = itm.tempResistance
+        if(!res) return
+        total.cold += res.cold ?? 0
+        total.heat += res.heat ?? 0
+    })
+    return total
+}
+
 export function getTotalDefense(){
     let totalD = characterState.stats.dex*2
     // log(`normal def ${totalD}`)
@@ -427,6 +454,7 @@ export function activateLifeSystem(){
             if(characterState.survival.sleep > 0) characterState.survival.sleep-=.2
             if(characterState.survival.sleep < 0.2) characterState.survival.sleep = 0
         }
+        tickBodyTemperature()
         updateSurvival_UI();
         if(characterState.survival.sleep < 10){
             restStat.parentElement.children[0].style.animation = "blinkingRed .5s infinite"
@@ -958,9 +986,71 @@ export function updateSP_UI(){
 }
 
 export function updateSurvival_UI(){
-    const {sleep, hunger} = characterState.survival
+    const {sleep, hunger, bodytemp} = characterState.survival
     hungStat.innerHTML = Math.floor(hunger)
     restStat.innerHTML = Math.floor(sleep)
+    if(tempStat){
+        const temp = bodytemp ?? BODY_TEMP_NORMAL
+        tempStat.innerHTML = `${Math.round(temp)}°`
+        // red when it's actually costing hp, amber while drifting but still
+        // inside the band - the warning arrives before the damage does, which
+        // is the whole point of showing a drifting number rather than a flag
+        const unsafe = temp < BODY_TEMP_MIN_SAFE || temp > BODY_TEMP_MAX_SAFE
+        const drifting = !unsafe && temp < BODY_TEMP_NORMAL - 5
+        // blinks the thermometer icon, matching exactly how the sleep row
+        // above signals its own low state (restStat.parentElement.children[0])
+        tempStat.parentElement.children[0].style.animation = unsafe ? "blinkingRed .5s infinite" : "none"
+        tempStat.style.color = unsafe ? "#e05555" : drifting ? "#e0b055" : ""
+    }
+}
+
+// Third survival stat, alongside hunger (needs to eat) and sleep (needs to
+// rest). Runs on the same restInterval tick those already use rather than a
+// timer of its own - one survival cadence, one place to reason about it.
+//
+// Body temp DRIFTS toward danger rather than snapping: a player can sprint
+// across a snowfield and be fine, but stopping to fight in one will kill them,
+// and stepping indoors visibly recovers. That's what makes gear meaningful
+// instead of binary - see constants/weather.js for the resistance rules.
+function tickBodyTemperature(){
+    if(!characterState?.survival) return
+    if(characterState.survival.bodytemp === undefined){
+        // characters created before this stat existed have no value stored -
+        // start them comfortable rather than at 0, which would read as lethal
+        // hypothermia the instant they log in
+        characterState.survival.bodytemp = BODY_TEMP_NORMAL
+    }
+
+    const strain = temperatureStrain(getAmbientTemperature(), getTotalTempResistance())
+
+    if(strain !== 0){
+        // scaled by how far past your limit you are, not a flat step - see
+        // STRAIN_FOR_FULL_DRIFT's own comment for why (flat drift made every
+        // partial resistance value worthless, and made a 5-degree sandstorm
+        // overshoot hurt as fast as a 30-degree blizzard)
+        const severity = Math.min(1, Math.abs(strain) / STRAIN_FOR_FULL_DRIFT)
+        const step = BODY_TEMP_DRIFT_PER_TICK * severity * Math.sign(strain)
+        characterState.survival.bodytemp = Math.max(
+            BODY_TEMP_FLOOR,
+            Math.min(BODY_TEMP_CEILING, characterState.survival.bodytemp + step)
+        )
+    }else if(characterState.survival.bodytemp !== BODY_TEMP_NORMAL){
+        // comfortable - climb (or fall) back toward normal from either side
+        const gap = BODY_TEMP_NORMAL - characterState.survival.bodytemp
+        const step = Math.sign(gap) * Math.min(Math.abs(gap), BODY_TEMP_RECOVER_PER_TICK)
+        characterState.survival.bodytemp += step
+    }
+
+    const temp = characterState.survival.bodytemp
+    if(temp >= BODY_TEMP_MIN_SAFE && temp <= BODY_TEMP_MAX_SAFE) return
+
+    // outside 15-35 costs hp every tick until it's back in band. Guarded the
+    // same way updateHunger's own starvation damage is - never drives hp
+    // below zero here, the death path is playerDeath's job.
+    if(characterState.hp > TEMP_DAMAGE_PER_TICK){
+        characterState.hp -= TEMP_DAMAGE_PER_TICK
+        updateHP_UI()
+    }
 }
 export function updateHpMpSp_UI(){
     updateHP_UI()

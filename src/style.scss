@@ -5044,3 +5044,49 @@ canvas {
 .achievement-popup-hidden{
   display: none;
 }
+// CURRENT WEATHER (weatherSystem.js updates this; effects/weather.js draws
+// the actual storm). Top-centre, deliberately small and low-contrast - it's a
+// persistent readout, not an alert, so it shouldn't compete with the quest
+// tracker on the left or the menu icons on the right.
+// Shares top-centre with .guild-icon-btn, which is only ever visible inside
+// the guild house - a "room" areaType, which never has weather - so the two
+// can never actually overlap.
+.weather-indicator {
+  position: fixed;
+  top: 1.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: $uiz;
+  display: none;          // shown by weatherSystem.js only in outdoor places
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 18px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(202, 165, 1, 0.35);
+  border-radius: 4px;
+  pointer-events: none;   // never eats a click meant for the scene behind it
+  transition: opacity 0.4s ease;
+
+  .weather-name {
+    margin: 0;
+    font-family: "Caudex", serif;
+    font-size: 0.95rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #edd59f;
+  }
+
+  .weather-temp {
+    margin: 0;
+    font-family: "Graduate", cursive;
+    font-size: 0.78rem;
+    color: rgba(245, 245, 245, 0.6);
+  }
+
+  // set alongside the weather name by weatherSystem.js - tints the readout
+  // toward whatever is falling, so the badge reads at a glance without
+  // needing an icon set that doesn't exist yet
+  &.is-cold .weather-name { color: #a8d8f0; }
+  &.is-hot  .weather-name { color: #f0b478; }
+}

@@ -5,7 +5,12 @@ import { Vector3, Ray } from "@babylonjs/core"
 const GROUND_RAY_ORIGIN_HEIGHT = 50
 const GROUND_RAY_LENGTH = 200
 
-function isGroundMesh(mesh){
+// exported so components/placementMode.js decides "is this spot open ground?"
+// with the exact same rule findGroundY below already uses to decide what
+// counts as ground - two different answers to that question (one for where a
+// structure snaps to, one for where it's allowed at all) is how a bonfire ends
+// up placeable on a mesh it can't actually sit on
+export function isGroundMesh(mesh){
     if(!mesh?.name) return false
     const name = mesh.name.toLowerCase()
     // village ground (createvillage.js's `${namePrefix}_ground`) and

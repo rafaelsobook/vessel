@@ -340,4 +340,14 @@ export function openClosePlayerListUI(forceOpen){
     const willOpen = forceOpen !== undefined ? forceOpen : !panelRoot.isVisible
     if(willOpen) refreshRows()
     panelRoot.isVisible = willOpen
+
+    // see campcraft.js's own openCloseCampcraftUI for the full reasoning -
+    // this file copied that panel's structure, and inherited the same gap
+    // with it. Short version: CreateFullscreenUI also attaches a core Layer,
+    // and Layer.render() only early-outs on isEnabled, never on whether the
+    // controls drawn on the texture are visible. So isVisible:false alone
+    // leaves a fullscreen alpha-blended quad compositing every frame (plus a
+    // canvas-sized RGBA texture resident) for the rest of the scene's life,
+    // once this panel has been opened a single time.
+    if(uiTexture?.layer) uiTexture.layer.isEnabled = willOpen
 }

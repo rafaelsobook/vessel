@@ -37,6 +37,12 @@ class SpeechGUI {
         this.proceedToNext = () => {}
 
         this.texture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("speechGUI", true, scene)
+        // starts disabled to match this.container.isVisible = false below - a
+        // SpeechGUI is constructed well before any dialogue actually runs, and
+        // without this it would composite a fullscreen quad every frame from
+        // construction until the first open() (see open/close for why the
+        // layer, not just the container, is what has to be toggled)
+        if(this.texture.layer) this.texture.layer.isEnabled = false
 
         this.container = new GUI.Rectangle("speech-container")
         this.container.width = "90%"
@@ -130,10 +136,21 @@ class SpeechGUI {
         if(this.nextBtn.textBlock) this.nextBtn.textBlock.text = btnName || "next"
     }
 
+    // open/close also toggle the ADT's own Layer, not just the container.
+    // CreateFullscreenUI attaches a core Layer alongside the texture, and
+    // Layer.render()'s only early-out is `if (!this.isEnabled)` - it never
+    // checks whether anything drawn on that texture is actually visible. With
+    // container.isVisible:false alone, a fullscreen alpha-blended quad of an
+    // empty texture still composites every frame and the canvas-sized RGBA
+    // texture stays resident, for as long as the scene lives. Dialogue is
+    // closed far more of the time than it's open, so this is the state that
+    // matters. Same fix campcraft.js and playerListUI.js carry - see
+    // openCloseCampcraftUI for the long version.
     open(){
         clearInterval(this.intervalGenerating)
         clearTimeout(this.autoAdvanceTimeout)
         this.container.isVisible = true
+        if(this.texture?.layer) this.texture.layer.isEnabled = true
     }
 
     close(){
@@ -141,6 +158,7 @@ class SpeechGUI {
         clearTimeout(this.autoAdvanceTimeout)
         this.container.isVisible = false
         this.charImg.isVisible = false
+        if(this.texture?.layer) this.texture.layer.isEnabled = false
     }
 
     setImageOfSpeaker(imageDirectory, isLeft){

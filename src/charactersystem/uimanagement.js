@@ -1,3 +1,4 @@
+import { refreshWeatherVisuals } from "../components/weatherSystem.js";
 import { showItemInfo, unEquip } from "./itemInfoSystem.js"
 import { closeInventory, openUpdateInventory } from "./inventory.js"
 import { openOrCloseStats } from "./statsSystem.js"
@@ -29,6 +30,7 @@ const conts       = document.querySelectorAll(".cont")
 const itemSlotList   = document.querySelector(".slots-list")
 const inventoryCont  = document.querySelector(".inventory-container")
 const storyNotifCont = document.querySelector(".story-notif-container")
+const weatherIndicator = document.querySelector(".weather-indicator")
 const throwBtn       = document.querySelector(".walkrun-btns.throw")
 
 // THROW BUTTON - spear-only basic action (style.scss's own .throw rule
@@ -217,6 +219,46 @@ export function showHideIcons(display = "none", arrayOfIconNames = ['icons-conta
     })
 }
 
+// Show/hide ONE menu icon, independent of showHideIcons above - that one
+// toggles the whole .icons-container, this one an individual button inside it.
+// The two don't fight: they're different elements, so an icon hidden here stays
+// hidden across any number of container-level show/hide cycles (cutscene
+// dialogue, resting, etc) without needing to be re-applied each time.
+//
+// iconCateg is the LAST class on each .menu-btns button in index.html -
+// "campcraft" | "skills" | "stats" | "inventory". Deliberately the same token
+// activateBtnOnce's own click handler already reads off e.target.className to
+// decide which panel to open (`className.split(" ")[3]`), so this isn't a
+// second parallel naming scheme to keep in sync - it's the one that's already
+// the identity of these buttons.
+export function hideIcon(iconCateg, isHidden = true){
+    const iconBtn = document.querySelector(`.menu-btns.${iconCateg}`)
+    if(!iconBtn) return
+    // "" (clears the inline style), not "block" - style.css's own
+    // `.icons-container .icon-btn` rule sets no display at all, so these render
+    // at a <button>'s default inline-block. Writing "block" back wouldn't
+    // restore that default, it'd permanently override it with a different
+    // layout mode than every other icon in the row.
+    iconBtn.style.display = isHidden ? "none" : ""
+}
+
+// campcraft is outdoor survival building - its own panel subtitle is "Build
+// structures and craft items to survive in the wild", and its one real handler
+// stakes a bonfire on the ground. There's nowhere to put one inside a "room",
+// and a "duel" is a bounded 1v1 arena where dropping structures mid-match
+// isn't intended. "dungeon" is deliberately NOT in this list: it's underground
+// but it's still somewhere you'd camp.
+const CAMPCRAFT_HIDDEN_AREATYPES = ["room", "duel"]
+
+// Called on every scene load (loadScene.js), not just when entering one of the
+// hiding areaTypes - hideIcon writes an inline style that outlives the scene
+// it was set in, so this has to positively re-show the icon too. Without the
+// re-show, a player who walked room -> openworld would keep campcraft hidden
+// for the rest of their session.
+export function applyAreaIconPolicy(areaType){
+    hideIcon("campcraft", CAMPCRAFT_HIDDEN_AREATYPES.includes(areaType))
+}
+
 export function closeAllPopupAndUI(){
     closeInventory()
 }
@@ -236,6 +278,17 @@ export function hideShowAllScreenUI(_isVisible = false){
     // function already hides itself when there's no longer an active quest,
     // so this can't leave a stale/empty tracker box on screen if the one
     // active quest happened to complete while the UI was hidden.
+    // the weather readout (index.html's .weather-indicator) was missing from
+    // this list for the same reason story-notif-container was - it's a newer
+    // HUD element and nothing added it here, so a cutscene or a fullscreen
+    // panel hid everything around it and left the weather badge floating on
+    // top. Restored via refreshWeatherVisuals rather than a blind display
+    // flip, since that function is what knows whether this player's CURRENT
+    // place should be showing weather at all - a blind "block" would strand
+    // the badge visible inside a dungeon.
+    if(_isVisible) refreshWeatherVisuals()
+    else if(weatherIndicator) weatherIndicator.style.display = "none"
+
     if(_isVisible) updateStoryQuestUI()
     else if(storyNotifCont) storyNotifCont.style.display = "none"
 }
@@ -416,24 +469,24 @@ export function activateBtnOnce(){
 
                     // air-attack and running-attack clips only exist for
                     // weaponType "sword" on the rig (swordattack_1_air,
-                    // running_sword1) - axe/pickaxe have no dedicated
-                    // versions of either, so BOTH alias to "sword" for just
-                    // these two special clips. Their own grounded combo
-                    // (animName above) is untouched by this - it already
-                    // correctly plays axeattack1/2 via equippedWeaponType's
-                    // own pickaxe->axe alias.
-                    const airRunWeaponType = (equippedWeaponType === "axe" || equippedWeaponType === "pickaxe")
+                    // running_sword1/running_sword2) - axe/pickaxe have no
+                    // dedicated versions of either, so BOTH alias to "sword"
+                    // for just these two special clips. Their own grounded
+                    // combo (animName above) is untouched by this - it
+                    // already correctly plays axeattack1/2 via
+                    // equippedWeaponType's own pickaxe->axe alias.
+                    const airRunWeaponType = (equippedWeaponType === "axe" || equippedWeaponType === "pickaxe" || equippedWeaponType === "staff")
                         ? "sword"
                         : equippedWeaponType
 
                     if(equippedWeaponType && !getIsGrounded()){
                         animName = `${airRunWeaponType}attack_1_air`
                     } else if(isRunningAttack){
-                        // grounded + weapon equipped + actually running gets
-                        // its own dedicated clip too, same "no alternating
-                        // swordAnimNum, only one variant" precedent the
-                        // air-attack clip above already set - only confirmed
-                        // to exist for weaponType "sword" ("running_sword1")
+                        // grounded + weapon equipped + actually running -
+                        // now has its own 2-clip combo (running_sword1/
+                        // running_sword2) same as the grounded swing does,
+                        // so it alternates on the same swordAnimNum toggle
+                        // instead of always playing the "1" variant
                         animName = `running_${airRunWeaponType}1`
                     }
 

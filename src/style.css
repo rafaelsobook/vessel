@@ -4938,3 +4938,40 @@ canvas {
 .achievement-popup-hidden {
   display: none;
 }/*# sourceMappingURL=style.css.map */
+.weather-indicator {
+  position: fixed;
+  top: 1.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 18px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(202, 165, 1, 0.35);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.weather-indicator .weather-name {
+  margin: 0;
+  font-family: "Caudex", serif;
+  font-size: 0.95rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #edd59f;
+}
+.weather-indicator .weather-temp {
+  margin: 0;
+  font-family: "Graduate", cursive;
+  font-size: 0.78rem;
+  color: rgba(245, 245, 245, 0.6);
+}
+.weather-indicator.is-cold .weather-name {
+  color: #a8d8f0;
+}
+.weather-indicator.is-hot .weather-name {
+  color: #f0b478;
+}

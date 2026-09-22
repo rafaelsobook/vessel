@@ -23,6 +23,7 @@ import { initOnceWorldChatSystem } from "../components/worldChatSystem.js";
 import { initOnceOutputSliders } from "../charactersystem/outputSliders.js";
 import { updateGuildIconVisibility } from "../htmlcomp/guildboard.js";
 import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
+import { refreshWeatherVisuals, onSceneDisposedForWeather } from "../components/weatherSystem.js";
 const canvas = document.querySelector("canvas")
 const fpsCounter = document.querySelector(".fps-counter")
 
@@ -68,9 +69,16 @@ export async function changeScene(_sceneName){
     setGameStatus("loading")
     setSocketOn(false)
 
+    // before the dispose below, not after - effects/weather.js holds a
+    // module-level handle to its field mesh and its onBeforeRenderObservable.
+    // Disposing the scene out from under it would leave that handle pointing
+    // at dead objects, and the next place's applyWeather would compare against
+    // a scene that no longer exists instead of building a fresh field.
+    onSceneDisposedForWeather()
+
     scene?.meshes?.forEach(mesh => mesh.dispose())
     scene?.dispose()
-    
+
     const sceneDetail = await loadScene()
 
     if(!sceneDetail) {
@@ -85,6 +93,12 @@ export async function changeScene(_sceneName){
     // })
     setSocketOn(sceneDetail.isSocketOn)
     setGameStatus("running")
+    // after `scene` is assigned above - refreshWeatherVisuals reads the live
+    // scene through getSceneDet(). Re-evaluated on every place change rather
+    // than only when the weather itself changes, because whether a storm is
+    // DRAWN depends on the areaType this player just walked into: the same
+    // unchanged blizzard shows in the openworld and must not show in a room.
+    refreshWeatherVisuals()
     updateGuildIconVisibility()
     openCloseLScreen(false)
     return true

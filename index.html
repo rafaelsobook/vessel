@@ -264,6 +264,15 @@
             <img src="./images/UI/inventory.png" alt="" class="icon-img">
         </button>
     </div>
+    <!-- current world weather (weatherSystem.js). Hidden by default and only
+         shown in the outdoor places that actually draw weather - the guild
+         icon also lives at top-centre, but only ever inside the guild house,
+         which is a "room" areaType and therefore never has weather, so the
+         two can't be on screen at the same time. -->
+    <div class="weather-indicator">
+        <p class="weather-name">Clear</p>
+        <p class="weather-temp">20°</p>
+    </div>
     <div class="hit-screen"></div>
     <!-- inventory -->
     <div class="inventory-container cont">
@@ -601,12 +610,16 @@
       </div>
       <div class="survival-stats">
           <div class="surv-bx">
-              <img src="./images/UI/stomach.png" alt="" class="surv-img">
+              <img src="./images/UI/stomach.webp" alt="" class="surv-img">
               <p class="hungStat surv-lbl">100</p>
           </div>
           <div class="surv-bx">
-              <img src="./images/UI/pillow.png" alt="" class="surv-img">
+              <img src="./images/UI/brain.webp" alt="" class="surv-img">
               <p class="restStat surv-lbl">100</p>
+          </div>
+          <div class="surv-bx">
+              <img src="./images/UI/temperature.webp" alt="" class="surv-img">
+              <p class="tempStat surv-lbl">35°</p>
           </div>
       </div>
       <div class="negative-stats">

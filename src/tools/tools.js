@@ -98,8 +98,50 @@ export function setDisplayElem(className, displayName){
 export function setDisplayALl(_displayName){    
     allUI.forEach(tagg=> tagg.style.display=_displayName)
 }
+// Opaque unique id string - used ~114 places as itemId (inventory.js,
+// craftingui.js, buyorsell.js), craftId (campcraft.js), and as mesh name
+// suffixes (createbonfire.js, createtreasure.js). Callers only ever compare
+// these for equality or embed them in a name, never parse them as numbers,
+// so the only thing that actually matters is that two calls never collide.
+//
+// The old implementation was `Math.random().toLocaleString().split(".")[1]`
+// twice, concatenated. That had three separate failure modes, all measured:
+//   1. toLocaleString() caps at 3 fraction digits by default, so each half
+//      was at most 3 characters - roughly a 6-digit id space total. Over
+//      20k ids that collided 239 times (~1.2%).
+//   2. When Math.random() rounded to "0" there was no "." to split on at
+//      all, so split(".")[1] was undefined and the id came out containing
+//      the literal string "undefined" (~0.23% of ids).
+//   3. Worst: toLocaleString() honors the BROWSER's locale. On any
+//      comma-decimal locale (de-DE, fr-FR, es-ES, pt-BR, it-IT, id-ID -
+//      most of Europe and Latin America) it returns "0,549", so
+//      split(".")[1] was undefined EVERY time and every id a player
+//      generated was the exact same string, "undefinedundefined". For
+//      campcraft.js that means every bonfire shares one craftId, so
+//      reCreateMeshesInScene's getMeshByName dedup treats the second one
+//      the player ever builds as already-existing and never spawns it.
+//
+// crypto.getRandomValues (not crypto.randomUUID) on purpose:
+// randomUUID is restricted to secure contexts, and `npm run dev` is
+// `vite --host`, i.e. plain http:// over the LAN for phone/other-device
+// testing - randomUUID would simply be undefined there. getRandomValues
+// has no such restriction, so this behaves identically in dev and prod.
+// 12 bytes -> 24 hex chars, and toString(16)/padStart are locale-independent
+// (which is the whole bug above).
 export function randomNum(){
-    return `${Math.random().toLocaleString().split(".")[1]}${Math.random().toLocaleString().split(".")[1]}`
+    const buf = new Uint8Array(12)
+    if(globalThis.crypto?.getRandomValues){
+        globalThis.crypto.getRandomValues(buf)
+    }else{
+        // nothing in a browser this game already runs on lacks
+        // getRandomValues, but falling back keeps this total rather than
+        // throwing if it's ever missing - still far better entropy than
+        // what it replaced
+        for(let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256)
+    }
+    let hex = ""
+    for(let i = 0; i < buf.length; i++) hex += buf[i].toString(16).padStart(2, "0")
+    return hex
 }
 export function randomNumMinMax(_min, _max){   
     const num = Math.random()*_max

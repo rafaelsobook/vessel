@@ -3360,6 +3360,54 @@ export default [
         toSell: [
             {
                 itemId: randomNum(),
+                name: "minersedge",
+                dn: "Miner's Edge",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "pickaxe",
+                equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: "A well-balanced pick, equally at home splitting stone or skulls",
+                rarity: "rare",
+                parts: {
+                    bladeRarity: "common1", guardRarity: "common1", handleRarity: "common1",
+                    bladeColor: "steel", guardColor: "iron", handleColor: "leather",
+                }
+            },
+            {
+                itemId: randomNum(),
+                name: "farmersaxe",
+                dn: "Farmer's Axe",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "axe",
+                equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: false,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: "A well-balanced axe, equally at home cutting trees",
+                rarity: "rare",
+                parts: {
+                    bladeRarity: "common1", guardRarity: "common1", handleRarity: "common1",
+                    bladeColor: "steel", guardColor: "iron", handleColor: "wood",
+                }
+            },
+            {
+                itemId: randomNum(),
                 name: "knightscale",
                 dn: "Knight's Scale",
                 itemCateg: "equipable",
@@ -3377,7 +3425,18 @@ export default [
                 qnty: 1,
                 desc: "Sturdy scale armor, fresh off Bram's anvil.",
                 rarity: "rare",
-                metalColor: METAL_COLOR.ADAMANTINE
+                metalColor: METAL_COLOR.ADAMANTINE,
+                // Weather protection, summed across everything equipped by
+                // characterstate.js's getTotalTempResistance. cold:N means
+                // "safe down to -N degrees", heat:N means "safe up to 35+N"
+                // (constants/weather.js's temperatureStrain has the rules).
+                // cold:15 here doesn't survive a -30 snowstorm on its own -
+                // that needs 30 total, so a full set of cold gear, which is
+                // the intent: one piece helps, a matching set is what lets you
+                // stand in a blizzard. Optional on every item - gear without
+                // the field contributes 0 rather than needing it added
+                // everywhere.
+                tempResistance: { cold: 15, heat: 0 }
             },
             {
                 itemId: randomNum(),

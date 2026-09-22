@@ -7,6 +7,7 @@ import { initiateCharacter } from "../charactersystem/characterstate.js";
 import { checkIfTokenSaved } from "../tools/tools.js";
 import { getAllSounds } from "../components/soundSystem.js";
 import { openCloseLScreen } from "../tools/popupUI.js";
+import { applyAreaIconPolicy } from "../charactersystem/uimanagement.js";
 import { showMainPage } from "../pages/mainpage.js";
 import { showLoginPage } from "../pages/loginpage.js";
 
@@ -24,6 +25,15 @@ export default async function loadScene(){
     }
 
     const placeDetail = findMyCurrentPlace()
+
+    // here rather than inside areaScene() - this is the one path every place
+    // transition goes through regardless of which scene builder handles it, so
+    // dungeons (dungeonScene, the one areaType that doesn't route through
+    // areaScene) get the policy re-evaluated too. Putting it in areaScene would
+    // mean walking room -> dungeon left the icon hidden, since nothing would
+    // have run to re-show it.
+    applyAreaIconPolicy(placeDetail.areaType)
+
     let sceneDetail;
     switch(placeDetail.areaType){
         case "dungeon":

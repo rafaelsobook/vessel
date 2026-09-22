@@ -17,6 +17,8 @@ import { giveSkill, giveAllSkills, giveRandomSkill, upgradeAllOwnedSkills } from
 import { displaySpeech } from '../tools/speechgui';
 import { giveRandomTitle } from '../components/titleUI';
 import { openClosePlayerListUI } from '../components/playerListUI';
+import { isPlacing } from '../components/placementMode.js';
+import { cycleWeatherDebug } from '../components/weatherSystem.js';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
 import { attachLightning } from '../effects/lightning';
@@ -323,6 +325,12 @@ export function activateMouseControls(scene){
         // can't collide with any existing left-click/touch handling
         if(pointerInfo.event.button !== 2) return
         if(!myPlayer) return
+        // placementMode.js owns right-click while a structure is being placed
+        // (it cancels placement there). Without this both fire off the same
+        // event: the player right-clicks to back out of placing a bonfire and
+        // also drops into a weapon block, which then has no matching POINTERUP
+        // path to clear it cleanly.
+        if(isPlacing()) return
 
         if(pointerInfo.type === PointerEventTypes.POINTERDOWN){
             if(myPlayer.weaponBlocking) return // already blocking - held button firing repeat down events
@@ -810,6 +818,16 @@ function setupControls(scene, allsounds) {
             break
             case "r":
                 reCreateMeshesInScene()
+            break
+            case "y":
+                // cycles the WORLD weather through tcp (clear -> rain -> fog
+                // -> snow -> sandstorm), not just this client's own view -
+                // weather is global and server-owned, so forcing it locally
+                // would put this player out of sync with everyone else and
+                // with the temperature damage they're all taking. Same
+                // "whichever client presses it, everyone gets it" scope as
+                // "v"'s own bot toggle above.
+                cycleWeatherDebug()
             break
             case "v":
                 // tcp/index.ts's own "toggle-spawn-bots" handler - flips a
