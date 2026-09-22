@@ -30,6 +30,7 @@ import { attachLightning, createLightningBoltLine } from "../effects/lightning.j
 import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
 import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
+import { fireAimProbe } from "./aimProbe.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase } from "../sockets/emits.js"
 import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect } from "../charactersystem/characterstate.js"
@@ -2053,10 +2054,33 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     }
     pushProjectile(projectile)
 
+    // AIM ASSIST - an invisible oversized scout fires alongside this
+    // projectile and runs ahead of it (creations/aimProbe.js). The first
+    // enemy/bot/player it overlaps becomes this projectile's homing target,
+    // and renderer.js's own projectile loop then steers onto it.
+    //
+    // Set as a plain field rather than re-aiming here: this function has
+    // already finished by the time a lock happens, and the render loop is the
+    // only thing that actually moves a projectile anyway.
+    //
+    // Cancelled on every projectile exit path - a probe outliving the thing it
+    // was aiming for would keep running its own observer and per-frame
+    // intersection tests for nothing.
+    const cancelAimProbe = fireAimProbe(scene, spawnPos, forward, charState.owner, (targetBody) => {
+        if(box.isDisposed()) return
+        // .clone() - a SNAPSHOT of where the target was when the probe reached
+        // it, not a live reference to the body. That is the whole difference
+        // between aim assist and a homing missile: the projectile corrects onto
+        // this direction once and then flies straight, passing through the spot
+        // whether or not the target is still standing in it.
+        projectile.aimPoint = targetBody.position.clone()
+    })
+
     // removeProjectile only disposes the box - whatever the projectile style
     // attached (particles/blade/lightning) is this file's own responsibility
     // to clean up, on every exit path
     function cleanupProjectile(){
+        cancelAimProbe()
         cleanupStyle()
         removeProjectile(itemId)
     }

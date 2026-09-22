@@ -67,6 +67,29 @@ const BOT_SPRINT_SPEED = 4
 // staleness, without reporting anywhere near every frame
 const CHASE_POS_REPORT_INTERVAL_MS = 1200
 
+// radians/sec a projectile may turn while making its one-time aim correction
+// (see the aimPoint block in renderCallback). ~230 deg/sec - fast enough to
+// come onto the direction quickly, slow enough that it reads as a curve rather
+// than a snap. Per-projectile override via proj.homingTurnRate.
+const PROJECTILE_HOMING_TURN_RATE = 4
+
+// how close to the aimed heading counts as "done steering", in radians
+// (~0.6 deg). Below this the correction is finished and aimPoint is dropped,
+// so the projectile can never re-steer toward a point it has already passed.
+const AIM_LOCKED_EPSILON = 0.01
+
+// shortest-path step from `current` toward `target`, capped at `maxStep`.
+// Plain lerping two angles takes the long way round whenever they straddle
+// the -PI/+PI wrap - a projectile facing just past PI locking onto something
+// just under -PI would spin almost a full turn the wrong way.
+function stepAngle(current, target, maxStep){
+    let diff = (target - current) % (Math.PI * 2)
+    if(diff > Math.PI) diff -= Math.PI * 2
+    if(diff < -Math.PI) diff += Math.PI * 2
+    if(Math.abs(diff) <= maxStep) return target
+    return current + Math.sign(diff) * maxStep
+}
+
 const PROJECTILE_GROUND_LOW = 0.4
 const PROJECTILE_GROUND_HIGH = 0.95
 const PROJECTILE_GROUND_FAR = 3
@@ -170,6 +193,45 @@ let renderCallback = function () {
         if(charState.currentPlace.placeId !== proj.placeId) return
         if(!proj.body) return
         if(proj.stuck) return
+
+        // ONE-TIME AIM CORRECTION - proj.aimPoint is a FIXED world point,
+        // captured by creations/aimProbe.js at the instant its scout overlapped
+        // something (see fireElementalProjectile). Deliberately a point, not a
+        // mesh reference: this steers toward where the target WAS when the lock
+        // happened and then stops. It is aim assist, not a guided missile - a
+        // projectile that kept reading a live body position would chase a
+        // running enemy around corners forever.
+        //
+        // Steering happens HERE rather than in skillEffects because this loop
+        // is the only thing that moves a projectile: movement is
+        // locallyTranslate along the body's own local Z, so heading lives
+        // entirely in body.rotation and nothing reads proj.targetDirection.
+        //
+        // Turned at a rate rather than snapped so the correction reads as a
+        // curve, and so a late lock can't hook a projectile backwards. Once
+        // aligned, aimPoint is cleared and the projectile flies straight for
+        // the rest of its life - including straight PAST the target if it has
+        // moved, which is the intended behaviour.
+        if(proj.aimPoint){
+            const tx = proj.aimPoint.x - proj.body.position.x
+            const ty = proj.aimPoint.y - proj.body.position.y
+            const tz = proj.aimPoint.z - proj.body.position.z
+
+            const desiredYaw = Math.atan2(tx, tz)
+            const desiredPitch = -Math.atan2(ty, Math.sqrt(tx * tx + tz * tz))
+            const maxTurn = (proj.homingTurnRate ?? PROJECTILE_HOMING_TURN_RATE) * dt
+
+            proj.body.rotation.y = stepAngle(proj.body.rotation.y, desiredYaw, maxTurn)
+            proj.body.rotation.x = stepAngle(proj.body.rotation.x, desiredPitch, maxTurn)
+
+            // aligned (or as close as one step gets) - lock the heading in and
+            // never steer again. Without this the projectile would keep
+            // correcting toward a point it is about to fly past, and start
+            // circling it once overshot.
+            const yawLeft = Math.abs(stepAngle(proj.body.rotation.y, desiredYaw, Math.PI) - proj.body.rotation.y)
+            const pitchLeft = Math.abs(stepAngle(proj.body.rotation.x, desiredPitch, Math.PI) - proj.body.rotation.x)
+            if(yawLeft < AIM_LOCKED_EPSILON && pitchLeft < AIM_LOCKED_EPSILON) proj.aimPoint = null
+        }
 
         _moveVec.set(0, 0, proj.spd * dt)
         proj.body.locallyTranslate(_moveVec)
