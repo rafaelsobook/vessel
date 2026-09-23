@@ -24,6 +24,8 @@ import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagemen
 import { attachLightning } from '../effects/lightning';
 import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
+import { createAggregate } from '../tools/physics.js';
+import { attachCam } from '../tools/camera.js';
 
 
 // the most recent enemy MY OWN melee attack actually landed on (see
@@ -146,66 +148,6 @@ export function relocatePos(body, newPos){
         aggregate.body.setLinearVelocity(Vector3.Zero())
         aggregate.body.setAngularVelocity(Vector3.Zero())
     }
-}
-// DEBUG - bound to the " " keyup case below. Spawns a visible clone of the
-// wagon's own collider template (containers.js's wagonBodyColliderRoot,
-// stashed on socketContainers) a couple units in front of the local
-// player, so its real shape/scale can be inspected outside of an actual
-// wagon. Same clone-then-reset pattern createwagon.js's own
-// createWagonBody already uses for a real wagon's collider - the template
-// itself stays isVisible:false/setEnabled(false) (containers.js), every
-// clone has to flip both back explicitly, the template's own state is
-// never touched.
-function createWagonRoot(){
-    const wagonBodyColliderRoot = getSocketContainers()?.wagonBodyColliderRoot
-    if(!wagonBodyColliderRoot) return console.warn("[debug] createWagonRoot: wagonBodyColliderRoot not loaded")
-    myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState().owner)
-    if(!myPlayer) return console.log("not found myPlayer")
-
-    const clone = wagonBodyColliderRoot.clone(`wagonbody_debug_${Date.now()}`)
-    // clone(name) with no second arg still copies the SOURCE mesh's own
-    // .parent onto the clone internally (Mesh._copySource - confirmed
-    // against @babylonjs/core's own source) - this is the actual 2-day bug:
-    // without clearing it, every .position/.rotationQuaternion write below
-    // was being interpreted as a LOCAL offset from whatever parent the
-    // template itself picked up on import, not world space
-    clone.parent = null
-    clone.isVisible = true
-    clone.setEnabled(true)
-    clone.isPickable = false
-    clone.rotationQuaternion = null
-
-
-    // rotationHelper ("rotBox") - the dedicated tiny box this same file's
-    // own updateRotation() already keeps facing the player's real movement
-    // direction every tick (see its own lookAt() call above), so its own
-    // .forward is the same "which way is the player facing" direction
-    // every other yaw-only object in this game already trusts (the wagon,
-    // the harness deer, every enemy - all just Math.atan2(dirX, dirZ) off
-    // a plain direction vector, see createwagon.js's own
-    // rotation.y = Math.atan2(dirX, dirZ)). Doing the SAME thing here
-    // instead of copying rotationHelper's own rotationQuaternion directly -
-    // that copy approach depends on wagonBodyColliderRoot's own baked
-    // "front" axis lining up exactly with rotationHelper's local +Z, which
-    // is unverified (containers.js's own 45° bake on that mesh is a rough
-    // in-game visual estimate, not a confirmed-exact value - see that
-    // file's own comment). Math.atan2 sidesteps that entirely: it only
-    // ever needs a plain direction vector, same as every other proven
-    // facing calc in this codebase, not a matching pair of mesh-local axes.
-    const fPos = rotationHelper.forward
-    const cPos = myPlayer.body.position.clone()
-    const newPos = { x: cPos.x + fPos.x, y: cPos.y, z: cPos.z + fPos.z }
-    // was `clone.position = cPos` - the character's OWN position, not
-    // newPos (the point actually computed in front of them) - the clone
-    // spawned exactly on top of the player regardless of any rotation fix
-    clone.position = new Vector3(newPos.x, newPos.y, newPos.z)
-    // rotationQuaternion is already null (set above) - required for plain
-    // Euler .rotation to actually take effect (Babylon ignores .rotation
-    // entirely whenever rotationQuaternion is non-null, same reasoning
-    // createwagon.js's own positionWagonBehindDeer comment already covers)
-    clone.rotation.y = Math.atan2(fPos.x, fPos.z)
-
-    return clone
 }
 // uimanagement.js's startResting - forcing canPress false mid-stride only
 // blocks NEW input from here on (handleKeyDown/handleKeyUp/joystick
@@ -723,7 +665,7 @@ function setupControls(scene, allsounds) {
                 console.log(myPlayer.body.position)
                 // sendWorldMessage(`${getCharState().name} joined !`)
                 
-                // createWagonRoot()
+
             break
             case "x":
                 // changeStory({
@@ -848,6 +790,103 @@ function setupControls(scene, allsounds) {
                 // taken (giveRandomSkill()), hence "g" instead.
                 emitSpawnBotNearMe()
             break
+            case "k":
+                const wagonbodycollider = getSocketContainers().wagonBodyColliderRoot
+                const wagonroot = getSocketContainers().wagonRoot
+                console.log(wagonbodycollider)
+                const wg = wagonbodycollider.clone()
+                const wroot = wagonroot.clone()
+                wg.parent = null
+                wg.isVisible = false
+
+                wroot.parent = wg
+                wroot.isVisible = true
+                const currScene = getSceneDet().scene
+                // const justaBox = MeshBuilder.CreateBox("asd", {depth: 2}, currScene)
+                const forward = myPlayer.body.getDirection(Vector3.Forward())
+                // const spawnPos = myPlayer.body.position.add(forward.scale(2))
+                const distanceFromMe = 2
+                const plPos = myPlayer.body.position.clone()
+                const spawnPos = new Vector3(plPos.x+(forward.x*distanceFromMe), plPos.y+forward.y, plPos.z+(forward.z*distanceFromMe))
+                // const direction = new Vector3(plPos.x+(forward.x*4), plPos.y+forward.y, plPos.z+(forward.z*4))
+                const direction = spawnPos.add(forward.scale(2))
+                // const direction = spawnPos.add(Vector3.Forward())
+                // justaBox.position.copyFrom(spawnPos)
+                // justaBox.position = spawnPos
+                
+                // justaBox.lookAt(direction,0,0,0)
+                wg.position = spawnPos
+                wg.lookAt(direction,0,0,0)
+                
+                console.log(forward)
+                console.log(forward.length())
+                console.log(spawnPos.length())
+
+                const agg = createAggregate(wg, { mass:1, friction: 0.1, restitution: 0}, "box", currScene)
+                agg.body.setMassProperties({
+                    inertia: new Vector3(0,1,0)
+                })
+                // const boxForward = justaBox.getDirection(Vector3.Forward())
+                const spd = 40
+
+                // WHEELS - each glb is a full AXLE PAIR (both wheels modelled
+                // together, X bounds -1.31..1.30), so one clone per axle, not
+                // per wheel. Parented to wroot so they ride the visible wagon.
+                //
+                // Placement is derived from wroot own bounds rather than
+                // hardcoded, so a re-export of wagon.glb moves the axles with
+                // it. wagon.glb currently spans Z -1.74..5.49 with its body
+                // bottom at Y 0.76, leaving exactly the gap these sit in.
+                const wheelFrontRoot = getSocketContainers().wagonWheelFrontRoot
+                const wheelRearRoot = getSocketContainers().wagonWheelRearRoot
+                if(wheelFrontRoot && wheelRearRoot){
+                    const wb = wroot.getBoundingInfo().boundingBox
+                    // inset from each end so the axles sit under the bed
+                    // rather than poking past it
+                    const AXLE_INSET = 0.8
+                    const frontZ = wb.maximum.z - AXLE_INSET
+                    const rearZ = wb.minimum.z + AXLE_INSET
+                    // wheel is centre-pivoted vertically (Y -0.73..0.70), so
+                    // placing it at its own radius rests the bottom on y=0
+                    const wheelY = 0.7
+
+                    const frontWheels = wheelFrontRoot.clone("wagonwheel_front_" + Date.now())
+                    frontWheels.parent = wroot
+                    frontWheels.position.set(0, wheelY, frontZ-2.5)
+                    frontWheels.rotationQuaternion = null
+                    frontWheels.rotation.set(0, 0, 0)
+                    frontWheels.isVisible = true
+                    frontWheels.setEnabled(true)
+                    frontWheels.isPickable = false
+
+                    const rearWheels = wheelRearRoot.clone("wagonwheel_rear_" + Date.now())
+                    rearWheels.parent = wroot
+                    rearWheels.position.set(0, wheelY, rearZ)
+                    rearWheels.rotationQuaternion = null
+                    rearWheels.rotation.set(0, 0, 0)
+                    rearWheels.isVisible = true
+                    rearWheels.setEnabled(true)
+                    rearWheels.isPickable = false
+
+                    
+                    const dirForward = wg.getDirection(Vector3.Forward())
+                    // agg.body.setAngularDamping(100)
+                    // myPlayer.body.parent = wg
+                    attachCam(frontWheels)
+                    currScene.onAfterRenderObservable.add(() => {
+                        const vel = agg.body.getLinearVelocity()
+                        wg.lookAt(direction,0,0,0)
+                        agg.body.setLinearVelocity(new Vector3(dirForward.x*spd, vel.y, dirForward.z*spd))
+                        frontWheels.addRotation(Math.PI/10,0,0)
+                        rearWheels.addRotation(Math.PI/10,0,0)
+
+                            myPlayer.body.position.y = wg.position.y+500
+                            myPlayer.body.position.x = wg.position.x
+                            myPlayer.body.position.z = wg.position.z
+                    })
+                }
+
+            break;
             case "i":
                 giveAllItems()
             break

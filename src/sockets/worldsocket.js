@@ -28,8 +28,6 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
-import createWagon, { positionWagonBehindDeer } from "../assetcreation/createwagon.js"
-import createHarnessDeer, { computeHarnessDeerPosition } from "../assetcreation/createharnessdeer.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
 import { refreshPlayerListIfOpen } from "../components/playerListUI"
@@ -46,20 +44,6 @@ let tcpBonfires = []
 // filtered out on "struck-weapon-removed"), just player-created at runtime
 // like tcpBonfires instead of seeded.
 let tcpStruckWeapons = []
-// openworld ambient wagon traffic (tcp/recources/wagons.ts's own Twagon) -
-// a wagon has no movement law of its own - each entry only references
-// which harness deer pulls it via deerId, and client-side it just trails
-// wherever that deer's own already-resolved position ends up each frame
-// (createwagon.js's own positionWagonBehindDeer). Never removed once
-// placed, same permanence as tcpBonfires above (no "wagon-removed"
-// broadcast exists).
-let tcpWagons = []
-// harness deer (tcp/recources/wagons.ts's own Tharnessdeer) - the primary,
-// driving entity of the pairing (see wagons.ts's own header comment on
-// why): each entry is a pure position-from-elapsed-time DEFINITION
-// (origin/heading/spd/halfDistance/startTime), never a live x/z the server
-// ticks. Same permanence as tcpWagons.
-let tcpHarnessDeer = []
 
 // In Client
 let playersOnScene = []
@@ -85,17 +69,6 @@ let struckWeaponsInScene = []
 // creations/skillEffects.js's hit-registration sites can target duel
 // opponents with player skills the same way they already target real enemies
 let duelOpponentsOnScene = []
-// openworld ambient wagons - mirrors enemiez's shape (full objects carrying
-// a live .body, not just the {id}-only bookkeeping treasuresInScene/
-// bonfiresInScene use for stationary props), since renderer.js needs a body
-// reference to update every frame. See createwagon.js's own header comment
-// for how a wagon trails whichever deer is pulling it.
-let wagonsOnScene = []
-// harness deer on scene - mirrors wagonsOnScene's own shape (full objects
-// carrying a live .body, since renderer.js needs it every frame). See
-// createharnessdeer.js's own header comment for how each one computes its
-// own live position (the primary/driving entity of the pairing now).
-let harnessDeerOnScene = []
 
 // how close (planar, x/z only) the LOCAL player needs to be before an
 // openworld enemy's mesh actually gets created - openworld can have ~500
@@ -155,7 +128,10 @@ let containers = {
     slimeRoot: null,
     lesserDemonRoot: null,
     deerRoot: null,
-    wagonRoot: null
+    wagonRoot: null,
+    wagonWheelFrontRoot: null,
+    wagonWheelRearRoot: null,
+    wagonBodyColliderRoot: null
 }
 
 
@@ -184,17 +160,6 @@ export function resetArray(){
     duelOpponentsOnScene = []
     // unlike treasuresInScene/bonfiresInScene above (never reset here - a
     // pre-existing gap for those, not something copied on purpose), a
-    // wagon's entry carries a live .body reference this array is the ONLY
-    // thing tracking. Leaving a stale entry behind after changeScene()
-    // disposes the old scene's meshes would permanently block
-    // pushWagonOnScene's own dedup check from ever recreating it the next
-    // time this player re-enters openworld - wagons only ever exist there,
-    // so unlike treasures/bonfires (which can live in less-frequently-
-    // revisited places), this gap would bite on every single re-entry.
-    wagonsOnScene = []
-    // same reasoning as wagonsOnScene right above - a harness deer also
-    // carries a live .body this array is the only thing tracking
-    harnessDeerOnScene = []
     containers = {
         hairs: null,
         animeBody: null,
@@ -213,7 +178,10 @@ export function resetArray(){
         slimeRoot: null,
         lesserDemonRoot: null,
         deerRoot: null,
-        wagonRoot: null
+        wagonRoot: null,
+        wagonWheelFrontRoot: null,
+        wagonWheelRearRoot: null,
+        wagonBodyColliderRoot: null
     }
 }
 export function setSocketContainers(newContainers){
@@ -239,26 +207,6 @@ export function pushDuelOpponentOnScene(opp){
 }
 export function removeDuelOpponentOnScene(body){
     duelOpponentsOnScene = duelOpponentsOnScene.filter(o => o.body !== body)
-}
-export function getWagonsOnScene(){
-    return wagonsOnScene
-}
-// same dedup-on-push guard pushEnemyOnScene already has - a wagon is
-// permanent/never removed, so the only way this could double-push is two
-// reCreateMeshesInScene passes racing on the same _id
-export function pushWagonOnScene(newWagon){
-    const isAlreadyHere = wagonsOnScene.find(wgn => wgn._id === newWagon._id)
-    if(isAlreadyHere) return
-    wagonsOnScene.push(newWagon)
-}
-export function getHarnessDeerOnScene(){
-    return harnessDeerOnScene
-}
-// same dedup-on-push guard pushWagonOnScene above already has
-export function pushHarnessDeerOnScene(newDeer){
-    const isAlreadyHere = harnessDeerOnScene.find(dr => dr._id === newDeer._id)
-    if(isAlreadyHere) return
-    harnessDeerOnScene.push(newDeer)
 }
 export function setSocketOn(_isOn){
     isSocketOn = _isOn
@@ -310,7 +258,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, wagons, harnessDeer, struckWeapons, weather } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, struckWeapons, weather } = allDataFromServer
         // weather rides on every snapshot, not just its own "weather-changed"
         // broadcast - this handler also fires on every PLACE CHANGE, so a
         // player walking out of a dungeon into a blizzard gets the current sky
@@ -343,8 +291,6 @@ export function activateOnSocketListeners(socket){
         allQuests = quests
         tcpTreasures = treasures ?? []
         tcpBonfires = bonfires ?? []
-        tcpWagons = wagons ?? []
-        tcpHarnessDeer = harnessDeer ?? []
         tcpStruckWeapons = struckWeapons ?? []
         
         const characterState = getCharState()
@@ -1055,29 +1001,6 @@ export function activateOnSocketListeners(socket){
 
         reCreateMeshesInScene()
     })
-    // tcp/index.ts's own wagon quota-check interval (10s) - fires this
-    // either when it just topped up a missing deer heading (a fresh paired
-    // wagon for it) or when a wagon entry itself went missing independently
-    // (see that interval's own comment) - wagons are permanent, nothing
-    // ever removes one, so in steady state this listener just never gets
-    // called again once every deer already has its own wagon. Same
-    // "replace the full snapshot, re-run reCreateMeshesInScene" shape as
-    // "enemy-respawned" above.
-    socket.on('wagons-spawned', allWagons => {
-        if (!isSocketOn) return
-        tcpWagons = allWagons
-        reCreateMeshesInScene()
-    })
-    // tcp/index.ts's own wagon quota-check interval - fires this when a
-    // cardinal heading's own harness deer turned out to be missing (and a
-    // fresh paired wagon got created alongside it - see that interval's own
-    // comment). Same "replace the full snapshot, re-run
-    // reCreateMeshesInScene" shape as "wagons-spawned" above.
-    socket.on('harness-deer-spawned', allHarnessDeer => {
-        if (!isSocketOn) return
-        tcpHarnessDeer = allHarnessDeer
-        reCreateMeshesInScene()
-    })
     // mirrors "enemy-removed" right above - fires for EVERY client
     // (including whoever opened it, echoed back), not just everyone else,
     // so this has to be safe to run against a chest this same client
@@ -1497,132 +1420,6 @@ export function reCreateMeshesInScene() {
 
         const bonfire = createBonfireMesh(scene, bonfireTcpInfo.pos, bonfireTcpInfo.craftId)
         if(bonfire) bonfiresInScene.push({ craftId: bonfireTcpInfo.craftId })
-    })
-    // same three-guard shape as tcpTreasures/tcpBonfires above, PLUS an
-    // ownerId self-exclusion (same idea allPlayersFromTCP's own loop at the
-    // top of this function already uses for `tcpCharDet.owner === characterState.owner`) -
-    // the striker's own client already rendered its own local copy the
-    // instant it struck (itemInfoSystem.js's struckItemFunc / creations/
-    // skills.js's spawnProjectile), so this only ever needs to create one
-    // for every OTHER player's client. characterBody is resolved fresh per
-    // client (myOwnBody, computed above for the enemy loop) rather than
-    // passed through the server payload - same "purely a local pickup
-    // trigger, every client wires its own" reasoning
-    // creategroundweapon.js's own header comment settles.
-    tcpStruckWeapons.length && tcpStruckWeapons.forEach(weaponTcpInfo => {
-        if (characterState.currentPlace.placeId !== weaponTcpInfo.currentPlaceId) return
-        if (weaponTcpInfo.ownerId === characterState.owner) return
-
-        // enemy-stick case (creations/skills.js's own enemy-hit branch) -
-        // looked up UP FRONT (not just at first-creation time) so the
-        // isAlreadyHere/weaponMesh branch just below can also use it to fix
-        // up a weapon that got created BEFORE its target enemy was on this
-        // client's own scene yet (openworld's distance-gated enemy
-        // creation - the enemies loop above only creates enemies within
-        // OPENWORLD_ENEMY_CREATE_DIST of this player, so a weapon struck on
-        // a still-out-of-range enemy falls back to the static ground
-        // rendering below, floating at that enemy's mid-body height until
-        // this catches up and reparents it properly)
-        const struckEnemy = weaponTcpInfo.targetEnemyId && enemiez.find(en => en._id === weaponTcpInfo.targetEnemyId)
-
-        const isAlreadyHere = struckWeaponsInScene.find(w => w.itemId === weaponTcpInfo.itemId)
-        const weaponMesh = sceneDet.scene.getMeshByName(`swordstuck_${weaponTcpInfo.itemId}`)
-        if(isAlreadyHere || weaponMesh){
-            // already created on an earlier pass - if we now know it
-            // should be riding on a specific enemy and it isn't parented
-            // there yet, fix it up instead of leaving it wherever the
-            // earlier fallback pass put it
-            if(weaponMesh && struckEnemy?.bodytarget && weaponMesh.parent !== struckEnemy.bodytarget){
-                weaponMesh.parent = struckEnemy.bodytarget
-                weaponMesh.position.set(0, 0, 0.4)
-            }
-            return
-        }
-
-        const myPlayer = playersOnScene.find(pl => pl.owner === characterState.owner)
-        if(!myPlayer) return
-
-        // enemy-stick case - parent directly to that enemy's own bodytarget
-        // so it visually rides along with them, matching what the striking
-        // player's own client already sees locally, instead of a floating
-        // static copy. Falls back to the plain ground-stick rendering
-        // below if that enemy isn't (yet, or anymore) on THIS client's own
-        // scene - see this block's own struckEnemy comment above.
-        const lootBox = struckEnemy?.bodytarget
-            ? createEnemyStuckWeapon(scene, weaponTcpInfo.itemDetail, struckEnemy.bodytarget, myPlayer.body, true)
-            : createGroundWeapon(scene, { ...weaponTcpInfo.itemDetail, lootPosition: weaponTcpInfo.pos }, myPlayer.body, true)
-        if(lootBox) struckWeaponsInScene.push({ itemId: weaponTcpInfo.itemId })
-    })
-    // same three-guard shape as tcpTreasures/tcpBonfires above (place
-    // filter, local tracking array, getMeshByName fallback) - unlike those
-    // two, createWagon needs a live .body reference kept around (pushed via
-    // pushWagonOnScene, not just an {id} bookkeeping entry), since
-    // renderer.js has to update its position every frame
-    // harness deer (tcp/recources/wagons.ts's own Tharnessdeer) - the
-    // primary/driving entity now (see wagons.ts's own header comment on the
-    // flip), run BEFORE the wagon loop below so a wagon created this same
-    // pass can already find its paired deer in harnessDeerOnScene for its
-    // own initial placement (otherwise it'd sit wherever wagonRoot's own
-    // template happens to be for one frame before renderer.js's own wagon
-    // loop first corrects it)
-    tcpHarnessDeer.length && tcpHarnessDeer.forEach(deerTcpInfo => {
-        if (characterState.currentPlace.placeId !== deerTcpInfo.currentPlaceId) return
-
-        const isAlreadyHere = harnessDeerOnScene.find(dr => dr._id === deerTcpInfo._id)
-        if (isAlreadyHere) return
-
-        const deerMesh = sceneDet.scene.getMeshByName(`harnessdeer.${deerTcpInfo._id}`)
-        if(deerMesh) return
-
-        const deer = createHarnessDeer(scene, deerTcpInfo)
-        if(deer) pushHarnessDeerOnScene(deer)
-        // TEMP DEBUG - so the wagon's own [wagon debug] placement log can
-        // be compared directly against where this deer actually is right
-        // now. Safe to delete once wagons are confirmed positioned
-        // correctly again.
-        const debugPos = computeHarnessDeerPosition(deerTcpInfo)
-    })
-    tcpWagons.length && tcpWagons.forEach(wagonTcpInfo => {
-        if (characterState.currentPlace.placeId !== wagonTcpInfo.currentPlaceId) return
-
-        const isAlreadyHere = wagonsOnScene.find(wgn => wgn._id === wagonTcpInfo._id)
-        if (isAlreadyHere) return
-
-        const wagonMesh = sceneDet.scene.getMeshByName(`wagon.${wagonTcpInfo._id}`)
-        if(wagonMesh) return
-
-        const wagon = createWagon(scene, wagonTcpInfo)
-        if(!wagon) return
-        pushWagonOnScene(wagon)
-
-        // initial placement - the deer this wagon is paired with may not
-        // exist yet AT ALL (e.g. this wagon's own deer hasn't spawned into
-        // range yet on this client) - if so, it just sits wherever
-        // createWagonBody's own template happens to be until a deer shows
-        // up and renderer.js's own loop starts correcting it every frame.
-        // If the deer DOES exist, its position is computed directly via
-        // computeHarnessDeerPosition - the same pure, elapsed-time-only
-        // formula renderer.js's own loop calls every frame - rather than
-        // requiring pairedDeer._lastResolved to already be set.
-        // _lastResolved is only ever written by renderer.js's own
-        // onBeforeRenderObservable loop, which hasn't run even once yet
-        // this early (right on connect) - relying on it here used to
-        // silently skip this teleport every time, leaving the wagon
-        // sitting near the collider template's default spot (near the
-        // scene origin, likely hundreds/thousands of units from the
-        // deer's actual HARNESS_ORIGIN-based position) until
-        // applyWagonPhysics's own clamped correction term slowly crawled
-        // it into view over a very long time - the "wagon invisible"
-        // report this fixes.
-        const pairedDeer = harnessDeerOnScene.find(dr => dr._id === wagonTcpInfo.deerId)
-        // TEMP DEBUG - confirms whether a paired deer was even found at
-        // creation time, and if so, exactly where the teleport placed the
-        // wagon. Safe to delete once wagons are confirmed visible again.
-        if(!pairedDeer){
-            console.warn(`[wagon debug] wagon.${wagonTcpInfo._id} has no paired deer (deerId=${wagonTcpInfo.deerId}) on this client yet - staying at its default spot`)
-        }else{
-            positionWagonBehindDeer(sceneDet.scene, wagon, pairedDeer._lastResolved ?? computeHarnessDeerPosition(pairedDeer.det))
-        }
     })
     if(characterState.currentPlace.placeId === 9){
 

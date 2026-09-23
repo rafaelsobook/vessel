@@ -114,9 +114,9 @@ export async function setStartingContainers(scene){
             // of identity since bakeCurrentTransformIntoVertices below folds
             // this rotation into the geometry itself, not into either
             // rotation property going forward)
-            wagonRoot.rotationQuaternion = null
-            wagonRoot.rotation.y = Math.PI
-            wagonRoot.bakeCurrentTransformIntoVertices()
+            // wagonRoot.rotationQuaternion = null
+            // wagonRoot.rotation.y = Math.PI
+            // wagonRoot.bakeCurrentTransformIntoVertices()
         }
 
         // wagon's own physics collider - a purpose-built shape (not the
@@ -132,9 +132,9 @@ export async function setStartingContainers(scene){
             return mesh ?? null
         })
         if(wagonBodyColliderRoot){
-            wagonBodyColliderRoot.isVisible = false
-            wagonBodyColliderRoot.setEnabled(false)
-            wagonBodyColliderRoot.isPickable = false
+            // wagonBodyColliderRoot.isVisible = false
+            // wagonBodyColliderRoot.setEnabled(false)
+            // wagonBodyColliderRoot.isPickable = false
             // MUST bake the node's own scale/translation into the vertices
             // (not just leave it as .position/.scaling) - createwagon.js's
             // own PhysicsShapeConvexHull reads this mesh's RAW local
@@ -164,10 +164,30 @@ export async function setStartingContainers(scene){
             // this overshoots/undershoots or goes the wrong way, adjust
             // the sign/magnitude here (a negative value turns the other
             // direction) rather than touching any of the yaw math itself.
-            wagonBodyColliderRoot.rotationQuaternion = null
-            wagonBodyColliderRoot.rotation.y = Math.PI / 4
-            wagonBodyColliderRoot.bakeCurrentTransformIntoVertices()
+            // wagonBodyColliderRoot.rotationQuaternion = null
+            // wagonBodyColliderRoot.rotation.y = Math.PI / 4
+            // wagonBodyColliderRoot.bakeCurrentTransformIntoVertices()
         }
+
+        // wagon wheels - two separate glbs, each one a full AXLE PAIR rather
+        // than a single wheel: both carry X bounds -1.31..1.30, i.e. the left
+        // and right wheel modelled together spanning the axle width. So one
+        // clone per axle (front, rear), not one per wheel.
+        // Y -0.73..0.70 means each is centre-pivoted vertically, so a clone
+        // placed at local y = wheel radius sits its bottom on the ground.
+        // Loaded through the same loadPropRootSafe + "first mesh with real
+        // geometry" pattern wagonRoot above uses, since these are equally
+        // single-node props.
+        let wagonWheelFrontRoot = await loadPropRootSafe("./models/outdors/wagonwheel_front.glb", scene, container => {
+            const mesh = container.meshes.find(m => m.getTotalVertices() > 0)
+            if(!mesh) console.warn(`[containers] wagonwheel_front.glb loaded but no mesh with geometry was found in it`)
+            return mesh ?? null
+        })
+        let wagonWheelRearRoot = await loadPropRootSafe("./models/outdors/wagonwheel_rear.glb", scene, container => {
+            const mesh = container.meshes.find(m => m.getTotalVertices() > 0)
+            if(!mesh) console.warn(`[containers] wagonwheel_rear.glb loaded but no mesh with geometry was found in it`)
+            return mesh ?? null
+        })
 
         const HairModel = await importMeshSafe("./models/avatar/", "hairModels.glb", scene)
         const helmets = await importMeshSafe("./models/helmets/", "helmets.glb", scene)
@@ -234,7 +254,9 @@ export async function setStartingContainers(scene){
             treasureRoot,
             bonfireRoot,
             wagonRoot,
-            wagonBodyColliderRoot
+            wagonBodyColliderRoot,
+            wagonWheelFrontRoot,
+            wagonWheelRearRoot
         })
         return { animeBodyContainer }
     } catch (error) {
