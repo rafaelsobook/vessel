@@ -253,6 +253,13 @@ export function activateOnSocketListeners(socket){
 
     socket.on("worldChatMessage", data => {
         if (!isSocketOn) return
+        // tcp announces server-side events on this same channel with
+        // msgType:"system" and no sender name (currently only a bot rolling
+        // the legendary black Knight's Scale on level-up). Those read as full
+        // sentences, so they render like the "player-death" line further
+        // down instead of through appendChatMessage, which always prefixes
+        // `${name}: ` and would leave a stray leading ": ".
+        if(data?.msgType === "system") return appendSystemMessage(data.message)
         receiveWorldChatMessage(data)
     })
 

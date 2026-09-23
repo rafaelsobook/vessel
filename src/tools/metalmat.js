@@ -20,6 +20,12 @@ export const METAL_TINTS = {
     // nothing else needed on that side. See MATERIAL_TEXTURES below for the
     // real scale-pattern image this material now also carries.
     dragonscale: new Color3(0.05, 0.05, 0.07),
+    // the top rung of tcp/recources/botItems.ts's own METAL_TIERS ladder, at
+    // 0.2% the rarest metal a bot can roll on any piece - a true black rather
+    // than dragonscale's cold near-black, and no texture of its own in
+    // MATERIAL_TEXTURES, so it reads as flat unadorned black plate and cannot
+    // be mistaken for the scale-patterned dragonscale.
+    black: new Color3(0.02, 0.02, 0.025),
 }
 
 export const METAL_ROUGHNESS = {
@@ -32,6 +38,7 @@ export const METAL_ROUGHNESS = {
     adamantine: 0.2,
     ruby: 0.25,
     dragonscale: 0.18, // hard, glossy scale
+    black: 0.35, // matte blackened steel, not a mirror
 }
 
 // A real image texture some materials carry ON TOP of their flat tint above

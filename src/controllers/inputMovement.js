@@ -822,12 +822,15 @@ function setupControls(scene, allsounds) {
                 console.log(forward.length())
                 console.log(spawnPos.length())
 
-                const agg = createAggregate(wg, { mass:1, friction: 0.1, restitution: 0}, "box", currScene)
-                agg.body.setMassProperties({
-                    inertia: new Vector3(0,1,0)
-                })
+                const agg = createAggregate(wg, { mass:100, friction: 0.5, restitution: 0}, "box", currScene)
+// agg.body.setMassProperties({
+//     mass: 1,
+//     // inertia: new Vector3(0, 0, 0),
+//     // inertiaOrientation: Quaternion.Identity(),
+// })
+// agg.body.disablePreStep = false
                 // const boxForward = justaBox.getDirection(Vector3.Forward())
-                const spd = 40
+                const spd = 25
 
                 // WHEELS - each glb is a full AXLE PAIR (both wheels modelled
                 // together, X bounds -1.31..1.30), so one clone per axle, not
@@ -869,18 +872,25 @@ function setupControls(scene, allsounds) {
                     rearWheels.isPickable = false
 
                     
-                    const dirForward = wg.getDirection(Vector3.Forward())
-                    // agg.body.setAngularDamping(100)
+                    let dirForward = wg.getDirection(Vector3.Forward())
+                    agg.body.setAngularDamping(10)
                     // myPlayer.body.parent = wg
                     attachCam(frontWheels)
+                    
+                    setInterval(() => {
+                        agg.body.disablePreStep = false
+                        wg.lookAt(dirForward,Math.PI,0,0, Space.LOCAL)
+                        setTimeout(() => {agg.body.disablePreStep = true}, 100)
+                    }, 5000)
                     currScene.onAfterRenderObservable.add(() => {
+                        // dirForward = wg.getDirection(Vector3.Forward())
                         const vel = agg.body.getLinearVelocity()
-                        wg.lookAt(direction,0,0,0)
+                        
                         agg.body.setLinearVelocity(new Vector3(dirForward.x*spd, vel.y, dirForward.z*spd))
                         frontWheels.addRotation(Math.PI/10,0,0)
                         rearWheels.addRotation(Math.PI/10,0,0)
 
-                            myPlayer.body.position.y = wg.position.y+500
+                            myPlayer.body.position.y = wg.position.y+10
                             myPlayer.body.position.x = wg.position.x
                             myPlayer.body.position.z = wg.position.z
                     })
