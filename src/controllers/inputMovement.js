@@ -321,8 +321,8 @@ function setupControls(scene, allsounds) {
     }else runsound = allsounds.runningS
     
 
-    let walkSpeed = 1;
-    let sprintSpeed = 20;
+    let walkSpeed = 2;
+    let sprintSpeed = 10;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
@@ -791,110 +791,7 @@ function setupControls(scene, allsounds) {
                 emitSpawnBotNearMe()
             break
             case "k":
-                const wagonbodycollider = getSocketContainers().wagonBodyColliderRoot
-                const wagonroot = getSocketContainers().wagonRoot
-                console.log(wagonbodycollider)
-                const wg = wagonbodycollider.clone()
-                const wroot = wagonroot.clone()
-                wg.parent = null
-                wg.isVisible = false
-
-                wroot.parent = wg
-                wroot.isVisible = true
-                const currScene = getSceneDet().scene
-                // const justaBox = MeshBuilder.CreateBox("asd", {depth: 2}, currScene)
-                const forward = myPlayer.body.getDirection(Vector3.Forward())
-                // const spawnPos = myPlayer.body.position.add(forward.scale(2))
-                const distanceFromMe = 2
-                const plPos = myPlayer.body.position.clone()
-                const spawnPos = new Vector3(plPos.x+(forward.x*distanceFromMe), plPos.y+forward.y, plPos.z+(forward.z*distanceFromMe))
-                // const direction = new Vector3(plPos.x+(forward.x*4), plPos.y+forward.y, plPos.z+(forward.z*4))
-                const direction = spawnPos.add(forward.scale(2))
-                // const direction = spawnPos.add(Vector3.Forward())
-                // justaBox.position.copyFrom(spawnPos)
-                // justaBox.position = spawnPos
                 
-                // justaBox.lookAt(direction,0,0,0)
-                wg.position = spawnPos
-                wg.lookAt(direction,0,0,0)
-                
-                console.log(forward)
-                console.log(forward.length())
-                console.log(spawnPos.length())
-
-                const agg = createAggregate(wg, { mass:100, friction: 0.5, restitution: 0}, "box", currScene)
-// agg.body.setMassProperties({
-//     mass: 1,
-//     // inertia: new Vector3(0, 0, 0),
-//     // inertiaOrientation: Quaternion.Identity(),
-// })
-// agg.body.disablePreStep = false
-                // const boxForward = justaBox.getDirection(Vector3.Forward())
-                const spd = 25
-
-                // WHEELS - each glb is a full AXLE PAIR (both wheels modelled
-                // together, X bounds -1.31..1.30), so one clone per axle, not
-                // per wheel. Parented to wroot so they ride the visible wagon.
-                //
-                // Placement is derived from wroot own bounds rather than
-                // hardcoded, so a re-export of wagon.glb moves the axles with
-                // it. wagon.glb currently spans Z -1.74..5.49 with its body
-                // bottom at Y 0.76, leaving exactly the gap these sit in.
-                const wheelFrontRoot = getSocketContainers().wagonWheelFrontRoot
-                const wheelRearRoot = getSocketContainers().wagonWheelRearRoot
-                if(wheelFrontRoot && wheelRearRoot){
-                    const wb = wroot.getBoundingInfo().boundingBox
-                    // inset from each end so the axles sit under the bed
-                    // rather than poking past it
-                    const AXLE_INSET = 0.8
-                    const frontZ = wb.maximum.z - AXLE_INSET
-                    const rearZ = wb.minimum.z + AXLE_INSET
-                    // wheel is centre-pivoted vertically (Y -0.73..0.70), so
-                    // placing it at its own radius rests the bottom on y=0
-                    const wheelY = 0.7
-
-                    const frontWheels = wheelFrontRoot.clone("wagonwheel_front_" + Date.now())
-                    frontWheels.parent = wroot
-                    frontWheels.position.set(0, wheelY, frontZ-2.5)
-                    frontWheels.rotationQuaternion = null
-                    frontWheels.rotation.set(0, 0, 0)
-                    frontWheels.isVisible = true
-                    frontWheels.setEnabled(true)
-                    frontWheels.isPickable = false
-
-                    const rearWheels = wheelRearRoot.clone("wagonwheel_rear_" + Date.now())
-                    rearWheels.parent = wroot
-                    rearWheels.position.set(0, wheelY, rearZ)
-                    rearWheels.rotationQuaternion = null
-                    rearWheels.rotation.set(0, 0, 0)
-                    rearWheels.isVisible = true
-                    rearWheels.setEnabled(true)
-                    rearWheels.isPickable = false
-
-                    
-                    let dirForward = wg.getDirection(Vector3.Forward())
-                    agg.body.setAngularDamping(10)
-                    // myPlayer.body.parent = wg
-                    attachCam(frontWheels)
-                    
-                    setInterval(() => {
-                        agg.body.disablePreStep = false
-                        wg.lookAt(dirForward,Math.PI,0,0, Space.LOCAL)
-                        setTimeout(() => {agg.body.disablePreStep = true}, 100)
-                    }, 5000)
-                    currScene.onAfterRenderObservable.add(() => {
-                        // dirForward = wg.getDirection(Vector3.Forward())
-                        const vel = agg.body.getLinearVelocity()
-                        
-                        agg.body.setLinearVelocity(new Vector3(dirForward.x*spd, vel.y, dirForward.z*spd))
-                        frontWheels.addRotation(Math.PI/10,0,0)
-                        rearWheels.addRotation(Math.PI/10,0,0)
-
-                            myPlayer.body.position.y = wg.position.y+10
-                            myPlayer.body.position.x = wg.position.x
-                            myPlayer.body.position.z = wg.position.z
-                    })
-                }
 
             break;
             case "i":

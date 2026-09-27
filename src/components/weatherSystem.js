@@ -4,6 +4,7 @@ import { getCharState } from "../charactersystem/characterstate.js"
 import { getSceneDet } from "../main/main.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { findMyCurrentPlace } from "../states/placestates.js"
+import { getAllSounds } from "./soundSystem.js"
 
 // Bridges tcp's world weather to (a) what this client draws and (b) what
 // temperature its player is standing in.
@@ -53,6 +54,21 @@ export function setWorldWeather(weather){
     if(!WEATHER_TYPES.includes(weather)) return
     worldWeather = weather
     refreshWeatherVisuals()
+
+    setTimeout(() => {
+        switch(weather){
+            case "rain":
+                getAllSounds().rainy.play()
+            break
+            case "rain", "sandstorm":
+                getAllSounds().windy.play()
+            break
+            default:
+                getAllSounds().rainy.stop()
+                getAllSounds().windy.stop()
+            break
+        }
+    },1000)
 }
 
 // Re-evaluates what should be on screen for the place this client is in NOW.

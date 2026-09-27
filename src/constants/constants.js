@@ -51,3 +51,9 @@ export const OPENWORLD_PLACE_ID = 888
 // createOpenWorldGrass rather than repeating a literal, so the three can no
 // longer drift apart again.
 export const OPENWORLD_TERRAIN_VERTS = 17
+
+// Zerech's travel fare (npcDetails.js's "120_zerech" / constants/zerechdata.js)
+// - flat, any tower. Shared here because two files need the same number:
+// his speech quotes it and his dialogue charges it, and a price that lived in
+// both would drift the first time someone tuned one and not the other.
+export const ZERECH_FARE = { coinType: "bronze", pieces: 20 }

@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { getCharState, healPlayer, updateHpMpSp_UI, rankOrder } from '../charactersystem/characterstate'
+import { buyOrSell } from "../components/buyorsell"
 import { getPlayerCoord } from '../charactersystem/createcharacter'
 import { createMagicCircle } from '../creations/magiccircles'
 import { getSceneDet } from '../main/main'
@@ -144,6 +145,11 @@ export function vesperData(){
                     startQuestionare(502)
                 } },
                 { text: "Let's talk", cb: () => startQuestionare(503) },
+                // her skill-book shelf (npcDetails.js's own toSell on
+                // "117_vesper") - buyOrSell(false, <sellerId>) is the same
+                // call bramdata.js/maeladata.js already use, the shop just
+                // reads a different NPC's stock
+                { text: "Teach me something", cb: () => buyOrSell(false, "117_vesper") },
             ],
             cb: () => {}
         },

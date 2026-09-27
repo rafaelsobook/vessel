@@ -51,6 +51,8 @@ let enemiez = []
 let npcz = []
 let projectilesOnScene = []
 let questsOnScene = []
+
+let wagonsOnScene = []
 // { itemId } entries only - createTreasureMesh already tracks its own
 // mesh/interact state internally, this just needs enough to know which
 // tcpTreasures ids already have a chest spawned (reCreateMeshesInScene's
@@ -150,6 +152,7 @@ export function resetArray(){
     enemiez = []
     npcz = []
     projectilesOnScene = []
+    wagonsOnScene = []
     // createQuestPlaneMesh dedupes against this by questId - the meshes it
     // tracks get destroyed along with the rest of the old scene on every
     // transition (changeScene() disposes the whole scene), but without
@@ -189,6 +192,10 @@ export function setSocketContainers(newContainers){
 }
 export function getSocketContainers(){ 
     return containers
+}
+
+export function getWagonsOnScene(){
+    return wagonsOnScene;
 }
 export function getPlayersOnScene(){
     return playersOnScene

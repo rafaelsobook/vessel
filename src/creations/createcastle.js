@@ -1,16 +1,18 @@
-import { MeshBuilder, Mesh, Vector3, StandardMaterial, Color3 } from "@babylonjs/core"
+import { MeshBuilder, Mesh, StandardMaterial, Color3 } from "@babylonjs/core"
 import { createMat } from "../tools/materials.js"
 import { createAggregate } from "../tools/physics.js"
 import { sampleTerrainSurfaceHeight } from "infterrain"
 import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 
 // A procedural medieval castle, entirely MeshBuilder primitives - no glb
-// asset for this one. Every piece is built at LOCAL origin (castle center =
-// (0,0,0), ground = y:0) and left unparented/untranslated until AFTER the
-// final merge, so Mesh.MergeMeshes bakes clean, origin-relative vertex data;
-// the whole thing is then moved into place with one single .position
-// assignment at the very end, same "build flat at origin, place once"
-// approach createRock.js's own peaks/rubble merge already uses.
+// asset for this one. Every piece is positioned directly in real WORLD
+// space at construction time (worldOffset = position.x/groundY/position.z,
+// threaded into every addWall/addTower/addKeep/addFloor/addGateStep call),
+// not built at local castle-center-at-origin and moved once at the end the
+// way this originally worked - see createCastle's own comment for exactly
+// why that changed (short version: a mass:0 PhysicsAggregate bakes its
+// collider pose once at creation and never re-syncs, so "position later"
+// stopped being an option once every piece started carrying one).
 //
 // Two materials (stone walls/towers/keep, dark tile roofs), preserved
 // through the merge via multiMultiMaterials:true (Mesh.MergeMeshes' own 6th
@@ -19,14 +21,21 @@ import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 // a single MultiMaterial + per-submesh index assignment, so this is still
 // genuinely ONE mesh afterward, just one that isn't monochrome.
 //
-// Physics is intentionally separate from the merged visual mesh - four
-// plain invisible box colliders matching the outer wall line (same "solid
-// perimeter, gate stays open" idea the visual walls already have), not a
-// single "mesh" shape aggregate on the merged castle itself. Confirmed
+// Physics: every individual piece (each wall run, each merlon, both tower
+// pieces, the keep and its roof, the floor slab, the gate step) gets its
+// own createAggregate({mass:0}, ..., "box") - real per-piece collision,
+// not the four flat wall-line boxes this used to approximate the whole
+// castle with (which meant towers/keep/roofs/crenellations/floor had NO
+// collision of their own at all). Still "box", not "mesh" - confirmed
 // elsewhere in this project (areascene.js's own openworld terrain setup
 // comment) that Havok's "mesh" shape doesn't actually collide in this
-// build - "box" is the one that reliably does, hence four separate boxes
-// instead of one shape hugging the real silhouette.
+// build, so a box approximating each piece's real silhouette (chunkier on
+// the cone/pyramid roofs, exact on everything else) is what's used
+// throughout, same as it always was here.
+//
+// The source meshes are kept alive (not disposed) through the merge when
+// hasPhysics is true, specifically so their aggregates survive - and then
+// hidden, since the merged castle carries the visuals from here on.
 
 const HALF = 20                 // half the castle's outer footprint (40x40)
 const WALL_HEIGHT = 8
@@ -118,61 +127,81 @@ function getMaterials(scene){
 // instanced chain the way createroom.js's own procedural rooms do (this is
 // a one-off static structure, not a reusable room shape, so the extra
 // instancing machinery isn't worth it here)
-function addWall(meshes, stoneMat, centerX, centerZ, length, axis){
+//
+// worldOffset ({x, y, z} = position.x, groundY, position.z) is added into
+// every position.set below rather than left at castle-local coordinates -
+// see createCastle's own comment for why a mass:0 aggregate needs that now.
+function addWall(meshes, stoneMat, centerX, centerZ, length, axis, worldOffset, scene, hasPhysics){
     const wall = axis === "x"
         ? MeshBuilder.CreateBox("castle_wall", { width: length, height: WALL_HEIGHT, depth: WALL_THICKNESS }, matScene)
         : MeshBuilder.CreateBox("castle_wall", { width: WALL_THICKNESS, height: WALL_HEIGHT, depth: length }, matScene)
-    wall.position.set(centerX, WALL_HEIGHT / 2, centerZ)
+    wall.position.set(worldOffset.x + centerX, worldOffset.y + WALL_HEIGHT / 2, worldOffset.z + centerZ)
     wall.material = stoneMat
+    if(hasPhysics) createAggregate(wall, { mass: 0 }, "box", scene)
     meshes.push(wall)
-    addCrenellations(meshes, stoneMat, centerX, centerZ, length, axis)
+    addCrenellations(meshes, stoneMat, centerX, centerZ, length, axis, worldOffset, scene, hasPhysics)
 }
 
 // small merlon blocks marching along the top of a wall run, alternating
-// merlon/gap for the classic castle silhouette - purely decorative, no
-// physics of their own (the wall box underneath already blocks movement
-// there)
-function addCrenellations(meshes, stoneMat, centerX, centerZ, length, axis){
+// merlon/gap for the classic castle silhouette. Used to be purely
+// decorative (the wall box underneath already blocks ground-level
+// movement) - now gets its own box collider too like everything else here,
+// so an arrow/projectile arcing over the wall can actually clip a merlon
+// instead of passing clean through it.
+function addCrenellations(meshes, stoneMat, centerX, centerZ, length, axis, worldOffset, scene, hasPhysics){
     const step = MERLON_SIZE + MERLON_GAP
     const count = Math.floor(length / step)
     const start = -((count - 1) * step) / 2
     const topY = WALL_HEIGHT + MERLON_HEIGHT / 2
 
     for(let i = 0; i < count; i++){
-        const offset = start + i * step
+        const merlonOffset = start + i * step
         const merlon = MeshBuilder.CreateBox("castle_merlon", { width: MERLON_SIZE, height: MERLON_HEIGHT, depth: MERLON_SIZE }, matScene)
-        if(axis === "x") merlon.position.set(centerX + offset, topY, centerZ)
-        else merlon.position.set(centerX, topY, centerZ + offset)
+        if(axis === "x") merlon.position.set(worldOffset.x + centerX + merlonOffset, worldOffset.y + topY, worldOffset.z + centerZ)
+        else merlon.position.set(worldOffset.x + centerX, worldOffset.y + topY, worldOffset.z + centerZ + merlonOffset)
         merlon.material = stoneMat
+        if(hasPhysics) createAggregate(merlon, { mass: 0 }, "box", scene)
         meshes.push(merlon)
     }
 }
 
 // a round tower - cylinder body + cone roof, sharing the same (x,z) so the
 // roof sits centered directly on top of the body
-function addTower(meshes, stoneMat, roofMat, x, z, radius, height, roofHeight){
+//
+// Both get their own box collider (createAggregate's "box" shape auto-sizes
+// off each mesh's own bounding box - physics.js/physicsAggregate.js) -
+// before this, NEITHER a tower's body nor its roof had any collision at
+// all, so the old 4-flat-wall-line colliders let you walk straight through
+// every tower. A box hugging the cone roof is chunkier than the real
+// pointed shape (box vs cone), same trade-off this file's own header
+// comment already accepts for the wall/gate colliders - not worth a
+// separate convex-hull shape for one decorative roof silhouette.
+function addTower(meshes, stoneMat, roofMat, x, z, radius, height, roofHeight, worldOffset, scene, hasPhysics){
     const body = MeshBuilder.CreateCylinder("castle_tower", { diameter: radius * 2, height, tessellation: 16 }, matScene)
-    body.position.set(x, height / 2, z)
+    body.position.set(worldOffset.x + x, worldOffset.y + height / 2, worldOffset.z + z)
     body.material = stoneMat
+    if(hasPhysics) createAggregate(body, { mass: 0 }, "box", scene)
     meshes.push(body)
 
     // diameterTop:0 - a real cone, same "cone" shape convention
     // skillEffects.js's own buildProjectileShapeMesh already uses for a
     // sharp point, just full-size here instead of a tiny skill effect
     const roof = MeshBuilder.CreateCylinder("castle_towerroof", { diameterTop: 0, diameterBottom: radius * 2.3, height: roofHeight, tessellation: 16 }, matScene)
-    roof.position.set(x, height + roofHeight / 2, z)
+    roof.position.set(worldOffset.x + x, worldOffset.y + height + roofHeight / 2, worldOffset.z + z)
     roof.material = roofMat
+    if(hasPhysics) createAggregate(roof, { mass: 0 }, "box", scene)
     meshes.push(roof)
 }
 
 // the central keep - a tall box with a pyramid roof (tessellation:4 turns
 // the same cone primitive into a 4-sided pyramid instead of a smooth cone -
 // no separate "pyramid" shape exists in MeshBuilder, this is the standard
-// way to get one)
-function addKeep(meshes, stoneMat, roofMat, x, z){
+// way to get one). Same per-piece box-collider treatment as addTower above.
+function addKeep(meshes, stoneMat, roofMat, x, z, worldOffset, scene, hasPhysics){
     const body = MeshBuilder.CreateBox("castle_keep", { width: KEEP_SIZE, height: KEEP_HEIGHT, depth: KEEP_SIZE }, matScene)
-    body.position.set(x, KEEP_HEIGHT / 2, z)
+    body.position.set(worldOffset.x + x, worldOffset.y + KEEP_HEIGHT / 2, worldOffset.z + z)
     body.material = stoneMat
+    if(hasPhysics) createAggregate(body, { mass: 0 }, "box", scene)
     meshes.push(body)
 
     const roof = MeshBuilder.CreateCylinder("castle_keeproof", { diameterTop: 0, diameterBottom: KEEP_SIZE * 1.35, height: KEEP_ROOF_HEIGHT, tessellation: 4 }, matScene)
@@ -180,8 +209,9 @@ function addKeep(meshes, stoneMat, roofMat, x, z){
     // diamond footprint, not aligned to the keep's own square) - 45°
     // rotation squares it back up with the box body underneath
     roof.rotation.y = Math.PI / 4
-    roof.position.set(x, KEEP_HEIGHT + KEEP_ROOF_HEIGHT / 2, z)
+    roof.position.set(worldOffset.x + x, worldOffset.y + KEEP_HEIGHT + KEEP_ROOF_HEIGHT / 2, worldOffset.z + z)
     roof.material = roofMat
+    if(hasPhysics) createAggregate(roof, { mass: 0 }, "box", scene)
     meshes.push(roof)
 }
 
@@ -196,25 +226,29 @@ function addKeep(meshes, stoneMat, roofMat, x, z){
 // favor, same idea a decal or a rug laid "just above" the ground it's on
 // already needs.
 const FLOOR_LIFT = 0.02
-function addFloor(meshes, floorMat){
+function addFloor(meshes, floorMat, worldOffset, scene, hasPhysics){
     const size = HALF * 2 - WALL_THICKNESS
     const floor = MeshBuilder.CreateBox("castle_floor", { width: size, height: FLOOR_THICKNESS, depth: size }, matScene)
-    floor.position.set(0, FLOOR_LIFT - FLOOR_THICKNESS / 2, 0)
+    floor.position.set(worldOffset.x, worldOffset.y + FLOOR_LIFT - FLOOR_THICKNESS / 2, worldOffset.z)
     floor.material = floorMat
+    // its own collider now too - without this, standing in the courtyard
+    // meant walking on the raw openworld terrain underneath (which can dip/
+    // rise across the 40x40 footprint) rather than this flat slab, so the
+    // ground under your feet could visibly not match what you're standing on
+    if(hasPhysics) createAggregate(floor, { mass: 0 }, "box", scene)
     meshes.push(floor)
 }
 
 // gate threshold - a low stone sill spanning the GATE_WIDTH opening, sitting
-// right on the south wall line (same z as the south wall segments) with its
-// OWN box collider (returned separately, not merged into the visual mesh -
-// same "physics stays separate from the merged castle" reasoning every
-// other collider here already follows). Short enough to hop up onto/over
-// rather than actually blocking the entrance - "I can just jump so I can
-// enter" per spec, not a real barrier.
-function addGateStep(meshes, stepMat){
+// right on the south wall line (same z as the south wall segments). Its own
+// box collider is only GATE_STEP_HEIGHT (0.3) tall, same as its visual mesh -
+// short enough to hop up onto/over rather than actually blocking the
+// entrance, "I can just jump so I can enter" per spec, not a real barrier.
+function addGateStep(meshes, stepMat, worldOffset, scene, hasPhysics){
     const step = MeshBuilder.CreateBox("castle_gatestep", { width: GATE_WIDTH, height: GATE_STEP_HEIGHT, depth: GATE_STEP_DEPTH }, matScene)
-    step.position.set(0, GATE_STEP_HEIGHT / 2, -HALF)
+    step.position.set(worldOffset.x, worldOffset.y + GATE_STEP_HEIGHT / 2, worldOffset.z - HALF)
     step.material = stepMat
+    if(hasPhysics) createAggregate(step, { mass: 0 }, "box", scene)
     meshes.push(step)
 }
 
@@ -236,66 +270,89 @@ export function createCastle(scene, position, hasPhysics = true){
     const { stoneMat, stepMat, roofMat, floorMat } = getMaterials(scene)
     const meshes = []
 
+    // groundY now computed UP FRONT, before any piece is built - every
+    // add* call below positions its piece directly in real WORLD space
+    // (worldOffset added into each one's own position.set), not at
+    // castle-local coordinates the way this used to work (build flat at
+    // origin, merge, then move the whole result once via one final
+    // castle.position assignment).
+    //
+    // That reordering is required, not stylistic: each piece now gets its
+    // own createAggregate({mass:0}, ...) - a STATIC body - and PhysicsBody
+    // sets disableSync=true specifically for STATIC bodies (confirmed in
+    // this project's own node_modules/@babylonjs/core/Physics/v2/
+    // physicsBody.js). A static collider bakes its pose ONCE at the moment
+    // createAggregate runs and never re-syncs to the mesh afterward - so
+    // if these were still built at local-origin-relative coordinates and
+    // only moved into place LATER (the old approach), every collider would
+    // stay baked near the origin while the visible castle moved away from
+    // them, invisibly.
+    const groundY = sampleTerrainSurfaceHeight(position.x, position.z, OPENWORLD_TERRAIN_VERTS)
+    const worldOffset = { x: position.x, y: groundY, z: position.z }
+
     // --- courtyard floor ---
-    addFloor(meshes, floorMat)
+    addFloor(meshes, floorMat, worldOffset, scene, hasPhysics)
 
     // --- outer walls (north/east/west solid, south split around the gate) ---
-    addWall(meshes, stoneMat, 0, HALF, HALF * 2, "x")   // north
-    addWall(meshes, stoneMat, HALF, 0, HALF * 2, "z")   // east
-    addWall(meshes, stoneMat, -HALF, 0, HALF * 2, "z")  // west
+    addWall(meshes, stoneMat, 0, HALF, HALF * 2, "x", worldOffset, scene, hasPhysics)   // north
+    addWall(meshes, stoneMat, HALF, 0, HALF * 2, "z", worldOffset, scene, hasPhysics)   // east
+    addWall(meshes, stoneMat, -HALF, 0, HALF * 2, "z", worldOffset, scene, hasPhysics)  // west
 
     const southSegmentLength = HALF - GATE_WIDTH / 2
     const southSegmentCenter = GATE_WIDTH / 2 + southSegmentLength / 2
-    addWall(meshes, stoneMat, southSegmentCenter, -HALF, southSegmentLength, "x")
-    addWall(meshes, stoneMat, -southSegmentCenter, -HALF, southSegmentLength, "x")
+    addWall(meshes, stoneMat, southSegmentCenter, -HALF, southSegmentLength, "x", worldOffset, scene, hasPhysics)
+    addWall(meshes, stoneMat, -southSegmentCenter, -HALF, southSegmentLength, "x", worldOffset, scene, hasPhysics)
 
     // --- corner towers ---
     ;[[HALF, HALF], [HALF, -HALF], [-HALF, HALF], [-HALF, -HALF]].forEach(([x, z]) => {
-        addTower(meshes, stoneMat, roofMat, x, z, CORNER_TOWER_RADIUS, CORNER_TOWER_HEIGHT, CORNER_ROOF_HEIGHT)
+        addTower(meshes, stoneMat, roofMat, x, z, CORNER_TOWER_RADIUS, CORNER_TOWER_HEIGHT, CORNER_ROOF_HEIGHT, worldOffset, scene, hasPhysics)
     })
 
     // --- gatehouse towers flanking the gate gap ---
-    addTower(meshes, stoneMat, roofMat, GATE_WIDTH / 2, -HALF, GATE_TOWER_RADIUS, GATE_TOWER_HEIGHT, GATE_ROOF_HEIGHT)
-    addTower(meshes, stoneMat, roofMat, -GATE_WIDTH / 2, -HALF, GATE_TOWER_RADIUS, GATE_TOWER_HEIGHT, GATE_ROOF_HEIGHT)
+    addTower(meshes, stoneMat, roofMat, GATE_WIDTH / 2, -HALF, GATE_TOWER_RADIUS, GATE_TOWER_HEIGHT, GATE_ROOF_HEIGHT, worldOffset, scene, hasPhysics)
+    addTower(meshes, stoneMat, roofMat, -GATE_WIDTH / 2, -HALF, GATE_TOWER_RADIUS, GATE_TOWER_HEIGHT, GATE_ROOF_HEIGHT, worldOffset, scene, hasPhysics)
 
     // --- central keep ---
-    addKeep(meshes, stoneMat, roofMat, 0, 0)
+    addKeep(meshes, stoneMat, roofMat, 0, 0, worldOffset, scene, hasPhysics)
 
     // --- gate threshold ---
-    addGateStep(meshes, stepMat)
+    addGateStep(meshes, stepMat, worldOffset, scene, hasPhysics)
 
+    // disposeSource is now !hasPhysics, not the old unconditional true.
+    // When hasPhysics is true, every mesh above already carries its own
+    // static PhysicsAggregate - disposing the SOURCE mesh here would
+    // dispose that aggregate right along with it (PhysicsAggregate's own
+    // onDisposeObservable hook, physicsAggregate.js), undoing the physics
+    // this was all for. Keeping them alive (and hiding them, below) is what
+    // keeps their colliders in the world after the merge.
+    //
     // multiMultiMaterials:true - keeps the stone/roof material split alive
     // through the merge (see this file's own header comment for the full
     // reasoning) instead of collapsing to whichever material the first
-    // mesh in the array happens to have
-    const castle = Mesh.MergeMeshes(meshes, true, true, undefined, false, true)
+    // mesh in the array happens to have.
+    const castle = Mesh.MergeMeshes(meshes, !hasPhysics, true, undefined, false, true)
     castle.name = "castle"
-
-    const groundY = sampleTerrainSurfaceHeight(position.x, position.z, OPENWORLD_TERRAIN_VERTS)
-    castle.position = new Vector3(position.x, groundY, position.z)
     castle.isPickable = false
     castle.receiveShadows = true
 
+    // No castle.position assignment - unlike the old version. MergeMeshes
+    // bakes each source's own WORLD matrix into the merged vertex data
+    // (Mesh.pure.js's own merge coroutine calls mesh.computeWorldMatrix(true)
+    // per source) and leaves the resulting mesh at position (0,0,0); since
+    // every source above was already built at its real world position via
+    // worldOffset, that baked data IS the correct final placement already.
+    // Moving the merged result again here would double-offset it away from
+    // the colliders that are, correctly, sitting at worldOffset.
+
     if(hasPhysics){
-        // four plain invisible box colliders matching the outer wall line -
-        // see this file's own header comment for why this is separate from
-        // (and simpler than) trying to collide against the merged castle
-        // mesh's own real shape
-        const collider = (width, depth, x, z, height = WALL_HEIGHT) => {
-            const box = MeshBuilder.CreateBox("castle_wall_collider", { width, height, depth }, scene)
-            box.position = new Vector3(position.x + x, groundY + height / 2, position.z + z)
-            box.isVisible = false
-            createAggregate(box, { mass: 0 }, "box", scene)
-            return box
-        }
-        collider(HALF * 2, WALL_THICKNESS, 0, HALF)                          // north
-        collider(WALL_THICKNESS, HALF * 2, HALF, 0)                          // east
-        collider(WALL_THICKNESS, HALF * 2, -HALF, 0)                         // west
-        collider(southSegmentLength, WALL_THICKNESS, southSegmentCenter, -HALF)
-        collider(southSegmentLength, WALL_THICKNESS, -southSegmentCenter, -HALF)
-        // gate step - short enough to hop up onto/over, not a real barrier
-        // (see addGateStep's own comment)
-        collider(GATE_WIDTH, GATE_STEP_DEPTH, 0, -HALF, GATE_STEP_HEIGHT)
+        // the merged castle carries every piece's visuals now - the
+        // originals (kept alive above so their aggregates survive) become
+        // pure invisible physics proxies, same convention the old manual
+        // wall-line colliders already used (isVisible:false)
+        meshes.forEach(mesh => {
+            mesh.isVisible = false
+            mesh.isPickable = false
+        })
     }
 
     return castle

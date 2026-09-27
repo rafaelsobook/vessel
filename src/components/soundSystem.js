@@ -143,6 +143,12 @@ export function initSounds(scene){
     {volume: 0.4, autoplay: false, loop: true})
 
     // background music
+    const rainy = createSoundSafe('cinema1', './sounds/backg/rain.mp3', scene,
+    {volume: .4, autoplay: false, loop: true})
+
+    const windy = createSoundSafe('cinema1', './sounds/backg/windy.mp3', scene,
+    {volume: .2, autoplay: false, loop: true})
+
     // const cinema1 = createSoundSafe('cinema1', './sounds/backg/cinema1.mp3', scene,
     // {volume: .4, autoplay: false, loop: true})
 
@@ -175,7 +181,10 @@ export function initSounds(scene){
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
         staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
         weaponblockS,
-        throwSpearS
+        throwSpearS,
+
+        rainy,
+        windy
     }
     return allSounds;
 }

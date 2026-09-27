@@ -106,11 +106,11 @@ export const metaDatas = [
             },
             {
                 itemId: randNum(0,9999).toString(),
-                name: "Travel Wagon",
+                name: "wagon",
                 position: {x: 12, y: 0, z: -1.6},
                 scale: null,
                 rotation:Math.PI/2 + 0.5,
-                glbPath: "./models/outdors/wagon.glb",
+                // glbPath: "./models/outdors/wagon.glb",
                 diffuseTexPath:null,
                 // bumpTexPath: "./images/textures/houses/guild1.jpg",
                 physics: {
@@ -356,7 +356,7 @@ export const metaDatas = [
                 name: "openworld",
                 areaType: "openworld",
                 pos: {x: 0, y: 1, z: -5},
-                startingPos: {x: -1893, y:7.5, z: 563},
+                startingPos: {x: -1890, y:7.5, z: 560},
             },
         ],
         optionalObjects: [
@@ -1095,11 +1095,12 @@ export const metaDatas = [
         optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
-                name: "Travel Wagon",
+                name: "wagon",
                 position: {x: 0, y: 2, z: 500},
+                dirTarg: {x:0, y:2, z:0},
                 scale: null,
                 rotation:Math.PI/2 + 0.5,
-                glbPath: "./models/outdors/wagon.glb",
+                // glbPath: "./models/outdors/wagon.glb",
                 diffuseTexPath:null,
                 // bumpTexPath: "./images/textures/houses/guild1.jpg",
                 physics: {
@@ -1110,7 +1111,7 @@ export const metaDatas = [
             },
             {
                 itemId: randNum(0,9999).toString(),
-                name: "Witch Tower",
+                name: "Vesper's Tower",
                 position: {x: -1893, y:7.5, z: 563},
                 scale: null,
                 rotation:-Math.PI/2,
@@ -1138,7 +1139,7 @@ export const metaDatas = [
             // startingPos y values below) after checking in-game.
             {
                 itemId: randNum(0,9999).toString(),
-                name: "Witch Tower",
+                name: "Ilvara's Tower",
                 position: {x: 1200, y: 7.5, z: 800},
                 scale: null,
                 rotation: -Math.PI/2,
@@ -1152,7 +1153,7 @@ export const metaDatas = [
             },
             {
                 itemId: randNum(0,9999).toString(),
-                name: "Witch Tower",
+                name: "Sable's Tower",
                 position: {x: -600, y: 7.5, z: -1400},
                 scale: null,
                 rotation: -Math.PI/2,

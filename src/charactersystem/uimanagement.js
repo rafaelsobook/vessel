@@ -21,6 +21,7 @@ import { showHideOutputSliders, toggleDisableOutputSliders } from "./outputSlide
 import { openCloseChatContainer, hideShowChatToggleBtn } from "../components/worldChatSystem.js"
 import { updateStoryQuestUI } from "./storyQuestSystem.js"
 import { openCloseCampcraftUI } from "../components/campcraft.js"
+import { triggerClassLeveling } from "./characterclass.js";
 
 
 const lifeManaStamCont  = document.querySelector(".simple-details-gui")
@@ -410,7 +411,7 @@ export function activateBtnOnce(){
                     }
                     const dmgDetails = calcDmg(charState)
 
-                    const spToDeduct = (dmgDetails.physicalDmg/2) + (dmgDetails.weaponDmg/4)
+                    const spToDeduct = (dmgDetails.physicalDmg/5) + (dmgDetails.weaponDmg/10)
                     clickedTimeOut = setTimeout(() => {
                         disableEnableWalkRunButtons(true)
                     },swordAnimNum === 1 ? 400: 800)
@@ -420,7 +421,7 @@ export function activateBtnOnce(){
                         return 
                     }
                     
-                    // charState.sp -= spToDeduct
+                    charState.sp -= Math.floor(spToDeduct)
                     updateSP_UI()
                     
                     // getAllSounds().voiceAttackS?.setPlaybackRate(0.9 + (Math.random()*0.2))
@@ -447,6 +448,8 @@ export function activateBtnOnce(){
                             const animWeaponType = itm.weaponType === "pickaxe" ? "axe" : itm.weaponType
                             equippedWeaponType = animWeaponType
                             animName = `${animWeaponType}attack${swordAnimNum}`
+
+                            triggerClassLeveling(equippedWeaponType)
                         }
                     })
 

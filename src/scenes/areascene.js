@@ -41,7 +41,7 @@ import { clearLocTimeOut, faceForward } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
-import { createOpenWorld, createOpenWorldGrass, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
+import { createOpenWorld, createOpenWorldGrass, createMountainsInOpenWorld, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
 import { showGamePerformanceUI } from "babylonstats"
 import { setStartingContainers } from "./containers.js";
 import { registerToAtkCollider } from "../charactersystem/attackingSystem.js";
@@ -49,6 +49,7 @@ import { createGroundWeapon } from "../assetcreation/creategroundweapon.js";
 import { createTreasureMesh } from "../assetcreation/createtreasure.js";
 import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { receiveAchievement } from "../charactersystem/achievement.js";
+import { createWagon } from "../assetcreation/createwagon.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -192,6 +193,32 @@ export async function areaScene(placeDetail){
             // was burying enemies
             ], { viewRadius: 1, verts: OPENWORLD_TERRAIN_VERTS })
 
+            // landmarks (infterrain's createMountainsInOpenWorld, mountains.js) -
+            // meshes only, no terrain edit, so this can sit right after grass
+            // with no effect on anything already placed. Same verts constant
+            // as the terrain/grass calls above for the same reason grass's own
+            // comment gives - infterrain grounds landmarks with
+            // sampleTerrainSurfaceHeight too, and a mismatched verts would float
+            // or bury every mountain/volcano/hill the same way it was burying
+            // enemies. rock1/rock2 are this project's own existing rock
+            // textures (modeltex/) - the volcano's lava crater is the shader's
+            // own emissive glow (mountains.js's uGlowStrength), not the base
+            // texture, so a plain rock texture there is correct, not a
+            // placeholder. bush1 (already used for grass above) reads as a
+            // grassy hill rather than a bare rock dome.
+
+
+            // await createMountainsInOpenWorld(scene,
+            //     { mountainPerChunk:0, volcanoPerChunk: 2, hillsPerChunk: 110 },
+            //     [
+            //         { mountaintexturePath: "./images/modeltex/rock1.jpg", qnty: 10, size: "small" },
+            //         { volcanotexturePath: "./images/modeltex/rock2.jpg", qnty: 10, size: "medium" },
+            //         { hillstexturePath: "./images/modeltex/rock2.jpg", qnty: 110, size: "large" },
+            //     ],
+            //     { viewRadius: 1, verts: OPENWORLD_TERRAIN_VERTS })
+
+            
+
             // medieval castle (placeId 888 only), ~100 units north of the
             // player's own openworld spawn (0, 500) - see createcastle.js's
             // own header comment for the full build/merge/physics rundown.
@@ -304,7 +331,10 @@ export async function areaScene(placeDetail){
                 createFireParticles(item.position, scene)
                 return
             }
-
+            if(item.name === "wagon"){
+                const {wg} = createWagon(scene, item.position, item.dirTarg, true)
+                return 
+            }
             // const model = await loadModelByIndx(item.glbPath, 1, scene);
             const model = await mergeAndLoadModel(item.glbPath, scene, item.functionBeforeMerge);
             model.position = new Vector3(item.position.x, item.position.y, item.position.z);

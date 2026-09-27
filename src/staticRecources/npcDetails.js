@@ -17,7 +17,8 @@ import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { resolveGuildmasterRitualSkill } from "../charactersystem/aptitudeSystem.js"
 import { eligibleSkillsFor } from "../charactersystem/skillWheel.js"
 import { chooseASkill } from "../components/chooseskillui.js"
-import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
+import { OPENWORLD_PLACE_ID, ZERECH_FARE } from "../constants/constants.js"
+import { makeSkillBooks } from "./skillBooks.js"
 
 const npcEnemySpd = 4
 const npcPatrolSpd = 1
@@ -2697,6 +2698,19 @@ export default [
         monsSoul: 2, // same like points system
         coins: 100,
         aptitude: ['dark'],
+        // Vesper's shelf - skill books (staticRecources/skillBooks.js), read
+        // by buyorsell.js off her own _id the same way Bram's and Maela's
+        // stock already is. She is the teacher of the three witches (the
+        // only one with a duel and a real menu), so hers is the FOUNDATION
+        // shelf: the basic cast every caster needs, then her own dark
+        // aptitude's rank-2 line. Nothing exotic - Sable sells that.
+        toSell: makeSkillBooks([
+            "singlecast",
+            "shadowbolt",
+            "voidrend",
+            "voidcurse",
+            "aegisward",
+        ]),
         blessings: [],
         race: "human",
         characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
@@ -2813,6 +2827,18 @@ export default [
         monsSoul: 2, // same like points system
         coins: 50,
         aptitude: ['fire'],
+        // Ilvara's shelf - fire, to match her own aptitude and the "fire
+        // doesn't wait for permission" temperament her randomSpeech already
+        // has. The full fire line from rank 1 up to Meteor, so she is the
+        // one witch you go to for raw offense.
+        toSell: makeSkillBooks([
+            "flamebrand",
+            "infernorush",
+            "pyroclasm",
+            "solarcataclysm",
+            "disintegration",
+            "meteor",
+        ]),
         blessings: [],
         race: "human",
         characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
@@ -2838,7 +2864,12 @@ export default [
             setTimeout(() => removeTempBuff(buffId), 5 * 60 * 1000)
             startConv([
                 { name: "Ilvara", isLeft: false, message: "There. Something to warm your swing for a while. Don't waste it." }
-            ], () => {})
+            // startConv's own cb fires when the line finishes - used here to
+            // chain into her skill-book menu (constants/ilvaradata.js,
+            // questionId 560) rather than ending the interaction. The buff
+            // above still lands first and unconditionally, so the shop is a
+            // second beat, not a gate in front of it.
+            ], () => startQuestionare(560))
         },
         forQuests: []
     },
@@ -2881,6 +2912,18 @@ export default [
         monsSoul: 2, // same like points system
         coins: 50,
         aptitude: ['dark'],
+        // Sable's shelf - the strange ones. She "deals in what magic hasn't
+        // done yet" (her own randomSpeech), so she stocks what the other two
+        // will not: the rank-3/4 oddities and the cast-modifiers, priced
+        // accordingly by skillBooks.js's own rank table.
+        toSell: makeSkillBooks([
+            "darkorb",
+            "abyssaldamnation",
+            "astralrain",
+            "multicast",
+            "burstshots",
+            "blinkstrike",
+        ]),
         blessings: [],
         race: "human",
         characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
@@ -2894,8 +2937,153 @@ export default [
                 { name: "Sable", isLeft: false, message: "..." },
                 { name: "Sable", isLeft: false, message: "You're carrying something you haven't put down yet. You'll know it when you feel it lift." },
                 { name: "Sable", isLeft: false, message: "That's all I have for you today. Come back when the shape of it changes." },
-            ], () => {})
+            // same chain Ilvara's own callback uses - the reading plays out
+            // in full and untouched first, then her shelf is offered
+            // (constants/sabledata.js, questionId 570)
+            ], () => startQuestionare(570))
         },
+        forQuests: []
+    },
+    {
+        // Zerech - stands directly in the OPENWORLD itself (placeId 888),
+        // near the spawn hub ({x:0,z:500} - see world.js's SPAWN_X/SPAWN_Z),
+        // not tucked inside one of its own interior rooms the way every
+        // other flavor NPC in this file is (Vesper/Ilvara/Sable each live
+        // behind a witch-tower door, placeId 15/16/17).
+        //
+        // y:2.01 is measured, not guessed: the hub is flattened to exactly
+        // HUB_HEIGHT:2 (world.js), confirmed against both terrainHeight and
+        // the rendered mesh's own sampleTerrainSurfaceHeight at this spot.
+        // createCapsuleBody (createcharacter.js) treats spawn y as the FEET,
+        // not the body's center, so this is ground level - the +0.01 is the
+        // same hair of clearance every room NPC's own y:0.01 already uses.
+        //
+        // (4, 503), not the (2, 500) first asked for: the hub's own wagon
+        // (localroomdb.js's placeId 888 optionalObjects, at (0,2,500) turned
+        // PI/2+0.5) runs straight through (2, 500) - measured 0.96 units off
+        // its centerline against a ~1.3 half-width, i.e. standing inside the
+        // wagon. Here he's 4.55 units clear of it, still in the middle of the
+        // scripture ring, facing the hub center players arrive from.
+        //
+        // A paid guide: stands in the middle of the four stone scriptures
+        // (createstonescripture.js) and sells one-way passage to the witch
+        // towers - see constants/zerechdata.js for the routes and fares.
+        glbPath: null,
+        gender: "male",
+        currentPlaceId: 888,
+        mode: "idle",
+        _id: "120_zerech",
+        name: "Zerech",
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x: 4,
+        y: 2.01,
+        z: 503,
+        _dirTarg: {x:0, z:500},
+        // Bram's own outfit (110_bram), field for field. Not optional for a
+        // male NPC: createAnimeBodyMaterials (createcharacter.js) reads
+        // clothColor.r and pantsColor.r for every non-female character, so
+        // leaving them off (as this entry first did, copying the all-female
+        // witches, who skip that branch) throws inside createCharacter and
+        // the NPC never spawns at all.
+        cloth: 'style2',
+        pants: 'style2',
+        hair: 'style1',
+        boots: 'style2',
+        skinColor: "skin2",
+        hairColor: ADVENTURER_COLORS.gray,
+        clothColor: ADVENTURER_COLORS.charcoal,
+        pantsColor: ADVENTURER_COLORS.brown,
+        items: [
+            {
+                itemId: randomNum(),
+                name: "leatherboots",
+                dn: "Leather Boots",
+                itemCateg: "equipable",
+                itemType: "boots",
+                equipAbilities: {
+                    dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false,
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            }
+        ],
+        // his own small stock, separate from what he wears above - read by
+        // buyorsell.js off his own _id when "Buy wares" opens
+        // (constants/zerechdata.js), same convention Bram/Maela's toSell
+        // already use. commonale/embergale (images/items/consumable/) were
+        // sitting unused in the art folder with no item ever defined for
+        // them - claimed here rather than reusing one of Maela's own foods,
+        // so his shelf reads as HIS goods, not a copy of hers.
+        toSell: [
+            {
+                itemId: randomNum(),
+                name: "commonale",
+                dn: "Traveler's Ale",
+                itemCateg: "consumable",
+                itemType: "food",
+                // plusSpd:1 matches the one precedent already set for this
+                // field elsewhere in this file (the sample bootsItem data
+                // below) rather than a guessed number - a full point on top
+                // of a single level-up's own +.125 (statsSystem.js)
+                consumeAbilities: { plusHp: 150, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, fillHunger: 20, fillTireness: 5, cure: [] },
+                price: { coinType: "bronze", pieces: 4 },
+                qnty: 1,
+                desc: "Thin, bitter, and exactly what every guide on a long road swears by. Keeps your feet moving after the sun's given up.",
+                rarity: "normal"
+            },
+            {
+                itemId: randomNum(),
+                name: "embergale",
+                dn: "Embergale",
+                itemCateg: "consumable",
+                itemType: "food",
+                consumeAbilities: { plusHp: 300, plusMp: 0, plusSp: 0, plusDmg: 5, plusSpd: 0, fillHunger: 25, fillTireness: 10, cure: [] },
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: "Brewed with enough fire-pepper to warm you through before a dangerous stretch of road. Zerech won't set out without one in hand.",
+                rarity: "normal"
+            }
+        ],
+        titles: [],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 50,
+        aptitude: [],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        // his pitch - plays through in full, then callbackAfterRandomSpeech
+        // below opens his own top menu (constants/zerechdata.js,
+        // questionId 580: Travel / Buy wares / Never mind), where the
+        // "where to?" question is actually asked alongside its answers
+        // rather than here, a line before them
+        randomSpeech: [
+            {name: "", message: "Four stones. Four warnings. Four beasts prowling the edges of the world - and you, standing right in the middle of them."},
+            {name: "", message: "Those scriptures stopped me cold the first time I read them. Still do. Every soul who passes stops to read them too - so right here is where I set up my business."},
+            {name: "", message: "Want to reach the witches in their far-flung towers? I know the old roads. I know which beasts are sleeping, and which ones only pretend to."},
+            {name: "", message: `Safe passage isn't free, of course - ${ZERECH_FARE.pieces} ${ZERECH_FARE.coinType} takes you to any tower you like. Fair coin for a fair road, and I've never lost a passenger. Yet.`},
+        ],
+        callbackAfterRandomSpeech: () => startQuestionare(580),
         forQuests: []
     },
     {

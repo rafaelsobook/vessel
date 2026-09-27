@@ -19,6 +19,12 @@ import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { showGuildQuest } from "./guildQuest.js"
 import { updateThrowButtonVisibility } from "./uimanagement.js"
+// skill books (staticRecources/skillBooks.js) resolve the real skill object
+// at learn time, and giveSkill is the same grant path the debug cheat and
+// every other "you now know X" already goes through - slot bumping, saving,
+// the acquired popup and the achievements all come with it.
+import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
+import { giveSkill } from "../components/skillsui.js"
 
 
 const itemInfoCont = document.querySelector(".item-info-cont")
@@ -267,10 +273,71 @@ let consumeItemFunc = async () => {
         openCloseMiniLS(`Item Consumed`, false)
         enableDisableInfoBtns(false)
         openUpdateInventory(true)
+        // last copy consumed -> nothing left to show, so close the panel
+        // instead of leaving it open on an item that's no longer in the
+        // inventory (same fix learnSkillFunc below already needed for the
+        // identical last-copy-spent case)
         if(theItemAfterDeducted) showItemInfo(theItemAfterDeducted)
+        else closeItemInfo()
         updateHunger()
         updateStatUI()
     })
+}
+
+// "learn" button on a skillbook item (see showItemInfo's own itemCateg
+// switch). Same shape consumeItemFunc above has - a one-shot use that spends
+// one copy of the item - just granting a skill instead of stats.
+//
+// The book stores only skillName, never a copy of the skill itself, so this
+// always teaches the CURRENT version of it (see skillBooks.js's own comment).
+let learnSkillFunc = async () => {
+    if(!itemDetail) return
+    if(itemDetail.itemCateg !== "skillbook") return
+
+    const skill = SKILLS_BY_NAME[itemDetail.skillName]
+    // a book whose skill no longer exists (renamed/removed in skillsData.js)
+    // - say so rather than silently doing nothing, and do NOT spend it
+    if(!skill) return openClosePopup("This tome's magic has faded", true, 1800)
+
+    const charState = getCharState()
+    if(!charState) return
+
+    // checked BEFORE spending the book, so a misclick on something you
+    // already know costs nothing. giveSkill guards this too, but it has no
+    // way to tell us it refused, and by then the copy would already be gone.
+    if(charState.skills?.find(sk => sk.name === skill.name)){
+        return openClosePopup(`You already know ${skill.displayName}`, true, 1500)
+    }
+
+    openCloseMiniLS(`Studying ${itemDetail.dn} ...`, true)
+    enableDisableInfoBtns(true)
+
+    // the shared grant path - pushes onto charState.skills with a free slot,
+    // refreshes the skill UI, persists, and fires the acquired popup and the
+    // "awakened"/"elite-skill" achievements
+    giveSkill(skill)
+
+    // spend one copy, same stack-aware deduction consumeItemFunc uses
+    let theItemAfterDeducted = itemDetail
+    charState.items.forEach(invItm => {
+        if(invItm.itemId !== itemDetail.itemId) return
+        if(invItm.qnty > 1){
+            invItm.qnty--
+            theItemAfterDeducted = invItm
+        }else{
+            removeItem(invItm)
+            theItemAfterDeducted = false
+        }
+    })
+
+    await updateMyDetailsOL(charState, checkIfTokenSaved())
+    openCloseMiniLS("", false)
+    enableDisableInfoBtns(false)
+    openUpdateInventory(true)
+    // last copy spent -> nothing left to show, so close the panel instead of
+    // leaving it open on an item that is no longer in the inventory
+    if(theItemAfterDeducted) showItemInfo(theItemAfterDeducted)
+    else closeItemInfo()
 }
 export function equipItem(itemDet, updateItemsListUI){
     weaponAccessoryList.forEach(chld => {
@@ -337,6 +404,10 @@ export function showItemInfo(_itemDet){
     itemInfoCont.style.display = "flex"
 
     itemImg.src = `./images/items/${itemCateg}/${name}.webp`
+    // a skill book has no art of its own - it shows the icon of the skill it
+    // teaches (skillBooks.js's own comment), same kind of override the
+    // helmet/weapon lines further down already are
+    if(itemCateg === "skillbook") itemImg.src = `./images/skills/${_itemDet.skillName}.webp`
 
     itemTtle.innerHTML = dn
 
@@ -430,6 +501,14 @@ export function showItemInfo(_itemDet){
             equipOrOpenBtn.style.display = "block"
             activateFunc = consumeItemFunc
             equipOrOpenBtn.innerHTML = "consume"
+        break
+        // a skill sold as an item (staticRecources/skillBooks.js) - the
+        // witches in the openworld towers stock these. Same one-shot-use
+        // shape as a consumable, just granting a skill instead of stats.
+        case "skillbook":
+            equipOrOpenBtn.style.display = "block"
+            activateFunc = learnSkillFunc
+            equipOrOpenBtn.innerHTML = "learn"
         break
     }
 

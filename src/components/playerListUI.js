@@ -52,7 +52,7 @@ function createText(name, text, options = {}){
 // player object never carries a characterclass at all - both fall back to
 // "Rookie" rather than an arbitrary always-lvl-0 class name.
 function getClassLabel(characterclass){
-    if(!characterclass) return "Rookie"
+    if(!characterclass) return "Hunter"
     let bestName = null
     let bestLvl = 0
     for(const className in characterclass){
@@ -62,7 +62,7 @@ function getClassLabel(characterclass){
             bestName = className
         }
     }
-    if(!bestName) return "Rookie"
+    if(!bestName) return "Hunter"
     return bestName.charAt(0).toUpperCase() + bestName.slice(1)
 }
 

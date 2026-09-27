@@ -1,7 +1,7 @@
 import { createElement } from "../tools/GUITools.js"
 import { getCharState } from "../charactersystem/characterstate.js"
 import { getSocket } from "../sockets/joinsocket.js"
-import { getIsSocketOn } from "../sockets/worldsocket.js"
+import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket.js"
 import { useFetch, checkIfTokenSaved } from "../tools/tools.js"
 import { APIURL } from "../constants/constants.js"
 
@@ -85,6 +85,17 @@ function sendChatMessage(playerDetail){
     const chatInpTxt = _messageNotFromChatInput ? "" : chatInp.value.trim()
     if(!_messageNotFromChatInput) chatInp.value = ''
     if(chatInpTxt === "adminclear") return clearWorldChatHistory()
+    if(chatInpTxt.includes("adminloc")){
+        const xPos = chatInpTxt.split(".")[1]
+        const zPos = chatInpTxt.split(".")[2]
+        console.log(xPos, zPos)
+        const myChar = getPlayersOnScene().find(pl => pl.owner === playerDetail.owner)
+        if(!myChar) return console.log("not found char ", playerDetail.owner, getCharState().owner)
+        myChar.body.position.x = parseFloat(xPos)
+        myChar.body.position.z = parseFloat(zPos)
+        myChar.body.position.y = 20
+        return
+    }
     if(!chatInpTxt && !_messageNotFromChatInput) return console.log(chatInpTxt, _messageNotFromChatInput)
     if(!getIsSocketOn()) return console.log(getIsSocketOn())
 

@@ -100,6 +100,10 @@ export function insertItemOnInventory(itm){
     // sword/spear, now that a real pickaxe.webp exists)
     if(itm.weaponType === "axe") itemImg.src = `./images/items/${itm.itemCateg}/axes.webp`
     if(itm.itemType === "helmet") itemImg.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
+    // a skill book shows the icon of the skill it teaches - it has no art of
+    // its own (staticRecources/skillBooks.js), so you can read a shelf of
+    // them straight off the grid
+    if(itm.itemCateg === "skillbook") itemImg.src = `./images/skills/${itm.skillName}.webp`
 
     // every sword shares the same placeholder icon above, so this is the
     // only way to tell which generated variant a slot actually is - shown

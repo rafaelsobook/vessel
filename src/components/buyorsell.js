@@ -102,6 +102,11 @@ function render(){
         // never meant to exist.
         if(itm.itemType === "helmet") img.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
         if(itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/pickaxe.webp`
+        // a skill book shows the icon of the skill it teaches, not an item
+        // icon - it has no art of its own (staticRecources/skillBooks.js).
+        // Set before the .png onerror fallback below so a book that somehow
+        // has no skill icon still falls back the same way everything else does.
+        if(itm.itemCateg === "skillbook") img.src = `./images/skills/${itm.skillName}.webp`
         // some existing item art is .png rather than .webp (see npcDetails.js sellers' toSell weapons) - fall back once
         img.onerror = () => { img.onerror = null; img.src = `./images/items/${itm.itemCateg}/${itm.name}.png` }
         const name = createElement("p", "bs-item-name", itm.dn)
