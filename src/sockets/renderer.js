@@ -351,6 +351,11 @@ let renderCallback = function () {
             case "minning":
                 player.characterAnimations.setState(ANIM_STATE.MINNING, 8)
             break
+            // charactersystem/seating.js - the root is already re-parented
+            // onto the seat by then; this just keeps the pose held
+            case "sitting":
+                player.characterAnimations.setState(ANIM_STATE.SITTING, 8)
+            break
             case "inAir":
                 player.characterAnimations.setState(ANIM_STATE.FALLING, 4)
             break

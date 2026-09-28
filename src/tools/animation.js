@@ -37,6 +37,7 @@ export const ANIM_STATE = {
     CASTING:    'casting',
     MINNING:    'minning',
     FALLING:    'falling',
+    SITTING:    'sitting',
 }
 
 export class CharacterAnimations {
@@ -58,6 +59,7 @@ export class CharacterAnimations {
             [ANIM_STATE.CASTING]:    find('casting'),
             [ANIM_STATE.MINNING]:    find('minning'),
             [ANIM_STATE.FALLING]:    find('falling'),
+            [ANIM_STATE.SITTING]:    find('sitting'),
         }
 
         const missing = Object.entries(this._anims).filter(([,v]) => !v).map(([k]) => k)
@@ -85,6 +87,11 @@ export class CharacterAnimations {
 
     currentState() {
         return this._state
+    }
+
+    // whether `name` is one of the looping states setState() can switch to
+    hasState(name) {
+        return !!this._anims[name]
     }
 
     setState(next, blendFrames = 8) {

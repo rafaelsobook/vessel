@@ -1,7 +1,7 @@
 import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4 } from "@babylonjs/core"
 import { createMatV2, dungeonMaterial } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
-import { createArcCam, attachCam } from "../tools/camera.js";
+import { createArcCam, attachCam, enableRoomCameraOcclusion } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
 import { createAggregate, initializePhysics } from "../tools/physics.js";
 import { createRock, createOre } from "../assetcreation/createRock.js";
@@ -103,6 +103,7 @@ export async function areaScene(placeDetail){
         break;
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
+            enableRoomCameraOcclusion(scene, cam, myCharacter.body, placeDetail.areaType)
         break;
         case "duel":
             createDuelArena(scene, placeDetail, myCharacter.body);

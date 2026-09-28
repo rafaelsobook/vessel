@@ -130,6 +130,25 @@ export function emitRemoveTreasure(treasureId){
     if(!socket) return
     socket.emit("removeTreasure", treasureId)
 }
+// tcp/index.ts's "sit-down"/"stand-up" - seating.js has already seated or
+// unseated this player locally; the server settles seat races and tells
+// everyone else
+export function emitSitDown(placeId, seatId){
+    if (!getIsSocketOn()) return
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("sit-down", { ownerId: charState.owner, placeId, seatId })
+}
+export function emitStandUp(){
+    if (!getIsSocketOn()) return
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("stand-up", { ownerId: charState.owner })
+}
 // tcp/index.ts's "pickupGrain" handler - same bare-id shape as
 // emitRemoveTreasure right above
 export function emitPickupGrain(grainId){

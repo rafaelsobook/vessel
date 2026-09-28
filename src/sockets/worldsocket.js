@@ -30,6 +30,7 @@ import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import { createTrunkMesh } from "../assetcreation/createtrunk.js"
 import { createGrainMesh, removeGrainMesh } from "../assetcreation/creategrain.js"
+import { onPlayerSat, onPlayerStood, onSitRejected, applyRosterSeat, syncSeatOccupancy, releaseSeatOf } from "../charactersystem/seating.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
 import { refreshPlayerListIfOpen } from "../components/playerListUI"
@@ -313,6 +314,7 @@ export function activateOnSocketListeners(socket){
             if(newBot) sendWorldMessage(newBot)
         }
         allPlayersFromTCP = players
+        syncSeatOccupancy(players)
         allEnemiez = tcpEnemies
         allQuests = quests
         tcpTreasures = treasures ?? []
@@ -1322,6 +1324,21 @@ export function activateOnSocketListeners(socket){
 
         playerDied(ownerId, currentPlaceId)
     })
+    // tcp/index.ts's "sit-down"/"stand-up" (plus a "player-stood" it sends by
+    // itself when a seated player disconnects or changes place) - see
+    // charactersystem/seating.js for the local half
+    socket.on("player-sat", data => {
+        if (!isSocketOn) return
+        onPlayerSat(data)
+    })
+    socket.on("player-stood", data => {
+        if (!isSocketOn) return
+        onPlayerStood(data)
+    })
+    socket.on("sit-rejected", data => {
+        if (!isSocketOn) return
+        onSitRejected(data)
+    })
     socket.on('removeChar', ({ ownerId, playerName, placeId }) => {
         if(ownerId === getCharState().owner) return
         removePlayer({ ownerId, playerName, placeId })
@@ -1403,6 +1420,9 @@ export function reCreateMeshesInScene() {
         let player = createCharacter(sceneDet.scene, spawnPos, tcpCharDet, false)
         if(!player) return
         pushPlayer(player, tcpCharDet.owner)
+        // already sitting before I got here - after pushPlayer, since
+        // seating.js looks the player up in playersOnScene
+        if(tcpCharDet.seat) applyRosterSeat(tcpCharDet.owner, tcpCharDet.seat)
     })
     // openworld only - see OPENWORLD_ENEMY_CREATE_DIST's own comment. null
     // everywhere else (village/dungeon never needed this, and skipping the
@@ -1553,6 +1573,10 @@ export function removePlayer({ ownerId, playerName, placeId }){
     if(gameStat === "loading") return
 
     if (characterState.currentPlace.placeId !== placeId) return
+    // a seated avatar hangs off its seat node, not the body - put it back on
+    // the body first so the body's dispose below takes it too. Before the
+    // playersOnScene filter, since seating.js finds the player through it
+    releaseSeatOf(ownerId)
     playerToRemove.anims.forEach(anim => anim.dispose())
     playersOnScene = playersOnScene.filter(playr => playr.owner !== ownerId)
 

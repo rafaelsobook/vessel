@@ -19,8 +19,12 @@ import { openCloseInteractBtn } from '../tools/popupUI';
 
 import { startQuestionare } from '../components/conversations';
 import { getAllSounds } from '../components/soundSystem';
+import { registerSeats } from '../charactersystem/seating';
 
-const WALL_HEIGHT    = 0.5;
+// a chair farther than this from every table is treated as free-standing
+const SEAT_TABLE_RANGE = 1.5
+
+const WALL_HEIGHT    = 3.5;
 const WALL_THICKNESS = 0.3;
 
 
@@ -107,6 +111,21 @@ function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, s
 // merged ONCE into a hidden master, then every location is an instance of it,
 // same idea as the woodboxes block below. Each instance still gets its own
 // collider, since each one physically blocks the player on its own.
+function nearestLocation(pos, locations, maxDist){
+    let best = null
+    let bestDistSq = maxDist * maxDist
+    locations?.forEach(loc => {
+        const dx = loc.pos.x - pos.x
+        const dz = loc.pos.z - pos.z
+        const distSq = dx * dx + dz * dz
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq
+            best = loc
+        }
+    })
+    return best
+}
+
 async function placeInstancedProps(roomName, propName, props, scene, hasPhysics){
     if(!props?.mainGlbpath || !props.locations?.length) return;
 
@@ -160,7 +179,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     const wt    = WALL_THICKNESS;
 
     const floorMat = createMat("floorMat", false, "./images/modeltex/planks.jpg", scene, { uScale: 2, vScale: 2});
-    const wallMat  = createMat(`${name}_mat_wall`, false, wallTexPath, scene,  { uScale: 0.5, vScale: 0.5 });
+    const wallMat  = createMat(`${name}_mat_wall`, false, wallTexPath, scene,  { uScale: wh/2, vScale: wh });
 
     // shared by BOTH the floor and the walls below when roomShape is
     // "cylinder" - a true circle now that the walls actually curve too
@@ -324,6 +343,23 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         onIntersecExitTrig(exitTrigger, characterBody, scene, () => {
             openCloseInteractBtn(false, false)
         })
+    }
+
+    // chairs are sittable - only with a real character to seat (the
+    // character-creation backdrop passes characterBody false)
+    if (characterBody && chairs?.locations?.length) {
+        registerSeats(scene, room.placeId, chairs.locations.map(({ pos, rotationY = 0 }, i) => {
+            const table = nearestLocation(pos, tables?.locations, SEAT_TABLE_RANGE)
+            return {
+                // index into this room's own chairs list - the same on every
+                // client, which is what lets tcp/index.ts match up seat claims
+                seatId: `chair_${i}`,
+                x: pos.x, y: pos.y, z: pos.z,
+                // face the table this chair belongs to; a free-standing one
+                // faces straight out from its long side
+                yaw: table ? Math.atan2(table.pos.x - pos.x, table.pos.z - pos.z) : rotationY,
+            }
+        }))
     }
 
     // last, after the exit trigger - these load glbs, and the way out of the

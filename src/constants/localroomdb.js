@@ -1424,6 +1424,8 @@ export const metaDatas = [
                 {name:"directional", intensity: 0.9},
             ],
         },
-        isMultiplayer: false
+        // shared room, like Guild House(9) - other players are rendered here
+        // and seat claims sync through tcp (charactersystem/seating.js)
+        isMultiplayer: true
     },
 ];

@@ -21,6 +21,7 @@ import { isPlacing } from '../components/placementMode.js';
 import { cycleWeatherDebug } from '../components/weatherSystem.js';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
+import { standUp } from '../charactersystem/seating';
 import { attachLightning } from '../effects/lightning';
 import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
@@ -101,6 +102,7 @@ const MODE_TO_ANIM_STATE = {
     casting: ANIM_STATE.CASTING,
     minning: ANIM_STATE.MINNING,
     resting: ANIM_STATE.STRUCTED,
+    sitting: ANIM_STATE.SITTING,
 }
 
 // reused every physics tick instead of `new Vector3(...)` inline in
@@ -535,6 +537,7 @@ function setupControls(scene, allsounds) {
         // this, removing the old dedicated "wake up" button would leave
         // touch players with no way to stop resting at all.
         if(getCharState()?.mode === "resting") stopResting();
+        if(getCharState()?.mode === "sitting") standUp();
         if (!getCanPress()) return;
 
         joystickPointerId = e.pointerId;
@@ -565,6 +568,10 @@ function setupControls(scene, allsounds) {
         // this is the only way rest ends now.
         if(["w","a","s","d"].includes(key) && getCharState()?.mode === "resting"){
             stopResting()
+        }
+        // same auto-stand-up for sitting (charactersystem/seating.js)
+        if(["w","a","s","d"].includes(key) && getCharState()?.mode === "sitting"){
+            standUp()
         }
         if(!getCanPress()) return
         clearTimeout(saveLocTimeout)

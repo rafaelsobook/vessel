@@ -18,7 +18,7 @@ import { getPlayersOnScene, getSocketContainers } from '../sockets/worldsocket';
 import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
 import { createBloodParticle, createBloodSplatter, createCustomizedSmoke } from '../tools/particlesystem';
-import { CharacterAnimations } from '../tools/animation';
+import { CharacterAnimations, playAnim } from '../tools/animation';
 import { createMesh, putFakeShadow } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 import { attachLightning } from '../effects/lightning';
@@ -654,6 +654,26 @@ export const FEMALE_ONLY_NAMES = [
 // what keeps this from ever ambiguously matching a female-side node instead.
 // exported - setupcharacterscene.js's creation-preview scene has the exact
 // same fragile positional pelvis/head-bone lookup on the same avatar.glb
+// Moves a player's visible avatar (player.root - not the physics body) under
+// newParent, optionally switching its animation. root keeps its normal local
+// offset from its parent (y -0.74, see createAnimeBody), so newParent should
+// sit where that player's body center would be - and passing player.body back
+// restores the standing setup exactly. Looping states (idle, sitting...) go
+// through characterAnimations so renderer.js's per-frame setState doesn't
+// fight them; anything else is played directly as a loop.
+export function parentRoot(ownerId, newParent, animationName){
+    const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
+    if(!player?.root || !newParent) return null
+
+    player.root.parent = newParent
+
+    if(animationName){
+        if(player.characterAnimations?.hasState(animationName)) player.characterAnimations.setState(animationName)
+        else playAnim(player.anims, animationName, true)
+    }
+    return player
+}
+
 export function findDeepByName(root, predicate){
     for(const child of root.getChildren()){
         if(predicate(child)) return child
