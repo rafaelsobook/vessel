@@ -67,6 +67,10 @@ export async function setStartingContainers(scene){
         let deerRoot = await loadMonsterRoot("./models/monsters/deer.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
         let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
+        // campcraft.js's "treelog" craft (Structures section, same
+        // click-to-place flow as bonfire) - a single cut log prop, cloned
+        // per placement by assetcreation/createtrunk.js's createTrunkMesh
+        let trunkRoot = await loadPropRootSafe("./models/outdors/trunk.glb", scene)
         // openworld ambient wagon traffic (tcp/recources/wagons.ts) - static,
         // non-animated prop (confirmed by grepping wagon.glb's own raw text:
         // no "animations" key at all). Unlike bonfireRoot/treasureRoot,
@@ -253,6 +257,7 @@ export async function setStartingContainers(scene){
             deerRoot,
             treasureRoot,
             bonfireRoot,
+            trunkRoot,
             wagonRoot,
             wagonBodyColliderRoot,
             wagonWheelFrontRoot,

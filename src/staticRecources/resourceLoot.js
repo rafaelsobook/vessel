@@ -194,6 +194,19 @@ const LOOT_TEMPLATES = {
         price: { coinType: "bronze", pieces: 3 },
         desc: "A plain chunk of quarried stone. Common, but dependable.",
         rarity: "common"
+    }),
+    // picked by hand from world grain patches (assetcreation/creategrain.js) -
+    // no itemDictionary.js entry, so it stays out of the sword-crafting picker
+    grain: () => ({
+        itemId: randomNum(),
+        name: "grain",
+        dn: "Grain",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 2 },
+        desc: "A bundle of ripe wheat, gathered straight from the field.",
+        rarity: "common"
     })
 }
 

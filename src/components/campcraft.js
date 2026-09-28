@@ -7,13 +7,14 @@ import { startPlacementMode, cancelPlacement } from "./placementMode.js"
 import { checkIfTokenSaved, randomNum } from "../tools/tools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
+import { createTrunkMesh } from "../assetcreation/createtrunk.js"
 import { hideShowAllScreenUI } from "../charactersystem/uimanagement.js"
 import { findGroundY } from "../tools/position.js"
-import { emitCraftBonfire } from "../sockets/emits.js"
+import { emitCraftBonfire, emitCraftTrunk } from "../sockets/emits.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
 
-// Data for every camp-craftable thing. Only "bonfire" has a real
-// CRAFT_HANDLERS entry (below) for now - anything added here without one
+// Data for every camp-craftable thing. Only "bonfire" and "treelog" have a
+// real CRAFT_HANDLERS entry (below) so far - anything added here without one
 // still renders a full card (icon/desc/cost), it just tells the player it
 // isn't built yet instead of crafting nothing silently. `section` is what
 // buildCampcraftPanel groups cards under ("Structures" vs "Crafting" in the
@@ -34,6 +35,17 @@ export const campcrafts = [
         // matching CRAFT_GHOSTS entry for the preview mesh. A future craft
         // that isn't a world structure - a potion, a tool - just leaves this
         // off and keeps the old immediate behaviour.
+        needsPlacement: true
+    },
+    {
+        name: "treelog",
+        dn: "Tree Log",
+        section: "Structures",
+        desc: "A sturdy log cut and hauled into camp. Doubles as rustic seating or decor around a fire.",
+        // qnty is a starting guess, not a balanced number - tune freely
+        requiredItems: [
+            { name: "wood", qnty: 5 }
+        ],
         needsPlacement: true
     }
 ]
@@ -288,6 +300,20 @@ const CRAFT_HANDLERS = {
             })
         }
         return bonfire
+    },
+    treelog(scene, position, craftId, placeId){
+        const trunk = createTrunkMesh(scene, position, craftId)
+        // emitCraftTrunk already no-ops in single-player places, same
+        // "don't tell the server about something that didn't happen" logic
+        // the bonfire handler right above follows
+        if(trunk){
+            emitCraftTrunk({
+                craftId,
+                position: { x: position.x, y: position.y, z: position.z },
+                placeId
+            })
+        }
+        return trunk
     }
 }
 
@@ -296,7 +322,8 @@ const CRAFT_HANDLERS = {
 // because containers.js loads these roots per-scene - grabbing one at module
 // load would capture a mesh belonging to a scene that's since been disposed.
 const CRAFT_GHOSTS = {
-    bonfire: () => getSocketContainers()?.bonfireRoot
+    bonfire: () => getSocketContainers()?.bonfireRoot,
+    treelog: () => getSocketContainers()?.trunkRoot
 }
 
 function handleCraftClick(craft, refreshCard){

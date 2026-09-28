@@ -102,6 +102,35 @@ function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, s
     }
 }
 
+// Furniture that repeats around a room (localroomdb.js's `tables`/`chairs`:
+// { mainGlbpath, locations: [{ pos, rotationY }] }) - the glb is loaded and
+// merged ONCE into a hidden master, then every location is an instance of it,
+// same idea as the woodboxes block below. Each instance still gets its own
+// collider, since each one physically blocks the player on its own.
+async function placeInstancedProps(roomName, propName, props, scene, hasPhysics){
+    if(!props?.mainGlbpath || !props.locations?.length) return;
+
+    let master;
+    try {
+        master = await mergeAndLoadModel(props.mainGlbpath, scene);
+    } catch (error) {
+        return console.warn(`[createRoom] failed to load ${propName} "${props.mainGlbpath}"`, error);
+    }
+    if(!master) return console.warn(`[createRoom] ${propName} "${props.mainGlbpath}" merged to nothing`);
+
+    master.name = `${roomName}_${propName}_master`;
+    master.isVisible = false;
+    master.isPickable = false;
+
+    props.locations.forEach(({ pos, rotationY = 0 }, i) => {
+        const instance = master.createInstance(`${roomName}_${propName}_${i}`);
+        instance.position = new Vector3(pos.x, pos.y, pos.z);
+        instance.rotation.y = rotationY;
+        instance.isPickable = false;
+        if(hasPhysics) createAggregate(instance, { mass: 0 }, "box", scene);
+    });
+}
+
 export async function createRoom(scene, room, characterBody, hasPhysics = true) {
     
     const {
@@ -120,6 +149,8 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         optionalObjects = [],
         paintedPlanes   = [],
         woodboxes       = [],
+        tables,
+        chairs,
         spawn,
         exitPlaceDetail
     } = room;
@@ -294,4 +325,11 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
             openCloseInteractBtn(false, false)
         })
     }
+
+    // last, after the exit trigger - these load glbs, and the way out of the
+    // room shouldn't wait on furniture finishing
+    await Promise.all([
+        placeInstancedProps(name, "table", tables, scene, hasPhysics),
+        placeInstancedProps(name, "chair", chairs, scene, hasPhysics),
+    ]);
 }

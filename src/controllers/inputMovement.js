@@ -321,7 +321,7 @@ function setupControls(scene, allsounds) {
     }else runsound = allsounds.runningS
     
 
-    let walkSpeed = 2;
+    let walkSpeed = 1;
     let sprintSpeed = 10;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
@@ -807,10 +807,13 @@ function setupControls(scene, allsounds) {
                 giveAllSkills()
             break
             case "t":
-                giveRandomTitle()
+                debugLevelUp()
             break
             case "b":
                 giveRandomSkill()
+            break
+            case "u":
+                giveRandomTitle()
             break
             case "h":
                 upgradeAllOwnedSkills()
@@ -823,9 +826,6 @@ function setupControls(scene, allsounds) {
             break
             case "f":
                 restoreAll()
-            break
-            case "x":
-                debugLevelUp()
             break
             case "1":
                 hideShowAllScreenUI(false)

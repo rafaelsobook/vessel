@@ -119,6 +119,31 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null
             },
+            // Tavern - placed well clear of every other village prop (the
+            // nearest neighbor, bigHouse at {43.8,13.5}, is ~40 units away -
+            // confirmed by actually running generateArea() with this exact
+            // village's own seed/counts and diffing against every hand-placed
+            // item above, not just eyeballed). rotation Math.PI/2 turns its
+            // door (confirmed at local {x:0,z:2.67} - the model's own +Z face,
+            // dead-center on X - by loading tavern.glb in isolation and
+            // reading its real bounding box) to face -X, back toward the
+            // village center the same way Guild House's own rotation faces
+            // its door back toward the wagon/spawn cluster.
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "Tavern",
+                position: {x: 75, y: 0, z: 10},
+                scale: null,
+                rotation: -Math.PI/2,
+                glbPath: "./models/houses/tavern.glb",
+                diffuseTexPath:null,
+                bumpTexPath: null,
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
         ],
         roomPaths: [
             {
@@ -127,6 +152,20 @@ export const metaDatas = [
                 areaType: "room",
                 pos: {x: -2.75, y: 0.5, z: -12.02},
                 startingPos: {x: 0.12, y: 1, z: -4.4}
+            },
+            // door trigger position = tavern position + rotated local door
+            // offset (0, 3.17) [2.67 real wall face + 0.5 clearance], using
+            // this same file's own rotation->world-offset relationship
+            // (worldX = -D*sin(rot), worldZ = D*cos(rot)) reverse-engineered
+            // from the Guild House entry above (rotation -PI/2, door offset
+            // {5.25,~0} => D=5.25) and confirmed against it algebraically
+            // before reusing it here
+            {
+                placeId: 18,
+                name: "Tavern",
+                areaType: "room",
+                pos: {x: 71.83, y: 0.5, z: 10},
+                startingPos: {x: 0, y: 1, z: -4}
             }
         ],
         resources: [
@@ -1281,5 +1320,110 @@ export const metaDatas = [
         isMultiplayer: true
         }),
         spawn: {x: 0.6, y: 10, z: 500},
+    },
+    // Keep new places at the END of this array - setupcharacterscene.js reads
+    // metaDatas[3] by position for the character-creation backdrop room, so an
+    // entry inserted anywhere earlier silently swaps that backdrop.
+    {
+        // Tavern interior - entered via placeId 1's own roomPaths entry
+        // (walking up to the "Tavern" building placed in optionalObjects
+        // above). Standalone room, not nested under another interior like
+        // Simple Room(10) is under Guild House(9) - same procedural boxed
+        // room shape (createroom.js), just its own placeId/door/exit back to
+        // the village instead of back to another interior.
+        placeId: 18,
+        name: 'Tavern',
+        width: 20,
+        height: 14,
+        areaType: "room",
+        layout: { cellSize: 1 },
+        // matches roomPaths' own startingPos above (both are "just inside
+        // the front door, facing into the room") - z:-6.5 is the exit
+        // trigger's own auto-placed position (createRoom.js: -halfH+0.5,
+        // halfH = height/2 = 7), so this sits a couple units further in
+        spawn: {x: 0, y: 1, z: -4, rotation: 0},
+
+        optionalObjects: [
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "roomdoor",
+                // createRoom.js auto-places the exit trigger at (0,1,-halfH+0.5)
+                // regardless of this entry - positioned here purely so the
+                // visible door model lines up with that same trigger spot,
+                // same convention Simple Room(10) already follows
+                position: {x: 0, y: 0, z: -6.5},
+                scale: null,
+                rotation: 0,
+                glbPath: "./models/indors/door.glb",
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
+        ],
+        // Both glbs are long along local X with the pivot at floor center
+        // (table 2.16 x 0.80, bench 1.72 x 0.55), so rotationY 0 runs them
+        // east-west and Math.PI/2 runs them north-south. Benches sit 0.8 off
+        // a table's center on each long side. Layout: a feast table (3 tables
+        // end to end) along the north wall, two lengthwise tables against
+        // each side wall, and a middle pair leaving a ~4.6-wide aisle from
+        // the door (south) to the feast table.
+        tables: {
+            mainGlbpath: "./models/indors/tavernTable.glb",
+            locations: [
+                { pos: {x: -2.16, y: 0, z: 4.2}, rotationY: 0 },
+                { pos: {x: 0, y: 0, z: 4.2}, rotationY: 0 },
+                { pos: {x: 2.16, y: 0, z: 4.2}, rotationY: 0 },
+                { pos: {x: -7, y: 0, z: -2.2}, rotationY: Math.PI/2 },
+                { pos: {x: -7, y: 0, z: 1.6}, rotationY: Math.PI/2 },
+                { pos: {x: 7, y: 0, z: -2.2}, rotationY: Math.PI/2 },
+                { pos: {x: 7, y: 0, z: 1.6}, rotationY: Math.PI/2 },
+                { pos: {x: -3.4, y: 0, z: -0.2}, rotationY: 0 },
+                { pos: {x: 3.4, y: 0, z: -0.2}, rotationY: 0 },
+            ]
+        },
+        chairs: {
+            mainGlbpath: "./models/indors/tavChair.glb",
+            locations: [
+                // feast table
+                { pos: {x: -2.16, y: 0, z: 3.4}, rotationY: 0 },
+                { pos: {x: -2.16, y: 0, z: 5}, rotationY: 0 },
+                { pos: {x: 0, y: 0, z: 3.4}, rotationY: 0 },
+                { pos: {x: 0, y: 0, z: 5}, rotationY: 0 },
+                { pos: {x: 2.16, y: 0, z: 3.4}, rotationY: 0 },
+                { pos: {x: 2.16, y: 0, z: 5}, rotationY: 0 },
+                // west wall tables
+                { pos: {x: -7.8, y: 0, z: -2.2}, rotationY: Math.PI/2 },
+                { pos: {x: -6.2, y: 0, z: -2.2}, rotationY: Math.PI/2 },
+                { pos: {x: -7.8, y: 0, z: 1.6}, rotationY: Math.PI/2 },
+                { pos: {x: -6.2, y: 0, z: 1.6}, rotationY: Math.PI/2 },
+                // east wall tables
+                { pos: {x: 6.2, y: 0, z: -2.2}, rotationY: Math.PI/2 },
+                { pos: {x: 7.8, y: 0, z: -2.2}, rotationY: Math.PI/2 },
+                { pos: {x: 6.2, y: 0, z: 1.6}, rotationY: Math.PI/2 },
+                { pos: {x: 7.8, y: 0, z: 1.6}, rotationY: Math.PI/2 },
+                // middle pair
+                { pos: {x: -3.4, y: 0, z: -1}, rotationY: 0 },
+                { pos: {x: -3.4, y: 0, z: 0.6}, rotationY: 0 },
+                { pos: {x: 3.4, y: 0, z: -1}, rotationY: 0 },
+                { pos: {x: 3.4, y: 0, z: 0.6}, rotationY: 0 },
+            ]
+        },
+        exit: "south",
+        exitPlaceDetail: {
+            placeId: 1,
+            name: "village",
+            areaType: "village",
+        },
+        sceneTemp: {
+            fogDensity: 0.1,
+            fogColor:{ r:0.05, g:0.15, b:0.1},
+
+            lights: [
+                {name:"directional", intensity: 0.9},
+            ],
+        },
+        isMultiplayer: false
     },
 ];

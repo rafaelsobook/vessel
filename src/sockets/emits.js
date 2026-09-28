@@ -130,6 +130,14 @@ export function emitRemoveTreasure(treasureId){
     if(!socket) return
     socket.emit("removeTreasure", treasureId)
 }
+// tcp/index.ts's "pickupGrain" handler - same bare-id shape as
+// emitRemoveTreasure right above
+export function emitPickupGrain(grainId){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("pickupGrain", grainId)
+}
 // tcp/index.ts's "craft-bonfire" handler - tells every OTHER connected
 // client (and any future joiner, via userJoined's own bonfires array) that
 // a bonfire now exists here too. campcraft.js's own craft flow already
@@ -142,6 +150,14 @@ export function emitCraftBonfire({ craftId, position, placeId }){
     const socket = getSocket()
     if(!socket) return
     socket.emit("craft-bonfire", { craftId, position, placeId })
+}
+// tcp/index.ts's "craft-trunk" handler - same relay-only shape
+// emitCraftBonfire right above uses, for campcraft.js's "treelog" craft.
+export function emitCraftTrunk({ craftId, position, placeId }){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("craft-trunk", { craftId, position, placeId })
 }
 // tcp/index.ts's "strike-weapon" handler - same "act locally first, this
 // just syncs everyone else + what a fresh joiner's own userJoined payload

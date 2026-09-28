@@ -16,7 +16,22 @@ const heartStatusDef = document.querySelector(".heart-status-def")
 const upgradeDivs = document.querySelectorAll(".upgrade-bx")
 const upgradeBtns = document.querySelectorAll(".upgrade-btn")
 const uniquesList = document.querySelector('.uniques-list')
+const classesList = document.querySelector('.classes-list')
 const statPointsAvailable = document.querySelector(".stat-points-available")
+
+// characterclass keys -> their icon in public/images/stats/ (server/models/
+// charDetM.js's characterclass schema). duskrunner has no icon art yet and
+// no weapon case in characterclass.js's triggerClassLeveling either, so it's
+// left out here rather than showing a broken image for a class nothing
+// actually levels up yet.
+const classIcons = [
+    { key: "warbringer", label: "Warbringer", icon: "sword" },
+    { key: "viking", label: "Viking", icon: "axe" },
+    { key: "warhammer", label: "Warhammer", icon: "hammer" },
+    { key: "berserker", label: "Berserker", icon: "fist" },
+    { key: "runecaller", label: "Runecaller", icon: "staff" },
+    { key: "necromancer", label: "Necromancer", icon: "necromancy" },
+]
 
 let statUpgradeBtnInitiated = false
 
@@ -155,6 +170,23 @@ export function updateStatUI(){
             img.addEventListener('mouseleave', hideAbilityDesc);
         })
     }
+    // COMBAT CLASSES display - read-only, no upgrade button (levels come
+    // from actually swinging the matching weapon, see characterclass.js's
+    // triggerClassLeveling, not a spendable point like strength/dex/magic)
+    classesList.innerHTML = ''
+    classIcons.forEach(({key, label, icon}) => {
+        const classDet = state.characterclass?.[key]
+        if(!classDet) return
+
+        const div = createElement('div', 'classes-bx')
+        const img = createElement('img', 'classes-img')
+        const pName = createElement('p', 'classes-name', label)
+        const pLvl = createElement('p', 'classes-lvl', `Lv. ${classDet.lvl}`)
+
+        img.src = `./images/stats/${icon}.webp`
+        div.append(img, pName, pLvl)
+        classesList.append(div)
+    })
     // HEART STATUS
     let statusLength = state.status.length
     heartStatus.style.color = "limegreen"

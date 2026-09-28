@@ -25,6 +25,7 @@ import {
     STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING
 } from "../constants/weather.js";
 import { triggerSkillWheel } from "./skillWheel.js";
+import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -178,15 +179,17 @@ export function gainExp(amount){
 
     if(!leveledUp) return
     lvlAndName.innerHTML = `Lvl ${characterState.lvl} ${characterState.name}`
-    openClosePopup(`Level Up! You are now Lvl ${characterState.lvl}`, true, 2000)
-    getAllSounds().notif2S?.play()
+    popupReceiveLevelUpUI(characterState.lvl)
     updateStatUI()
     updateMyDetailsOL(characterState, checkIfTokenSaved())
     setTimeout(() => {
         triggerSkillWheel()
     }, 1200)
 }
-// DEBUG CHEAT - bound to the "x" key in controllers/inputMovement.js.
+// DEBUG CHEAT - bound to the "t" key in controllers/inputMovement.js (was
+// "x", but that key already had its own unrelated case earlier in the same
+// switch - a duplicate case label, which JS resolves by always matching the
+// FIRST one, so this was permanently dead/unreachable code until moved).
 // Grants exactly enough EXP to cross the next threshold, reusing gainExp's
 // own real level-up path (popup/sound/statPoints/skill wheel) rather than
 // bumping characterState.lvl directly - so this exercises the same code a
@@ -374,7 +377,8 @@ export function activateLifeSystem(){
         if(characterState.mode === "casting") return
         const totalCurrMp = getTotal().mp
         const totalMaxMp = getTotal().maxMp
-        if(totalCurrMp < characterState.maxMp) characterState.mp += getTotal().mpRegen
+        const totalMpRegen = 0.5 + getTotal().mpRegen
+        if(totalCurrMp < characterState.maxMp) characterState.mp += totalMpRegen
         if(characterState.mp > characterState.maxMp) characterState.mp = characterState.maxMp
         updateMP_UI()
     }, 700)
@@ -406,12 +410,12 @@ export function activateLifeSystem(){
         // the local player up rather than just reading a characterState field
         const myPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
         if(myPlayer?.weaponBlocking) return
-        if(characterState.sp < characterState.maxSp) {
-            characterState.sp += getTotal().spRegen
-        }
+    
+        characterState.sp += (1+getTotal().spRegen)
+        
         if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
         updateSP_UI()
-    }, 100)
+    }, 500)
     // BLOCKING - stamina drains continuously while the LOCAL player's own
     // weaponBlocking flag is true (inputMovement.js's activateMouseControls,
     // r-click hold-to-block). Same "-1 flat per 500ms, own interval separate

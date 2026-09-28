@@ -28,6 +28,8 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
+import { createTrunkMesh } from "../assetcreation/createtrunk.js"
+import { createGrainMesh, removeGrainMesh } from "../assetcreation/creategrain.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
 import { refreshPlayerListIfOpen } from "../components/playerListUI"
@@ -37,6 +39,13 @@ let allEnemiez = []
 let allQuests = []
 let tcpTreasures = []
 let tcpBonfires = []
+// campcraft.js's "treelog" craft - same permanence/sync model as
+// tcpBonfires right above, just for trunk.glb placements
+let tcpTrunks = []
+// tcp/recources/grains.ts - seeded, pickup-able like tcpTreasures. No
+// grainsInScene array alongside it: creategrain.js dedupes by grainId in its
+// own per-scene Map, which also resets itself on every scene change
+let tcpGrains = []
 // weapons struck into the ground or an enemy body at runtime (see
 // itemInfoSystem.js's struckItemFunc, creations/skills.js's spawnProjectile
 // env-hit/enemy-hit cases) - server-tracked (tcp/index.ts's struckWeapons),
@@ -63,6 +72,9 @@ let treasuresInScene = []
 // are never removed once placed (no "bonfire-removed" counterpart to
 // treasure-removed), so this only ever grows, never gets spliced
 let bonfiresInScene = []
+// { craftId } entries - same idea as bonfiresInScene right above, for
+// campcraft.js's "treelog" craft
+let trunksInScene = []
 // { itemId } entries - same idea as treasuresInScene, dropped once
 // "struck-weapon-removed" comes in for it
 let struckWeaponsInScene = []
@@ -272,7 +284,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, struckWeapons, weather } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, grains, struckWeapons, weather } = allDataFromServer
         // weather rides on every snapshot, not just its own "weather-changed"
         // broadcast - this handler also fires on every PLACE CHANGE, so a
         // player walking out of a dungeon into a blizzard gets the current sky
@@ -305,6 +317,8 @@ export function activateOnSocketListeners(socket){
         allQuests = quests
         tcpTreasures = treasures ?? []
         tcpBonfires = bonfires ?? []
+        tcpTrunks = trunks ?? []
+        tcpGrains = grains ?? []
         tcpStruckWeapons = struckWeapons ?? []
         
         const characterState = getCharState()
@@ -1054,6 +1068,23 @@ export function activateOnSocketListeners(socket){
         reCreateMeshesInScene()
     })
 
+    // tcp/index.ts's own "craft-trunk" handler - same echo-to-everyone,
+    // dedup-and-replay shape "bonfire-crafted" right above uses
+    socket.on("trunk-crafted", trunk => {
+        if (!isSocketOn) return
+        if (tcpTrunks.some(tr => tr.craftId === trunk.craftId)) return
+        tcpTrunks.push(trunk)
+        reCreateMeshesInScene()
+    })
+
+    // tcp/index.ts's "pickupGrain" echo - reaches every client, including the
+    // one that picked it (removeGrainMesh is a no-op there, it's already gone)
+    socket.on("grain-removed", grainId => {
+        if (!isSocketOn) return
+        tcpGrains = tcpGrains.filter(grain => grain.grainId !== grainId)
+        removeGrainMesh(grainId)
+    })
+
     // tcp/index.ts's own "strike-weapon" handler echoes this to EVERY
     // connected client, including whoever struck it (bare io.emit there,
     // not socket.broadcast.emit) - same reasoning "bonfire-crafted" above
@@ -1434,6 +1465,32 @@ export function reCreateMeshesInScene() {
 
         const bonfire = createBonfireMesh(scene, bonfireTcpInfo.pos, bonfireTcpInfo.craftId)
         if(bonfire) bonfiresInScene.push({ craftId: bonfireTcpInfo.craftId })
+    })
+    // same three-guard shape as tcpBonfires right above, for campcraft.js's
+    // "treelog" craft (createTrunkMesh's own trunk_${craftId} naming)
+    tcpTrunks.length && tcpTrunks.forEach(trunkTcpInfo => {
+        if (characterState.currentPlace.placeId !== trunkTcpInfo.currentPlaceId) return
+
+        const isAlreadyHere = trunksInScene.find(tr => tr.craftId === trunkTcpInfo.craftId)
+        if (isAlreadyHere) return
+
+        const trunkMesh = sceneDet.scene.getMeshByName(`trunk_${trunkTcpInfo.craftId}`)
+        if(trunkMesh) return
+
+        const trunk = createTrunkMesh(scene, trunkTcpInfo.pos, trunkTcpInfo.craftId)
+        if(trunk) trunksInScene.push({ craftId: trunkTcpInfo.craftId })
+    })
+    // createGrainMesh dedupes by grainId itself - no getMeshByName fallback
+    // here, since that scans every mesh in the scene (15k+ grass/bush
+    // instances in the village) once per grain
+    tcpGrains.length && tcpGrains.forEach(grainTcpInfo => {
+        if (characterState.currentPlace.placeId !== grainTcpInfo.currentPlaceId) return
+        const { x, z } = grainTcpInfo.pos
+        // tcp has no terrain - openworld ground height only exists client-side
+        const groundY = grainTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
+            ? sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS)
+            : grainTcpInfo.pos.y
+        createGrainMesh(scene, { x, y: groundY, z }, grainTcpInfo.grainId)
     })
     if(characterState.currentPlace.placeId === 9){
 

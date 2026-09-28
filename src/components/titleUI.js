@@ -73,8 +73,9 @@ export async function receiveTitle(title){
     popupReceiveTitleUI(title)
 }
 
-// DEBUG CHEAT - bound to the "t" key in controllers/inputMovement.js, same
-// spirit as skillsui.js's giveSkill/giveAllSkills cheats. Picks one at
+// DEBUG CHEAT - bound to the "u" key in controllers/inputMovement.js (moved
+// off "t", which now triggers debugLevelUp instead), same spirit as
+// skillsui.js's giveSkill/giveAllSkills cheats. Picks one at
 // random from titlesData.js's own full pool and runs it through the exact
 // same receiveTitle path a real npc-defeat reward uses - still a real
 // server-enforced exclusivity claim, not a local-only shortcut, so this

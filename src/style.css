@@ -1613,6 +1613,44 @@ canvas {
   flex: 1;
   color: #d8d5d5;
 }
+.stats-container .stat-detail-cont .uniques-cont .classes-cap {
+  font-family: "Bellefair", serif;
+  font-size: 0.9rem;
+  color: rgba(233, 82, 12, 0.7);
+  margin-top: 10px;
+}
+.stats-container .stat-detail-cont .uniques-cont .classes-list {
+  width: 100%;
+  padding: 15px 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+}
+.stats-container .stat-detail-cont .uniques-cont .classes-bx {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  width: 100%;
+  height: 60px;
+  background: rgb(29, 28, 28);
+}
+.stats-container .stat-detail-cont .uniques-cont .classes-img {
+  width: 40px;
+  height: 40px;
+}
+.stats-container .stat-detail-cont .uniques-cont .classes-name {
+  font-family: "Bellefair", serif;
+  flex: 1;
+  color: #d8d5d5;
+}
+.stats-container .stat-detail-cont .uniques-cont .classes-lvl {
+  font-family: "Bellefair", serif;
+  color: rgba(233, 147, 35, 0.7254901961);
+}
 .stats-container .stat-detail-cont .left {
   display: flex;
   flex-direction: column;
@@ -2599,6 +2637,144 @@ canvas {
 .skill-popup-show {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+.levelup-popup {
+  --lup-w: min(92vw, 560px);
+  position: fixed;
+  top: 8%;
+  left: 50%;
+  width: var(--lup-w);
+  transform: translate(-50%, -20px);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.levelup-popup .lup-rays {
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: calc(var(--lup-w) * 0.07);
+  width: calc(var(--lup-w) * 0.55);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(255, 240, 200, 0.9) 0%, rgba(255, 205, 110, 0.5) 12%, rgba(255, 185, 70, 0.15) 35%, transparent 62%), repeating-conic-gradient(from 0deg, rgba(255, 225, 160, 0.28) 0deg 3deg, transparent 3deg 15deg);
+  -webkit-mask-image: radial-gradient(circle, #000 20%, transparent 68%), linear-gradient(to bottom, #000 45%, transparent 58%);
+  -webkit-mask-composite: source-in;
+  mask-image: radial-gradient(circle, #000 20%, transparent 68%), linear-gradient(to bottom, #000 45%, transparent 58%);
+  mask-composite: intersect;
+  animation: lupRaysSpin 18s linear infinite;
+}
+.levelup-popup .lup-crest {
+  position: relative;
+  z-index: 2;
+  width: calc(var(--lup-w) * 0.42);
+}
+.levelup-popup .lup-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--lup-w) * 0.07);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgb(255, 250, 225) 0%, rgba(255, 215, 120, 0.85) 30%, rgba(200, 140, 40, 0.35) 65%, transparent 72%);
+  animation: lupCorePulse 1.8s ease-in-out infinite;
+}
+.levelup-popup .lup-ring {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0 8px rgba(255, 200, 90, 0.6));
+}
+.levelup-popup .lup-band {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin-top: calc(var(--lup-w) * -0.07);
+  padding: calc(var(--lup-w) * 0.062) 0 calc(var(--lup-w) * 0.01);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.levelup-popup .lup-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(20, 15, 8, 0) 0%, rgba(20, 15, 8, 0.72) 22%, rgba(20, 15, 8, 0.85) 50%, rgba(20, 15, 8, 0.72) 78%, rgba(20, 15, 8, 0) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%);
+}
+.levelup-popup .lup-title {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.levelup-popup .lup-sideline {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--lup-w) * 0.66);
+  height: auto;
+  transform: translate(-50%, -50%);
+  -webkit-mask-image: linear-gradient(90deg, #000 17%, transparent 22%, transparent 78%, #000 83%);
+  mask-image: linear-gradient(90deg, #000 17%, transparent 22%, transparent 78%, #000 83%);
+  filter: drop-shadow(0 0 6px rgba(255, 200, 90, 0.5));
+}
+.levelup-popup .lup-wordmark {
+  position: relative;
+  display: block;
+  width: calc(var(--lup-w) * 0.32);
+  height: auto;
+  filter: drop-shadow(0 0 10px rgba(255, 200, 90, 0.55)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+.levelup-popup .lup-lvl {
+  font-family: "Bellefair", serif;
+  font-size: 1.05rem;
+  letter-spacing: 1px;
+  color: #efe6d2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), 0 0 8px rgba(255, 220, 150, 0.35);
+  margin: 2px 0 4px;
+  white-space: nowrap;
+}
+.levelup-popup .lup-goldline {
+  width: calc(var(--lup-w) * 0.6);
+  height: auto;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 90, 0.5));
+}
+
+.levelup-popup-hidden {
+  display: none;
+}
+
+.levelup-popup-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@keyframes lupRaysSpin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@keyframes lupCorePulse {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @keyframes sapCircleSpin {
@@ -4937,7 +5113,8 @@ canvas {
 
 .achievement-popup-hidden {
   display: none;
-}/*# sourceMappingURL=style.css.map */
+}
+
 .weather-indicator {
   position: fixed;
   top: 1.5%;
@@ -4974,4 +5151,4 @@ canvas {
 }
 .weather-indicator.is-hot .weather-name {
   color: #f0b478;
-}
+}/*# sourceMappingURL=style.css.map */
