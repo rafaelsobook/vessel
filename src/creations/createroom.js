@@ -39,8 +39,9 @@ const WALL_THICKNESS = 0.3;
 // chase-facing, the wagon, every skill projectile): since each segment
 // sits at (radius*sin(angle), radius*cos(angle)), rotation.y = angle
 // directly orients its own local +z (its thin/normal axis, same role
-// brickNS/brickEW's own `depth` plays for the straight walls) to point
-// radially outward, with its long "width" axis running tangentially.
+// buildWall's own shared `brick` mesh's `depth` plays for the straight
+// walls, rotated the exact same way for its own E/W run) to point radially
+// outward, with its long "width" axis running tangentially.
 function buildCylinderWalls(name, radius, wh, wt, wallMat, scene, hasPhysics, shadowGenerator){
     const circumference = 2 * Math.PI * radius;
     const count = Math.max(8, Math.ceil(circumference)); // floor of 8 - a small room still reads as round, not a square/octagon
@@ -81,17 +82,34 @@ function buildCylinderWalls(name, radius, wh, wt, wallMat, scene, hasPhysics, sh
     }
 }
 
-function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene, hasPhysics,shadowGenerator) {
+// rotationY (default 0, i.e. running east-west along local X - the N/S walls'
+// own orientation) - E/W walls pass Math.PI/2 instead of a SEPARATE, differently-
+// proportioned brick mesh. Both used to be their own MeshBuilder.CreateBox
+// (brickNS: width 1 x depth wt, brickEW: width wt x depth 1) sharing one
+// wallMat whose uScale/vScale was tuned for ONE of those two proportions -
+// the other direction's walls tiled/stretched the same texture differently,
+// reading as an inconsistent material between N/S and E/W walls despite
+// being the exact same wallMat. Reusing one brick shape and rotating it for
+// the E/W run keeps every wall segment's UVs identical regardless of which
+// wall it's on. createAggregate runs AFTER rotation is set, so each
+// segment's physics box collider picks up the same rotation the visual mesh
+// has (Babylon's PhysicsAggregate reads the mesh's current world transform).
+function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, scene, hasPhysics, rotationY = 0, shadowGenerator) {
     for (let i = 0; i < count; i++) {
         const px = startPos.x + stepVec.x * i;
         const pz = startPos.z + stepVec.z * i;
 
         const brick = brickMaster.createInstance(`${name}_${i}`);
         brick.position = new Vector3(px, wh / 2, pz);
+        brick.rotation.y = rotationY;
         if(hasPhysics)createAggregate(brick, { mass: 0 }, "box", scene);
 
+        // brickTop's own footprint is square (size:0.6 for both width/depth -
+        // see its own creation below), so rotating it changes nothing visually,
+        // but it costs nothing to keep it aligned with its brick either
         const cap = capMaster.createInstance(`${name}_cap_${i}`);
         cap.position = new Vector3(px, wh/2, pz);
+        cap.rotation.y = rotationY;
         if(hasPhysics)createAggregate(cap, { mass: 0 }, "box", scene);
 
         brick.isVisible = true
@@ -217,13 +235,13 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     if(hasPhysics) createAggregate(ground, { mass: 0 }, "box", scene);
 
     // ── Wall masters (hidden, used only for instancing) ───────────────────────
-    const brickNS = MeshBuilder.CreateBox(`${name}_mbrick_ns`, { width: 1,   height: wh,  depth: wt }, scene);
-    brickNS.material  = wallMat;
-    brickNS.isVisible = false;
-
-    const brickEW = MeshBuilder.CreateBox(`${name}_mbrick_ew`, { width: wt,  height: wh,  depth: 1  }, scene);
-    brickEW.material  = wallMat;
-    brickEW.isVisible = false;
+    // ONE shared brick shape for every straight wall (N/S/E/W) - see buildWall's
+    // own header comment for why a second, differently-proportioned mesh here
+    // (this used to be brickNS + a separate brickEW) made the same wallMat
+    // texture visibly inconsistent between wall directions.
+    const brick = MeshBuilder.CreateBox(`${name}_mbrick`, { width: 1, height: wh, depth: wt }, scene);
+    brick.material  = wallMat;
+    brick.isVisible = false;
 
     const brickTop = MeshBuilder.CreateBox(`${name}_mcap_ns`, { height: 0.4, size: 0.6 }, scene);
     brickTop.material  = wallMat;
@@ -253,10 +271,10 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     if(roomShape === "cylinder"){
         buildCylinderWalls(`${name}_wall`, cylinderRadius, wh, wt, wallMat, scene, hasPhysics);
     } else {
-        buildWall(`${name}_wall_n`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
-        buildWall(`${name}_wall_s`, brickNS, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics);
-        buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
-        buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
+        buildWall(`${name}_wall_n`, brick, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics, 0);
+        buildWall(`${name}_wall_s`, brick, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics, 0);
+        buildWall(`${name}_wall_e`, brick, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics, Math.PI / 2);
+        buildWall(`${name}_wall_w`, brick, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics, Math.PI / 2);
     }
 
     // ── Painted planes — flat textured overlays laid onto the room (rugs,

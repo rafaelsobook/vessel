@@ -13,6 +13,7 @@ import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
 import { createCastle } from "../creations/createcastle.js";
+import { createGraveyards } from "../creations/creategraveyard.js";
 import { createStoneScriptures } from "../creations/createstonescripture.js";
 import { createDuelArena } from "../creations/createduelarena.js";
 import { startDuel } from "../npc/duelSystem.js";
@@ -317,6 +318,9 @@ export async function areaScene(placeDetail){
             await createOriginal(scene, origin.pos, origin.rot, origin.textures, origin.glbPath)
         })
     }
+
+    // not awaited - nothing downstream (joinWorld's userJoined included) looks for it
+    if(placeDetail.graveYards?.length) createGraveyards(scene, placeDetail.graveYards, { onTerrain: placeDetail.areaType === "openworld" })
 
     if(placeDetail.optionalObjects && placeDetail.optionalObjects.length > 0){
         // awaited (not fire-and-forget forEach) - joinWorld() below tells the

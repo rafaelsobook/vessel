@@ -259,6 +259,28 @@ export function emitSpawnCircle(pos, element){
         socket.emit("spawncirc", {pos, placeId, element})
     }
 }
+// moves an enemy through the server (tcp/index.ts's "enemyWillTeleport" -
+// stamps tcpEnemies x/z, broadcasts "enemy-teleported", every client moves
+// it and re-grounds it on openworld terrain). Moved here from createEnemy.js
+// (the lesserdemon's teleport-to-melee) so skillEffects.js's enemy
+// blinkstrike can use it too without importing createEnemy.js back.
+export function emitEnemyTeleport(enemId, dest, placeId) {
+    getSocket()?.emit("enemyWillTeleport", {
+        currentPlaceId: placeId,
+        _id: enemId,
+        x: dest.x,
+        z: dest.z,
+    })
+}
+// one enemy melee hit on a player, with its damage chosen by the caller -
+// the same "enemyWillAttack" relay createEnemy.js's own emitAttack sends
+// for a normal swing (that one always sends det.stats.dmg). Everything the
+// "enemy-attacked" broadcast already does comes with it on every client:
+// snapping the enemy to pos, the attack animation, block/blood, the
+// victim's own deductHp, and a cursed enemy's hit backfiring on itself.
+export function emitEnemyWillAttack({ currentPlaceId, _id, pos, targetId, dmg, atkSpd, attackAnimName, effects }) {
+    getSocket()?.emit("enemyWillAttack", { currentPlaceId, _id, pos, targetId, dmg, atkSpd, attackAnimName, effects })
+}
 // SPEAR THROW - purely visual sync, same "spawncirc" shape right above:
 // no server state to touch, the thrower already spawned their OWN
 // projectile locally (uimanagement.js's throwSpearProjectile), this is

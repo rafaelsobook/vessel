@@ -143,6 +143,7 @@ let containers = {
     slimeRoot: null,
     lesserDemonRoot: null,
     deerRoot: null,
+    ghostRoot: null,
     wagonRoot: null,
     wagonWheelFrontRoot: null,
     wagonWheelRearRoot: null,
@@ -194,6 +195,7 @@ export function resetArray(){
         slimeRoot: null,
         lesserDemonRoot: null,
         deerRoot: null,
+        ghostRoot: null,
         wagonRoot: null,
         wagonWheelFrontRoot: null,
         wagonWheelRearRoot: null,
@@ -1497,7 +1499,7 @@ export function reCreateMeshesInScene() {
         const trunkMesh = sceneDet.scene.getMeshByName(`trunk_${trunkTcpInfo.craftId}`)
         if(trunkMesh) return
 
-        const trunk = createTrunkMesh(scene, trunkTcpInfo.pos, trunkTcpInfo.craftId)
+        const trunk = createTrunkMesh(scene, trunkTcpInfo.pos, trunkTcpInfo.craftId, trunkTcpInfo.currentPlaceId)
         if(trunk) trunksInScene.push({ craftId: trunkTcpInfo.craftId })
     })
     // createGrainMesh dedupes by grainId itself - no getMeshByName fallback

@@ -20,11 +20,11 @@ import { getEnemiesOnScene, getPlayersOnScene, getDuelOpponentsOnScene } from ".
 // volume. Fat on purpose: this is aim ASSIST, and a thin probe would only ever
 // lock onto something already dead-centre, which is exactly the case that did
 // not need help.
-const PROBE_SCALE = 3
+const PROBE_SCALE = 1
 // how far ahead it will look before giving up
 const PROBE_RANGE = 2050
 // units/sec. ~1.25s to cover PROBE_RANGE.
-const PROBE_SPEED = 100
+const PROBE_SPEED = 300
 
 // DEBUG - draws the probe as a green wireframe box so its flight and the
 // moment it overlaps a target are visible. Set back to false for normal play.
@@ -43,7 +43,7 @@ const PROBE_VISIBLE = false
 export function fireAimProbe(scene, spawnPos, forward, casterOwner, onLock){
     if(!scene || scene.isDisposed || !onLock) return () => {}
 
-    const probe = MeshBuilder.CreateBox(`aimprobe_${Date.now()}`, { size: PROBE_SCALE, height: PROBE_SCALE*4 }, scene)
+    const probe = MeshBuilder.CreateBox(`aimprobe_${Date.now()}`, { size: PROBE_SCALE, height: PROBE_SCALE*10 }, scene)
     probe.position.copyFrom(spawnPos)
     probe.scaling.setAll(PROBE_SCALE)
     // DEBUG VISIBILITY - flip PROBE_VISIBLE back to false once you have seen

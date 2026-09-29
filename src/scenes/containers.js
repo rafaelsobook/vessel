@@ -65,6 +65,10 @@ export async function setStartingContainers(scene){
         let slimeRoot = await loadMonsterRoot("./models/monsters/slime.glb", scene)
         let lesserDemonRoot = await loadMonsterRoot("./models/monsters/lesserdemon.glb", scene)
         let deerRoot = await loadMonsterRoot("./models/monsters/deer.glb", scene)
+        // graveyard-only enemy (tcp/generate-datas/genenemy.ts's generateGhosts) -
+        // idle1/running1/attack1/attack2/hit1/hit2/death clips confirmed on
+        // disk, same loadMonsterRoot as every other rigged enemy above
+        let ghostRoot = await loadMonsterRoot("./models/monsters/ghost.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
         let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
         // campcraft.js's "treelog" craft (Structures section, same
@@ -255,6 +259,7 @@ export async function setStartingContainers(scene){
             slimeRoot,
             lesserDemonRoot,
             deerRoot,
+            ghostRoot,
             treasureRoot,
             bonfireRoot,
             trunkRoot,

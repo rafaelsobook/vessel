@@ -302,7 +302,7 @@ const CRAFT_HANDLERS = {
         return bonfire
     },
     treelog(scene, position, craftId, placeId){
-        const trunk = createTrunkMesh(scene, position, craftId)
+        const trunk = createTrunkMesh(scene, position, craftId, placeId)
         // emitCraftTrunk already no-ops in single-player places, same
         // "don't tell the server about something that didn't happen" logic
         // the bonfire handler right above follows

@@ -29,10 +29,11 @@ import { addGlow } from "../tools/glow.js"
 import { attachLightning, createLightningBoltLine } from "../effects/lightning.js"
 import { createSimplex } from "../tools/noise.js"
 import { displaceWithNoise } from "../assetcreation/createRock.js"
-import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene } from "../sockets/worldsocket.js"
+import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjectile, removeProjectile, getDuelOpponentsOnScene, getIsSocketOn } from "../sockets/worldsocket.js"
+import { pickAnimVariant } from "../tools/animation.js"
 import { fireAimProbe } from "./aimProbe.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
-import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase } from "../sockets/emits.js"
+import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase, emitSpawnCircle, emitEnemyTeleport, emitEnemyWillAttack } from "../sockets/emits.js"
 import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect } from "../charactersystem/characterstate.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup } from "../tools/popupUI.js"
@@ -804,6 +805,36 @@ const originalZ = atkCollider.scaling.z
     // attack swing, so sweeping through/near a tree during this strike
     // doesn't also chop it
     atkCollider.isSkillHijacked = true
+    // skillsData.js's own isPhysicalDmg flag (dashstrikeSkill's "dash"
+    // effect, blinkstrikeSkill's "blink" effect) - read here, off the mesh,
+    // by createEnemy.js's own atkCollider hit handler when it fires during
+    // this window, same side-channel trick isSkillHijacked itself already
+    // is (that handler has no other way to know a skill - let alone WHICH
+    // one - is driving this particular swing; see castDashSkill's own
+    // header comment on why calcDmg's plusDmg/crit bonuses already have to
+    // go through this same kind of indirection instead of being passed in
+    // directly). .some(), not a single named effect lookup, so any FUTURE
+    // skill reusing strikeWithHandCollider gets this for free off its own
+    // effects array, whatever that effect is actually called.
+    //
+    // SKILLS_BY_NAME[skill.name], not skill.effects itself - `skill` here is
+    // a player's OWNED copy (charState.skills, skillsui.js's own slotbuttons
+    // click handler), a plain object SNAPSHOT taken (giveSkill's `{
+    // ...skillDetail }`) the moment that skill was learned and saved to
+    // their character from then on (characterstate.js's initiateCharacter
+    // loads it back verbatim, no re-merge against this file's current
+    // exports). A structural content edit here - adding isPhysicalDmg to an
+    // effect, same as any other new field on an existing skill - never
+    // reaches an owned copy taken before the edit, permanently, for that
+    // character, the exact bug this was: dashstrike still hurt a
+    // physicalImmune ghost because the caster's saved dashstrike predated
+    // this flag. plusDmg/lvl/explosionScale etc. staying on the OWNED copy
+    // is correct (upgradeSkill, attackingSystem.js, mutates real
+    // progression there) - isPhysicalDmg never changes with level, so
+    // there's nothing wrong with always reading it off the one canonical
+    // definition instead.
+    const canonicalSkill = SKILLS_BY_NAME[skill.name] || skill
+    atkCollider.isPhysicalDmg = !!canonicalSkill.effects?.some(eff => eff.isPhysicalDmg)
     atkCollider.parent = player.rHand
     // same local offset createSword's own weapon-in-hand placement uses
     // (createcharacter.js) - roughly where the equipped weapon itself sits
@@ -851,6 +882,7 @@ const originalZ = atkCollider.scaling.z
         atkCollider.position.y = ATK_COLLIDER_PARKED_Y
         atkCollider.scaling.z = originalZ
         atkCollider.isSkillHijacked = false
+        atkCollider.isPhysicalDmg = false
     }, HAND_STRIKE_WINDOW_MS)
 }
 
@@ -2210,9 +2242,18 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                 // "your own damage backfires on you" rule a cursed enemy's
                 // own attack already follows (worldsocket.js's "enemy-attacked"
                 // handler)
+                // isPhysicalDmg deliberately left OUT here (not false, just
+                // absent) - this is a spell hit, not a weapon/fist swing, and
+                // omitted is exactly what createEnemy.js's own atkCollider
+                // handler's isPhysicalDmg:true default is FOR: undefined on
+                // arrival at tcp/index.ts's applyDamageToEnemy reads as "not
+                // physical" without every one of this function's own skill
+                // hit call sites needing to repeat `isPhysicalDmg: false` by
+                // hand - same "omission already means the right thing"
+                // convention effectsWhenHit above already relies on.
                 dealDamageToEnemy({
                     playerId: freshCharState.owner,
-                    dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0 },
+                    dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0, magicDmg: totalDmg },
                     targetId: enemy._id,
                     currentPlaceId: freshCharState.currentPlace.placeId,
                 })
@@ -4146,6 +4187,15 @@ export function castEnemySkill(scene, enemy, skill, targetPlayer){
         triggerEnemyLightningStrike(scene, enemy, skill, targetPlayer)
         return
     }
+    // blink skill (blinkstrikeSkill - the ghost's) - same gap as groundTrap/
+    // lightningStrike above: a melee weapon skill with useProjectile:false
+    // would otherwise fly an invisible box at the player. Wild enemies only
+    // - a duel opponent (enemy.applyDamage, duelSystem.js) never routes a
+    // blink skill here, its own performOpponentBlinkstrike covers that.
+    if(getSkillEffect(skill, "blink") && !enemy.applyDamage){
+        triggerEnemyBlinkstrike(scene, enemy, skill, targetPlayer)
+        return
+    }
 
     // aim toward bodytarget (createcharacter.js - a box parented to the
     // spine bone, roughly chest height) rather than the raw capsule body's
@@ -4197,6 +4247,77 @@ export function castEnemySkill(scene, enemy, skill, targetPlayer){
             setTimeout(() => fireEnemySkillProjectile(scene, enemy, skill, spawnPos, shotForward, targetOwner), burstIntervalMs * i)
         }
     }, skill.castDuration * 1000)
+}
+
+// wild-enemy version of blinkstrikeSkill (the ghost's - genenemy.ts's
+// ghostBase). Telegraphs the landing spot, blinks there, and lands one
+// boosted melee hit through the normal enemy attack relay
+// (emitEnemyWillAttack -> "enemy-attacked"), so blocking, blood, the
+// victim's armour (deductHp) and a cursed enemy's hit backfiring on itself
+// all behave exactly like any other enemy swing.
+//
+// ENEMY_BLINK_WINDUP_MS - the player's own blinkstrike is instant, but an
+// enemy's with no warning could never be blocked. A short telegraph (same
+// circle-then-teleport shape as the lesserdemon's own teleport,
+// createEnemy.js) makes that reaction possible. 0 makes it instant.
+const ENEMY_BLINK_WINDUP_MS = 600
+// same flat "guaranteed crit" stand-in duelSystem.js's BLINK_CRIT_MULTIPLIER
+// uses for its own NPC blinkstrike - not imported, duelSystem.js imports
+// this file (same cycle castOffenseSkill's magic formula is duplicated for)
+const ENEMY_BLINK_CRIT_MULTIPLIER = 1.5
+
+function triggerEnemyBlinkstrike(scene, enemy, skill, targetPlayer){
+    // driven by the VICTIM's own client only - castEnemySkill runs on every
+    // client watching (see its header comment), and everyone else sees the
+    // result through the broadcasts this causes (the circle,
+    // "enemy-teleported", "enemy-attacked"). Exactly one client picks the
+    // landing spot and sends the hit.
+    const charState = getCharState()
+    if(!charState || targetPlayer.owner !== charState.owner) return
+    if(!getIsSocketOn() || !targetPlayer.body) return
+
+    // lands between the player and where the enemy was - right in front of
+    // them, coming from its own direction. Same formula duelSystem.js's
+    // performOpponentBlinkstrike uses.
+    const enPos = enemy.body.position
+    const plPos = targetPlayer.body.position
+    const dx = enPos.x - plPos.x
+    const dz = enPos.z - plPos.z
+    const dist = Math.hypot(dx, dz) || 1
+    const landOffset = skill.blink?.landOffset ?? 1.2
+    const land = { x: plPos.x + (dx / dist) * landOffset, z: plPos.z + (dz / dist) * landOffset }
+
+    // the enemy's own element picks the circle (a ghost's is dark), not the
+    // skill's - blinkstrike is "normal", which would draw a water circle.
+    // The receivers of emitSpawnCircle rebuild the image as `apt_${element}`.
+    const circleImg = ELEMENT_CIRCLES[enemy.det?.elementType] || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
+    createMagicCircle(new Vector3(land.x, plPos.y, land.z), scene, circleImg, 0.8, ENEMY_BLINK_WINDUP_MS + 300)
+    emitSpawnCircle({ x: land.x, y: plPos.y, z: land.z }, circleImg.replace(/^apt_/, ""))
+
+    setTimeout(() => {
+        const live = getEnemiesOnScene().find(ene => ene._id === enemy._id)
+        if(!live?.body || live._disabled) return
+        const placeId = live.det.currentPlaceId
+
+        // teleport first - its handler re-grounds the enemy on openworld
+        // terrain, the attack relay right after only ever moves x/z
+        emitEnemyTeleport(live._id, land, placeId)
+
+        const critChance = getSkillEffect(skill, "critical")?.criticalPercent ?? 0
+        const critMult = Math.random() < critChance ? ENEMY_BLINK_CRIT_MULTIPLIER : 1
+        const dmg = Math.round(((live.det.stats?.dmg || 0) + (getSkillEffect(skill, "blink")?.plusDmg || 0)) * critMult)
+        const attackAnim = pickAnimVariant(live.anims, "attack")
+        emitEnemyWillAttack({
+            currentPlaceId: placeId,
+            _id: live._id,
+            pos: { x: land.x, z: land.z },
+            targetId: targetPlayer.owner,
+            dmg,
+            atkSpd: live.det.stats?.atkSpd,
+            attackAnimName: attackAnim ? attackAnim.name : "attack1",
+            effects: live.det.effects,
+        })
+    }, ENEMY_BLINK_WINDUP_MS)
 }
 
 // enemy/npcFighter version of castOffenseSkill's own groundTrap branch

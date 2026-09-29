@@ -168,6 +168,17 @@ export const metaDatas = [
                 startingPos: {x: 0, y: 1, z: -4}
             }
         ],
+        // creations/creategraveyard.js - areaSize is the plot's full side
+        // length, entrance defaults to "south". x:55 rather than 50: this
+        // seed's generated bigHouse at (43.8, 13.5) reaches x ~48, which put
+        // it ~3 units inside a plot centered on x:50
+        graveYards: [
+            {
+                position: {x: 55, y: 0, z: 10},
+                areaSize: 10,
+                entrance: "south",
+            }
+        ],
         resources: [
             {
                 resourceId: randNum(0,9999).toString(),
@@ -218,8 +229,9 @@ export const metaDatas = [
         totalMediumTrees: 10,
         totalSmallTrees: 100,
         totalRocks: 500,
-        totalGrass: 10000,
-        totalBushes: 5000,
+        totalGrass: 1000,
+        totalBushes: 1000,
+        
         // entry: "south",
         exit: "east",
         entryExitPlaceIds: {
@@ -1128,6 +1140,13 @@ export const metaDatas = [
 
     // openworld
     {
+        graveYards: [
+            {
+                position: {x: 412, y: 0, z: 255},
+                areaSize: 100,
+                entrance: "south",
+            }
+        ],
         // "Travel Wagon" removed - it was leftover from copy-pasting this area's
         // structure from another placeDetail, hardcoded at y:0 which only made
         // sense on the old flat village ground, not procedural terrain height.

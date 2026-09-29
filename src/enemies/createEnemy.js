@@ -14,7 +14,7 @@ import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
-import { emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget } from "../sockets/emits.js"
+import { emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget, emitEnemyTeleport } from "../sockets/emits.js"
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
@@ -30,10 +30,10 @@ import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 
 // modelStyles that don't bleed at all (see this file's own bloodps setup
-// below) - slime is gooey, not fleshy. Add others here later if it turns
-// out they shouldn't bleed either (e.g. monolith, being stone) - not added
-// yet since not asked for.
-const BLOODLESS_MODEL_STYLES = new Set(["slime"])
+// below) - slime is gooey, not fleshy; ghost is an incorporeal spirit, same
+// reasoning. Add others here later if it turns out they shouldn't bleed
+// either (e.g. monolith, being stone) - not added yet since not asked for.
+const BLOODLESS_MODEL_STYLES = new Set(["slime", "ghost"])
 
 export default function createEnemy(scene, det) {
     // guards the actual mesh-creation choke point itself, not just whatever
@@ -46,7 +46,7 @@ export default function createEnemy(scene, det) {
     // twice for the same _id) - returning null here early is the one place
     // that can't be bypassed no matter what called this or why
     if(scene.getMeshByName(`enemy.${det._id}`)) return null
-    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot} = getSocketContainers()
+    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot, ghostRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
     // on openworld's uneven terrain, so look up the real ground height instead.
     // sampleTerrainSurfaceHeight (not terrainHeight) - matches the coarse,
@@ -124,6 +124,14 @@ export default function createEnemy(scene, det) {
         case "deer":
             entries = deerRoot?.instantiateModelsToScene()
             bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1.6, height: 2.8 }, det._id)
+        break
+        case "ghost":
+            entries = ghostRoot?.instantiateModelsToScene()
+            // bodytarget is only ever a hidden bone-attachment anchor
+            // (attachToBone below, isVisible=false right after this switch) -
+            // its own box dimensions have no visible/gameplay effect, same
+            // "doesn't really matter, just needs to exist" as slime's {size:1}
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1 }, det._id)
         break
         default:
 
@@ -386,7 +394,10 @@ export default function createEnemy(scene, det) {
                 const charState = getCharState()
                 if (!charState || closestPlayer.owner !== charState.owner) return
 
-                const skillName = det.skills[0]
+                // a random one of det.skills each cast - was always
+                // det.skills[0], so an enemy given more than one skill (the
+                // ghost's blinkstrike + darkorb) only ever used its first
+                const skillName = det.skills[Math.floor(Math.random() * det.skills.length)]
                 const skill = SKILLS_BY_NAME[skillName]
                 if (!skill) return console.warn(`[enemy skill] unknown skill "${skillName}" on enemy`, det.name)
 
@@ -594,9 +605,26 @@ export default function createEnemy(scene, det) {
             // Bare hand or a weapon with no effectsWhenHit of its own just
             // sends undefined here - enemyIsHit's own find() on it no-ops.
             const equippedWeapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+            // isPhysicalDmg (inside dmgDetails, NOT the same field as the
+            // isPhysical:true below - that one only ever drove the
+            // swordS1/punchedS sound choice) - tcp/index.ts's
+            // applyDamageToEnemy destructures this now (not consumed by
+            // anything there yet - see its own comment) so a real weapon/
+            // fist hit can eventually be told apart from a skill's magic
+            // damage that happens to also ride through this same
+            // physicalDmg field (skillEffects.js's own comment on that
+            // reuse). A bare swing (atkCollider NOT currently hijacked by
+            // strikeWithHandCollider) is unambiguously physical - true
+            // unconditionally. A skill-driven swing (dashstrike/
+            // blinkstrike, parented onto the hand for their own strike
+            // window) instead carries whatever isPhysicalDmg THAT skill's
+            // own effects array declared (skillEffects.js sets
+            // atkCollider.isPhysicalDmg the moment it hijacks the collider,
+            // same isSkillHijacked side-channel this already reads).
+            const isPhysicalDmg = atkCollider.isSkillHijacked ? !!atkCollider.isPhysicalDmg : true
             dealDamageToEnemy({
                 playerId: charState.owner,
-                dmgDetails: calcDmg(charState),
+                dmgDetails: { ...calcDmg(charState), isPhysicalDmg },
                 targetId: det._id,
                 currentPlaceId: det.currentPlaceId,
                 isPhysical: true,
@@ -838,15 +866,6 @@ function emitEnemyDodge(enemId, dest, placeId) {
         z: dest.z,
     })
 }
-function emitEnemyTeleport(enemId, dest, placeId) {
-    getSocket().emit("enemyWillTeleport", {
-        currentPlaceId: placeId,
-        _id: enemId,
-        x: dest.x,
-        z: dest.z,
-    })
-}
-
 export function enemyIsHit(data){
     const charState = getCharState()
     if(!charState) return
@@ -856,7 +875,21 @@ export function enemyIsHit(data){
     // for weapon when hit something sound
     // playSound(soundToPlay, .9, .3)
     const enemPos = enemy.body.position
- 
+
+    // physicalImmune enemy (genenemy.ts's ghostBase) hit by a weapon/fist -
+    // tcp/index.ts's applyDamageToEnemy dealt nothing and flagged it. "miss"
+    // in place of the damage number, and none of the rest of a real hit:
+    // no hp change to show, no flinch/hit sound/blood, no weapon
+    // effectsWhenHit (a Majestic Sword's burn passing through a ghost
+    // shouldn't set it alight either), no swing-connected sound. Still
+    // turns to face whoever swung - it noticed, it just wasn't hurt.
+    if(data.isImmune){
+        poppingTextMesh("miss", "white", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
+        const swinger = getPlayersOnScene().find(pl => pl.owner === playerId)
+        if(swinger?.body) lookAt(enemy.body, swinger.body.position)
+        return
+    }
+
     poppingTextMesh(`-${Math.floor(dmgToApply)}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`

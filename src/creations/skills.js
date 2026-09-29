@@ -277,7 +277,10 @@ export function spawnProjectile(spawnPos, targetDirection, glowingColor, scene, 
                 // const dmgToApply = dmgDetails.weaponDmg ? dmgDetails.weaponDmg : dmgDetails.physicalDmg
                 dealDamageToEnemy({
                     playerId: freshCharState.owner,
-                    dmgDetails: {...calcDmg(freshCharState), weaponDmg:dmgDetails.weaponDmg*10 },
+                    // isPhysicalDmg - a thrown weapon is a real weapon hit,
+                    // same as createEnemy.js's own atkCollider swing, so a
+                    // physicalImmune enemy (ghost) shrugs it off too
+                    dmgDetails: {...calcDmg(freshCharState), weaponDmg:dmgDetails.weaponDmg*10, isPhysicalDmg: true },
                     targetId: enem._id,
                     currentPlaceId: freshCharState.currentPlace.placeId,
                     isPhysical: true,

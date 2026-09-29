@@ -1603,7 +1603,7 @@ export const dashstrikeSkill = {
     skillCoolDown: 3000,
     demand: [{ name: "mp", minCost: 25, cost: 0 }],
     effects: [
-        { effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
+        { isPhysicalDmg: true, effectType: "dash", dmgPm: 0, plusDmg: 90, chance: 1, bashPower: 0.5 },
         { effectType: "critical", criticalPercent: 0.4},
     ],
     dash: { distance: 6, impulseForce: 120, durationMs: 350 },
@@ -1658,7 +1658,7 @@ export const blinkstrikeSkill = {
     skillCoolDown: 4000,
     demand: [{ name: "mp", minCost: 35, cost: 0 }],
     effects: [
-        { effectType: "blink", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.5 },
+        { isPhysicalDmg: true,effectType: "blink", dmgPm: 0, plusDmg: 100, chance: 1, bashPower: 0.5 },
         { effectType: "critical", criticalPercent: 1 },
     ],
     // range: how far (Vector3.Distance) the nearest-target scan reaches;

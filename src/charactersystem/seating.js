@@ -23,11 +23,22 @@ import { openCloseInteractBtn, openClosePopup } from "../tools/popupUI.js"
 const SIT_RADIUS = 1.5
 const CHECK_EVERY_N_FRAMES = 8
 
-// The current room's seats and who's on them - rebuilt per room, since a new
-// scene means every seat node from the old one was disposed along with it.
+// The current place's seats and who's on them - rebuilt whenever the scene
+// changes, since every seat node from the old one was disposed along with it.
 // { scene, placeId, seats: Map(seatId -> seat), nearest,
 //   occupiedBy: Map(seatId -> ownerId), seated: Map(ownerId -> { seatId, seatNode }) }
 let seatState = null
+
+// applyRosterSeat calls that arrived for a seat that doesn't exist YET on
+// this client - ownerId -> seat. Only actually happens for treelogs: a room's
+// chairs are all registered upfront (registerSeats, from createRoom, before
+// any player ever syncs in), but a treelog only becomes sittable once
+// createTrunkMesh runs for it (addSeat below), and worldsocket.js's
+// reCreateMeshesInScene processes the PLAYER roster (and thus a seated
+// remote player's own applyRosterSeat call) before it gets to placed world
+// objects like treelogs in that same pass. Flushed the moment the seat those
+// calls were actually waiting on shows up.
+const pendingRosterSeats = new Map()
 
 function myOwner(){
     return getCharState()?.owner
@@ -41,23 +52,32 @@ function equippedWeaponName(){
     return getCharState()?.items.find(itm => itm.itemType === "weapon" && itm.equiped)?.name
 }
 
-// seats: [{ seatId, x, y, z, yaw }] - seatId must be the same on every client
-// (built from the room data), y is the floor under the seat, yaw uses the same
-// atan2(dx, dz) facing convention as inputMovement.js's faceForward().
-// One nearest-seat check instead of a trigger box per seat: seats sit close
-// together (0.44 apart end to end on the feast table), and overlapping
-// triggers would each show/hide the one shared interact button on their own.
-export function registerSeats(scene, placeId, seats){
-    if(!seats?.length) return
+// Builds a fresh, empty seat registry for this exact scene+place, or returns
+// the one already built for it. One nearest-seat proximity check (not a
+// trigger box per seat): seats can sit close together (0.44 apart end to end
+// on the tavern's own feast table), and overlapping triggers would each
+// show/hide the one shared interact button on their own.
+function ensureSeatState(scene, placeId){
+    if(seatState?.scene === scene && seatState.placeId === placeId) return seatState
+
     const state = {
         scene,
         placeId,
-        seats: new Map(seats.map(seat => [seat.seatId, seat])),
+        seats: new Map(),
         nearest: null,
         occupiedBy: new Map(),
         seated: new Map(),
     }
     seatState = state
+    // Drop only pending seats belonging to whatever DIFFERENT place was
+    // current before this one - NOT a blanket clear. A pending entry for
+    // THIS placeId is not stale: it's the exact treelog scenario this queue
+    // exists for (a remote player's roster seat for the place being entered,
+    // queued before that place's very first seat - the one that creates this
+    // seatState in the first place - is even registered yet).
+    pendingRosterSeats.forEach((seat, ownerId) => {
+        if(seat.placeId !== placeId) pendingRosterSeats.delete(ownerId)
+    })
 
     let frame = 0
     scene.onBeforeRenderObservable.add(() => {
@@ -87,6 +107,41 @@ export function registerSeats(scene, placeId, seats){
         if(best) openCloseInteractBtn("normal", true, () => sitDown(best))
         else openCloseInteractBtn(false, false)
     })
+    return state
+}
+
+function flushPendingRosterSeats(){
+    if(!pendingRosterSeats.size) return
+    pendingRosterSeats.forEach((seat, ownerId) => {
+        if(!seatState || seatState.placeId !== seat.placeId || !seatState.seats.has(seat.seatId)) return
+        pendingRosterSeats.delete(ownerId)
+        seatPlayer(ownerId, seat.seatId)
+    })
+}
+
+// seats: [{ seatId, x, y, z, yaw }] - seatId must be the same on every client
+// (built from the room data), y is the floor under the seat, yaw uses the same
+// atan2(dx, dz) facing convention as inputMovement.js's faceForward(). Used
+// for a room's whole fixed furniture layout, known upfront in one batch - see
+// addSeat below for the treelog equivalent (placed one at a time, at runtime).
+export function registerSeats(scene, placeId, seats){
+    if(!seats?.length) return
+    const state = ensureSeatState(scene, placeId)
+    seats.forEach(seat => state.seats.set(seat.seatId, seat))
+    flushPendingRosterSeats()
+}
+
+// Adds ONE seat to whatever's already registered for this scene+place - or
+// starts a fresh (empty) registration if this is the first seat this place
+// has seen this session. assetcreation/createtrunk.js calls this per placed
+// tree log, the moment it's created - both freshly crafted (campcraft.js) and
+// synced in already-placed (worldsocket.js's reCreateMeshesInScene), so a
+// treelog is sittable the instant it exists on your screen either way.
+export function addSeat(scene, placeId, seat){
+    const state = ensureSeatState(scene, placeId)
+    if(state.seats.has(seat.seatId)) return
+    state.seats.set(seat.seatId, seat)
+    flushPendingRosterSeats()
 }
 
 // Puts any player on the scene (local or remote) onto a seat. parentRoot keeps
@@ -201,9 +256,16 @@ export function onSitRejected({ placeId, seatId }){
     openClosePopup("Someone is already sitting there", true, 1500)
 }
 
-// a player who was already seated before I arrived (tcp Tplayers.seat)
+// a player who was already seated before I arrived (tcp Tplayers.seat). The
+// seat itself might not exist on this client yet (see pendingRosterSeats'
+// own comment) - queued rather than dropped, flushed once it does.
 export function applyRosterSeat(ownerId, seat){
-    if(!seat || !seatState || seatState.placeId !== seat.placeId) return
+    if(!seat) return
+    if(!seatState || seatState.placeId !== seat.placeId || !seatState.seats.has(seat.seatId)){
+        pendingRosterSeats.set(ownerId, seat)
+        return
+    }
+    pendingRosterSeats.delete(ownerId)
     seatPlayer(ownerId, seat.seatId)
 }
 
@@ -224,4 +286,5 @@ export function syncSeatOccupancy(roster){
 // a seated avatar hangs off the seat node, not the body, so it wouldn't go with it
 export function releaseSeatOf(ownerId){
     unseatPlayer(ownerId)
+    pendingRosterSeats.delete(ownerId)
 }
