@@ -469,12 +469,13 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         })
     }
     if(isNpc){
-        // npcs only ever play idle/walk - dispose the rest (combat, casting,
-        // mining, hit/death reactions, etc.) so each spawned npc isn't carrying
-        // the full player animation set around in memory for nothing
+        // npcs only ever play idle/walk, plus hit1 when the player swings at
+        // them (createAllNpcInArea.js's registerNpcHitReaction) - dispose the
+        // rest (combat, casting, mining, death, etc.) so each spawned npc isn't
+        // carrying the full player animation set around in memory for nothing
         const keptAnims = animationGroups.filter(anim => {
             const name = anim.name.toLowerCase()
-            const keep = name === "idle" || name === "walk"
+            const keep = name === "idle" || name === "walk" || name === "hit1"
             if(!keep) anim.dispose()
             return keep
         })

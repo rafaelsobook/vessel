@@ -10,7 +10,7 @@ import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
 import { getCharState, gainExp, dealDamageToEnemy } from "../charactersystem/characterstate.js"
 import { getGameStatus, getSceneDet } from "../main/main.js"
-import { playAnim, playRandomAnim, pickAnimVariant } from "../tools/animation.js"
+import { playAnim, playRandomAnim, pickAnimVariant, findAnimVariants } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
@@ -285,6 +285,20 @@ export default function createEnemy(scene, det) {
             const dist = checkDistance(new Vector3(enPos.x, targPos.y, enPos.z), targPos)
             if (dist <= thisEnemy.det.maxDistance + 1.3) {  // PLUS 1
                 emitAttack(det, thisEnemy._id, thisEnemy._targetId, det.currentPlaceId, { x: enPos.x, z: enPos.z }, thisEnemy.anims)
+            } else if (typeof thisEnemy._targetId === "string" && thisEnemy._targetId.startsWith("bot_")) {
+                // out of reach of a BOT target - re-arm the chase. Every
+                // attack ("enemy-attacked", worldsocket.js) sets _isMoving
+                // false, and a real player gets it set back by the
+                // atkDetection exit trigger above (emitChase) the moment
+                // they step away - but that trigger only ever watches this
+                // client's OWN character, and a bot has no client of its
+                // own to fire it. Without this, a caster bot kiting away
+                // after taking a hit (npcBrain.ts's notifyDamaged) left the
+                // enemy frozen in place while it got shot from range. Also
+                // covers a bind wearing off (removeEnemyBind -> resumeAttack)
+                // and the local player passing through atkDetection
+                // mid-chase, both of which clear _isMoving the same way.
+                thisEnemy._isMoving = true
             }
         }
     }
@@ -718,6 +732,10 @@ export default function createEnemy(scene, det) {
         // burst while _wanderTarget is a dodge rather than a lazy wander.
         _wanderTarget: null,
         _isDodging: false,
+        // eating (startEnemyEating below) - performance.now() deadline, and
+        // the looping "eating" clip it started (null for a rig without one)
+        _eatingUntil: 0,
+        _eatingAnim: null,
 
         runSound,
         deathSound,
@@ -1106,6 +1124,30 @@ function disposeBindVisual(targetId){
         entry.mesh.dispose()
     }
     enemyBindEntries.delete(targetId)
+}
+
+// ENEMY EATING (tcp/index.ts's wander interval -> worldsocket.js's
+// "enemy-eating") - holds still and loops the rig's own "eating" clip for
+// `duration` ms. A rig with no eating clip (everything but deer.glb right
+// now) shows idle instead - idle already loops underneath from spawn
+// (playRandomAnim(..., "idle", true) in createEnemy above), so the fallback
+// only has to restart it if something stopped it. renderer.js ends this
+// early the moment the enemy gets a target or starts moving.
+export function startEnemyEating(enemy, duration){
+    stopEnemyEating(enemy)
+    enemy._eatingUntil = performance.now() + duration
+    enemy._eatingAnim = pickAnimVariant(enemy.anims, "eating")
+    if(enemy._eatingAnim){
+        enemy._eatingAnim.play(true)
+    } else if(!findAnimVariants(enemy.anims, "idle").some(anim => anim.isPlaying)){
+        playRandomAnim(enemy.anims, "idle", true)
+    }
+}
+
+export function stopEnemyEating(enemy){
+    enemy._eatingAnim?.stop()
+    enemy._eatingAnim = null
+    enemy._eatingUntil = 0
 }
 
 export function applyEnemyBind(scene, targetId, shape, bindDuration){

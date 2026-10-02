@@ -13,7 +13,7 @@ import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
 import { createCastle } from "../creations/createcastle.js";
-import { createGraveyards } from "../creations/creategraveyard.js";
+import { createGraveyards, streamGraveyards } from "../creations/creategraveyard.js";
 import { createStoneScriptures } from "../creations/createstonescripture.js";
 import { createDuelArena } from "../creations/createduelarena.js";
 import { startDuel } from "../npc/duelSystem.js";
@@ -319,8 +319,17 @@ export async function areaScene(placeDetail){
         })
     }
 
-    // not awaited - nothing downstream (joinWorld's userJoined included) looks for it
-    if(placeDetail.graveYards?.length) createGraveyards(scene, placeDetail.graveYards, { onTerrain: placeDetail.areaType === "openworld" })
+    // not awaited - nothing downstream (joinWorld's userJoined included) looks
+    // for it. The openworld's plots are streamed around the player (built
+    // near, disposed far - see creategraveyard.js's streamGraveyards); any
+    // other place's are few and small enough to just build.
+    if(placeDetail.graveYards?.length){
+        if(placeDetail.areaType === "openworld"){
+            streamGraveyards(scene, placeDetail.graveYards, () => myCharacter.body?.position, { onTerrain: true })
+        } else {
+            createGraveyards(scene, placeDetail.graveYards)
+        }
+    }
 
     if(placeDetail.optionalObjects && placeDetail.optionalObjects.length > 0){
         // awaited (not fire-and-forget forEach) - joinWorld() below tells the

@@ -18,6 +18,7 @@ import { emitSpawnCircle } from '../sockets/emits.js';
 import { randomNum } from '../tools/tools.js';
 import { sampleTerrainSurfaceHeight } from 'infterrain';
 import { OPENWORLD_TERRAIN_VERTS } from './constants.js';
+import { OPENWORLD_GRAVEYARDS } from './graveyards.js';
 
 export const metaDatas = [
 
@@ -1140,13 +1141,9 @@ export const metaDatas = [
 
     // openworld
     {
-        graveYards: [
-            {
-                position: {x: 412, y: 0, z: 255},
-                areaSize: 100,
-                entrance: "south",
-            }
-        ],
+        // 13 plots across the openworld, streamed in around the player - the
+        // list (and why each site was picked) lives in constants/graveyards.js
+        graveYards: OPENWORLD_GRAVEYARDS,
         // "Travel Wagon" removed - it was leftover from copy-pasting this area's
         // structure from another placeDetail, hardcoded at y:0 which only made
         // sense on the old flat village ground, not procedural terrain height.

@@ -15,7 +15,87 @@ import { getPlayerCoord } from "../charactersystem/createcharacter.js"
 import { setCanPress } from "../charactersystem/characterstate.js"
 import { offerDuel } from "./duelSystem.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
+import { createBloodSplatter } from "../tools/particlesystem.js"
+import { playAnim } from "../tools/animation.js"
+import { displaySpeech } from "../tools/speechgui.js"
 
+
+// The player's own swing landing on an npc - the shared "atkCollider" every
+// weapon/fist swing hits through (createMyCharacter.js; dashstrike/blinkstrike
+// reuse it too), same trigger createEnemy.js registers per enemy. Purely a
+// reaction, npcs have no hp: a "hit1" flinch and a blood splatter. Local to
+// the swinging player's own screen, since atkCollider only exists for them.
+//
+// Three kinds of npc come through createAllNpcInArea:
+//   - npcFighter (createFighterNpc) - the full player rig, already carrying
+//     its own bloodps and characterAnimations, which plays hit1 and returns
+//     to whatever state it was in;
+//   - avatar npcs (createNpc, no glbPath) - hit1 is kept for them in
+//     createcharacter.js's isNpc animation trim; flinch played by hand here,
+//     then the loop it interrupted (idle, or walk mid-patrol) resumes;
+//   - glbPath npcs (emry/halric/vanessa .glb) - those models only have an
+//     "idle" clip, so they just bleed, no flinch.
+// a whole combo of swings would otherwise restart the line on every hit
+// before it's even finished typing out
+const HURT_SPEECH_COOLDOWN_MS = 4000
+
+// one of the npc's own npcDetails.js hurtSpeech lines, at random - never the
+// same one twice running. Centered, auto-advancing (displaySpeech's
+// isCenterAndNoBackground mode, same as duelSystem.js's fight lines), so it
+// doesn't open a dialogue box that needs clicking away.
+function sayHurtLine(npc){
+    const lines = npc.det?.hurtSpeech
+    if(!lines?.length) return
+    const now = Date.now()
+    if(now < (npc._hurtSpeechUntil ?? 0)) return
+    npc._hurtSpeechUntil = now + HURT_SPEECH_COOLDOWN_MS
+
+    let index = Math.floor(Math.random() * lines.length)
+    if(lines.length > 1 && index === npc._lastHurtLine) index = (index + 1) % lines.length
+    npc._lastHurtLine = index
+    displaySpeech([{ name: npc.det.name, isLeft: false, message: lines[index] }], undefined, undefined, true)
+}
+
+function registerNpcHitReaction(scene, npc){
+    const atkCollider = scene.getMeshByName("atkCollider")
+    if(!atkCollider || !npc.body) return
+
+    // the splatter emits from the npc's own body - same setup createEnemy.js
+    // gives every enemy (the full-rig fighter already has one on its spine)
+    if(!npc.bloodps){
+        npc.bloodps = createBloodSplatter(scene)
+        npc.bloodps.ps.emitter = npc.body
+    }
+
+    onIntersecEnterTrig(atkCollider, npc.body, scene, () => {
+        npc.bloodps.play()
+        sayHurtLine(npc)
+
+        if(npc.characterAnimations) return npc.characterAnimations.playAction(npc.anims, "hit1", 1)
+
+        const hit = npc.anims?.find(anim => anim.name.toLowerCase() === "hit1")
+        if(!hit) return
+        // hit again mid-flinch - restart it rather than stacking a second
+        // resume on top of the first
+        if(npc._hitFlinching) return hit.goToFrame(hit.from)
+        npc._hitFlinching = true
+        const interrupted = npc.anims.find(anim => anim !== hit && anim.isPlaying)
+        interrupted?.stop()
+        hit.onAnimationGroupEndObservable.addOnce(() => {
+            npc._hitFlinching = false
+            // deferred, and skipped if something's already playing: npcPatrol.js's
+            // walk/idle switch stops every clip (ending this flinch early,
+            // which fires this same observer synchronously) and then starts
+            // its own - resuming the old loop here would run both at once
+            setTimeout(() => {
+                if(npc.body?.isDisposed() || npc.anims.some(anim => anim.isPlaying)) return
+                if(interrupted) interrupted.play(true)
+                else playAnim(npc.anims, "idle", true)
+            }, 0)
+        })
+        hit.play(false)
+    })
+}
 
 export function createAllNpcInArea(hero, scene){
     const myHeroDatabase = getCharState()
@@ -31,6 +111,7 @@ export function createAllNpcInArea(hero, scene){
         // pushed by reference (not a {...anNpc} copy) so the _patrolFrozen/_patrolIndex
         // flags set here and read by updateNpcPatrol() in renderer.js stay in sync
         pushNpc(anNpc)
+        registerNpcHitReaction(scene, anNpc)
 
         onIntersecEnterTrig(anNpc.body, hero.body, scene, () => {
             openCloseInteractBtn("normal", true, () => {

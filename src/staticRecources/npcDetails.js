@@ -182,6 +182,13 @@ export default [
         mode: "idle",
         _id: "101_receptionist",
         name: "Vanessa",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "By the saints! Lay no hand upon a servant of the guild.",
+            "Strike me again and I shall strike your name from the ledger.",
+            "Peace, traveler. Whatever grievance you carry, this is not the way.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -234,6 +241,13 @@ export default [
         mode: "idle",
         _id: "101_emry",
         name: "Emry",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Ow! I pulled you from those woods, and this is my thanks?",
+            "Easy now! Save that fire for the evil out there, not for me.",
+            "Has the fever addled your wits? It's me, Emry!",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -402,6 +416,13 @@ export default [
         mode: "idle",
         _id: "111_halric",
         name: "Halric",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Mind yourself. I have buried bolder fools than you.",
+            "Raise your hand to me once more, and the guild shall need a new recruit.",
+            "Hm. Temper without purpose. Emry spoke too kindly of you.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -791,6 +812,13 @@ export default [
         mode: "idle",
         _id: "102_armin",
         name: "Armin",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Oi! Save your swings for the slimes, recruit!",
+            "Strike me again and you'll be mucking the stables till the harvest moon.",
+            "Sloppy footwork, and aimed at the wrong target besides.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -1076,6 +1104,13 @@ export default [
         mode: "idle",
         _id: "103_kraun",
         name: "Kraun",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Oi! I've a mine to run, not a brawl to mind.",
+            "Swing that at the rock face, not at me!",
+            "Keep that up and you'll be hauling ore by hand, friend.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -1194,6 +1229,13 @@ export default [
         mode: "idle",
         _id: "109_talin",
         name: "Talin",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Hey now! Scouts are for spying, not for sparring.",
+            "You'd strike a friendly face? Poor judgment, that.",
+            "Sheathe it. The wilds hold plenty more deserving of your blade than I.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -1295,6 +1337,13 @@ export default [
         mode: "idle",
         _id: "104_strong",
         name: "Strong",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Assaulting the watch?! In broad daylight?!",
+            "Ow! I'll... pretend I didn't see that. This once.",
+            "Careful! I nearly dropped my... uh, my very official apple.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -1548,6 +1597,13 @@ export default [
         mode: "idle",
         _id: "105_vords",
         name: "Vordz",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Strike the watch again and you'll spend the night in irons.",
+            "So you're the trouble I've been waiting on. I knew it was too quiet.",
+            "One more swing and I call the whole garrison down upon you.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -1801,6 +1857,13 @@ export default [
         mode: "idle",
         _id: "106_doran",
         name: "Doran",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Whoa there! I'm no beast to be driven with a switch!",
+            "You'll spook the horses with that nonsense!",
+            "Is this how you thank the man who keeps the roads running?",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -2016,6 +2079,13 @@ export default [
         mode: "idle",
         _id: "114_colousa",
         name: "Colousa",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Wanting a fight? Challenge me properly and I'll oblige you.",
+            "Cheap shot. Swing like that in a real bout and you'd already be on the ground.",
+            "Keep your guard up, and your blade off my back.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -2255,6 +2325,13 @@ export default [
         mode: "idle",
         _id: "115_maela",
         name: "Maela",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Oh! Mind the kettle, you brute!",
+            "Strike me again and you'll pay double for every plum.",
+            "Goodness! Is that how they greet a lady where you hail from?",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -2412,6 +2489,13 @@ export default [
         mode: "idle",
         _id: "117_vesper",
         name: "Vesper",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Touch me again and you'll learn why the wilds keep their distance from this tower.",
+            "How crude. I expected at least a question first.",
+            "Careful. I have turned men into far lesser things for far less.",
+        ],
         stats: { weapon: 2, accuracy: 1.2, critical: 1.6, dex: 1, strength: 2, magic: 3, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -2800,6 +2884,13 @@ export default [
         mode: "idle",
         _id: "118_ilvara",
         name: "Ilvara",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Do that again and I'll set your boots alight.",
+            "Fire doesn't wait for permission. Neither will my temper.",
+            "You've nerve, I'll grant you. Shame it isn't matched by sense.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 2, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -2887,6 +2978,13 @@ export default [
         mode: "idle",
         _id: "119_sable",
         name: "Sable",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "I saw that coming. You, it seems, did not.",
+            "Strange. Your thread showed a far gentler hand than that.",
+            "Pain fades. What you've just set in motion will not.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 2, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -2974,6 +3072,13 @@ export default [
         mode: "idle",
         _id: "120_zerech",
         name: "Zerech",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Strike your guide, and you'll find the old roads far less kind.",
+            "Even the beasts beyond the stones show more restraint than you.",
+            "My fare just went up. Considerably.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -3092,6 +3197,13 @@ export default [
         mode: "idle",
         _id: "107_wren",
         name: "Wren",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Hey! I'm on duty!",
+            "Ow! If the captain hears of this, it's both our hides.",
+            "Save it for whatever keeps slipping past my rounds, would you?",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -3236,6 +3348,13 @@ export default [
         mode: "idle",
         _id: "108_corin",
         name: "Corin",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Easy! I keep the outer ring safe for you, remember?",
+            "That's a poor way to treat the one watching your back.",
+            "A scout's life is thankless enough without the bruises, friend.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -3380,6 +3499,13 @@ export default [
     {
         _id: "sellerEldric123",
         name: "Eldric Merchant",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Please, spare the wares! And me!",
+            "Violence is terrible for business, traveler.",
+            "Shall I summon the guard, or will you buy something instead?",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         currentPlaceId: "wisemanVillage",
@@ -3433,6 +3559,13 @@ export default [
     {
         _id: "sellerSylvan123",
         name: "Sylvan Merchant",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Oof! Hungry folk are ill-tempered folk. Have a bite and calm yourself.",
+            "Mind the stew! It took all morning.",
+            "Strike me again and you'll not eat a warm meal in this village.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         currentPlaceId: "wisemanVillage",
@@ -3487,6 +3620,13 @@ export default [
         mode: "idle",
         _id: "110_bram",
         name: "Bram",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Hah! Better, but you swing at the wrong target, lad.",
+            "Steel's for your enemies. Aim it at me again and I'll show you how it's done.",
+            "Is that a challenge? Careful what you ask of an old soldier.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -4024,6 +4164,13 @@ export default [
         mode: "idle",
         _id: "112_renarden",
         name: "Renarden",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "You dare strike me unbidden? Name your challenge, or be gone.",
+            "Know the difference in our strengths before you swing again.",
+            "Brave. Foolish, but brave.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
@@ -4245,6 +4392,13 @@ export default [
         mode: "idle",
         _id: "113_robin",
         name: "Robin",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Hey! Wait your turn if you want a bout.",
+            "You'll need more than a sneak strike to best me.",
+            "Careful, friend. I strike back harder.",
+        ],
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",

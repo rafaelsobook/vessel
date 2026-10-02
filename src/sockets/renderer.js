@@ -8,6 +8,7 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { emitEnemyChasePosition } from "./emits.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
+import { stopEnemyEating } from "../enemies/createEnemy.js";
 
 let scene;
 
@@ -407,6 +408,13 @@ let renderCallback = function () {
                 en._farHidden = shouldHide
                 en.body.setEnabled(!shouldHide)
             }
+        }
+
+        // eating (createEnemy.js's startEnemyEating) - ends on its own timer,
+        // or immediately once the enemy gets a target (never eat with one)
+        // or starts moving (wander/dodge/chase)
+        if(en._eatingUntil && (en._targetId || en._isMoving || performance.now() >= en._eatingUntil)){
+            stopEnemyEating(en)
         }
 
         // bound (see createEnemy.js's applyEnemyBind/skillEffects.js's

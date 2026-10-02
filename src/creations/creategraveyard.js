@@ -1,7 +1,6 @@
 import { MeshBuilder, Mesh, StandardMaterial, Texture, Color3, Vector4, SceneLoader } from "@babylonjs/core"
 import { sampleTerrainSurfaceHeight } from "infterrain"
 import { createAggregate } from "../tools/physics.js"
-import { mergeAndLoadModel } from "../tools/loadmodel.js"
 import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 
 // A fenced graveyard plot - localroomdb.js's per-place graveYards entries:
@@ -43,6 +42,23 @@ import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 // though its chunks don't exist yet. Pillars and stones sit at the LOWEST
 // point under their footprint, so no edge floats; fence panels get shorter
 // wherever the ground under them changes, stepping down the slope.
+//
+// Two ways in:
+//   createGraveyards - builds every plot at once and keeps it (the village's
+//     one small plot).
+//   streamGraveyards - the openworld's many plots. Only a plot near the
+//     player exists: it's built once they come within GRAVEYARD_LOAD_DIST of
+//     its fence, a few instances per frame so it never hitches, and disposed
+//     - instances, fence colliders and every stone's physics body with them -
+//     once they're past GRAVEYARD_UNLOAD_DIST. The shared masters (glbs,
+//     textures) are freed too once no plot has been loaded for a while.
+//
+// Both go through planGraveyard: a plot is a list of small build tasks (a
+// long fence run is one task called repeatedly until it's done), each
+// recording what it created in the plot's own list so the whole plot can be
+// torn down again. Tasks run in order, so the seeded layout comes out the
+// same however many frames the build is spread across - and the same on
+// every client, which matters because every stone and post has a collider.
 
 const PILLAR_PATH = "./models/outdors/fencepillar.glb"
 const PILLAR_TEX_PATH = "./images/modeltex/pillartex2.webp"
@@ -109,95 +125,89 @@ const GRAVE_JITTER_LEAN = 0.05
 // gravestones.glb's carved faces point down their own -z once imported
 const STONE_FRONT_YAW = Math.PI
 
-let fenceMat = null
-let fenceMatScene = null
-function getFenceMat(scene){
-    if(fenceMatScene !== scene) fenceMat = null
-    fenceMatScene = scene
-    if(!fenceMat){
-        fenceMat = new StandardMaterial("graveyardFenceMat", scene)
-        const tex = new Texture(FENCE_TEX_PATH, scene)
-        tex.hasAlpha = true // alpha test - the gaps between pickets cut out
-        tex.wrapU = Texture.CLAMP_ADDRESSMODE
-        tex.wrapV = Texture.CLAMP_ADDRESSMODE
-        fenceMat.diffuseTexture = tex
-        fenceMat.specularColor = new Color3(0, 0, 0)
-    }
-    return fenceMat
-}
+// Streaming (streamGraveyards). Distances are from the player to the plot's
+// nearest fence, not its center, so a big plot and a small one both appear
+// when their edge is this close. LOAD sits a little past where openworld
+// enemies turn visible (renderer.js's OPENWORLD_ENEMY_SHOW_DIST, 180) so the
+// ghosts and their graveyard show up together; UNLOAD leaves a 100-unit gap
+// so walking along the boundary never rebuilds the same plot over and over.
+// Both sit inside what the terrain keeps built around you (infterrain's
+// 256-unit chunks, viewRadius 1 - areascene.js).
+const GRAVEYARD_LOAD_DIST = 200
+const GRAVEYARD_UNLOAD_DIST = 300
+const GRAVEYARD_CHECK_INTERVAL_MS = 500
+// build work allowed per frame - an 80-wide plot is ~600 stones, each an
+// instance plus a physics body, far too much for one frame. At this budget
+// it finishes in a second or two, long before anyone walks 200 units.
+const GRAVEYARD_BUILD_BUDGET_MS = 4
+// the masters are cheap to keep but the gravestone atlas alone is a
+// 2048x2048 texture - freed once no plot has been loaded for this long, kept
+// otherwise so walking back and forth between plots doesn't reload it
+const GRAVEYARD_MASTERS_IDLE_MS = 60 * 1000
 
-// one master per picket-gap count (the 9-gap full panel, plus whichever
-// shorter remainders the runs need), shared by every run in the scene.
-// Unit width - each instance is scaled to its real length.
-function getPanelMaster(scene, panelMasters, gaps){
-    if(panelMasters.has(gaps)) return panelMasters.get(gaps)
-    const uvs = new Vector4(PANEL_U0, 0, PANEL_U0 + gaps * GAP_U, 1)
-    const panel = MeshBuilder.CreatePlane(`graveyard_fence_master_${gaps}`, {
-        width: 1,
-        height: FENCE_HEIGHT,
-        sideOrientation: Mesh.DOUBLESIDE,
-        frontUVs: uvs,
-        backUVs: uvs,
-    }, scene)
-    panel.material = getFenceMat(scene)
-    panel.isVisible = false
-    panel.isPickable = false
-    panelMasters.set(gaps, panel)
-    return panel
-}
-
-// fencepillar.glb ships with no material of its own (mergeAndLoadModel's
-// multiMultiMaterials merge just carries that "nothing" through, which is
-// what actually rendered as flat gray) - its one mesh's UVs span a clean
-// 0..1 already, so pillartex2.webp goes on at uScale/vScale:1, no tiling
-let pillarMat = null
-let pillarMatScene = null
-function getPillarMat(scene){
-    if(pillarMatScene !== scene) pillarMat = null
-    pillarMatScene = scene
-    if(!pillarMat){
-        pillarMat = new StandardMaterial("graveyardPillarMat", scene)
-        pillarMat.diffuseTexture = new Texture(PILLAR_TEX_PATH, scene, false, false)
-        pillarMat.specularColor = new Color3(0.05, 0.05, 0.05)
-    }
-    return pillarMat
-}
-
-async function createPillarMaster(scene){
-    const pillar = await mergeAndLoadModel(PILLAR_PATH, scene)
-    pillar.name = "graveyard_pillar_master"
-    pillar.material = getPillarMat(scene)
-    pillar.isVisible = false
-    pillar.isPickable = false
-    return pillar
-}
-
-// one master per stone in gravestones.glb (however many there are), all
-// sharing the one atlas texture. Each stone is baked into world space on
-// its own - the same MergeMeshes pass mergeAndLoadModel does, just per mesh
-// instead of all together - so every master sits base-down on y:0 at the
-// origin, ready to instance.
-async function createGravestoneMasters(scene){
-    const container = await SceneLoader.LoadAssetContainerAsync("", GRAVESTONES_PATH, scene)
+// a glb's own meshes merged into one hidden master (materials replaced by
+// the caller), the container's empty __root__ and its own materials thrown
+// away - mergeAndLoadModel (tools/loadmodel.js) does the merge but keeps the
+// root around, which a master that gets disposed and reloaded would leak
+async function loadMergedMasters(scene, path, perMesh){
+    const container = await SceneLoader.LoadAssetContainerAsync("", path, scene)
     container.addAllToScene()
-
-    const mat = new StandardMaterial("graveyardStoneMat", scene)
-    // glTF UVs - invertY off, same as every other glb texture in this project
-    mat.diffuseTexture = new Texture(GRAVESTONES_TEX_PATH, scene, false, false)
-    mat.specularColor = new Color3(0.05, 0.05, 0.05)
-
-    const stones = container.meshes[0].getChildMeshes().filter(mesh => mesh.getTotalVertices() > 0)
-    const masters = stones.map(stone => {
-        const name = stone.name
-        const master = Mesh.MergeMeshes([stone], true, true, undefined, false, false)
-        master.name = `graveyard_${name}_master`
-        master.material = mat
+    const meshes = container.meshes[0].getChildMeshes().filter(mesh => mesh.getTotalVertices() > 0)
+    if(!meshes.length) throw new Error(`[graveyards] no meshes with geometry in ${path}`)
+    const groups = perMesh ? meshes.map(mesh => [mesh]) : [meshes]
+    const masters = groups.map(group => {
+        const sourceName = group[0].name
+        const master = Mesh.MergeMeshes(group, true, true, undefined, false, false)
         master.isVisible = false
         master.isPickable = false
-        const { minimum, maximum } = master.getBoundingInfo().boundingBox
+        return { sourceName, mesh: master }
+    })
+    container.materials.forEach(glbMat => glbMat.dispose())
+    container.meshes[0].dispose()
+    return masters
+}
+
+// everything every plot instances from, loaded once and shared: the pillar,
+// one master per stone in gravestones.glb (however many there are), fence
+// panel masters (made on demand, see getPanelMaster) and their materials.
+// dispose() frees all of it, textures included - only ever called once no
+// plot is using any of it (a master's dispose takes its instances with it).
+async function loadGraveyardMasters(scene){
+    const fenceMat = new StandardMaterial("graveyardFenceMat", scene)
+    const fenceTex = new Texture(FENCE_TEX_PATH, scene)
+    fenceTex.hasAlpha = true // alpha test - the gaps between pickets cut out
+    fenceTex.wrapU = Texture.CLAMP_ADDRESSMODE
+    fenceTex.wrapV = Texture.CLAMP_ADDRESSMODE
+    fenceMat.diffuseTexture = fenceTex
+    fenceMat.specularColor = new Color3(0, 0, 0)
+
+    // fencepillar.glb ships with no material of its own - its one mesh's UVs
+    // span a clean 0..1 already, so pillartex2.webp goes on at 1:1, no tiling
+    const pillarMat = new StandardMaterial("graveyardPillarMat", scene)
+    pillarMat.diffuseTexture = new Texture(PILLAR_TEX_PATH, scene, false, false)
+    pillarMat.specularColor = new Color3(0.05, 0.05, 0.05)
+
+    // glTF UVs - invertY off, same as every other glb texture in this project
+    const stoneMat = new StandardMaterial("graveyardStoneMat", scene)
+    stoneMat.diffuseTexture = new Texture(GRAVESTONES_TEX_PATH, scene, false, false)
+    stoneMat.specularColor = new Color3(0.05, 0.05, 0.05)
+
+    const [[pillar], stones] = await Promise.all([
+        loadMergedMasters(scene, PILLAR_PATH, false),
+        loadMergedMasters(scene, GRAVESTONES_PATH, true),
+    ])
+    pillar.mesh.name = "graveyard_pillar_master"
+    pillar.mesh.material = pillarMat
+
+    // each stone baked into world space on its own, so every master sits
+    // base-down on y:0 at the origin, ready to instance
+    const stoneMasters = stones.map(({ sourceName, mesh }) => {
+        mesh.name = `graveyard_${sourceName}_master`
+        mesh.material = stoneMat
+        const { minimum, maximum } = mesh.getBoundingInfo().boundingBox
         return {
-            name,
-            mesh: master,
+            name: sourceName,
+            mesh,
             height: maximum.y - minimum.y,
             // how far the base reaches from its pivot across (x) and
             // front-to-back (z) - a headstone is ~3x wider than it is deep
@@ -206,10 +216,40 @@ async function createGravestoneMasters(scene){
         }
     })
 
-    // the glb's own (untextured) material and the now-empty __root__
-    container.materials.forEach(glbMat => glbMat.dispose())
-    container.meshes[0].dispose()
+    const masters = {
+        fenceMat,
+        panelMasters: new Map(),
+        pillarMaster: pillar.mesh,
+        stoneMasters,
+        dispose(){
+            masters.panelMasters.forEach(panel => panel.dispose())
+            masters.panelMasters.clear()
+            masters.pillarMaster.dispose()
+            masters.stoneMasters.forEach(stone => stone.mesh.dispose())
+            ;[fenceMat, pillarMat, stoneMat].forEach(mat => mat.dispose(false, true))
+        },
+    }
     return masters
+}
+
+// one master per picket-gap count (the 9-gap full panel, plus whichever
+// shorter remainders the runs need), shared by every run in the scene.
+// Unit width - each instance is scaled to its real length.
+function getPanelMaster(scene, masters, gaps){
+    if(masters.panelMasters.has(gaps)) return masters.panelMasters.get(gaps)
+    const uvs = new Vector4(PANEL_U0, 0, PANEL_U0 + gaps * GAP_U, 1)
+    const panel = MeshBuilder.CreatePlane(`graveyard_fence_master_${gaps}`, {
+        width: 1,
+        height: FENCE_HEIGHT,
+        sideOrientation: Mesh.DOUBLESIDE,
+        frontUVs: uvs,
+        backUVs: uvs,
+    }, scene)
+    panel.material = masters.fenceMat
+    panel.isVisible = false
+    panel.isPickable = false
+    masters.panelMasters.set(gaps, panel)
+    return panel
 }
 
 // [lowest, highest] ground under a rectangular footprint turned by yaw - the
@@ -331,8 +371,12 @@ function pickGraveSlots(half, gateHalf, density, random, noise){
         .map(({ slot }) => slot)
 }
 
-function addGravestones(name, stoneMasters, cx, cz, half, gateHalf, graveyard, entrance, groundAt, scene, hasPhysics){
-    if(!stoneMasters.length) return
+// one build task per stone (in slot order, then the centerpiece), each
+// pushing what it made onto `track`. The slot pick and every jitter draw come
+// off one seeded random stream consumed in that same order, so the result
+// doesn't depend on how the tasks end up spread across frames.
+function planGravestones(name, stoneMasters, cx, cz, half, gateHalf, graveyard, entrance, groundAt, scene, hasPhysics, track){
+    if(!stoneMasters.length) return []
     const toWorld = LOCAL_TO_WORLD[entrance]
     const [fx, fz] = ENTRANCE_DIR[entrance]
     const facingYaw = Math.atan2(fx, fz) + STONE_FRONT_YAW
@@ -377,20 +421,29 @@ function addGravestones(name, stoneMasters, cx, cz, half, gateHalf, graveyard, e
         instance.isPickable = false
         // after rotation - a static collider bakes its pose once, at creation
         if(hasPhysics) createAggregate(instance, { mass: 0 }, "box", scene)
+        track.push(instance)
     }
 
-    pickGraveSlots(half, gateHalf, density, random, seededValueNoise(seed))
-        .forEach(slot => place(nextStone(), slot.lx, slot.lz, true))
-    place(tallest, 0, half - CENTERPIECE_BACK_MARGIN, false)
+    const tasks = pickGraveSlots(half, gateHalf, density, random, seededValueNoise(seed))
+        .map(slot => () => place(nextStone(), slot.lx, slot.lz, true))
+    tasks.push(() => place(tallest, 0, half - CENTERPIECE_BACK_MARGIN, false))
+    return tasks
 }
+
+// how much of a fence run one build step does - a whole 100-long side is
+// ~40 panels and 13 colliders, too much to fit one streaming frame's budget
+const FENCE_PANELS_PER_STEP = 10
+const FENCE_COLLIDERS_PER_STEP = 3
 
 // a straight fence run from (x1, z1) to (x2, z2) along one axis: a whole
 // number of picket gaps stretched a touch to fit exactly, plus invisible box
-// colliders covering the whole run
-function addFenceRun(name, panelMasters, x1, z1, x2, z2, groundAt, scene, hasPhysics){
+// colliders covering the whole run. Returns a STEPPED task - each call lays
+// down the next few panels (then colliders) and returns true while there's
+// more to do, so a long run can be spread across frames like everything else.
+function fenceRunTask(name, masters, x1, z1, x2, z2, groundAt, scene, hasPhysics, track){
     const alongX = z1 === z2
     const length = alongX ? Math.abs(x2 - x1) : Math.abs(z2 - z1)
-    if(length <= 0) return
+    if(length <= 0) return () => false
 
     const startX = Math.min(x1, x2)
     const startZ = Math.min(z1, z2)
@@ -409,8 +462,13 @@ function addFenceRun(name, panelMasters, x1, z1, x2, z2, groundAt, scene, hasPhy
 
     const totalGaps = Math.max(1, Math.round(length / GAP_WIDTH))
     const gapWidth = length / totalGaps
+    const segments = hasPhysics ? Math.max(1, Math.ceil(length / COLLIDER_SEGMENT)) : 0
+    const segLength = length / Math.max(1, segments)
     let placedGaps = 0
-    for(let i = 0; placedGaps < totalGaps; i++){
+    let panelIndex = 0
+    let segment = 0
+
+    function placePanel(){
         const from = placedGaps * gapWidth
         let gaps = Math.min(PANEL_GAPS, totalGaps - placedGaps)
         let [low, high] = groundRange(from, from + gaps * gapWidth, 2)
@@ -420,22 +478,20 @@ function addFenceRun(name, panelMasters, x1, z1, x2, z2, groundAt, scene, hasPhy
         }
         const width = gaps * gapWidth
         const [px, pz] = pointAt(from + width / 2)
-        const panel = getPanelMaster(scene, panelMasters, gaps).createInstance(`${name}_panel_${i}`)
+        const panel = getPanelMaster(scene, masters, gaps).createInstance(`${name}_panel_${panelIndex++}`)
         panel.scaling.x = width
         panel.position.set(px, low + FENCE_HEIGHT / 2, pz)
         if(!alongX) panel.rotation.y = Math.PI / 2
         panel.isPickable = false
+        track.push(panel)
         placedGaps += gaps
     }
 
-    if(!hasPhysics) return
-    const segments = Math.max(1, Math.ceil(length / COLLIDER_SEGMENT))
-    const segLength = length / segments
-    for(let s = 0; s < segments; s++){
-        const from = s * segLength
+    function placeCollider(){
+        const from = segment * segLength
         const [low, high] = groundRange(from, from + segLength, Math.max(2, Math.ceil(segLength / COLLIDER_SAMPLE_STEP)))
         const height = high - low + COLLIDER_HEIGHT
-        const collider = MeshBuilder.CreateBox(`${name}_collider_${s}`, {
+        const collider = MeshBuilder.CreateBox(`${name}_collider_${segment}`, {
             width: alongX ? segLength : COLLIDER_THICKNESS,
             height,
             depth: alongX ? COLLIDER_THICKNESS : segLength,
@@ -445,22 +501,38 @@ function addFenceRun(name, panelMasters, x1, z1, x2, z2, groundAt, scene, hasPhy
         collider.isVisible = false
         collider.isPickable = false
         createAggregate(collider, { mass: 0 }, "box", scene)
+        track.push(collider)
+        segment++
+    }
+
+    return () => {
+        if(placedGaps < totalGaps){
+            for(let n = 0; n < FENCE_PANELS_PER_STEP && placedGaps < totalGaps; n++) placePanel()
+            return placedGaps < totalGaps || segment < segments
+        }
+        for(let n = 0; n < FENCE_COLLIDERS_PER_STEP && segment < segments; n++) placeCollider()
+        return segment < segments
     }
 }
 
 // alongX: the fence this post belongs to runs along x - the pillar's wider
 // face (its x side) goes along the fence line either way
-function addPillar(name, pillarMaster, x, z, groundAt, alongX, scene, hasPhysics){
+function addPillar(name, pillarMaster, x, z, groundAt, alongX, scene, hasPhysics, track){
     const pillar = pillarMaster.createInstance(name)
     pillar.position.set(x, footprintGround(groundAt, x, z, PILLAR_HALF_WIDTH, PILLAR_HALF_DEPTH, alongX ? 0 : Math.PI / 2)[0], z)
     pillar.scaling.setAll(PILLAR_SCALE)
     if(!alongX) pillar.rotation.y = Math.PI / 2
     pillar.isPickable = false
     if(hasPhysics) createAggregate(pillar, { mass: 0 }, "box", scene)
+    track.push(pillar)
 }
 
-function createGraveyard(scene, graveyard, index, masters, onTerrain, hasPhysics){
-    const { panelMasters, pillarMaster, stoneMasters } = masters
+// the whole plot as an ordered list of build tasks - fence runs and posts
+// first (the outline you see from a distance), then one task per stone.
+// Everything created lands in `track`, which is what tearing the plot back
+// down disposes.
+function planGraveyard(scene, graveyard, index, masters, onTerrain, hasPhysics, track){
+    const { pillarMaster, stoneMasters } = masters
     const { position, areaSize } = graveyard
     const entrance = graveyard.entrance ?? "south"
     const half = areaSize / 2
@@ -472,6 +544,7 @@ function createGraveyard(scene, graveyard, index, masters, onTerrain, hasPhysics
         : () => flatY
     const gateHalf = Math.min(ENTRANCE_WIDTH, areaSize / 2) / 2
     const name = `graveyard_${index}`
+    const tasks = []
 
     // each side as its two corners, walked in the same direction the
     // entrance gap gets cut from: [x1, z1, x2, z2]
@@ -485,7 +558,7 @@ function createGraveyard(scene, graveyard, index, masters, onTerrain, hasPhysics
     Object.entries(sides).forEach(([side, [x1, z1, x2, z2]]) => {
         const alongX = z1 === z2
         if(side !== entrance){
-            addFenceRun(`${name}_${side}`, panelMasters, x1, z1, x2, z2, groundAt, scene, hasPhysics)
+            tasks.push(fenceRunTask(`${name}_${side}`, masters, x1, z1, x2, z2, groundAt, scene, hasPhysics, track))
             return
         }
         // split around the gap, gate posts on both sides of it
@@ -493,33 +566,180 @@ function createGraveyard(scene, graveyard, index, masters, onTerrain, hasPhysics
         const midZ = (z1 + z2) / 2
         const gapX = alongX ? gateHalf : 0
         const gapZ = alongX ? 0 : gateHalf
-        addFenceRun(`${name}_${side}_a`, panelMasters, x1, z1, midX - gapX, midZ - gapZ, groundAt, scene, hasPhysics)
-        addFenceRun(`${name}_${side}_b`, panelMasters, midX + gapX, midZ + gapZ, x2, z2, groundAt, scene, hasPhysics)
-        addPillar(`${name}_gatepost_a`, pillarMaster, midX - gapX, midZ - gapZ, groundAt, alongX, scene, hasPhysics)
-        addPillar(`${name}_gatepost_b`, pillarMaster, midX + gapX, midZ + gapZ, groundAt, alongX, scene, hasPhysics)
+        tasks.push(fenceRunTask(`${name}_${side}_a`, masters, x1, z1, midX - gapX, midZ - gapZ, groundAt, scene, hasPhysics, track))
+        tasks.push(fenceRunTask(`${name}_${side}_b`, masters, midX + gapX, midZ + gapZ, x2, z2, groundAt, scene, hasPhysics, track))
+        tasks.push(() => addPillar(`${name}_gatepost_a`, pillarMaster, midX - gapX, midZ - gapZ, groundAt, alongX, scene, hasPhysics, track))
+        tasks.push(() => addPillar(`${name}_gatepost_b`, pillarMaster, midX + gapX, midZ + gapZ, groundAt, alongX, scene, hasPhysics, track))
     })
 
     ;[[-half, -half], [half, -half], [-half, half], [half, half]].forEach(([dx, dz], i) => {
-        addPillar(`${name}_corner_${i}`, pillarMaster, cx + dx, cz + dz, groundAt, true, scene, hasPhysics)
+        tasks.push(() => addPillar(`${name}_corner_${i}`, pillarMaster, cx + dx, cz + dz, groundAt, true, scene, hasPhysics, track))
     })
 
-    addGravestones(name, stoneMasters, cx, cz, half, gateHalf, graveyard, entrance, groundAt, scene, hasPhysics)
+    tasks.push(...planGravestones(name, stoneMasters, cx, cz, half, gateHalf, graveyard, entrance, groundAt, scene, hasPhysics, track))
+    return tasks
 }
 
-// createGraveyards(scene, placeDetail.graveYards, { onTerrain }) - every
-// graveyard in the place shares the same pillar, fence panel and gravestone
-// masters. onTerrain: ground everything on the openworld terrain instead of
-// each graveyard's own flat position.y.
+// createGraveyards(scene, placeDetail.graveYards, { onTerrain }) - builds
+// every plot at once and keeps it for the scene's life (the village's one
+// small plot). onTerrain: ground everything on the openworld terrain instead
+// of each graveyard's own flat position.y. See streamGraveyards for the
+// openworld's many plots.
 export async function createGraveyards(scene, graveYards, { onTerrain = false, hasPhysics = true } = {}){
     if(!graveYards?.length) return
-    const [pillarMaster, stoneMasters] = await Promise.all([
-        createPillarMaster(scene),
-        createGravestoneMasters(scene),
-    ])
-    const masters = {
-        panelMasters: new Map(),
-        pillarMaster,
-        stoneMasters,
+    const masters = await loadGraveyardMasters(scene)
+    graveYards.forEach((graveyard, i) => {
+        // a stepped task (fence runs) returns true until it's finished
+        planGraveyard(scene, graveyard, i, masters, onTerrain, hasPhysics, []).forEach(task => { while(task()){} })
+    })
+}
+
+// streamGraveyards(scene, placeDetail.graveYards, getFocusPosition) - only
+// the plots near the player exist (see the GRAVEYARD_* constants and the
+// header comment). getFocusPosition returns the point distances are measured
+// from - the local player's body. Cleans itself up with the scene; the
+// returned handle's dispose() stops it early, and stats() reports what's
+// currently built.
+export function streamGraveyards(scene, graveYards, getFocusPosition, { onTerrain = true, hasPhysics = true } = {}){
+    if(!graveYards?.length) return null
+
+    // state: "unloaded" -> "queued" (in range, waiting for masters/its turn)
+    // -> "building" (tasks running) -> "loaded"; any of the last three
+    // goes straight back to "unloaded" once out of range
+    const plots = graveYards.map((graveyard, index) => ({
+        graveyard, index,
+        half: graveyard.areaSize / 2,
+        state: "unloaded",
+        tasks: null,
+        taskIndex: 0,
+        nodes: [],
+    }))
+
+    let masters = null
+    let mastersLoading = false
+    let idleSince = null
+    let sinceCheckMs = 0
+    let stopped = false
+
+    // player -> nearest point of the plot's square
+    const edgeDistance = (plot, pos) => {
+        const dx = Math.max(Math.abs(pos.x - plot.graveyard.position.x) - plot.half, 0)
+        const dz = Math.max(Math.abs(pos.z - plot.graveyard.position.z) - plot.half, 0)
+        return Math.hypot(dx, dz)
     }
-    graveYards.forEach((graveyard, i) => createGraveyard(scene, graveyard, i, masters, onTerrain, hasPhysics))
+
+    function unload(plot){
+        // an instance/collider's dispose takes its physics body with it
+        // (PhysicsAggregate hooks onDisposeObservable)
+        plot.nodes.forEach(node => node.dispose())
+        plot.nodes = []
+        plot.tasks = null
+        plot.taskIndex = 0
+        plot.state = "unloaded"
+    }
+
+    function ensureMasters(){
+        if(masters || mastersLoading) return
+        mastersLoading = true
+        loadGraveyardMasters(scene)
+            .then(loaded => {
+                mastersLoading = false
+                if(stopped || scene.isDisposed) return loaded.dispose()
+                masters = loaded
+            })
+            .catch(err => {
+                mastersLoading = false
+                console.warn("[graveyards] failed to load graveyard assets", err)
+            })
+    }
+
+    function check(){
+        const pos = getFocusPosition()
+        if(!pos) return
+        plots.forEach(plot => {
+            const dist = edgeDistance(plot, pos)
+            if(plot.state === "unloaded" && dist < GRAVEYARD_LOAD_DIST) plot.state = "queued"
+            else if(plot.state !== "unloaded" && dist > GRAVEYARD_UNLOAD_DIST) unload(plot)
+        })
+
+        if(plots.some(plot => plot.state !== "unloaded")){
+            idleSince = null
+            ensureMasters()
+        } else if(masters){
+            // nothing in range - hold the masters a while in case the player
+            // turns back, then free them
+            if(idleSince === null) idleSince = performance.now()
+            if(performance.now() - idleSince > GRAVEYARD_MASTERS_IDLE_MS){
+                masters.dispose()
+                masters = null
+                idleSince = null
+            }
+        }
+    }
+
+    function build(){
+        if(!masters) return
+        const pending = plots.filter(plot => plot.state === "queued" || plot.state === "building")
+        if(!pending.length) return
+        const pos = getFocusPosition()
+        if(pos) pending.sort((a, b) => edgeDistance(a, pos) - edgeDistance(b, pos)) // nearest first
+
+        const start = performance.now()
+        for(const plot of pending){
+            if(plot.state === "queued"){
+                // planning (picking every grave slot) gets a frame of its own
+                plot.tasks = planGraveyard(scene, plot.graveyard, plot.index, masters, onTerrain, hasPhysics, plot.nodes)
+                plot.taskIndex = 0
+                plot.state = "building"
+                return
+            }
+            while(plot.taskIndex < plot.tasks.length){
+                if(performance.now() - start > GRAVEYARD_BUILD_BUDGET_MS) return
+                let more = false
+                try {
+                    // a stepped task (fence runs) returns true while it has more to do
+                    more = plot.tasks[plot.taskIndex]()
+                } catch (err) {
+                    console.warn(`[graveyards] graveyard_${plot.index} build step failed`, err)
+                }
+                if(!more) plot.taskIndex++
+            }
+            plot.tasks = null
+            plot.state = "loaded"
+        }
+    }
+
+    const observer = scene.onBeforeRenderObservable.add(() => {
+        sinceCheckMs += scene.getEngine().getDeltaTime()
+        if(sinceCheckMs >= GRAVEYARD_CHECK_INTERVAL_MS){
+            sinceCheckMs = 0
+            check()
+        }
+        build()
+    })
+    check()
+
+    function stop(){
+        if(stopped) return
+        stopped = true
+        scene.onBeforeRenderObservable.remove(observer)
+        plots.forEach(unload)
+        masters?.dispose()
+        masters = null
+    }
+    // the scene takes every mesh/material with it anyway - just stop ticking
+    scene.onDisposeObservable.addOnce(() => {
+        stopped = true
+        scene.onBeforeRenderObservable.remove(observer)
+    })
+
+    return {
+        dispose: stop,
+        stats: () => ({
+            loaded: plots.filter(plot => plot.state === "loaded").map(plot => plot.index),
+            building: plots.filter(plot => plot.state === "building" || plot.state === "queued").map(plot => plot.index),
+            nodes: plots.reduce((sum, plot) => sum + plot.nodes.length, 0),
+            mastersLoaded: !!masters,
+        }),
+    }
 }

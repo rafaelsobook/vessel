@@ -15,7 +15,7 @@ import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
-import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose } from "../enemies/createEnemy"
+import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitDied, emitEnemyIsHit } from "./emits"
 import { castEnemySkill } from "../creations/skillEffects.js"
@@ -910,6 +910,22 @@ export function activateOnSocketListeners(socket){
         if (!enemy) return
         enemy._wanderTarget = { x: data.x, z: data.z }
         enemy._isMoving = true
+    })
+    // enemy eating (same tcp/index.ts interval as enemy-wander above) -
+    // holds still and plays its "eating" clip, or "idle" for a rig without
+    // one (see createEnemy.js's startEnemyEating). The server already never
+    // sends this for an enemy with a target - the _targetId/_isMoving guard
+    // here just covers this client being a beat ahead of the server on a
+    // fresh aggro or chase.
+    socket.on("enemy-eating", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        const enemy = enemiez.find(enem => enem._id === data._id)
+        if (!enemy || enemy.isDead) return
+        if (enemy._targetId || enemy._isMoving) return
+        startEnemyEating(enemy, data.duration)
     })
     socket.on("enemy-dodge", data => {
         if (!isSocketOn) return
