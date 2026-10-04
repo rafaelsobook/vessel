@@ -60,19 +60,33 @@ function particleTexturePath(name){
     return `./images/particles/${name}.${ext}`
 }
 
-export function createFireParticles(position, scene) {
+// intensity/range: the flickering light's level and reach - the defaults are
+// the fireplace's own. A fire on much darker surfaces (the dungeon's torches)
+// passes a stronger intensity; the flicker scales with it.
+export function createFireParticles(position, scene, { intensity = 1.2, range = 5 } = {}) {
     const light = new PointLight("fire_light", new Vector3(position.x, position.y + 0.6, position.z), scene)
     light.diffuse  = new Color3(1.0, 0.4, 0.1)
     light.specular = new Color3(0, 0, 0)
-    light.intensity = 1.4
-    light.range = 5
+    light.intensity = intensity
+    light.range = range
 
     let tick = 0
+    const flicker = intensity / 1.2
     scene.registerBeforeRender(() => {
         tick += 0.08
-        light.intensity = 1.2 + Math.sin(tick * 4.3) * 0.15 + Math.sin(tick * 7.1) * 0.08
+        light.intensity = intensity + (Math.sin(tick * 4.3) * 0.15 + Math.sin(tick * 7.1) * 0.08) * flicker
     })
 
+    const particles = createFireFlame(position, scene)
+    return { particles, light }
+}
+
+// Just the flame - createFireParticles' exact fire, with no PointLight of its
+// own, for a fire whose light comes from somewhere else (or that shouldn't
+// light anything). A fire that needs its own light can use createFireParticles
+// freely, however many there are - tools/lightBudget.js keeps only the 5 point
+// lights nearest the player switched on.
+export function createFireFlame(position, scene) {
     const particles = new ParticleSystem("fire", 250, scene)
     particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.webp")
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
@@ -105,7 +119,7 @@ export function createFireParticles(position, scene) {
 
     particles.start()
 
-    return { particles, light }
+    return particles
 }
 // "wreathed in flame" look for a whole body, not a single torch flame -
 // skillEffects.js's disintegrationSkill (a fire ground-trap that binds

@@ -1,4 +1,5 @@
 import { setWorldWeather } from "../components/weatherSystem.js";
+import { setDayNightState } from "../components/dayNightSystem.js";
 import { deductHp, getCharState } from "../charactersystem/characterstate"
 import { createCharacter, capsuleHeight } from "../charactersystem/createcharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
@@ -273,6 +274,10 @@ export function activateOnSocketListeners(socket){
         setWorldWeather(data.weather)
     })
 
+    // tcp's world clock (recources/dayNight.ts) - periodic resync; this client
+    // advances the time itself in between (dayNightSystem.js)
+    socket.on("daynight-sync", setDayNightState)
+
     socket.on("worldChatMessage", data => {
         if (!isSocketOn) return
         // tcp announces server-side events on this same channel with
@@ -287,7 +292,9 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, grains, struckWeapons, weather } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, grains, struckWeapons, weather, dayNight } = allDataFromServer
+        // world clock rides on every snapshot too, same reasoning as weather below
+        if(dayNight) setDayNightState(dayNight)
         // weather rides on every snapshot, not just its own "weather-changed"
         // broadcast - this handler also fires on every PLACE CHANGE, so a
         // player walking out of a dungeon into a blizzard gets the current sky

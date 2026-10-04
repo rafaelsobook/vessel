@@ -1,5 +1,12 @@
 /**
- * generateDungeon.js – v4 (fixed)
+ * generateDungeon.js – v5
+ * Changes from v4:
+ *  - floor tiles are placed by their TOP surface, so the walkable floor is at
+ *    y 0 (+ jitter) - it used to end up ~1.64 up inside the 5x-tall tile
+ *  - the boss room is a raised dais (bossRoom.elevation) with a staircase cut
+ *    into it at its one entrance - walked via an invisible ramp
+ *  - only walls that touch a floor cell are built (no buried physics bodies)
+ *  - props and room lights from the generator are drawn
  */
 
 import {
@@ -7,26 +14,55 @@ import {
     MeshBuilder,
     PhysicsAggregate,
     PhysicsShapeType,
-    PBRMaterial,
     Color3,
     PointLight,
+    HemisphericLight,
+    Light,
     Tools,
-    Texture,
     StandardMaterial
 } from '@babylonjs/core';
-import { createPBRMat } from '../tools/pbrmat';
+import { createPBRMat, createHeightBumpTexture } from '../tools/pbrmat';
+import { createFireParticles } from '../tools/particlesystem';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FLOOR_THICKNESS = 0.3;
 const FLOOR_Y         = -(FLOOR_THICKNESS / 2);
 const DEFAULT_CEIL_H  = 15;
+// walls reach this far below the floor - tile1.glb's bevelled edges dip just
+// under y 0, which left a hairline view of the void under every wall
+const WALL_FOOT       = 2;
 
-const STEP_W     = 12;
-const STEP_H     = 0.1;
-const STEP_D     = 0.40;
-const STEP_COUNT = 20;
+// Boss staircase - STEP_COUNT visible steps from the corridor floor up to the
+// dais. Rise and run per step follow bossRoom.elevation and the stair's depth
+// in cells, so they always match what the generator laid out.
+const STEP_COUNT     = 20;
+// the invisible ramp under the steps that the player actually walks on
+const RAMP_THICKNESS = 0.4;
+const RAMP_UNDERRUN  = 0.5;   // extra length past the bottom step, sunk into the floor
+// glowing archway over the foot of the stairs
+const ARCH_HEIGHT    = 7;
+const ARCH_BEAM      = 0.5;
+// torch prop - a pole with the fireplace's fire (flame + flickering light) on top
+const TORCH_HEIGHT   = 1.2;
+// the fireplace's light is 1.2 / range 5 on its room's brighter floor - these
+// dark dungeon tiles need ~4x that for the same warm pool, and range 7 reaches
+// the wall behind (torches stand 6 units out from it)
+const TORCH_LIGHT_INTENSITY = 5;
+const TORCH_LIGHT_RANGE     = 7;
 
-const STAIR_TOTAL_HEIGHT = STEP_COUNT * STEP_H;
+// Room lights - the generator's intensities (0.3 / 0.6 boss) are relative
+// values for lights ~10 units over the floor; this scales them to standard
+// (range-based) falloff, which is what spawnLight sets.
+const ROOM_LIGHT_INTENSITY = 4;
+// How many room lights exist at once. A WebGL2 fragment shader typically gets
+// only 12 uniform blocks and Babylon spends one per light on top of
+// scene/material/mesh, so a light for every room (11 lights) made every
+// dungeon material fail to compile. This pool follows the camera to the
+// nearest rooms instead - the light count never changes, so moving them
+// never recompiles a shader.
+const ROOM_LIGHT_POOL = 4;
+// hard cap on the lights any dungeon material takes, whatever else exists
+const MAX_MATERIAL_LIGHTS = 8;
 
 // ─── makePBR — props only ─────────────────────────────────────────────────────
 export function makePBR(name, cfg, scene) {
@@ -47,6 +83,10 @@ function spawnLight(id, x, y, z, cfg, scene) {
     l.diffuse = l.specular = Color3.FromHexString(cfg.color ?? "#ffffff");
     l.intensity = cfg.intensity ?? 1.0;
     l.range     = cfg.range     ?? 20;
+    // range-based falloff - PBR materials default to physical inverse-square
+    // falloff, which ignores range and fades these to nothing well before
+    // they reach the floor
+    l.falloffType = Light.FALLOFF_STANDARD;
     return l;
 }
 
@@ -59,146 +99,170 @@ function getCeilHeight(dungeon, gx, gz) {
     return DEFAULT_CEIL_H;
 }
 
-// ─── Staircase + Boss Gate ────────────────────────────────────────────────────
-function buildStaircaseAndGate(scene, dungeon, cs, wallH) {
-    const { bossRoom, stairApproach } = dungeon;
-    if (!bossRoom || !stairApproach) return;
+// ─── Boss staircase ───────────────────────────────────────────────────────────
+// The boss room's floor stands bossRoom.elevation above the rest; its one
+// entrance gets a staircase cut entrance.stairCells deep into the dais, as wide
+// as the opening. The steps are only visual: the player's collider is a box
+// that can't climb even a single 0.1 riser (Havok-tested), so an invisible ramp
+// under them at the same overall slope is what you actually walk up.
+function buildBossStairs(scene, dungeon, cs, wallH, mats) {
+    const { elevation, entrance } = dungeon.bossRoom;
+    if (!(elevation > 0) || !entrance) return;
+    const { dx, dz, cells, stairCells } = entrance;
 
-    const {
-        approachDir,
-        floorEdgeX, floorEdgeZ,
-        stairCentreX, stairCentreZ,
-        corridorWorldWidth,
-        stairBaseX, stairBaseZ,
-    } = stairApproach;
-    const { dx, dz } = approachDir;
+    // entrance.cells are the corridor cells just outside the room - the room
+    // edge is the boundary between them and the room, on the side dx/dz point to
+    const c0    = cells[0];
+    const edge  = dx > 0 ? (c0.x + 1) * cs : dx < 0 ? c0.x * cs
+                : dz > 0 ? (c0.y + 1) * cs : c0.y * cs;
+    const span  = cells.map(c => dx !== 0 ? c.y : c.x);
+    const first = Math.min(...span) * cs;
+    const last  = (Math.max(...span) + 1) * cs;
+    const width = last - first;
+    const mid   = (first + last) / 2;
+    const run   = stairCells * cs;
+    // world point s units into the room from the edge, centred on the opening
+    const at = (s, y) => dx !== 0 ? new Vector3(edge + dx * s, y, mid) : new Vector3(mid, y, edge + dz * s);
 
-    const stepW    = corridorWorldWidth;
-    const totalRun = STEP_COUNT * STEP_D;
-
-    const stepMat = makePBR("mat_stair_step", { albedoColor: "#3a3030", roughness: 0.75, metallic: 0.1 }, scene);
-    const rimMat  = makePBR("mat_stair_rim",  { albedoColor: "#6a4020", emissiveColor: "#3a1800", emissiveIntensity: 0.4, roughness: 0.5, metallic: 0.3 }, scene);
-    const gateMat = makePBR("mat_boss_gate",  { albedoColor: "#1a0505", emissiveColor: "#cc2200", emissiveIntensity: 1.5, roughness: 0.2, metallic: 0.9 }, scene);
-
+    // visible steps - solid from the floor up, so there's no gap under them.
+    // One hidden unit box per step material; every step is an instance of it
+    // scaled to its size, so the 20 steps cost 2 draw calls instead of 20.
+    const stepTemplates = [mats.step, mats.rim].map((mat, i) => {
+        const tpl = MeshBuilder.CreateBox(`_tpl_stair_step_${i}`, { size: 1 }, scene);
+        tpl.material = mat;
+        tpl.isVisible = false;
+        tpl.isPickable = false;
+        return tpl;
+    });
+    const stepD = run / STEP_COUNT;
+    const stepH = elevation / STEP_COUNT;
     for (let i = 0; i < STEP_COUNT; i++) {
-        const distFromEdge = totalRun - i * STEP_D - STEP_D / 2;
-        const stepX = dz !== 0 ? stairCentreX : floorEdgeX - dx * distFromEdge;
-        const stepZ = dx !== 0 ? stairCentreZ : floorEdgeZ - dz * distFromEdge;
-        const stepY = i * STEP_H + STEP_H / 2;
-
-        const step = MeshBuilder.CreateBox(`stair_step_${i}`, {
-            width:  dz !== 0 ? stepW  : STEP_D,
-            height: STEP_H,
-            depth:  dx !== 0 ? stepW  : STEP_D,
-        }, scene);
-        step.position = new Vector3(stepX, stepY, stepZ);
-        step.material = i % 2 === 0 ? stepMat : rimMat;
-        new PhysicsAggregate(step, PhysicsShapeType.BOX, { mass: 0 }, scene);
+        const top  = (i + 1) * stepH;
+        const step = stepTemplates[i % 2].createInstance(`stair_step_${i}`);
+        step.scaling.set(dx !== 0 ? stepD : width, top, dx !== 0 ? width : stepD);
+        step.position = at((i + 0.5) * stepD, top / 2);
+        step.isPickable = false;
+        step.freezeWorldMatrix();
     }
 
-    // spawnLight("light_stair_base",
-    //     dz !== 0 ? stairCentreX : stairBaseX,
-    //     1.5,
-    //     dx !== 0 ? stairCentreZ : stairBaseZ,
-    //     { color: "#ff4400", intensity: 0.5, range: 14 }, scene);
-
-    const landingX = dz !== 0 ? stairCentreX : floorEdgeX + dx * (cs / 2);
-    const landingZ = dx !== 0 ? stairCentreZ : floorEdgeZ + dz * (cs / 2);
-    const landingMat = makePBR("mat_landing", { albedoColor: "#3a1a1a", roughness: 0.6, metallic: 0.1 }, scene);
-    const landing = MeshBuilder.CreateBox("boss_landing", {
-        width:  dz !== 0 ? stepW : cs,
-        height: FLOOR_THICKNESS,
-        depth:  dx !== 0 ? stepW : cs,
+    // the walkable ramp: its top face runs from the edge at floor level to
+    // the dais at the far end. Local +z points up the slope - yawed onto
+    // dx/dz, pitched up by -slope (positive rotation.x tips +z downward).
+    const slope = Math.atan2(elevation, run);
+    const up     = new Vector3(dx * Math.cos(slope), Math.sin(slope), dz * Math.cos(slope));
+    const normal = new Vector3(-dx * Math.sin(slope), Math.cos(slope), -dz * Math.sin(slope));
+    const ramp = MeshBuilder.CreateBox("stair_ramp", {
+        width:  width,
+        height: RAMP_THICKNESS,
+        depth:  Math.hypot(run, elevation) + RAMP_UNDERRUN,
     }, scene);
-    landing.position = new Vector3(landingX, STAIR_TOTAL_HEIGHT + FLOOR_Y, landingZ);
-    landing.material = landingMat;
-    new PhysicsAggregate(landing, PhysicsShapeType.BOX, { mass: 0 }, scene);
+    ramp.rotation = new Vector3(-slope, Math.atan2(dx, dz), 0);
+    ramp.position = at(run / 2, elevation / 2)
+        .subtract(normal.scale(RAMP_THICKNESS / 2))
+        .subtract(up.scale(RAMP_UNDERRUN / 2));
+    ramp.isVisible = false;
+    ramp.isPickable = false;
+    const rampAggregate = new PhysicsAggregate(ramp, PhysicsShapeType.BOX, { mass: 0 }, scene);
+    rampAggregate.shape.material = { restitution: 0, friction: 1 };
 
-    const gateX = dz !== 0 ? stairCentreX : floorEdgeX + dx * cs;
-    const gateZ = dx !== 0 ? stairCentreZ : floorEdgeZ + dz * cs;
-    const gateY = STAIR_TOTAL_HEIGHT;
-    const gateW = corridorWorldWidth;
-    const gateH = wallH;
-
-    const gate = MeshBuilder.CreateBox("boss_gate", {
-        width:  dz !== 0 ? gateW : 0.3,
-        height: gateH,
-        depth:  dx !== 0 ? gateW : 0.3,
-    }, scene);
-    gate.position = new Vector3(gateX, gateY + gateH / 2, gateZ);
-    gate.material = gateMat;
-    new PhysicsAggregate(gate, PhysicsShapeType.BOX, { mass: 0 }, scene);
-
-    // spawnLight("light_boss_gate", gateX, gateY + gateH * 0.6, gateZ,
-    //     { color: "#ff1100", intensity: 1.2, range: 20 }, scene);
-
-    const sealMat   = makePBR("mat_gate_seal", { albedoColor: "#1a0808", roughness: 0.7, metallic: 0.15 }, scene);
-    const sealH     = wallH + STAIR_TOTAL_HEIGHT;
-    const sealHalfW = gateW / 2 + cs / 2;
-
-    [1, -1].forEach((side, fi) => {
-        const sx = dz !== 0 ? gateX + side * sealHalfW : gateX;
-        const sz = dx !== 0 ? gateZ + side * sealHalfW : gateZ;
-
-        const seal = MeshBuilder.CreateBox(`gate_seal_${fi}`, {
-            width:  cs,
-            height: sealH,
-            depth:  cs,
-        }, scene);
-        seal.position = new Vector3(sx, sealH / 2, sz);
-        seal.material = sealMat;
-        new PhysicsAggregate(seal, PhysicsShapeType.BOX, { mass: 0 }, scene);
-
-        // spawnLight(`light_gate_seal_${fi}`, sx, gateY + 2, sz,
-        //     { color: "#ff3300", intensity: 0.5, range: 8 }, scene);
+    // archway straddling the edge - the old sealed boss gate's look, opened
+    // up. Posts stand in the opening's two edges (solid), the beam is
+    // overhead, out of reach.
+    const postTemplate = MeshBuilder.CreateBox("_tpl_boss_gate_post", { width: ARCH_BEAM, height: ARCH_HEIGHT, depth: ARCH_BEAM }, scene);
+    postTemplate.material = mats.gate;
+    postTemplate.isVisible = false;
+    postTemplate.isPickable = false;
+    [first + ARCH_BEAM / 2, last - ARCH_BEAM / 2].forEach((p, i) => {
+        const post = postTemplate.createInstance(`boss_gate_post_${i}`);
+        post.position = dx !== 0 ? new Vector3(edge, ARCH_HEIGHT / 2, p) : new Vector3(p, ARCH_HEIGHT / 2, edge);
+        post.freezeWorldMatrix();
+        new PhysicsAggregate(post, PhysicsShapeType.BOX, { mass: 0 }, scene);
     });
+    const beam = MeshBuilder.CreateBox("boss_gate", {
+        width:  dx !== 0 ? ARCH_BEAM : width,
+        height: ARCH_BEAM,
+        depth:  dx !== 0 ? width : ARCH_BEAM,
+    }, scene);
+    beam.position = at(0, ARCH_HEIGHT + ARCH_BEAM / 2);
+    beam.material = mats.gate;
+    beam.isPickable = false;
+
+    // the boss room's ceiling sits `elevation` higher than the corridor's, so
+    // above the opening there'd be a slot open to the void between the two -
+    // filled with wall from the corridor's wall top to the raised ceiling
+    const header = MeshBuilder.CreateBox("boss_entrance_header", {
+        width:  dx !== 0 ? cs / 2 : width,
+        height: elevation + FLOOR_THICKNESS,
+        depth:  dx !== 0 ? width : cs / 2,
+    }, scene);
+    header.position = at(0, wallH + (elevation + FLOOR_THICKNESS) / 2);
+    header.material = mats.wall;
+    header.isPickable = false;
+    header.freezeWorldMatrix();
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
+// matOverrides: optional { wall, floor, bossFloor, ceiling } materials to use
+// instead of the defaults built below.
+// Returns { floorTopY } - the walkable surface height of an un-jittered floor
+// tile, for callers that need to stand something on the floor.
 export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = null, tileTemplate = null) {
     const { grid } = dungeon.layout;
     const cs       = dungeon.layout.cellSize;
     const wallH    = dungeon.walls.height;
 
-    const { wallTexName, floorTexName, ceilingTexName } = dungeon.textures;
+    // dungeon.textures.ceilingTexName has no texture files behind it (there is
+    // no images/textures/ceilings folder), so the ceiling stays a plain colour.
+    // textures can be null (tcp's placesMD dungeon) - fall back to placeId 12's.
+    // floorBumpHeightMap (optional): a grey height-map image to use as the floor's
+    // bump instead of floors/<floorTexName>_normal.jpg - see createHeightBumpTexture
+    const { wallTexName = "wall1", floorTexName = "floor1", floorBumpHeightMap } = dungeon.textures ?? {};
 
     // ── Single material per surface type ──────────────────────────────────────
-    const wallMat  = createPBRMat("walls",wallTexName, scene, {}, new Color3(0.07, 0.11, 0.09));
-    const floorMat = createPBRMat("floors",floorTexName, scene, {}, new Color3(0.12, 0.18, 0.14));
+    // the floor's bump is built once and shared by both floor materials, so it's
+    // one texture on the GPU rather than two (undefined = the default normal map)
+    const floorBump = floorBumpHeightMap ? createHeightBumpTexture(floorBumpHeightMap, scene) : undefined;
+    const wallMat  = matOverrides.wall  ?? createPBRMat("walls",wallTexName, scene, { uScale: 2, vScale: 10}, new Color3(0.07, 0.11, 0.09));
+    const floorMat = matOverrides.floor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump }, new Color3(0.12, 0.18, 0.14));
+    // the generator's own boss_room floor colour, so the dais reads as its own place
+    const bossFloorColor = dungeon.rooms.find(r => r.type === "boss_room")?.pbr?.floor?.albedoColor ?? "#3a1a1a";
+    const bossFloorMat = matOverrides.bossFloor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump }, Color3.FromHexString(bossFloorColor));
 
-    const ceilMat = new StandardMaterial("mat_ceil", scene);
-    ceilMat.albedoColor       = Color3.FromHexString("#080808");
-    ceilMat.roughness         = 1;
-    ceilMat.metallic          = 0;
-    ceilMat.environmentIntensity = 0.05;
+    // StandardMaterial has no albedoColor/roughness/metallic - setting those
+    // did nothing and left the ceiling Babylon's default white
+    let ceilMat = matOverrides.ceiling;
+    if (!ceilMat) {
+        ceilMat = new StandardMaterial("mat_ceil", scene);
+        ceilMat.diffuseColor  = Color3.FromHexString("#080808");
+        ceilMat.specularColor = Color3.Black();
+    }
 
-    const bossRoom = dungeon.rooms.find(r => r.type === "boss_room");
-
+    // ── Boss dais ──────────────────────────────────────────────────────────────
+    const boss      = dungeon.bossRoom;
+    const elevation = boss?.elevation ?? 0;
     function isInBossRoom(gx, gz) {
-        if (!bossRoom) return false;
-        const { x, y, width, height } = bossRoom.bounds;
-        return gx >= x && gx < x+width && gz >= y && gz < y+height;
+        if (!boss) return false;
+        return gx >= boss.gridX && gx < boss.gridX + boss.width && gz >= boss.gridY && gz < boss.gridY + boss.height;
     }
-
-    const BOSS_ELEVATION = STAIR_TOTAL_HEIGHT;
-
-    // Pre-build boss wall key set
-    const bossWallKeys = new Set();
-    if (bossRoom) {
-        const { x: bx, y: by, width: bw, height: bh } = bossRoom.bounds;
-        for (let gz = 0; gz < grid.length; gz++) {
-            for (let gx = 0; gx < grid[gz].length; gx++) {
-                if (grid[gz][gx] !== 0) continue;
-                const neighbours = [[gx-1,gz],[gx+1,gz],[gx,gz-1],[gx,gz+1]];
-                for (const [nx, nz] of neighbours) {
-                    if (nx >= bx && nx < bx+bw && nz >= by && nz < by+bh) {
-                        bossWallKeys.add(`${gx}_${gz}`);
-                        break;
-                    }
-                }
-            }
-        }
+    // cells the staircase is cut into - they stay at floor level
+    const stairKeys = new Set();
+    if (elevation > 0 && boss.entrance) {
+        const { dx, dz, cells, stairCells } = boss.entrance;
+        cells.forEach(c => {
+            for (let k = 1; k <= stairCells; k++) stairKeys.add(`${c.x + dx * k}_${c.y + dz * k}`);
+        });
     }
+    const isDais = (gx, gz) => elevation > 0 && isInBossRoom(gx, gz) && !stairKeys.has(`${gx}_${gz}`);
+
+    // walls with any floor (or boss room) cell around them, diagonals included
+    // - everything else is buried in solid rock, never seen or touched
+    function nearCell(gx, gz, test) {
+        for (let oz = -1; oz <= 1; oz++)
+            for (let ox = -1; ox <= 1; ox++)
+                if ((ox || oz) && test(gx + ox, gz + oz)) return true;
+        return false;
+    }
+    const isFloor = (gx, gz) => grid[gz]?.[gx] !== undefined && grid[gz][gx] !== 0;
 
     // ── Single wall template ───────────────────────────────────────────────────
     const wallTemplate = MeshBuilder.CreateBox("_tpl_wall", { width: cs, height: wallH, depth: cs }, scene);
@@ -206,14 +270,20 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     wallTemplate.isVisible = false;
 
     // ── Floor template — GLB tile or simple box ────────────────────────────────
-    let floorTemplate;
+    // floorTemplateTop: height of the template's top face above its own
+    // origin, so every tile can be placed by its top surface
+    let floorTemplate, floorTemplateTop;
     if (tileTemplate) {
         const bbox  = tileTemplate.getBoundingInfo().boundingBox;
         const tileW = (bbox.maximum.x - bbox.minimum.x) || 1;
         const tileD = (bbox.maximum.z - bbox.minimum.z) || 1;
         tileTemplate.scaling   = new Vector3(cs / tileW, 5, cs / tileD);
+        // loadModel's setParent(null) bakes a 180° Z flip into the tile (it
+        // only came out upright because every instance reset its rotation)
+        tileTemplate.rotationQuaternion = null;
         tileTemplate.isVisible = false;
         tileTemplate.isPickable = false;
+        floorTemplateTop = bbox.maximum.y * tileTemplate.scaling.y;
 
         // Apply floorMat to the GLB root and all child meshes
         tileTemplate.material = floorMat;
@@ -227,6 +297,22 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
         floorTemplate = MeshBuilder.CreateBox("_tpl_floor", { width: cs, height: FLOOR_THICKNESS, depth: cs }, scene);
         floorTemplate.material = floorMat;
         floorTemplate.isVisible = false;
+        floorTemplateTop = -FLOOR_Y;
+    }
+    const bossFloorTemplate = floorTemplate.clone("_tpl_boss_floor");
+    bossFloorTemplate.material = bossFloorMat;
+    bossFloorTemplate.getChildMeshes?.().forEach(child => child.material = bossFloorMat);
+    bossFloorTemplate.isVisible = false;
+
+    // fills the dais from the dungeon floor up under its raised tiles - the
+    // tiles alone leave a gap below them. Inset a hair so its sides never
+    // z-fight with the tile sides above.
+    const plinthTemplate = elevation > 0
+        ? MeshBuilder.CreateBox("_tpl_dais_plinth", { width: cs - 0.02, height: elevation, depth: cs - 0.02 }, scene)
+        : null;
+    if (plinthTemplate) {
+        plinthTemplate.material = bossFloorMat;
+        plinthTemplate.isVisible = false;
     }
 
     // ── Single ceiling template ────────────────────────────────────────────────
@@ -234,41 +320,37 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     ceilTemplate.material = ceilMat;
     ceilTemplate.isVisible = false;
 
-    let wallCount = 0, floorCount = 0, ceilCount = 0;
+    let wallCount = 0, floorCount = 0, ceilCount = 0, plinthCount = 0;
 
     for (let gz = 0; gz < grid.length; gz++) {
         for (let gx = 0; gx < grid[gz].length; gx++) {
             const cell   = grid[gz][gx];
             const cx     = worldX(gx, cs);
             const cz     = worldZ(gz, cs);
-            const inBoss = isInBossRoom(gx, gz);
 
             if (cell === 0) {
                 // Wall cell
-                const isBossWall = bossWallKeys.has(`${gx}_${gz}`);
-                const elev = isBossWall ? BOSS_ELEVATION : 0;
+                if (!nearCell(gx, gz, isFloor)) continue;
+                // around the boss room the walls run from the dungeon floor all
+                // the way up past the dais' raised ceiling - no gap under or over
+                const top = elevation > 0 && nearCell(gx, gz, isInBossRoom) ? wallH + elevation : wallH;
+                const h   = top + WALL_FOOT;
                 const inst = wallTemplate.createInstance(`wall_${wallCount++}`);
-                inst.position = new Vector3(cx, elev + wallH / 2, cz);
+                inst.scaling.y = h / wallH;
+                inst.position = new Vector3(cx, top - h / 2, cz);
                 inst.freezeWorldMatrix();
                 new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
                 continue;
             }
 
             // Floor + ceiling cell
-            const elev = inBoss ? 0 : 0;
+            const inBoss = isInBossRoom(gx, gz);
+            const elev   = isDais(gx, gz) ? elevation : 0;
 
-            // Floor instance
-            const fi = floorTemplate.createInstance(`floor_${floorCount++}`);
+            // Floor instance - top surface at elev + jitter
+            const fi = (inBoss ? bossFloorTemplate : floorTemplate).createInstance(`floor_${floorCount++}`);
             const tileJitter = dungeon.tileHeights?.[`${gx}_${gz}`] ?? 0;
-
-            if (tileTemplate) {
-                const bbox  = tileTemplate.getBoundingInfo().boundingBox;
-                const halfH = ((bbox.maximum.y - bbox.minimum.y) / 2) || 0.05;
-                fi.position = new Vector3(cx, elev - halfH + tileJitter, cz);
-            } else {
-                fi.position = new Vector3(cx, elev + FLOOR_Y + tileJitter, cz);
-            }
-            fi.rotationQuaternion = null
+            fi.position = new Vector3(cx, elev + tileJitter - floorTemplateTop, cz);
             fi.freezeWorldMatrix();
 
             const fiAggregate = new PhysicsAggregate(fi, PhysicsShapeType.BOX, { mass: 0 }, scene);
@@ -276,133 +358,213 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 restitution: 0,    // no bounciness
                 friction: 1,     // moderate friction for better ground control
             }
-            // Ceiling instance
-            const ch = getCeilHeight(dungeon, gx, gz);
+
+            if (elev > 0) {
+                const pl = plinthTemplate.createInstance(`dais_plinth_${plinthCount++}`);
+                pl.position = new Vector3(cx, elevation / 2, cz);
+                pl.freezeWorldMatrix();
+            }
+
+            // Ceiling instance - the whole boss room's ceiling is raised with its dais
+            const ch = getCeilHeight(dungeon, gx, gz) + (inBoss ? elevation : 0);
             const ci = ceilTemplate.createInstance(`ceil_${ceilCount++}`);
-            ci.position = new Vector3(cx, elev + ch + FLOOR_THICKNESS / 2, cz);
+            ci.position = new Vector3(cx, ch + FLOOR_THICKNESS / 2, cz);
             ci.freezeWorldMatrix();
         }
     }
 
+    // ── Scene lights ───────────────────────────────────────────────────────────
+    // ambient first: a mesh with the default 4-light cap (the player, other
+    // characters) takes the scene's lights in creation order, so this one
+    // always makes the cut
+    const ambient = dungeon.lighting?.ambient;
+    if (ambient) {
+        const hemi = new HemisphericLight("dungeon_ambient", new Vector3(0, 1, 0), scene);
+        hemi.intensity   = ambient.intensity;
+        hemi.diffuse     = Color3.FromHexString(ambient.color);
+        hemi.groundColor = Color3.FromHexString(ambient.color);
+        hemi.specular    = Color3.Black();
+    }
+    // one entry per room (generator's placeLights) - only ROOM_LIGHT_POOL of
+    // them are lit at a time, the ones nearest whatever the camera looks at
+    const roomLights = (dungeon.lighting?.lights ?? []).filter(cfg => cfg.type === "point").map(cfg => ({
+        position:  new Vector3(cfg.x * cs, cfg.y, cfg.z * cs),
+        color:     Color3.FromHexString(cfg.color ?? "#ffffff"),
+        intensity: cfg.intensity * ROOM_LIGHT_INTENSITY,
+        range:     cfg.range * cs,
+    }));
+    const pool = roomLights.slice(0, ROOM_LIGHT_POOL).map((room, i) =>
+        spawnLight(`room_light_${i}`, room.position.x, room.position.y, room.position.z, {}, scene));
+    if (pool.length) {
+        const slotRoom = pool.map(() => null);
+        const showRoom = (i, room) => {
+            const l = pool[i];
+            l.position.copyFrom(room.position);
+            l.diffuse.copyFrom(room.color);
+            l.specular.copyFrom(room.color);
+            l.intensity = room.intensity;
+            l.range     = room.range;
+            slotRoom[i] = room;
+        };
+        const lightNearestRooms = () => {
+            const camera = scene.activeCamera;
+            if (!camera) return;
+            // an ArcRotateCamera's target is the player it orbits
+            const focus = camera.getTarget?.() ?? camera.position;
+            const nearest = roomLights
+                .map(room => ({ room, d: Vector3.DistanceSquared(room.position, focus) }))
+                .sort((a, b) => a.d - b.d)
+                .slice(0, pool.length)
+                .map(e => e.room);
+            // nearest room in slot 0, next in slot 1... - meshes with the
+            // default 4-light cap (the player, NPCs) take lights in creation
+            // order, so after the directional and ambient they get the two
+            // closest rooms. The dungeon's own materials take the whole pool,
+            // so shuffling slots never changes what the walls show.
+            nearest.forEach((room, i) => { if (slotRoom[i] !== room) showRoom(i, room); });
+        };
+        lightNearestRooms();
+        let frame = 0;
+        scene.onBeforeRenderObservable.add(() => {
+            if (++frame % 15 === 0) lightNearestRooms();
+        });
+    }
+
     // ── Props ──────────────────────────────────────────────────────────────────
+    // After the scene lights on purpose: a mesh with the default 4-light cap (the
+    // player, other characters) takes the scene's lights in creation order, and
+    // the ambient + room lights have to come before the torches' own lights.
+    //
+    // Each prop shape is ONE hidden source mesh, built the first time a prop
+    // needs it; every prop of that shape is an instance of it - one draw call
+    // per shape instead of one per prop. An instance always draws with its
+    // source's material (setting one on the instance itself does nothing), so
+    // the material lives on the template.
+    // Static (mass 0): every client simulates its own copy of the dungeon, so a
+    // barrel one player knocks over would stay upright for everyone else.
+    const propTemplates = new Map();
+    const propInstance = (shape, name, buildTemplate) => {
+        let tpl = propTemplates.get(shape);
+        if (!tpl) {
+            tpl = buildTemplate();
+            tpl.isVisible = false;
+            tpl.isPickable = false;
+            propTemplates.set(shape, tpl);
+        }
+        return tpl.createInstance(name);
+    };
+    const cylinderTemplate = (name, options, color, emissive) => () => {
+        const tpl = MeshBuilder.CreateCylinder(name, options, scene);
+        tpl.material = makePBR(`mat${name}`, { albedoColor: color, emissiveColor: emissive }, scene);
+        return tpl;
+    };
+    // positions a prop instance (uniform scale) and freezes it - it never moves
+    const settle = (inst, x, y, z, rotY = 0, scale = 1) => {
+        inst.position.set(x, y, z);
+        inst.rotation.y = rotY;
+        inst.scaling.setAll(scale);
+        inst.freezeWorldMatrix();
+        return inst;
+    };
+
     dungeon.props?.forEach(prop => {
         const px   = worldX(prop.x, cs);
         const pz   = worldZ(prop.y, cs);
+        // standing on the tile's own surface, raised slab or dais included
+        const py   = (isDais(prop.x, prop.y) ? elevation : 0) + (dungeon.tileHeights?.[`${prop.x}_${prop.y}`] ?? 0);
         const sc   = prop.scale ?? 1.0;
-        const pMat = prop.pbr ? makePBR(`pmat_${prop.id}`, prop.pbr, scene) : null;
+        const rotY = Tools.ToRadians(prop.rotation ?? 0);
 
-        // switch (prop.type) {
-        //     case "torch": {
-        //         const poleMat  = makePBR("mat_tpole",  { albedoColor: "#4a2a10", roughness: 0.8,  metallic: 0.05 }, scene);
-        //         const flameMat = makePBR("mat_tflame", { albedoColor: "#ff6600", emissiveColor: "#ff4400", emissiveIntensity: 3.0, roughness: 0.4, metallic: 0.0 }, scene);
-        //         const pole  = MeshBuilder.CreateCylinder(`${prop.id}_pole`,  { height: 1.2, diameter: 0.1 }, scene);
-        //         const flame = MeshBuilder.CreateSphere  (`${prop.id}_flame`, { diameter: 0.3 }, scene);
-        //         pole.position  = new Vector3(px, 0.6,  pz);
-        //         flame.position = new Vector3(px, 1.35, pz);
-        //         pole.material  = poleMat;
-        //         flame.material = flameMat;
-        //         spawnLight(`light_${prop.id}`, px, 1.5, pz, { color: "#ff8844", intensity: 0.7, range: 12 }, scene);
-        //         break;
-        //     }
-        //     case "barrel": {
-        //         const mat = pMat ?? makePBR("mat_barrel", { albedoColor: "#5c3317", roughness: 0.75, metallic: 0.05 }, scene);
-        //         const h   = 1.5 * sc;
-        //         const b   = MeshBuilder.CreateCylinder(prop.id, { height: h, diameter: 0.8 * sc }, scene);
-        //         b.position   = new Vector3(px, h / 2, pz);
-        //         b.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
-        //         b.material   = mat;
-        //         new PhysicsAggregate(b, PhysicsShapeType.CYLINDER, { mass: 10 }, scene);
-        //         break;
-        //     }
-        //     case "chest":
-        //     case "ancient_chest": {
-        //         const mat = pMat ?? makePBR("mat_chest", { albedoColor: "#8b6914", roughness: 0.4, metallic: 0.6 }, scene);
-        //         const W = 1.0*sc, H = 0.8*sc, D = 0.6*sc;
-        //         const c = MeshBuilder.CreateBox(prop.id, { width: W, height: H, depth: D }, scene);
-        //         c.position   = new Vector3(px, H / 2, pz);
-        //         c.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
-        //         c.material   = mat;
-        //         new PhysicsAggregate(c, PhysicsShapeType.BOX, { mass: 20 }, scene);
-        //         break;
-        //     }
-        //     case "crystal_cluster": {
-        //         const mat = pMat ?? makePBR("mat_ccluster", { albedoColor: "#4488ff", emissiveColor: "#2244dd", emissiveIntensity: 2.0, roughness: 0.05, metallic: 0.7 }, scene);
-        //         [
-        //             { h: 1.8*sc, d: 0.28*sc, ox: 0,        oz: 0,        rz: 0   },
-        //             { h: 1.2*sc, d: 0.18*sc, ox:  0.25*sc, oz:  0.10*sc, rz: 10  },
-        //             { h: 1.0*sc, d: 0.15*sc, ox: -0.20*sc, oz:  0.15*sc, rz: -10 },
-        //         ].forEach((s, i) => {
-        //             const m = MeshBuilder.CreateCylinder(`${prop.id}_s${i}`, {
-        //                 height: s.h, diameterTop: 0, diameterBottom: s.d, tessellation: 6
-        //             }, scene);
-        //             m.position   = new Vector3(px + s.ox, s.h / 2, pz + s.oz);
-        //             m.rotation.y = Tools.ToRadians((prop.rotation ?? 0) + i * 25);
-        //             m.rotation.z = Tools.ToRadians(s.rz);
-        //             m.material   = mat;
-        //         });
-        //         if (prop.pbr?.emissiveIntensity > 1.0)
-        //             spawnLight(`light_${prop.id}`, px, 1.2*sc, pz,
-        //                 { color: prop.pbr.emissiveColor ?? "#4466ff", intensity: prop.pbr.emissiveIntensity * 0.25, range: 12*sc }, scene);
-        //         break;
-        //     }
-        //     case "crystal_pillar": {
-        //         const mat = pMat ?? makePBR("mat_cpillar", { albedoColor: "#44aaff", emissiveColor: "#1166dd", emissiveIntensity: 2.5, roughness: 0.04, metallic: 0.7 }, scene);
-        //         const ph  = 3.5 * sc;
-        //         const p   = MeshBuilder.CreateCylinder(`${prop.id}_body`, {
-        //             height: ph, diameterTop: 0.12*sc, diameterBottom: 0.38*sc, tessellation: 7
-        //         }, scene);
-        //         p.position   = new Vector3(px, ph / 2, pz);
-        //         p.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
-        //         p.material   = mat;
-        //         new PhysicsAggregate(p, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
-        //         const tip = MeshBuilder.CreateSphere(`${prop.id}_tip`, { diameter: 0.45*sc }, scene);
-        //         tip.position = new Vector3(px, ph + 0.2*sc, pz);
-        //         tip.material = mat;
-        //         spawnLight(`light_${prop.id}`, px, ph + 0.3*sc, pz,
-        //             { color: prop.pbr?.emissiveColor ?? "#4488ff", intensity: (prop.pbr?.emissiveIntensity ?? 2.5) * 0.35, range: 18*sc }, scene);
-        //         break;
-        //     }
-        //     case "stalagmite": {
-        //         const mat = pMat ?? makePBR("mat_stalagmite", { albedoColor: "#222228", roughness: 0.88, metallic: 0.02 }, scene);
-        //         const h   = 1.6 * sc;
-        //         const s   = MeshBuilder.CreateCylinder(prop.id, { height: h, diameterTop: 0.04*sc, diameterBottom: 0.3*sc, tessellation: 6 }, scene);
-        //         s.position   = new Vector3(px, h / 2, pz);
-        //         s.rotation.y = Tools.ToRadians(prop.rotation ?? 0);
-        //         s.material   = mat;
-        //         new PhysicsAggregate(s, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
-        //         break;
-        //     }
-        //     default:
-        //         console.warn(`[generateDungeon] Unknown prop type: "${prop.type}"`);
-        // }
+        switch (prop.type) {
+            case "torch": {
+                const pole = propInstance("torch_pole", `${prop.id}_pole`,
+                    cylinderTemplate("_tpl_torch_pole", { height: TORCH_HEIGHT, diameter: 0.1 }, "#4a2a10"));
+                settle(pole, px, py + TORCH_HEIGHT / 2, pz);
+                // the fireplace's own fire (placeId 10) - flame AND its
+                // flickering light - on the pole top (createFireParticles puts
+                // the flame 0.25 and the light 0.6 above the position it's
+                // given). A light per torch is fine: tools/lightBudget.js keeps
+                // only the 5 point lights nearest the player switched on.
+                const { light } = createFireParticles(new Vector3(px, py + TORCH_HEIGHT - 0.25, pz), scene,
+                    { intensity: TORCH_LIGHT_INTENSITY, range: TORCH_LIGHT_RANGE });
+                // range-based falloff, as the fireplace gets on its room's
+                // StandardMaterials - on these PBR floors the default physical
+                // (inverse-square) falloff left only a faint smudge of its glow
+                light.falloffType = Light.FALLOFF_STANDARD;
+                break;
+            }
+            case "barrel": {
+                const barrel = propInstance("barrel", prop.id,
+                    cylinderTemplate("_tpl_barrel", { height: 1.5, diameter: 0.8 }, "#5c3317"));
+                settle(barrel, px, py + 1.5 * sc / 2, pz, rotY, sc);
+                new PhysicsAggregate(barrel, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+                break;
+            }
+            case "chest":
+            case "ancient_chest": {
+                const chest = propInstance("chest", prop.id, () => {
+                    const tpl = MeshBuilder.CreateBox("_tpl_chest", { width: 1.0, height: 0.8, depth: 0.6 }, scene);
+                    tpl.material = makePBR("mat_chest", { albedoColor: "#8b6914" }, scene);
+                    return tpl;
+                });
+                settle(chest, px, py + 0.8 * sc / 2, pz, rotY, sc);
+                new PhysicsAggregate(chest, PhysicsShapeType.BOX, { mass: 0 }, scene);
+                break;
+            }
+            case "crystal_cluster": {
+                // three shards of one unit cone, each scaled to its own size
+                [
+                    { h: 1.8*sc, d: 0.28*sc, ox: 0,        oz: 0,        rz: 0   },
+                    { h: 1.2*sc, d: 0.18*sc, ox:  0.25*sc, oz:  0.10*sc, rz: 10  },
+                    { h: 1.0*sc, d: 0.15*sc, ox: -0.20*sc, oz:  0.15*sc, rz: -10 },
+                ].forEach((s, i) => {
+                    const shard = propInstance("crystal_shard", `${prop.id}_s${i}`,
+                        cylinderTemplate("_tpl_crystal_shard", { height: 1, diameterTop: 0, diameterBottom: 1, tessellation: 6 }, "#4488ff", "#2244dd"));
+                    shard.position.set(px + s.ox, py + s.h / 2, pz + s.oz);
+                    shard.rotation.set(0, Tools.ToRadians((prop.rotation ?? 0) + i * 25), Tools.ToRadians(s.rz));
+                    shard.scaling.set(s.d, s.h, s.d);
+                    shard.freezeWorldMatrix();
+                });
+                break;
+            }
+            case "crystal_pillar": {
+                const ph = 3.5 * sc;
+                const body = propInstance("crystal_pillar", `${prop.id}_body`,
+                    cylinderTemplate("_tpl_crystal_pillar", { height: 3.5, diameterTop: 0.12, diameterBottom: 0.38, tessellation: 7 }, "#44aaff", "#1166dd"));
+                settle(body, px, py + ph / 2, pz, rotY, sc);
+                new PhysicsAggregate(body, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+                const tip = propInstance("crystal_tip", `${prop.id}_tip`, () => {
+                    const tpl = MeshBuilder.CreateSphere("_tpl_crystal_tip", { diameter: 0.45 }, scene);
+                    tpl.material = body.material;
+                    return tpl;
+                });
+                settle(tip, px, py + ph + 0.2 * sc, pz, 0, sc);
+                break;
+            }
+            case "stalagmite": {
+                const stalagmite = propInstance("stalagmite", prop.id,
+                    cylinderTemplate("_tpl_stalagmite", { height: 1.6, diameterTop: 0.04, diameterBottom: 0.3, tessellation: 6 }, "#222228"));
+                settle(stalagmite, px, py + 1.6 * sc / 2, pz, rotY, sc);
+                new PhysicsAggregate(stalagmite, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
+                break;
+            }
+            default:
+                console.warn(`[generateDungeon] Unknown prop type: "${prop.type}"`);
+        }
     });
-
-    // ── Scene lights ───────────────────────────────────────────────────────────
-    // dungeon.lighting?.lights?.forEach((cfg, i) => {
-    //     if (cfg.type === "point")
-    //         spawnLight(`scene_light_${i}`, cfg.x * cs, cfg.y, cfg.z * cs,
-    //             { color: cfg.color, intensity: cfg.intensity, range: cfg.range }, scene);
-    // });
 
     // ── Rocks ──────────────────────────────────────────────────────────────────
     if (rockTemplate && dungeon.rocks?.length) {
         rockTemplate.isVisible = false;
-
-        const bossElev = dungeon.bossRoom ? STAIR_TOTAL_HEIGHT : 0;
 
         dungeon.rocks.forEach(rock => {
             const inst = rockTemplate.createInstance(rock.id);
             const wx   = rock.gridX * cs + cs / 2;
             const wz   = rock.gridZ * cs + cs / 2;
 
-            let elev = 0;
-            if (bossRoom) {
-                const { x, y, width, height } = bossRoom.bounds;
-                if (rock.gridX >= x && rock.gridX < x + width &&
-                    rock.gridZ >= y && rock.gridZ < y + height) {
-                    elev = bossElev;
-                }
-            }
+            // sitting on the tile's surface, dais included
+            const elev = (isDais(rock.gridX, rock.gridZ) ? elevation : 0)
+                       + (dungeon.tileHeights?.[`${rock.gridX}_${rock.gridZ}`] ?? 0);
 
             const halfH = (rock.scaleY ?? rock.scale ?? 1.5) * 1.2 * 0.72;
             inst.position = new Vector3(wx, elev + halfH, wz);
@@ -416,11 +578,28 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
             inst.rotation.z = Tools.ToRadians(rock.rotZ ?? 0);
             inst.freezeWorldMatrix();
 
-            const avgScale = ((rock.scaleX ?? 1.5) + (rock.scaleZ ?? 1.5)) / 2;
-            new PhysicsAggregate(inst, PhysicsShapeType.SPHERE,
-                { mass: 0, radius: 1.2 * avgScale }, scene);
+            // the rock's own scaled, rotated bounds - a sphere sized off the
+            // average X/Z scale stood far above flat slab rocks (up to ~4 units
+            // of invisible dome) and could shove a player off the spawn
+            new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
         });
     }
 
-    buildStaircaseAndGate(scene, dungeon, cs, wallH);
+    const stairMats = {
+        step: makePBR("mat_stair_step", { albedoColor: "#3a3030" }, scene),
+        rim:  makePBR("mat_stair_rim",  { albedoColor: "#6a4020", emissiveColor: "#3a1800" }, scene),
+        gate: makePBR("mat_boss_gate",  { albedoColor: "#1a0505", emissiveColor: "#cc2200" }, scene),
+    };
+    buildBossStairs(scene, dungeon, cs, wallH, { ...stairMats, wall: wallMat });
+
+    // A material only takes its first maxSimultaneousLights (default 4) of the
+    // scene's ENABLED lights, and every wall/floor/ceiling is an instance of one
+    // template sharing one material - raised to cover the ambient plus the
+    // point lights tools/lightBudget.js leaves on, never past MAX_MATERIAL_LIGHTS.
+    const lightCount = Math.min(scene.lights.length, MAX_MATERIAL_LIGHTS);
+    const propMats = [...propTemplates.values()].map(tpl => tpl.material);
+    [wallMat, floorMat, bossFloorMat, ceilMat, ...propMats, ...Object.values(stairMats)]
+        .forEach(m => { m.maxSimultaneousLights = Math.max(m.maxSimultaneousLights ?? 4, lightCount); });
+
+    return { floorTopY: 0 };
 }

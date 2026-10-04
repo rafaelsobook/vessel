@@ -16,6 +16,26 @@ let castMagic = 0
 let maxSwingToLevelUp = 2
 let maxCastToLevel = 2
 
+// weaponType -> the class whose lvl adds onto that weapon's damage (read by
+// attackingSystem.js's calcDmg). pickaxe shares viking with axe since
+// uimanagement.js already aliases it to "axe" before triggerClassLeveling
+// sees it - the class a pickaxe swing levels is the same one that boosts it.
+const WEAPON_DMG_CLASS = {
+    sword: "warbringer",
+    spear: "paladin",
+    axe: "viking",
+    pickaxe: "viking",
+}
+// flat weaponDmg per class lvl - half of what one spent stats.weapon point
+// gives (x10 in calcDmg), since class levels come free from just swinging
+const CLASS_DMG_PER_LVL = 5
+
+export function getClassDmgBonus(charState, weaponType){
+    const className = WEAPON_DMG_CLASS[weaponType]
+    if(!className) return 0
+    return (charState.characterclass?.[className]?.lvl ?? 0) * CLASS_DMG_PER_LVL
+}
+
 // Same nine-patch trick campcraft.js's own createNinePatchBg uses - stretches
 // only the frame's flat middle, leaving skillbox.webp's painted border/corner
 // art at native size instead of smearing it.

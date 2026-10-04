@@ -11,7 +11,6 @@ import {
 import { createAggregate } from '../tools/physics';
 import { loadModelByIndx, mergeAndLoadModel } from '../tools/loadmodel';
 import { createMat, createMatV2 } from '../tools/materials';
-import { createFireParticles } from '../tools/particlesystem';
 import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
 import { findMyCurrentPlace, findPlaceMetaData } from '../states/placestates';
 import { travelToPlace } from '../tools/travel';

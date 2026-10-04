@@ -1,4 +1,3 @@
-import { dungeonScene } from "../scenes/dungeonscene.js";
 import { areaScene } from "../scenes/areascene.js";
 import { setGameStatus } from "./main.js";
 import {getIsSocketOn } from "../sockets/worldsocket.js";
@@ -27,17 +26,17 @@ export default async function loadScene(){
     const placeDetail = findMyCurrentPlace()
 
     // here rather than inside areaScene() - this is the one path every place
-    // transition goes through regardless of which scene builder handles it, so
-    // dungeons (dungeonScene, the one areaType that doesn't route through
-    // areaScene) get the policy re-evaluated too. Putting it in areaScene would
-    // mean walking room -> dungeon left the icon hidden, since nothing would
-    // have run to re-show it.
+    // transition goes through, so it re-evaluates the policy for every place
+    // regardless of which scene builder ends up handling it.
     applyAreaIconPolicy(placeDetail.areaType)
 
     let sceneDetail;
     switch(placeDetail.areaType){
+        // dungeons used to have their own dungeonScene(), which only built the
+        // geometry - no player, no camera, no doors, no multiplayer join.
+        // areaScene does all of that for every other place already.
         case "dungeon":
-            sceneDetail = await dungeonScene(placeDetail)
+            sceneDetail = await areaScene(placeDetail)
         break
         case "room":
             sceneDetail = await areaScene(placeDetail)

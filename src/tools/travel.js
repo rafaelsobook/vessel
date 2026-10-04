@@ -12,6 +12,11 @@ import { changeScene } from "../main/main.js"
 // changeScene. One shared function instead of retyping it at every call
 // site - update the sequence once here and every caller gets the fix.
 export async function travelToPlace({ placeId, name, areaType, startingPos}){
+    // checked before charState is touched - a door missing its startingPos
+    // used to throw halfway through, leaving currentPlace already pointing at
+    // the new place while the scene never changed
+    if(!startingPos) return console.warn(`[travelToPlace] no startingPos for placeId ${placeId} (${name})`)
+
     const charState = getCharState()
 
     charState.currentPlace.placeId = placeId

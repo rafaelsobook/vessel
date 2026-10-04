@@ -25,6 +25,7 @@ import {
     STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING
 } from "../constants/weather.js";
 import { triggerSkillWheel } from "./skillWheel.js";
+import { isSittingOnLog } from "./seating.js";
 import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
 
 // LIFE MANA STAMINA
@@ -63,10 +64,14 @@ export function setAllowDeath(value){
 // uimanagement.js's startResting/stopResting - see restInterval's own
 // comment below for the resulting recovery time
 const REST_SLEEP_REGEN_PER_TICK = 2
+// seating.js's isSittingOnLog - how often (ms) the extra hp/mp/sp regen from
+// sitting on a tree log is applied, on top of the normal regen intervals
+const LOG_SIT_REGEN_EVERY_MS = 1000
 
 let hpRegenInterval
 let mpRegenInterval
 let spRegenInterval
+let logSitRegenInterval
 let castingDrainInterval
 let blockingDrainInterval
 
@@ -361,25 +366,14 @@ export function activateLifeSystem(){
     // HP
     hpRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
-        const totalCLife = characterState.hp+addStats.additionalHp
-        const totalMaxLife = characterState.maxHp+addStats.additionalHp
-        if(totalCLife <= 0) return clearIntervals()
-        if(totalCLife <= totalMaxLife) characterState.hp += getTotal().hpRegen
-        if(totalCLife > totalMaxLife) characterState.hp = characterState.maxHp
+        incrementHp()
         updateHP_UI()
         
     }, 700)
     // MANA
     mpRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
-        // regen and the casting drain below would otherwise just fight each
-        // other every tick instead of actually draining anything
-        if(characterState.mode === "casting") return
-        const totalCurrMp = getTotal().mp
-        const totalMaxMp = getTotal().maxMp
-        const totalMpRegen = 0.5 + getTotal().mpRegen
-        if(totalCurrMp < characterState.maxMp) characterState.mp += totalMpRegen
-        if(characterState.mp > characterState.maxMp) characterState.mp = characterState.maxMp
+        incrementMp()
         updateMP_UI()
     }, 700)
     // CASTING - mana drains continuously while mode is "casting" (see the
@@ -400,22 +394,19 @@ export function activateLifeSystem(){
     // STAMINA
     spRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
-        // regen and the blocking drain below would otherwise just fight
-        // each other every tick instead of actually draining anything -
-        // same "skip regen entirely while the drain is active" rule
-        // mpRegenInterval above already applies for mana/casting.
-        // weaponBlocking lives on the createCharacter() rig object
-        // (playersOnScene), not on characterState itself - see
-        // createcharacter.js's own comment on why - so this has to look
-        // the local player up rather than just reading a characterState field
-        const myPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
-        if(myPlayer?.weaponBlocking) return
-    
-        characterState.sp += (1+getTotal().spRegen)
-        
-        if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
+        incrementSp()
         updateSP_UI()
     }, 500)
+    // SITTING ON A TREE LOG - bonus hp/mp/sp regen while seated on one
+    // (seating.js). Same incrementX helpers the normal regen intervals above
+    // use, so their own casting/blocking skips and max clamps still apply.
+    logSitRegenInterval = setInterval( () => {
+        if(!isSittingOnLog()) return
+        incrementHp()
+        incrementMp()
+        incrementSp()
+        updateHpMpSp_UI()
+    }, LOG_SIT_REGEN_EVERY_MS)
     // BLOCKING - stamina drains continuously while the LOCAL player's own
     // weaponBlocking flag is true (inputMovement.js's activateMouseControls,
     // r-click hold-to-block). Same "-1 flat per 500ms, own interval separate
@@ -454,6 +445,10 @@ export function activateLifeSystem(){
         if(characterState.mode === "resting"){
             if(characterState.survival.sleep < 100) characterState.survival.sleep += REST_SLEEP_REGEN_PER_TICK
             if(characterState.survival.sleep > 100) characterState.survival.sleep = 100
+
+            incrementHp()
+            incrementMp()
+            incrementSp()
         } else {
             if(characterState.survival.sleep > 0) characterState.survival.sleep-=.2
             if(characterState.survival.sleep < 0.2) characterState.survival.sleep = 0
@@ -606,6 +601,7 @@ export function clearIntervals(){
     clearInterval(hpRegenInterval)
     clearInterval(mpRegenInterval)
     clearInterval(spRegenInterval)
+    clearInterval(logSitRegenInterval)
     clearInterval(castingDrainInterval)
     clearInterval(blockingDrainInterval)
     clearInterval(hungerInterval)
@@ -1134,4 +1130,34 @@ export function setCharStateMode(_newMode){
     }
 
     setPlayerMode(characterState.owner, _newMode, weapon ? weapon.name : undefined)
+}
+
+function incrementHp(){
+    const totalCLife = characterState.hp+addStats.additionalHp
+    const totalMaxLife = characterState.maxHp+addStats.additionalHp
+    if(totalCLife <= 0) return clearIntervals()
+    if(totalCLife <= totalMaxLife) characterState.hp += getTotal().hpRegen
+    if(totalCLife > totalMaxLife) characterState.hp = characterState.maxHp
+}
+
+function incrementMp(){
+    // regen and the casting drain (castingDrainInterval) would otherwise just
+    // fight each other every tick instead of actually draining anything
+    if(characterState.mode === "casting") return
+    const totalMpRegen = 0.5 + getTotal().mpRegen
+    if(getTotal().mp < characterState.maxMp) characterState.mp += totalMpRegen
+    if(characterState.mp > characterState.maxMp) characterState.mp = characterState.maxMp
+}
+
+function incrementSp(){
+    // regen and the blocking drain (blockingDrainInterval) would otherwise
+    // fight each other - same "skip regen entirely while the drain is active"
+    // rule incrementMp applies for mana/casting. weaponBlocking lives on the
+    // createCharacter() rig object (playersOnScene), not on characterState
+    // itself - see createcharacter.js's own comment on why - so this has to
+    // look the local player up rather than just reading a characterState field
+    const myPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+    if(myPlayer?.weaponBlocking) return
+    characterState.sp += (1+getTotal().spRegen)
+    if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
 }

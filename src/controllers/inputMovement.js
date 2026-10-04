@@ -19,6 +19,7 @@ import { giveRandomTitle } from '../components/titleUI';
 import { openClosePlayerListUI } from '../components/playerListUI';
 import { isPlacing } from '../components/placementMode.js';
 import { cycleWeatherDebug } from '../components/weatherSystem.js';
+import { skipTimeOfDayDebug } from '../components/dayNightSystem.js';
 import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
 import { standUp } from '../charactersystem/seating';
@@ -777,6 +778,11 @@ function setupControls(scene, allsounds) {
                 // "whichever client presses it, everyone gets it" scope as
                 // "v"'s own bot toggle above.
                 cycleWeatherDebug()
+            break
+            case "o":
+                // jumps the WORLD clock 3 in-game hours ahead through tcp
+                // (dayNightSystem.js) - same everyone-at-once scope as "y"
+                skipTimeOfDayDebug()
             break
             case "v":
                 // tcp/index.ts's own "toggle-spawn-bots" handler - flips a

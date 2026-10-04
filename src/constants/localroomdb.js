@@ -19,36 +19,60 @@ import { randomNum } from '../tools/tools.js';
 import { sampleTerrainSurfaceHeight } from 'infterrain';
 import { OPENWORLD_TERRAIN_VERTS } from './constants.js';
 import { OPENWORLD_GRAVEYARDS } from './graveyards.js';
+import { getSpawnPos } from '../tools/position.js';
+
+// placeId 12's dungeon - built up here instead of inline in metaDatas so the
+// openworld's own door into it (placeId 888's roomPaths, below) can point its
+// startingPos at this exact dungeon's spawn. getSpawnPos converts the BSP's
+// cell-index spawn into world units, the same conversion the void-fall
+// respawn (inputMovement.js) already uses for it.
+const DUNGEON_12 = generateBSPDungeon({
+    placeId: 12,
+    areaType: "dungeon",
+    seed: 12345,
+    rockDensity: 0,
+    gridWidth: 32,
+    gridHeight: 32,
+    cellSize: 4,
+    wallHeight: 15,
+    corridorWidth: 3,
+    // boss room twice as wide as the BSP carved it
+    bossRoomWidthScale: 2,
+    difficulty: 1,
+    // floorBumpHeightMap: the floor's bump. images/modeltex/pillartex1normal.webp is
+    // a grey HEIGHT map (white = raised) despite its name, so createDungeon has
+    // createHeightBumpTexture turn it into a normal map rather than loading it as one
+    textures: { wallTexName: "wall1", floorTexName: "pillartex1", ceilingTexName: "ceil1", floorBumpHeightMap: "./images/modeltex/pillartex1normal.webp" },
+    // ↑ shorthand — applies rock2.jpg to wall, floor AND ceiling
+
+    //new
+    sceneTemp: {
+        fogDensity: 0.008,
+        fogColor:{ r:0.05, g:0.15, b:0.1},
+
+        // no directional light: it shone straight through the ceiling (nothing
+        // casts shadows) and lit every room equally. The dungeon's own
+        // ambient + per-room lights come from creations/createdungeon.js.
+        lights: [],
+    },
+    isMultiplayer: true,
+    exitPlaceDetail: {
+        placeId: 888,
+        name: "openworld",
+        areaType: "openworld",
+        // 4 units back from the openworld's own dungeon door
+        // ({x:-1.5, z:510}) so you don't land inside its trigger again.
+        // y is the ground there (sampleTerrainSurfaceHeight = 2, flat
+        // around the openworld spawn), same feet-on-the-ground convention
+        // the Witch House's own exit startingPos uses
+        startingPos: {x: -1.5, y: 2, z: 506},
+    },
+})
 
 export const metaDatas = [
 
-    generateBSPDungeon({
-        placeId: 12,
-        areaType: "dungeon",
-        seed: 12345,
-        rockDensity: 0,
-        gridWidth: 32,
-        gridHeight: 32,
-        cellSize: 4,
-        wallHeight: 15,
-        corridorWidth: 3,
-        difficulty: 1,
-        textures: { wallTexName: "wall1", floorTexName: "floor1", ceilingTexName: "ceil1" },
-        // ↑ shorthand — applies rock2.jpg to wall, floor AND ceiling
-
-        //new
-        sceneTemp: {
-            fogDensity: 0.008,
-            fogColor:{ r:0.05, g:0.15, b:0.1},
-
-            lights: [
-                {name:"directional", intensity: 0.9},
-                // {name:"hemispheric", intensity: 0.1},
-            ],
-        },
-        isMultiplayer: true
-    }),
-    {   
+    DUNGEON_12,
+    {
         originalGlbs: [
             {
                 pos: {x: -12, y: 0, z: -24}, 
@@ -145,6 +169,28 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null
             },
+            // free-standing "anywhere door" to the dungeon (placeId 12) - the
+            // rooms' own generic door.glb, just with no wall around it. Open
+            // ground beside the south path, ~7.5 from spawn: checked against
+            // this village's generateArea() output and every hand-placed
+            // prop/npc (nearest: light pole {12.7,-19} ~7.6 away, Doran ~11.5).
+            // door.glb is thin along Z, so rotation PI/2 turns it to face -X,
+            // back toward the path, where its roomPaths trigger sits
+            {
+                itemId: randNum(0,9999).toString(),
+                name: "dungeondoor",
+                position: {x: 7, y: 0, z: -14},
+                scale: null,
+                rotation: Math.PI/2,
+                glbPath: "./models/indors/door.glb",
+                diffuseTexPath: null,
+                bumpTexPath: null,
+                physics: {
+                    opt: {mass: 0},
+                    type: "box"
+                },
+                functionBeforeMerge: null
+            },
         ],
         roomPaths: [
             {
@@ -167,6 +213,16 @@ export const metaDatas = [
                 areaType: "room",
                 pos: {x: 71.83, y: 0.5, z: 10},
                 startingPos: {x: 0, y: 1, z: -4}
+            },
+            // in front of the "dungeondoor" above ({x:7,z:-14}, facing -X) -
+            // 1.2 out from it, so the door's own physics box keeps you from
+            // reaching this trigger from behind
+            {
+                placeId: 12,
+                name: "Dungeon",
+                areaType: "dungeon",
+                pos: {x: 5.8, y: 0.5, z: -14},
+                startingPos: getSpawnPos(DUNGEON_12)
             }
         ],
         // creations/creategraveyard.js - areaSize is the plot's full side
@@ -1241,7 +1297,8 @@ export const metaDatas = [
                 placeId: 12,
                 name: "Dungeon",
                 areaType: "dungeon",
-                pos: {x: -1.5, y: 3, z: 510}
+                pos: {x: -1.5, y: 3, z: 510},
+                startingPos: getSpawnPos(DUNGEON_12)
             },
             {
                 // door into the Witch House (this same optionalObjects

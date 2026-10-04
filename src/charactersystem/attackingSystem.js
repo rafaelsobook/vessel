@@ -10,6 +10,7 @@ import { getSkillEffect } from "../staticRecources/skillsData"
 import { updateSkillListUI } from "../components/skillsui.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { getClassDmgBonus } from "./characterclass.js"
 
 // CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
 // stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
@@ -412,7 +413,7 @@ export function calcDmg(charState){
         magicDmg += magicDmg*abilityAdditions.additionalMagicDmg.percent
     }
     if(weaponDet){
-        weaponDmg = physicalDmg + weaponDet.equipAbilities.dmg + (charState.stats.weapon*10)
+        weaponDmg = physicalDmg + weaponDet.equipAbilities.dmg + (charState.stats.weapon*10) + getClassDmgBonus(charState, weaponType)
     }
 
     // resolved HERE, client-side, before dmgDetails ever leaves this

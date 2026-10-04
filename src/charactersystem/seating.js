@@ -231,6 +231,12 @@ export function isSitting(){
     return !!seatState?.seated.has(myOwner())
 }
 
+// createtrunk.js's seatId is always `trunk_${craftId}` - the tavern's benches/
+// chairs never use that prefix, so this is what tells a log apart from them
+export function isSittingOnLog(){
+    return !!seatState?.seated.get(myOwner())?.seatId.startsWith("trunk_")
+}
+
 // ── multiplayer entry points (sockets/worldsocket.js) ─────────────────────────
 
 export function onPlayerSat({ ownerId, placeId, seatId }){

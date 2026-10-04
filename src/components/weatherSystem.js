@@ -55,20 +55,30 @@ export function setWorldWeather(weather){
     worldWeather = weather
     refreshWeatherVisuals()
 
-    setTimeout(() => {
-        switch(weather){
-            case "rain":
-                getAllSounds().rainy.play()
-            break
-            case "rain", "sandstorm":
-                getAllSounds().windy.play()
-            break
-            default:
-                getAllSounds().rainy.stop()
-                getAllSounds().windy.stop()
-            break
-        }
-    },1000)
+    setTimeout(updateWeatherSounds, 1000)
+}
+
+// Rain/wind audio for the weather this client is under right now - silent
+// anywhere WEATHERED_AREA_TYPES doesn't cover (rooms, dungeons), like the
+// visuals and temperature. Also runs on every scene load, so walking into a
+// dungeon mid-storm cuts the sound instead of leaving it playing underground.
+function updateWeatherSounds(){
+    const { rainy, windy } = getAllSounds() ?? {}
+    if(!rainy || !windy) return
+    const areaType = getCharState()?.currentPlace?.areaType ?? findMyCurrentPlace()?.areaType
+    const weather = WEATHERED_AREA_TYPES.includes(areaType) ? worldWeather : "clear"
+    switch(weather){
+        case "rain":
+            rainy.play()
+        break
+        case "sandstorm":
+            windy.play()
+        break
+        default:
+            rainy.stop()
+            windy.stop()
+        break
+    }
 }
 
 // Re-evaluates what should be on screen for the place this client is in NOW.
@@ -87,6 +97,9 @@ export function refreshWeatherVisuals(){
     // leave whatever the last storm set on the scene
     applyWeather(scene, visible ? worldWeather : "clear")
     updateWeatherIndicator(visible)
+    // only silences - starting sounds stays with setWorldWeather, so a scene
+    // load into a stormy village doesn't suddenly start playing rain
+    if(!visible) updateWeatherSounds()
 }
 
 // Top-centre HUD readout. Hidden entirely indoors rather than showing "Clear

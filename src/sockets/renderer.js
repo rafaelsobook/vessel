@@ -2,13 +2,14 @@ import { getProjectilesOnScene, getPlayersOnScene, getIsSocketOn, getEnemiesOnSc
 import { getCharState } from "../charactersystem/characterstate.js";
 import { playAnim, ANIM_STATE, findAnimVariants } from "../tools/animation.js";
 import { getGameStatus } from "../main/main.js";
-import { Vector3 } from "@babylonjs/core";
+import { Vector3, PhysicsRaycastResult } from "@babylonjs/core";
 import { updateNpcPatrol } from "../npc/npcPatrol.js";
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { emitEnemyChasePosition } from "./emits.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
 import { stopEnemyEating } from "../enemies/createEnemy.js";
+import { findPlaceMetaData } from "../states/placestates.js";
 
 let scene;
 
@@ -65,6 +66,192 @@ const BOT_SPRINT_SPEED = 4
 // re-check is never working off more than about one report-cycle of
 // staleness, without reporting anywhere near every frame
 const CHASE_POS_REPORT_INTERVAL_MS = 1200
+
+// CHASE OBSTACLE AVOIDANCE - enemies have no physics body of their own (they're
+// translated directly), so a chase used to walk straight through walls, houses
+// and props. While chasing, three physics rays - ahead, ahead-left and
+// ahead-right, at the enemy's body height - find what's in the way, and the
+// enemy veers around it. Every wall/house/prop/rock already has a collider.
+const AVOID_RAY_LENGTH = 2.5
+const AVOID_RAY_ANGLE = Math.PI / 5          // the side rays, 36° off the heading
+// how far it veers when blocked ahead, tried in this order (see chaseHeading)
+const AVOID_TURN_ANGLES = [Math.PI / 2.5, Math.PI / 2, Math.PI * 2 / 3, Math.PI * 5 / 6]
+// once it picks a side to go around, it keeps it this long - otherwise it
+// flip-flops left/right in front of a wall it's facing head-on
+const AVOID_COMMIT_MS = 700
+// closer than this, a direction counts as blocked even for the fallback turns
+const AVOID_MIN_CLEARANCE = 0.6
+// rays re-cast every Nth frame per enemy, the chosen heading reused between
+const AVOID_RECHECK_FRAMES = 4
+
+const _rayFrom = new Vector3()
+const _rayTo = new Vector3()
+const _rayResult = new PhysicsRaycastResult()
+
+// distance to the first obstacle along the planar direction (dirX, dirZ) within
+// maxLength, or Infinity. Floors and slopes (mostly-upward normals - openworld
+// terrain, the dungeon's stair ramp) aren't obstacles, and neither is a
+// player's body - the chased player must not block its own chaser.
+function obstacleDistance(physicsEngine, origin, dirX, dirZ, maxLength){
+    _rayFrom.copyFrom(origin)
+    _rayTo.set(origin.x + dirX * maxLength, origin.y, origin.z + dirZ * maxLength)
+    physicsEngine.raycastToRef(_rayFrom, _rayTo, _rayResult)
+    if(!_rayResult.hasHit) return Infinity
+    if(Math.abs(_rayResult.hitNormalWorld.y) > 0.6) return Infinity
+    if(_rayResult.body?.transformNode?.name?.startsWith("player.")) return Infinity
+    const hit = _rayResult.hitPointWorld
+    return Math.hypot(hit.x - origin.x, hit.z - origin.z)
+}
+
+// DUNGEON ROUTING - the rays only see what's right in front, so a target on the
+// far side of a long wall left the chaser pressed against it (Havok test: 3 of
+// 5 dungeon chases stalled). In a dungeon the grid is known, so the chase aims
+// along the shortest route through it instead of straight at the target - the
+// rays still keep it off walls along the way. Elsewhere (village, openworld:
+// isolated houses/trees, no grid) it's rays only.
+const ROUTE_LOOKAHEAD_CELLS = 6
+const ROUTE_SAMPLE_STEP = 0.5
+const MAX_CACHED_ROUTES = 32
+// `${placeId}:${cellX}_${cellZ}` (the target's cell) -> Int32Array of route
+// lengths in cells from every cell to it, -1 for walls/unreachable. Shared by
+// every enemy chasing anyone standing in that cell.
+const _routeFields = new Map()
+
+// props createDungeon gives a collider - the route treats their cells as
+// blocked, or it keeps steering into a barrel/chest the rays then push away from
+const SOLID_PROP_TYPES = new Set(["barrel", "chest", "ancient_chest", "crystal_pillar", "stalagmite"])
+
+function dungeonOf(en){
+    const place = findPlaceMetaData(en.det?.currentPlaceId)
+    return place?.areaType === "dungeon" ? place : null
+}
+
+function routeField(placeId, dungeon, tx, tz){
+    const key = `${placeId}:${tx}_${tz}`
+    let field = _routeFields.get(key)
+    if(field) return field
+    const { grid } = dungeon.layout
+    const solid = new Set((dungeon.props ?? []).filter(p => SOLID_PROP_TYPES.has(p.type)).map(p => p.x + p.y * grid[0].length))
+    const w = grid[0].length, h = grid.length
+    field = new Int32Array(w * h).fill(-1)
+    if(grid[tz]?.[tx]){
+        const queue = [tx + tz * w]
+        field[queue[0]] = 0
+        for(let i = 0; i < queue.length; i++){
+            const x = queue[i] % w, z = (queue[i] - x) / w
+            for(const [nx, nz] of [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]]){
+                if(nx < 0 || nz < 0 || nx >= w || nz >= h || !grid[nz][nx] || field[nx + nz * w] !== -1 || solid.has(nx + nz * w)) continue
+                field[nx + nz * w] = field[queue[i]] + 1
+                queue.push(nx + nz * w)
+            }
+        }
+    }
+    if(_routeFields.size >= MAX_CACHED_ROUTES) _routeFields.delete(_routeFields.keys().next().value)
+    _routeFields.set(key, field)
+    return field
+}
+
+// is the straight line between two world points entirely over floor cells?
+function gridLineClear(grid, cs, ax, az, bx, bz){
+    const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / ROUTE_SAMPLE_STEP)
+    for(let i = 1; i <= steps; i++){
+        const t = i / steps
+        if(!grid[Math.floor((az + (bz - az) * t) / cs)]?.[Math.floor((ax + (bx - ax) * t) / cs)]) return false
+    }
+    return true
+}
+
+// Where a chasing enemy in a dungeon should head for: the target itself if
+// nothing but floor lies between them, otherwise the furthest cell a few
+// steps down the shortest route that's still in a straight, all-floor line.
+// null outside dungeons (or with no route), meaning "straight at the target".
+function dungeonWaypoint(en, targetPos){
+    const dungeon = dungeonOf(en)
+    if(!dungeon) return null
+    const { grid, cellSize: cs } = dungeon.layout
+    const ex = en.body.position.x, ez = en.body.position.z
+    if(gridLineClear(grid, cs, ex, ez, targetPos.x, targetPos.z)) return null
+
+    const w = grid[0].length
+    const field = routeField(en.det.currentPlaceId, dungeon, Math.floor(targetPos.x / cs), Math.floor(targetPos.z / cs))
+    let x = Math.floor(ex / cs), z = Math.floor(ez / cs)
+    let best = null
+    for(let step = 0; step < ROUTE_LOOKAHEAD_CELLS; step++){
+        const here = field[x + z * w]
+        if(here <= 0) break
+        const next = [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]].find(([nx, nz]) => field[nx + nz * w] === here - 1)
+        if(!next) break
+        ;[x, z] = next
+        const cx = (x + 0.5) * cs, cz = (z + 0.5) * cs
+        if(best && !gridLineClear(grid, cs, ex, ez, cx, cz)) break
+        best = { x: cx, z: cz }
+    }
+    return best
+}
+
+// The planar unit heading a chasing enemy should move along this frame, or null
+// to hold still (boxed in). Heads for the target - or, in a dungeon, the next
+// point on the route to it - unless the rays say something's in the way.
+function chaseHeading(en, targetPos, dist){
+    // route and rays are re-worked every AVOID_RECHECK_FRAMES frames, the
+    // heading they settled on reused in between
+    en._avoidFrame = (en._avoidFrame ?? -1) + 1
+    if(en._avoidFrame % AVOID_RECHECK_FRAMES !== 0 && en._chaseHeading !== undefined) return en._chaseHeading
+
+    const aim = dungeonWaypoint(en, targetPos) ?? targetPos
+    let dirX = aim.x - en.body.position.x
+    let dirZ = aim.z - en.body.position.z
+    const aimDist = Math.hypot(dirX, dirZ) || 1
+    dirX /= aimDist
+    dirZ /= aimDist
+    dist = Math.min(dist, aimDist)
+
+    const physicsEngine = scene?.getPhysicsEngine()
+    if(!physicsEngine) return (en._chaseHeading = { x: dirX, z: dirZ })
+
+    const rotate = angle => ({
+        x: dirX * Math.cos(angle) - dirZ * Math.sin(angle),
+        z: dirX * Math.sin(angle) + dirZ * Math.cos(angle),
+    })
+    // never further than the target itself - a wall behind the player isn't in the way
+    const reach = Math.min(AVOID_RAY_LENGTH, dist)
+    const origin = en.body.position
+    const cast = d => obstacleDistance(physicsEngine, origin, d.x, d.z, reach)
+    const left = rotate(AVOID_RAY_ANGLE)
+    const right = rotate(-AVOID_RAY_ANGLE)
+    const ahead = cast({ x: dirX, z: dirZ })
+    const leftClear = cast(left)
+    const rightClear = cast(right)
+
+    const now = performance.now()
+    let heading
+    if(ahead < reach){
+        // blocked ahead - go around on the clearer side (or the side it
+        // already committed to), turning harder if that's blocked too, and
+        // only then trying the other side (a committed side that dead-ends in
+        // a corner used to pin the enemy there for good). The turns go past
+        // 90°: sliding along a wall, the direction to the target rotates, so
+        // "90° off it" ends up angled into the wall - without the wider turns
+        // that read as blocked and the enemy paced back and forth in front of
+        // a house instead of rounding its corner.
+        const side = en._avoidSide && now < en._avoidUntil ? en._avoidSide : (leftClear >= rightClear ? 1 : -1)
+        const turn = [side, -side]
+            .flatMap(s => AVOID_TURN_ANGLES.map(angle => ({ s, d: rotate(s * angle) })))
+            .find(t => cast(t.d) >= AVOID_MIN_CLEARANCE)
+        heading = turn ? turn.d : null
+        if(turn){
+            en._avoidSide = turn.s
+            en._avoidUntil = now + AVOID_COMMIT_MS
+        }
+    } else if(leftClear < reach / 2 || rightClear < reach / 2){
+        // clear ahead but grazing something on one side - ease away from it
+        heading = rotate(leftClear < rightClear ? -AVOID_RAY_ANGLE / 2 : AVOID_RAY_ANGLE / 2)
+    } else {
+        heading = { x: dirX, z: dirZ }
+    }
+    en._chaseHeading = heading
+    return heading
+}
 
 // radians/sec a projectile may turn while making its one-time aim correction
 // (see the aimPoint block in renderCallback). ~230 deg/sec - fast enough to
@@ -536,10 +723,18 @@ let renderCallback = function () {
 
                 if(dist < en.det.maxDistance) return
 
-                _lookTarget.set(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z)
-                en.body.lookAt(_lookTarget)
-                _moveVec.set(0, 0, en.spd * dt)
-                en.body.locallyTranslate(_moveVec)
+                // around walls/props instead of through them - see chaseHeading
+                const heading = chaseHeading(en, targetPlayer.position, dist)
+                if(heading){
+                    _lookTarget.set(en.body.position.x + heading.x, en.body.position.y, en.body.position.z + heading.z)
+                    en.body.lookAt(_lookTarget)
+                    _moveVec.set(0, 0, en.spd * dt)
+                    en.body.locallyTranslate(_moveVec)
+                } else {
+                    // boxed in - hold still, still facing the target
+                    _lookTarget.set(targetPlayer.position.x, en.body.position.y, targetPlayer.position.z)
+                    en.body.lookAt(_lookTarget)
+                }
             }
             
             // I asign the running animation here so if ever a multiplayer connected they wont see the character running while on idle

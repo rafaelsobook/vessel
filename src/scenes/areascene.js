@@ -1,5 +1,5 @@
 import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4 } from "@babylonjs/core"
-import { createMatV2, dungeonMaterial } from "../tools/materials.js";
+import { createMatV2 } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam, enableRoomCameraOcclusion } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
@@ -51,6 +51,8 @@ import { createTreasureMesh } from "../assetcreation/createtreasure.js";
 import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { receiveAchievement } from "../charactersystem/achievement.js";
 import { createWagon } from "../assetcreation/createwagon.js";
+import { startPointLightBudget } from "../tools/lightBudget.js";
+import { startDayNight } from "../components/dayNightSystem.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -80,6 +82,8 @@ export async function areaScene(placeDetail){
     const charState = await initiateCharacter(checkIfTokenSaved())
     const myCharacter = createMyCharacter(charState, scene, allsounds)
     pushPlayer(myCharacter)
+    // only the 5 point lights nearest this player are ever on - see lightBudget.js
+    startPointLightBudget(scene, () => myCharacter.body?.position)
 
     // default true (normal death) on every scene load - only the "duel" case
     // below overrides it. This is what makes duelSystem.js's soft-loss
@@ -110,6 +114,20 @@ export async function areaScene(placeDetail){
             createDuelArena(scene, placeDetail, myCharacter.body);
             setAllowDeath(false)
             startDuel(scene, myCharacter.body, placeDetail);
+        break;
+        case "dungeon":
+            // BSP dungeons (generatebsp.js) - the rock and floor tile templates
+            // the old standalone dungeonscene.js built them with. No sun rays:
+            // a closed dungeon has no sun to shine through the ceiling.
+            const { floorTopY } = createDungeon(scene, placeDetail, {}, createRock(scene), await loadModel("./models/tiles/tile1.glb", scene));
+            placeDetail.roomPaths?.forEach(path => {
+                // 1 above the walkable surface createDungeon reports (y 0 today)
+                // - set before the roomPaths trigger loop further down builds
+                // the door from path.pos (same value every load, so rewriting
+                // the shared data is safe)
+                path.pos.y = floorTopY + 1
+                createDungeonExitMarker(scene, path.pos)
+            })
         break;
         case "openworld":
             receiveAchievement("into-the-wild")
@@ -268,6 +286,10 @@ export async function areaScene(placeDetail){
     // single tree hit (not just the ~30% chance one), before the loot roll
     // ever ran. Nothing reads this counter yet; declared here just to stop
     // the crash and preserve whatever it was meant to track.
+
+    // world clock lighting (openworld/village only - see dayNightSystem.js),
+    // after the switch above so the place's lights, sky and lamp posts exist
+    startDayNight(scene, placeDetail.areaType)
 
     registerToAtkCollider(scene, "tree", (meshHIT) => {
         console.log("hit tree")
@@ -564,6 +586,27 @@ export async function areaScene(placeDetail){
         disableEnableAttackButtonsContainer(true)
     }
 
-  
+
     return {scene, isSocketOn: isMultiplayer }
+}
+
+// A dungeon's exit (generatebsp.js's roomPaths door) is just an invisible
+// trigger in a room corner - unlike the openworld's doors, there's no building
+// around it to show where it is. A slowly spinning upright ring marks the
+// spot. pos.y is 1 above the floor surface, so the ring's bottom sits 0.6 up,
+// just off the floor (the exit cell never gets a raised slab).
+function createDungeonExitMarker(scene, pos){
+    const ring = MeshBuilder.CreateTorus("dungeon_exit_marker", { diameter: 2, thickness: 0.1, tessellation: 48 }, scene)
+    ring.position.set(pos.x, pos.y + 0.6, pos.z)
+    ring.rotation.x = Math.PI / 2
+    ring.isPickable = false
+
+    const mat = new StandardMaterial("dungeon_exit_marker_mat", scene)
+    mat.emissiveColor = new Color3(0.4, 0.8, 1)
+    mat.disableLighting = true
+    ring.material = mat
+
+    scene.onBeforeRenderObservable.add(() => {
+        ring.rotation.y += scene.getEngine().getDeltaTime() * 0.001
+    })
 }
