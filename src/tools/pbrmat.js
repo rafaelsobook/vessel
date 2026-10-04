@@ -127,9 +127,10 @@ function texturePath(folder, name, suffix = ""){
 // materials, so two materials can use one texture on the GPU instead of two.
 // albedoTexture: likewise a ready-made colour texture (createAlbedoTexture),
 // used instead of <texName>; albedoColor3 then TINTS it rather than replacing it.
-export function createPBRMat(pathName, texName, scene, {
+export function createPBRMat(pathName, texName, scene, 
+    {
     uScale = DEFAULT_REPEAT, vScale = DEFAULT_REPEAT, bumpTexture, albedoTexture
-} = {}, albedoColor3) {
+    } = {}, albedoColor3) {
     const mat = new PBRMaterial(texName, scene);
 
     let bumpTex = bumpTexture

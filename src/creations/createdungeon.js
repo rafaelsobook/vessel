@@ -19,10 +19,13 @@ import {
     HemisphericLight,
     Light,
     Tools,
-    StandardMaterial
+    StandardMaterial,
+    PBRMaterial,
+    Texture
 } from '@babylonjs/core';
-import { createPBRMat, createHeightBumpTexture } from '../tools/pbrmat';
+import { createPBRMat, createHeightBumpTexture, createAlbedoTexture } from '../tools/pbrmat';
 import { createFireParticles } from '../tools/particlesystem';
+import { buildRivers, buildGrass, spawnVases, spawnTorchStands, TORCH_STAND_HEIGHT } from './dungeonNature';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FLOOR_THICKNESS = 0.3;
@@ -42,8 +45,10 @@ const RAMP_UNDERRUN  = 0.5;   // extra length past the bottom step, sunk into th
 // glowing archway over the foot of the stairs
 const ARCH_HEIGHT    = 7;
 const ARCH_BEAM      = 0.5;
-// torch prop - a pole with the fireplace's fire (flame + flickering light) on top
-const TORCH_HEIGHT   = 1.2;
+// multiplies the floor's colour texture - white shows it as painted
+const FLOOR_TEXTURE_TINT = Color3.White();
+// torch prop - the standing model (dungeonNature.js, TORCH_STAND_HEIGHT tall)
+// with the fireplace's fire (flame + flickering light) on top
 // the fireplace's light is 1.2 / range 5 on its room's brighter floor - these
 // dark dungeon tiles need ~4x that for the same warm pool, and range 7 reaches
 // the wall behind (torches stand 6 units out from it)
@@ -214,19 +219,33 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     // dungeon.textures.ceilingTexName has no texture files behind it (there is
     // no images/textures/ceilings folder), so the ceiling stays a plain colour.
     // textures can be null (tcp's placesMD dungeon) - fall back to placeId 12's.
-    // floorBumpHeightMap (optional): a grey height-map image to use as the floor's
-    // bump instead of floors/<floorTexName>_normal.jpg - see createHeightBumpTexture
-    const { wallTexName = "wall1", floorTexName = "floor1", floorBumpHeightMap } = dungeon.textures ?? {};
+    // Both optional, each a full image path:
+    //  - floorBumpHeightMap: a grey height-map image used as the floor's bump
+    //    instead of floors/<floorTexName>_normal.jpg - see createHeightBumpTexture
+    //  - floorAlbedoMap: the floor's colour texture. Without it the floor is a flat
+    //    colour (and the boss floor's colour below is that colour, not a tint)
+    const { wallTexName = "wall1.jpg", floorTexName = "floor1", floorBumpHeightMap, floorAlbedoMap } = dungeon.textures ?? {};
 
     // ── Single material per surface type ──────────────────────────────────────
-    // the floor's bump is built once and shared by both floor materials, so it's
-    // one texture on the GPU rather than two (undefined = the default normal map)
-    const floorBump = floorBumpHeightMap ? createHeightBumpTexture(floorBumpHeightMap, scene) : undefined;
-    const wallMat  = matOverrides.wall  ?? createPBRMat("walls",wallTexName, scene, { uScale: 2, vScale: 10}, new Color3(0.07, 0.11, 0.09));
-    const floorMat = matOverrides.floor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump }, new Color3(0.12, 0.18, 0.14));
+    // the floor's bump and albedo are each built once and shared by both floor
+    // materials, so it's one texture on the GPU rather than two (undefined = the
+    // default normal map / a flat colour). They share a repeat, so the relief
+    // stays on the bricks it was made for.
+    const floorBump   = floorBumpHeightMap ? createHeightBumpTexture(floorBumpHeightMap, scene) : undefined;
+    const floorAlbedo = floorAlbedoMap ? createAlbedoTexture(floorAlbedoMap, scene) : undefined;
+    const wallMat = new PBRMaterial("wall", scene);
+    wallMat.albedoTexture = new Texture(`./images/modeltex/${wallTexName}`, scene);
+    wallMat.roughness = 1
+    // const wallMat  = matOverrides.wall  ?? createPBRMat("walls",wallTexName, scene, { uScale: 2, vScale: 10}, new Color3(0.07, 0.11, 0.09));
+    const floorMat = matOverrides.floor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
+        floorAlbedo ? FLOOR_TEXTURE_TINT : new Color3(0.12, 0.18, 0.14));
     // the generator's own boss_room floor colour, so the dais reads as its own place
-    const bossFloorColor = dungeon.rooms.find(r => r.type === "boss_room")?.pbr?.floor?.albedoColor ?? "#3a1a1a";
-    const bossFloorMat = matOverrides.bossFloor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump }, Color3.FromHexString(bossFloorColor));
+    const bossFloorColor = Color3.FromHexString(dungeon.rooms.find(r => r.type === "boss_room")?.pbr?.floor?.albedoColor ?? "#3a1a1a");
+    // over a texture it's a TINT, which multiplies the stone - scaled up so its
+    // brightest channel is 1, or the dark red would darken the texture twice over
+    const bossFloorTint = bossFloorColor.scale(1 / Math.max(bossFloorColor.r, bossFloorColor.g, bossFloorColor.b, 0.001));
+    const bossFloorMat = matOverrides.bossFloor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
+        floorAlbedo ? bossFloorTint : bossFloorColor);
 
     // StandardMaterial has no albedoColor/roughness/metallic - setting those
     // did nothing and left the ceiling Babylon's default white
@@ -265,9 +284,19 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     const isFloor = (gx, gz) => grid[gz]?.[gx] !== undefined && grid[gz][gx] !== 0;
 
     // ── Single wall template ───────────────────────────────────────────────────
-    const wallTemplate = MeshBuilder.CreateBox("_tpl_wall", { width: cs, height: wallH, depth: cs }, scene);
+    // A wall cell is a stack of cs-sized CUBES, like the room's bricks - every
+    // face shows the texture once at its real proportions. One cs x wallH x cs
+    // box stretched it ~4x up the wall.
+    // wrap: every side face's texture upright - by default the ±x faces show it
+    // turned 90°, bricks standing on end
+    const wallTemplate = MeshBuilder.CreateBox("_tpl_wall", { size: cs, wrap: true }, scene);
     wallTemplate.material = wallMat;
     wallTemplate.isVisible = false;
+    // ...but still ONE physics body per wall cell: an invisible full-height box
+    // (scaled per cell), rather than a body for every cube in the stack
+    const wallColliderTemplate = MeshBuilder.CreateBox("_tpl_wall_collider", { width: cs, height: 1, depth: cs }, scene);
+    wallColliderTemplate.isVisible = false;
+    wallColliderTemplate.isPickable = false;
 
     // ── Floor template — GLB tile or simple box ────────────────────────────────
     // floorTemplateTop: height of the template's top face above its own
@@ -335,11 +364,23 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 // the way up past the dais' raised ceiling - no gap under or over
                 const top = elevation > 0 && nearCell(gx, gz, isInBossRoom) ? wallH + elevation : wallH;
                 const h   = top + WALL_FOOT;
-                const inst = wallTemplate.createInstance(`wall_${wallCount++}`);
-                inst.scaling.y = h / wallH;
-                inst.position = new Vector3(cx, top - h / 2, cz);
-                inst.freezeWorldMatrix();
-                new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene);
+                const wallId = wallCount++;
+                // cubes stacked DOWN from the top, so the wall ends exactly at
+                // the ceiling and the leftover part of the last cube is buried
+                // under the floor rather than poking up out of the dungeon
+                const cubes = Math.ceil(h / cs);
+                for (let i = 0; i < cubes; i++) {
+                    const cube = wallTemplate.createInstance(`wall_${wallId}_${i}`);
+                    cube.position.set(cx, top - cs / 2 - i * cs, cz);
+                    cube.freezeWorldMatrix();
+                }
+                const collider = wallColliderTemplate.createInstance(`wall_${wallId}_collider`);
+                collider.isVisible = false;
+                collider.isPickable = false;
+                collider.scaling.y = h;
+                collider.position.set(cx, top - h / 2, cz);
+                collider.freezeWorldMatrix();
+                new PhysicsAggregate(collider, PhysicsShapeType.BOX, { mass: 0 }, scene);
                 continue;
             }
 
@@ -467,6 +508,8 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
         return inst;
     };
 
+    const vaseProps = [];
+    const torchProps = [];
     dungeon.props?.forEach(prop => {
         const px   = worldX(prop.x, cs);
         const pz   = worldZ(prop.y, cs);
@@ -477,15 +520,14 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
 
         switch (prop.type) {
             case "torch": {
-                const pole = propInstance("torch_pole", `${prop.id}_pole`,
-                    cylinderTemplate("_tpl_torch_pole", { height: TORCH_HEIGHT, diameter: 0.1 }, "#4a2a10"));
-                settle(pole, px, py + TORCH_HEIGHT / 2, pz);
+                // the stand is a GLB, loaded in the background - spawnTorchStands below
+                torchProps.push({ id: prop.id, x: px, y: py, z: pz });
                 // the fireplace's own fire (placeId 10) - flame AND its
-                // flickering light - on the pole top (createFireParticles puts
+                // flickering light - on the stand's top (createFireParticles puts
                 // the flame 0.25 and the light 0.6 above the position it's
                 // given). A light per torch is fine: tools/lightBudget.js keeps
                 // only the 5 point lights nearest the player switched on.
-                const { light } = createFireParticles(new Vector3(px, py + TORCH_HEIGHT - 0.25, pz), scene,
+                const { light } = createFireParticles(new Vector3(px, py + TORCH_STAND_HEIGHT - 0.25, pz), scene,
                     { intensity: TORCH_LIGHT_INTENSITY, range: TORCH_LIGHT_RANGE });
                 // range-based falloff, as the fireplace gets on its room's
                 // StandardMaterials - on these PBR floors the default physical
@@ -501,6 +543,13 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 break;
             }
             case "chest":
+                // a real, lootable chest stands here - tcp's treasuresInDungeon.ts
+                // turns every generator chest into a world treasure
+                break;
+            case "vase":
+                // a GLB, loaded in the background - spawnVases below
+                vaseProps.push(prop);
+                break;
             case "ancient_chest": {
                 const chest = propInstance("chest", prop.id, () => {
                     const tpl = MeshBuilder.CreateBox("_tpl_chest", { width: 1.0, height: 0.8, depth: 0.6 }, scene);
@@ -597,8 +646,18 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     // template sharing one material - raised to cover the ambient plus the
     // point lights tools/lightBudget.js leaves on, never past MAX_MATERIAL_LIGHTS.
     const lightCount = Math.min(scene.lights.length, MAX_MATERIAL_LIGHTS);
+
+    // ── River, grass, display vases (the generator's placeNature) ─────────────
+    const floorAt = (gx, gz) => (isDais(gx, gz) ? elevation : 0) + (dungeon.tileHeights?.[`${gx}_${gz}`] ?? 0);
+    const natureMats = [
+        ...buildRivers(scene, dungeon.rivers, cs),
+        ...buildGrass(scene, dungeon.grass, cs, floorAt, dungeon.meta?.seed),
+    ];
+    spawnVases(scene, vaseProps, cs, floorAt, lightCount);
+    spawnTorchStands(scene, torchProps, lightCount);
+
     const propMats = [...propTemplates.values()].map(tpl => tpl.material);
-    [wallMat, floorMat, bossFloorMat, ceilMat, ...propMats, ...Object.values(stairMats)]
+    [wallMat, floorMat, bossFloorMat, ceilMat, ...propMats, ...Object.values(stairMats), ...natureMats]
         .forEach(m => { m.maxSimultaneousLights = Math.max(m.maxSimultaneousLights ?? 4, lightCount); });
 
     return { floorTopY: 0 };

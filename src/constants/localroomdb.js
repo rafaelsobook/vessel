@@ -37,12 +37,44 @@ const DUNGEON_12 = generateBSPDungeon({
     wallHeight: 15,
     corridorWidth: 3,
     // boss room twice as wide as the BSP carved it
-    bossRoomWidthScale: 2,
+    bossRoomWidthScale: 5,
+    // the generator's ore spots (against the walls of every ordinary room) take
+    // these in turn - a plain vein, then a rich one. Mined through areascene.js
+    // like any place's resources[]. The generator picks the spots, so this
+    // list changes what ore yields, never where it stands.
+    resourceTemplates: [
+        {
+            resourceType: "ore", // procedurally generated, see createOre() in createRock.js
+            name: "ore",
+            loots: [
+                {name: "stone", chance: 0.25},
+                {name: "bronzeore", chance: 0.15},
+                {name: "silverore", chance: 0.08},
+                {name: "solarore", chance: 0.045},
+            ],
+            physics: { opt: {mass: 0}, type: "box" },
+        },
+        {
+            resourceType: "ore",
+            name: "richore",
+            loots: [
+                {name: "stone", chance: 0.15},
+                {name: "rubyore", chance: 0.06},
+                {name: "manastone", chance: 0.05},
+                {name: "bloodstone", chance: 0.03},
+            ],
+            physics: { opt: {mass: 0}, type: "box" },
+        },
+    ],
     difficulty: 1,
-    // floorBumpHeightMap: the floor's bump. images/modeltex/pillartex1normal.webp is
-    // a grey HEIGHT map (white = raised) despite its name, so createDungeon has
-    // createHeightBumpTexture turn it into a normal map rather than loading it as one
-    textures: { wallTexName: "wall1", floorTexName: "pillartex1", ceilingTexName: "ceil1", floorBumpHeightMap: "./images/modeltex/pillartex1normal.webp" },
+    // floorAlbedoMap: the floor's colour texture. floorBumpHeightMap: its bump -
+    // images/modeltex/pillartex1normal.webp is a grey HEIGHT map (white = raised)
+    // despite its name, so createDungeon has createHeightBumpTexture turn it into a
+    // normal map rather than loading it as one. The two are a matched pair.
+    textures: { wallTexName: "pillartex2.webp", floorTexName: "pillartex2", ceilingTexName: "ceil1",
+        // floorAlbedoMap: "./images/modeltex/pillartex1.webp",
+        floorAlbedoMap: "./images/modeltex/pillartex2.webp",
+        floorBumpHeightMap: "./images/modeltex/pillartex1normal.webp" },
     // ↑ shorthand — applies rock2.jpg to wall, floor AND ceiling
 
     //new
