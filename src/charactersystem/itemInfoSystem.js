@@ -2,7 +2,8 @@ import { Vector3 } from "@babylonjs/core"
 import { createElement } from "../tools/GUITools.js"
 import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
-import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL } from "./characterstate.js"
+import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL, addEffectsOnStat } from "./characterstate.js"
+import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
 import { getSceneDet } from "../main/main.js"
 import { capsuleHeight } from "./createcharacter.js"
@@ -229,7 +230,7 @@ let consumeItemFunc = async () => {
     if(itemDetail.itemCateg !== "consumable") return
     
     openCloseMiniLS(`Consuming ${itemDetail.dn} ...`, true)
-    const { cure, plusHp, plusMp, plusSp, plusDmg, plusSpd,fillHunger,  fillTireness } = itemDetail.consumeAbilities
+    const { cure, inflict, plusHp, plusMp, plusSp, plusDmg, plusSpd,fillHunger,  fillTireness } = itemDetail.consumeAbilities
     // saving
     const charState = getCharState()
     charState.hp+=plusHp
@@ -253,6 +254,14 @@ let consumeItemFunc = async () => {
         cure.forEach(effectTypeName => {
             const hasCure = charState.status.find(effect => effect.effectType === effectTypeName)
             charState.status = charState.status.filter(effect => effect.effectType !== effectTypeName)
+        })
+    }
+    // the bad side of a food - status effects eating it GIVES you (the white
+    // mushroom's poison, tcp's mushroomLibrary.ts), in the same shape the
+    // enemies' own effects come in, each rolled against its own chance (0-100)
+    if(inflict && inflict.length){
+        inflict.forEach(effect => {
+            if(Math.random() * 100 < (effect.chance ?? 100)) addEffectsOnStat({ ...effect })
         })
     }
     let theItemAfterDeducted = itemDetail
@@ -408,6 +417,10 @@ export function showItemInfo(_itemDet){
     // teaches (skillBooks.js's own comment), same kind of override the
     // helmet/weapon lines further down already are
     if(itemCateg === "skillbook") itemImg.src = `./images/skills/${_itemDet.skillName}.webp`
+    // an item can name its own picture - a cooked mushroom keeps its raw one's,
+    // toasted (cooking.js). Reset every time: this panel reuses one <img>.
+    if(_itemDet.icon) itemImg.src = _itemDet.icon
+    itemImg.style.filter = isCookedItem(_itemDet) ? COOKED_ICON_FILTER : ""
 
     itemTtle.innerHTML = dn
 

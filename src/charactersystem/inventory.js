@@ -5,6 +5,7 @@ import { equipItem, showItemInfo, unEquip } from "./itemInfoSystem.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { createLootItem, lootNames } from "../staticRecources/resourceLoot.js"
+import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { activateSkill } from "./attackingSystem.js"
 import { checkStoryQuestIfCompleted } from "./storyQuestSystem.js"
 import { updateSkillListUI } from "../components/skillsui.js"
@@ -89,6 +90,10 @@ export function insertItemOnInventory(itm){
     }else{
         itemImg.src = `./images/items/${itm.itemCateg}/${itm.name}.webp`
     }
+    // an item can name its own picture (a cooked mushroom keeps its raw one's,
+    // see cooking.js) - shown toasted when it's been cooked
+    if(itm.icon) itemImg.src = itm.icon
+    if(isCookedItem(itm)) itemImg.style.filter = COOKED_ICON_FILTER
     if(itm.weaponType === "sword" || 
         itm.weaponType === "spear" || 
         itm.weaponType === "pickaxe" ||

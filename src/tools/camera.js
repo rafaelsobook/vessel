@@ -81,10 +81,11 @@ export function attachCam(body){
 // lerped follow point, roughly head height), and a small room's own walls
 // sit well within that radius the moment the player backs up against one -
 // see this feature's own reference screenshot, a wall filling the whole view
-// with the character rendered small in the distance beyond it. Villages/
-// dungeons/openworld never have this problem (nothing solid sits between
-// camera and target at the radii those places actually use), so this is
-// scoped to areaType "room" specifically, not wired in globally.
+// with the character rendered small in the distance beyond it. The BSP
+// dungeons (createdungeon.js) have it worse - 3-cell corridors walled by
+// 15-high stone - so they get it too, in their own mode (OCCLUSION_MODES
+// below). Villages/openworld have nothing solid in the way at the radii they
+// use, so it isn't wired in globally.
 //
 // Approach: every frame, raycast from the camera's real position toward the
 // target and fade (not hide - still reads as "a wall is there", just not
@@ -157,11 +158,49 @@ function setMeshFaded(mesh, faded){
     }
 }
 
+// The dungeon's walls are 4x4 cubes stacked floor to ceiling - a faded one is
+// still a big translucent block in the way, so they're HIDDEN outright
+// (isVisible is per-instance, see setMeshFaded above). Physics is untouched:
+// each wall cell collides through its own invisible collider, not its cubes.
+function setMeshHidden(mesh, hidden){
+    mesh.isVisible = !hidden
+}
+
+// how far either side of the centre ray the dungeon's two extra rays run -
+// one ray only clears a sliver exactly on the line to the player, leaving the
+// columns either side of it still filling most of the view
+const DUNGEON_RAY_SPREAD = 0.8
+
+// what each kind of place hides, and how
+//  - rays: sideways offsets (world units) of the parallel rays cast, camera to player
+//  - occluder: which meshes may be hidden at all
+//  - conceal(mesh, on): hides/fades one mesh, or brings it back
+// A mesh's _occlusionGroup (an array of meshes), when it has one, goes as a
+// whole - createdungeon.js gives each wall cell's stack of cubes one, so a
+// ray clipping a single cube takes the full column with it.
+const OCCLUSION_MODES = {
+    // createroom.js - walls, tables, chairs: anything pickable, faded
+    room: {
+        rays: [0],
+        occluder: mesh => mesh.isPickable,
+        conceal: setMeshFaded,
+    },
+    // createdungeon.js - only what it tagged _cameraOccluder (wall cubes and
+    // ceiling tiles), never the floor, props or other players
+    dungeon: {
+        rays: [-DUNGEON_RAY_SPREAD, 0, DUNGEON_RAY_SPREAD],
+        occluder: mesh => mesh._cameraOccluder === true,
+        conceal: setMeshHidden,
+    },
+}
+let occlusionMode = null
+const _occlusionSide = new Vector3()
+
 // targetBody - whatever the camera is actually following (createMyCharacter.js's
 // own player.body/camParent), read fresh each frame since it moves. areaType
 // is checked here (not left to the caller) per this feature's own ask - safe
 // to call unconditionally from areascene.js's switch, a no-op everywhere
-// except the "room" case.
+// except the places OCCLUSION_MODES has a mode for ("room", "dungeon").
 export function enableRoomCameraOcclusion(scene, camera, targetBody, areaType){
     // always clear whatever the PREVIOUS room (or lack of one) left wired up
     // first - covers both "just left a room" and "re-entering the same one
@@ -169,11 +208,23 @@ export function enableRoomCameraOcclusion(scene, camera, targetBody, areaType){
     // scene are never carried forward
     disableRoomCameraOcclusion()
 
-    if(areaType !== "room") return
+    const mode = OCCLUSION_MODES[areaType]
+    if(!mode) return
     if(!scene || !camera || !targetBody) return
 
     const ray = new Ray(Vector3.Zero(), Vector3.Up(), 1)
     occlusionScene = scene
+    occlusionMode = mode
+
+    // mesh.isVisible is required here (not just the mode's occluder test) to
+    // skip hidden master/template meshes that instances are made from - BUT a
+    // mesh THIS SAME loop already concealed last frame also sits at
+    // isVisible:false now (setMeshFaded/setMeshHidden's own doing), and
+    // without the currentlyFaded fallback it would silently drop out of every
+    // hit-test the moment it's hidden - reading as "stopped blocking",
+    // un-hiding it, which makes it visible again and get concealed again next
+    // frame: a permanent one-frame flicker, not a one-time fade.
+    const isOccluder = mesh => mode.occluder(mesh) && (mesh.isVisible || currentlyFaded.has(mesh))
 
     occlusionObserver = scene.onBeforeRenderObservable.add(() => {
         const camPos = camera.globalPosition
@@ -184,36 +235,33 @@ export function enableRoomCameraOcclusion(scene, camera, targetBody, areaType){
         // camera already basically AT the target (radius near its lower
         // limit) - nothing meaningful to raycast
         if(dist <= OCCLUSION_TARGET_MARGIN) return
-
         _occlusionDir.scaleInPlace(1 / dist)
-        ray.origin.copyFrom(camPos)
-        ray.direction.copyFrom(_occlusionDir)
-        ray.length = dist - OCCLUSION_TARGET_MARGIN
 
-        // mesh.isVisible is required here (not just isPickable) to skip the
-        // hidden master/template meshes buildWall/placeInstancedProps
-        // instance from - BUT a mesh THIS SAME loop already faded last frame
-        // also sits at isVisible:false now (setMeshFaded's own doing), and
-        // without the currentlyFaded fallback it would silently drop out of
-        // every hit-test the moment it's hidden - reading as "stopped
-        // blocking", un-hiding it, which makes it visible again and get
-        // faded again next frame: a permanent one-frame flicker, not a
-        // one-time fade.
-        const hits = scene.multiPickWithRay(ray, mesh => mesh.isPickable && (mesh.isVisible || currentlyFaded.has(mesh)))
+        // sideways, level with the floor - the extra rays run parallel to
+        // the centre one, this far to either side of it
+        Vector3.CrossToRef(_occlusionDir, Vector3.UpReadOnly, _occlusionSide)
+        if(_occlusionSide.lengthSquared() > 1e-6) _occlusionSide.normalize()
+
         const stillBlocking = new Set()
-
-        hits?.forEach(hit => {
-            const mesh = hit.pickedMesh
-            if(!mesh) return
-            stillBlocking.add(mesh)
-            if(currentlyFaded.has(mesh)) return
-            currentlyFaded.add(mesh)
-            setMeshFaded(mesh, true)
+        mode.rays.forEach(offset => {
+            ray.origin.copyFrom(camPos).addInPlace(_occlusionSide.scale(offset))
+            ray.direction.copyFrom(_occlusionDir)
+            ray.length = dist - OCCLUSION_TARGET_MARGIN
+            scene.multiPickWithRay(ray, isOccluder)?.forEach(hit => {
+                const mesh = hit.pickedMesh
+                if(!mesh) return
+                ;(mesh._occlusionGroup ?? [mesh]).forEach(m => stillBlocking.add(m))
+            })
         })
 
+        stillBlocking.forEach(mesh => {
+            if(currentlyFaded.has(mesh)) return
+            currentlyFaded.add(mesh)
+            mode.conceal(mesh, true)
+        })
         currentlyFaded.forEach(mesh => {
             if(stillBlocking.has(mesh)) return
-            if(!mesh.isDisposed()) setMeshFaded(mesh, false)
+            if(!mesh.isDisposed()) mode.conceal(mesh, false)
             currentlyFaded.delete(mesh)
         })
     })
@@ -236,10 +284,12 @@ export function disableRoomCameraOcclusion(){
     occlusionObserver = null
     occlusionScene = null
 
+    const conceal = occlusionMode?.conceal ?? setMeshFaded
     currentlyFaded.forEach(mesh => {
-        if(!mesh.isDisposed()) setMeshFaded(mesh, false)
+        if(!mesh.isDisposed()) conceal(mesh, false)
     })
     currentlyFaded.clear()
+    occlusionMode = null
     // NOT disposed here - every ghost belongs to the scene that's either
     // still alive (nothing to clean up yet) or already disposed along with
     // it (nothing left TO dispose). Just drop the stale references either way.

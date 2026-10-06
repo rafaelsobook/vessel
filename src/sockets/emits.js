@@ -157,6 +157,14 @@ export function emitPickupGrain(grainId){
     if(!socket) return
     socket.emit("pickupGrain", grainId)
 }
+// tcp/index.ts's "pickupMushroom" handler - same bare-id shape as
+// emitPickupGrain right above
+export function emitPickupMushroom(mushroomId){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("pickupMushroom", mushroomId)
+}
 // tcp/index.ts's "craft-bonfire" handler - tells every OTHER connected
 // client (and any future joiner, via userJoined's own bonfires array) that
 // a bonfire now exists here too. campcraft.js's own craft flow already

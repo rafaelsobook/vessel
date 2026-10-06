@@ -31,6 +31,7 @@ import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import { createTrunkMesh } from "../assetcreation/createtrunk.js"
 import { createGrainMesh, removeGrainMesh } from "../assetcreation/creategrain.js"
+import { createMushroomMesh, removeMushroomMesh } from "../assetcreation/createmushroom.js"
 import { onPlayerSat, onPlayerStood, onSitRejected, applyRosterSeat, syncSeatOccupancy, releaseSeatOf } from "../charactersystem/seating.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
@@ -48,6 +49,9 @@ let tcpTrunks = []
 // grainsInScene array alongside it: creategrain.js dedupes by grainId in its
 // own per-scene Map, which also resets itself on every scene change
 let tcpGrains = []
+// tcp/recources/mushroomsInDungeon.ts - same model as tcpGrains right above
+// (createmushroom.js dedupes by mushroomId in its own per-scene Map)
+let tcpMushrooms = []
 // weapons struck into the ground or an enemy body at runtime (see
 // itemInfoSystem.js's struckItemFunc, creations/skills.js's spawnProjectile
 // env-hit/enemy-hit cases) - server-tracked (tcp/index.ts's struckWeapons),
@@ -292,7 +296,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, grains, struckWeapons, weather, dayNight } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, grains, mushrooms, struckWeapons, weather, dayNight } = allDataFromServer
         // world clock rides on every snapshot too, same reasoning as weather below
         if(dayNight) setDayNightState(dayNight)
         // weather rides on every snapshot, not just its own "weather-changed"
@@ -330,6 +334,7 @@ export function activateOnSocketListeners(socket){
         tcpBonfires = bonfires ?? []
         tcpTrunks = trunks ?? []
         tcpGrains = grains ?? []
+        tcpMushrooms = mushrooms ?? []
         tcpStruckWeapons = struckWeapons ?? []
         
         const characterState = getCharState()
@@ -1111,6 +1116,19 @@ export function activateOnSocketListeners(socket){
         tcpGrains = tcpGrains.filter(grain => grain.grainId !== grainId)
         removeGrainMesh(grainId)
     })
+    // tcp/index.ts's "pickupMushroom" echo - same as "grain-removed" right above
+    socket.on("mushroom-removed", mushroomId => {
+        if (!isSocketOn) return
+        tcpMushrooms = tcpMushrooms.filter(mushroom => mushroom.mushroomId !== mushroomId)
+        removeMushroomMesh(mushroomId)
+    })
+    // the item for a mushroom THIS player picked - tcp sends it only to the
+    // picker, and only if nobody took that mushroom first (mushroomLibrary.ts
+    // is where the kinds and their items live)
+    socket.on("mushroom-picked", ({ item }) => {
+        if (!isSocketOn || !item) return
+        obtain(item)
+    })
 
     // tcp/index.ts's own "strike-weapon" handler echoes this to EVERY
     // connected client, including whoever struck it (bare io.emit there,
@@ -1536,6 +1554,11 @@ export function reCreateMeshesInScene() {
             ? sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS)
             : grainTcpInfo.pos.y
         createGrainMesh(scene, { x, y: groundY, z }, grainTcpInfo.grainId)
+    })
+    // dungeon floors only - tcp already knows each one's floor height
+    tcpMushrooms.length && tcpMushrooms.forEach(mushroomTcpInfo => {
+        if (characterState.currentPlace.placeId !== mushroomTcpInfo.currentPlaceId) return
+        createMushroomMesh(scene, mushroomTcpInfo.pos, mushroomTcpInfo.mushroomId, mushroomTcpInfo.kind)
     })
     if(characterState.currentPlace.placeId === 9){
 

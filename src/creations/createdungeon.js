@@ -25,6 +25,7 @@ import {
 } from '@babylonjs/core';
 import { createPBRMat, createHeightBumpTexture, createAlbedoTexture } from '../tools/pbrmat';
 import { createFireParticles } from '../tools/particlesystem';
+import { createDungeonFloorMat } from '../tools/dungeonFloorMat';
 import { buildRivers, buildGrass, spawnVases, spawnTorchStands, TORCH_STAND_HEIGHT } from './dungeonNature';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -224,28 +225,43 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     //    instead of floors/<floorTexName>_normal.jpg - see createHeightBumpTexture
     //  - floorAlbedoMap: the floor's colour texture. Without it the floor is a flat
     //    colour (and the boss floor's colour below is that colour, not a tint)
-    const { wallTexName = "wall1.jpg", floorTexName = "floor1", floorBumpHeightMap, floorAlbedoMap } = dungeon.textures ?? {};
+    //  - floorLayers / floorAccent: several textures mixed across the floor so it
+    //    doesn't look tiled (tools/dungeonFloorMat.js) - when set, they replace
+    //    floorTexName, floorAlbedoMap and floorBumpHeightMap
+    const { wallTexName = "wall1.jpg", wallBumpTexName = "wall5normal.jpg", floorTexName = "floor1", floorBumpHeightMap, floorAlbedoMap,
+        floorLayers, floorAccent } = dungeon.textures ?? {};
 
     // ── Single material per surface type ──────────────────────────────────────
     // the floor's bump and albedo are each built once and shared by both floor
     // materials, so it's one texture on the GPU rather than two (undefined = the
     // default normal map / a flat colour). They share a repeat, so the relief
     // stays on the bricks it was made for.
-    const floorBump   = floorBumpHeightMap ? createHeightBumpTexture(floorBumpHeightMap, scene) : undefined;
-    const floorAlbedo = floorAlbedoMap ? createAlbedoTexture(floorAlbedoMap, scene) : undefined;
+    const floorBump   = floorBumpHeightMap && !floorLayers?.length ? createHeightBumpTexture(floorBumpHeightMap, scene) : undefined;
+    const floorAlbedo = floorAlbedoMap && !floorLayers?.length ? createAlbedoTexture(floorAlbedoMap, scene) : undefined;
     const wallMat = new PBRMaterial("wall", scene);
     wallMat.albedoTexture = new Texture(`./images/modeltex/${wallTexName}`, scene);
-    wallMat.roughness = 1
+    wallMat.bumpTexture = new Texture(`./images/modeltex/${wallBumpTexName}`, scene);
+    wallMat.roughness = 0.8
+    wallMat.albedoTexture.uScale = 1;
+    wallMat.albedoTexture.vScale = 1;
     // const wallMat  = matOverrides.wall  ?? createPBRMat("walls",wallTexName, scene, { uScale: 2, vScale: 10}, new Color3(0.07, 0.11, 0.09));
-    const floorMat = matOverrides.floor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
-        floorAlbedo ? FLOOR_TEXTURE_TINT : new Color3(0.12, 0.18, 0.14));
+    const mixedFloor = floorLayers?.length > 0;
+    const floorMat = matOverrides.floor ?? (mixedFloor
+        ? createDungeonFloorMat(scene, "mat_floor", { layers: floorLayers, accent: floorAccent, cellSize: cs })
+        : createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
+            floorAlbedo ? FLOOR_TEXTURE_TINT : new Color3(0.12, 0.18, 0.14)));
     // the generator's own boss_room floor colour, so the dais reads as its own place
     const bossFloorColor = Color3.FromHexString(dungeon.rooms.find(r => r.type === "boss_room")?.pbr?.floor?.albedoColor ?? "#3a1a1a");
     // over a texture it's a TINT, which multiplies the stone - scaled up so its
     // brightest channel is 1, or the dark red would darken the texture twice over
     const bossFloorTint = bossFloorColor.scale(1 / Math.max(bossFloorColor.r, bossFloorColor.g, bossFloorColor.b, 0.001));
-    const bossFloorMat = matOverrides.bossFloor ?? createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
-        floorAlbedo ? bossFloorTint : bossFloorColor);
+    const bossFloorMat = matOverrides.bossFloor ?? (mixedFloor
+        // mostly neutral and darker - the boss room's own red light already
+        // floods this material; the full tint on top came out solid scarlet
+        ? createDungeonFloorMat(scene, "mat_boss_floor", { layers: floorLayers, accent: floorAccent, cellSize: cs,
+            tint: Color3.Lerp(Color3.White(), bossFloorTint, 0.4).scale(0.55) })
+        : createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
+            floorAlbedo ? bossFloorTint : bossFloorColor));
 
     // StandardMaterial has no albedoColor/roughness/metallic - setting those
     // did nothing and left the ceiling Babylon's default white
@@ -369,10 +385,17 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 // the ceiling and the leftover part of the last cube is buried
                 // under the floor rather than poking up out of the dungeon
                 const cubes = Math.ceil(h / cs);
+                // the camera hides walls that come between it and the player
+                // (tools/camera.js's occlusion) - a whole column at a time,
+                // never one cube left floating over a gap
+                const column = [];
                 for (let i = 0; i < cubes; i++) {
                     const cube = wallTemplate.createInstance(`wall_${wallId}_${i}`);
                     cube.position.set(cx, top - cs / 2 - i * cs, cz);
                     cube.freezeWorldMatrix();
+                    cube._cameraOccluder = true;
+                    cube._occlusionGroup = column;
+                    column.push(cube);
                 }
                 const collider = wallColliderTemplate.createInstance(`wall_${wallId}_collider`);
                 collider.isVisible = false;
@@ -393,6 +416,8 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
             const tileJitter = dungeon.tileHeights?.[`${gx}_${gz}`] ?? 0;
             fi.position = new Vector3(cx, elev + tileJitter - floorTemplateTop, cz);
             fi.freezeWorldMatrix();
+            // ground you can build a bonfire on (tools/position.js's isGroundMesh)
+            fi._isGround = true;
 
             const fiAggregate = new PhysicsAggregate(fi, PhysicsShapeType.BOX, { mass: 0 }, scene);
             fiAggregate.shape.material = {
@@ -411,6 +436,8 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
             const ci = ceilTemplate.createInstance(`ceil_${ceilCount++}`);
             ci.position = new Vector3(cx, ch + FLOOR_THICKNESS / 2, cz);
             ci.freezeWorldMatrix();
+            // hidden too while the camera is up past it, looking down
+            ci._cameraOccluder = true;
         }
     }
 

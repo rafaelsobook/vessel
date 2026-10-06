@@ -116,10 +116,13 @@ export async function areaScene(placeDetail){
             startDuel(scene, myCharacter.body, placeDetail);
         break;
         case "dungeon":
+            scene.clearColor = new Color3(0,0,0)
             // BSP dungeons (generatebsp.js) - the rock and floor tile templates
             // the old standalone dungeonscene.js built them with. No sun rays:
             // a closed dungeon has no sun to shine through the ceiling.
             const { floorTopY } = createDungeon(scene, placeDetail, {}, createRock(scene), await loadModel("./models/tiles/tile1.glb", scene));
+            // walls between the camera and the player get hidden (camera.js's "dungeon" mode)
+            enableRoomCameraOcclusion(scene, cam, myCharacter.body, placeDetail.areaType)
             placeDetail.roomPaths?.forEach(path => {
                 // 1 above the walkable surface createDungeon reports (y 0 today)
                 // - set before the roomPaths trigger loop further down builds
@@ -128,6 +131,7 @@ export async function areaScene(placeDetail){
                 path.pos.y = floorTopY + 1
                 createDungeonExitMarker(scene, path.pos)
             })
+            
         break;
         case "openworld":
             receiveAchievement("into-the-wild")

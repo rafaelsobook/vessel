@@ -71,10 +71,23 @@ const DUNGEON_12 = generateBSPDungeon({
     // images/modeltex/pillartex1normal.webp is a grey HEIGHT map (white = raised)
     // despite its name, so createDungeon has createHeightBumpTexture turn it into a
     // normal map rather than loading it as one. The two are a matched pair.
-    textures: { wallTexName: "pillartex2.webp", floorTexName: "pillartex2", ceilingTexName: "ceil1",
+    //
+    // floorLayers/floorAccent take over from both when set: the floor mixes
+    // these across itself so it doesn't look tiled (tools/dungeonFloorMat.js) -
+    // pillartex2 is the main stone, cement and rubble form patches over it, and
+    // `chance` of the cells are re-laid in tile4. repeat: times the texture
+    // repeats across one 4-unit cell.
+    textures: { wallTexName: "wall5.webp", wallBumpTexName: "wall5normal.jpg", floorTexName: "pillartex2", ceilingTexName: "ceil1",
         // floorAlbedoMap: "./images/modeltex/pillartex1.webp",
         floorAlbedoMap: "./images/modeltex/pillartex2.webp",
-        floorBumpHeightMap: "./images/modeltex/pillartex1normal.webp" },
+        floorBumpHeightMap: "./images/modeltex/pillartex1normal.webp",
+        floorLayers: [
+            { path: "./images/modeltex/pillartex2.webp", repeat: 1 },
+            { path: "./images/modeltex/sement1.jpg", repeat: 1 },
+            { path: "./images/modeltex/rockTex.jpg", repeat: 1 },
+        ],
+        floorAccent: { path: "./images/modeltex/tile4.jpg", repeat: 1, chance: 0.05 },
+    },
     // ↑ shorthand — applies rock2.jpg to wall, floor AND ceiling
 
     //new

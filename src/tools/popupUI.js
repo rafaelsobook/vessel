@@ -25,14 +25,31 @@ export function activateInteractBtn(){
     interactBtnActivated = true
 }
 
-export function openCloseInteractBtn(_iconImg = "normal", isVisible, _callbackAfterClicked) {
+// whoever last showed the interact button - see openCloseInteractBtn's owner
+let interactOwner = null
+
+// _iconImg: a bare name is one of ./images/UI's icons ("normal", "pickaxe");
+// anything with a "/" in it is a full image path (components/bonfireCooking.js
+// shows the bonfire's own campcraft picture, then the mushroom it cooked).
+// owner (optional): who's showing it - lets several nearby things share the
+// one button without one hiding the other's (getInteractBtnOwner below).
+export function openCloseInteractBtn(_iconImg = "normal", isVisible, _callbackAfterClicked, owner) {
     if(!interactBtnActivated) activateInteractBtn()
     
-    if(_iconImg) interactBtnImg.src = `./images/UI/${_iconImg}.webp`
+    if(_iconImg) interactBtnImg.src = _iconImg.includes("/") ? _iconImg : `./images/UI/${_iconImg}.webp`
     //_iconImg is if ever we want a different icon to display when it interact with different door or passage etc
     interactBtn.style.display = isVisible ? "block" : "none"
     callbackAfterClicked = _callbackAfterClicked
+    interactOwner = isVisible ? (owner ?? null) : null
     if(isVisible) clearLocTimeOut()
+}
+// the owner passed to the openCloseInteractBtn call that's showing the button
+// right now - null when it's hidden, or shown by a caller that passed none
+export function getInteractBtnOwner(){
+    return interactOwner
+}
+export function isInteractBtnVisible(){
+    return interactBtn.style.display === "block"
 }
 
 export function openClosePopup(_popMessage, willOpen, timeOut, cb){

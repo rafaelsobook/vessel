@@ -43,6 +43,11 @@ const MAX_OBSTACLE_FOOTPRINT = 40
 // not things you can bump into
 const IGNORED_MESH_NAMES = ["fakeshadow", "skybox", "water"]
 
+// a mesh whose bottom is more than this far above the player's body is
+// overhead (a ceiling, a beam, a tree's canopy start) rather than standing in
+// the spot - the player's body sits ~0.75 above their feet
+const OVERHEAD_CLEARANCE = 3
+
 const GHOST_VALID_TINT   = new Color3(0.15, 0.85, 0.25)
 const GHOST_BLOCKED_TINT = new Color3(0.9, 0.12, 0.12)
 const GHOST_ALPHA = 0.55
@@ -85,8 +90,7 @@ function isCharacterMesh(mesh, characterRoots){
 // One pass over scene.meshes at placement start, reduced to flat XZ discs
 // {x, z, r}. Everything after this is arithmetic - no bounding-info or matrix
 // work happens again per mouse move.
-function collectObstacles(scene, heroPos){
-    const characterRoots = buildCharacterRootSet()
+function collectObstacles(scene, heroPos, characterRoots){
     const limitSq = OBSTACLE_SCAN_RADIUS * OBSTACLE_SCAN_RADIUS
     const obstacles = []
 
@@ -96,7 +100,9 @@ function collectObstacles(scene, heroPos){
         // hides (body/bodytarget), and disabled covers the hidden prop roots
         // containers.js keeps around as clone templates - neither is something
         // standing in the world
-        if(!mesh.isVisible || !mesh.isEnabled()) return
+        // ...except a dungeon wall the camera has hidden to see the player
+        // (tools/camera.js's occlusion) - it's only out of sight, still solid
+        if((!mesh.isVisible && !mesh._cameraOccluder) || !mesh.isEnabled()) return
         if(isGroundMesh(mesh)) return
         if(IGNORED_MESH_NAMES.some(n => mesh.name?.toLowerCase().includes(n))) return
         if(isCharacterMesh(mesh, characterRoots)) return
@@ -108,6 +114,10 @@ function collectObstacles(scene, heroPos){
         const dx = centre.x - heroPos.x
         const dz = centre.z - heroPos.z
         if(dx * dx + dz * dz > limitSq) return
+
+        // overhead, not in the way - a dungeon's ceiling tiles sit over every
+        // floor cell, and as flat discs they'd block every spot in it
+        if(boundingBox.minimumWorld.y > heroPos.y + OVERHEAD_CLEARANCE) return
 
         const extend = boundingBox.extendSizeWorld
         const footprint = Math.max(extend.x, extend.z)
@@ -132,12 +142,20 @@ function firstBlockingObstacle(obstacles, point){
 // {ok, reason, point} for the spot currently under the cursor. reason is
 // player-facing copy, shown as-is when they tap an illegal spot.
 function evaluateSpot(state, pointerX, pointerY){
-    const { scene, heroBody, obstacles } = state
+    const { scene, heroBody, obstacles, characterRoots } = state
     console.log("evaluate")
-    // Babylon's own pick already skips isPickable:false meshes, which is why
-    // this reports the ground UNDER a tree rather than the tree - handled by
-    // the obstacle pass below, not here
-    const hit = scene.pick(pointerX, pointerY, mesh => !mesh._isPlacementGhost)
+    // Skips isPickable:false meshes, which is why this reports the ground
+    // UNDER a tree rather than the tree - handled by the obstacle pass below,
+    // not here. Babylon only does those checks itself when NO predicate is
+    // passed: with one, every mesh is fair game, so a hidden template, a
+    // dungeon wall's invisible collider or a wall the camera hid would all
+    // stop the cursor ray short of the floor. Characters are looked through
+    // too, the same as the obstacle pass ignores them - aiming at the floor
+    // just behind your own avatar (the camera sits behind it) would otherwise
+    // pick the avatar and refuse the spot.
+    const hit = scene.pick(pointerX, pointerY, mesh =>
+        !mesh._isPlacementGhost && mesh.isEnabled() && mesh.isVisible && mesh.isPickable
+        && !isCharacterMesh(mesh, characterRoots))
     if(!hit?.hit || !hit.pickedPoint) return { ok: false, reason: "Aim at the ground", point: null }
     if(!isGroundMesh(hit.pickedMesh)) return { ok: false, reason: "You can only build on open ground", point: null }
 
@@ -253,12 +271,17 @@ export function startPlacementMode(scene, { ghostSource, onConfirm, onCancel } =
     const ghost = buildGhost(ghostSource)
     if(!ghost) return false
 
+    // every character on the scene - neither an obstacle nor something the
+    // cursor stops on (gathered once, like the obstacles)
+    const characterRoots = buildCharacterRootSet()
+
     const state = {
         scene,
         heroBody,
         ghost,
         onCancel,
-        obstacles: collectObstacles(scene, heroBody.position),
+        characterRoots,
+        obstacles: collectObstacles(scene, heroBody.position, characterRoots),
         pointerObserver: null,
         keyHandler: null,
         disposeObserver: null,

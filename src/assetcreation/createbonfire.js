@@ -1,6 +1,7 @@
 import { Vector3 } from "@babylonjs/core"
 import { getSocketContainers } from "../sockets/worldsocket.js"
 import { createFireParticles } from "../tools/particlesystem.js"
+import { makeCookingSpot } from "../components/bonfireCooking.js"
 import { randomNum } from "../tools/tools.js"
 
 // A placed bonfire - clones containers.js's shared bonfireRoot template (a
@@ -41,6 +42,9 @@ export function createBonfireMesh(scene, position, craftId){
     const { particles, light } = createFireParticles(bonfire.position, scene)
     bonfire._fireParticles = particles
     bonfire._fireLight = light
+
+    // you can cook over it - walk up, press interact (components/bonfireCooking.js)
+    makeCookingSpot(scene, bonfire)
 
     return bonfire
 }

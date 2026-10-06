@@ -1,4 +1,5 @@
 import * as GUI from "@babylonjs/gui"
+import { GOLD, GOLD_BRIGHT, TEXT_MUTED, FONT_TITLE, FONT_BODY, FONT_NUM, createNinePatchBg, createDivider, createText, createGoldButton, setButtonDisabled } from "./guiKit.js"
 import { Vector3 } from "@babylonjs/core"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { getSceneDet } from "../main/main.js"
@@ -67,25 +68,8 @@ function craftIconPath(craft){
 // builders are written generic enough for whatever panel comes after this
 // one to reuse, not hardcoded to campcraft specifics.
 
-// GOLD/DARK palette already established across style.css's own UI (the
-// same #edd59f / rgba(202,165,1,...) gold this game already uses for
-// hover borders, rarity readouts, etc) - reused here so a Babylon-GUI panel
-// doesn't visually clash with the DOM ones sitting right next to it.
-const GOLD        = "#caa501"
-const GOLD_BRIGHT = "#edd59f"
-const TEXT_MUTED  = "rgba(245,245,245,0.65)"
-const TEXT_BODY   = "rgba(245,245,245,0.85)"
-// one shared source for createGoldButton's idle/hover fill - previously
-// duplicated as the literal "rgba(202,165,1,0.12)" string in three places
-// (initial background, onPointerOut, setButtonDisabled), which is exactly
-// how the idle fill drifted out of sync with itself when only one of the
-// three got bumped up for visibility
-const BTN_BG_IDLE  = "rgba(202,165,1,0.35)"
-const BTN_BG_HOVER = "rgba(202,165,1,0.55)"
-
-const FONT_TITLE = "'M PLUS Rounded 1c'"
-const FONT_BODY  = "'Bellefair'"
-const FONT_NUM   = "'Graduate'"
+// The palette, fonts and low-level builders (nine-patch frame, text, gold
+// buttons) live in guiKit.js now, shared with the bonfire cook list.
 
 // One AdvancedDynamicTexture per scene, built lazily and cached - not one
 // per call. changeScene() fully disposes the old Scene (and everything
@@ -114,138 +98,6 @@ function getUITexture(scene){
     return uiTexture
 }
 
-// Nine-patch background - the ornate bordered frame art (corner flourishes,
-// notched edges) stays crisp at any control size instead of the corners
-// stretching into mush the way a plain STRETCH_FILL would.
-//
-// sliceLeft/sliceRight/sliceTop/sliceBottom are NOT four independent insets
-// from each control's own nearest edge, despite what their names suggest -
-// read straight from @babylonjs/gui's own _renderNinePatch (image.pure.js):
-// centerWidth = sliceRight - sliceLeft, rightWidth = sw - sliceRight. All
-// four are absolute pixel COORDINATES in the SOURCE image, measured from
-// its top-left origin - sliceLeft/sliceTop are "where the left/top border
-// ends" (fine, an inset from 0 IS just that coordinate), but sliceRight/
-// sliceBottom are "where the right/bottom border STARTS", i.e. (imageWidth
-// - insetFromRight) / (imageHeight - insetFromBottom), not the inset
-// itself. Setting all four to the same "inset" value (this function's
-// original bug) makes centerWidth/centerHeight collapse to 0 and mangles
-// the right/bottom patches into stretching nearly the whole image - the
-// exact "border shows on some edges, not others" result this was built to
-// fix. Computed here off the image's own real decoded size
-// (onImageLoadedObservable) instead of a second hardcoded guess, since
-// nothing in this file actually knows these images' pixel dimensions.
-function createNinePatchBg(name, imgPath, sliceInset){
-    const img = new GUI.Image(name, imgPath)
-    img.stretch = GUI.Image.STRETCH_NINE_PATCH
-    img.sliceLeft = sliceInset
-    img.sliceTop = sliceInset
-    img.width = "100%"
-    img.height = "100%"
-    img.onImageLoadedObservable.add(() => {
-        img.sliceRight = img.imageWidth - sliceInset
-        img.sliceBottom = img.imageHeight - sliceInset
-    })
-    return img
-}
-
-function createDivider(width = "100%"){
-    const div = new GUI.Rectangle("divider")
-    div.width = width
-    div.height = "1px"
-    div.thickness = 0
-    div.background = "rgba(202,165,1,0.35)"
-    return div
-}
-
-function createText(name, text, options = {}){
-    const t = new GUI.TextBlock(name, text)
-    t.fontFamily = options.fontFamily ?? FONT_BODY
-    t.fontSize = options.fontSize ?? 16
-    t.color = options.color ?? TEXT_BODY
-    t.textWrapping = options.wrap ?? false
-    t.textHorizontalAlignment = options.align ?? GUI.Control.HORIZONTAL_ALIGNMENT_CENTER
-    t.height = options.height ?? "24px"
-    t.resizeToFit = options.resizeToFit ?? false
-    // was silently dropped before - every options.width a caller passed
-    // (the section label, each resource-cost qty text) never actually
-    // reached the control, leaving it at Babylon GUI's own default sizing
-    // inside a horizontal StackPanel (effectively collapsed/fighting its
-    // siblings for space), which is why both read as missing entirely
-    // rather than just mis-positioned
-    if(options.width !== undefined) t.width = options.width
-    // Control's own padding properties (Babylon GUI's equivalent of CSS
-    // padding) - same "only touch it if the caller actually asked" as
-    // width above, so every existing call site that didn't pass these
-    // keeps its old (zero-padding) behavior unchanged
-    if(options.paddingLeft !== undefined) t.paddingLeft = options.paddingLeft
-    if(options.paddingRight !== undefined) t.paddingRight = options.paddingRight
-    if(options.paddingTop !== undefined) t.paddingTop = options.paddingTop
-    if(options.paddingBottom !== undefined) t.paddingBottom = options.paddingBottom
-    return t
-}
-
-// A clickable Rectangle+TextBlock button - Babylon GUI's own Button.
-// CreateSimpleButton does almost this, but doesn't give hover/disabled
-// states of our own styling, which the Craft button needs (greyed out +
-// unclickable when the player can't afford it, same spirit as
-// craftingui.js's disabled material swatches)
-function createGoldButton(name, label, onClick){
-    const btn = new GUI.Rectangle(name)
-    btn.height = "34px"
-    // was thickness:1 + a 12%-alpha fill - read as a barely-visible hairline
-    // with floating text rather than an actual button. Thicker border +
-    // much stronger fill so it reads as a pressable box against the
-    // panel's near-black background.
-    btn.thickness = 2
-    btn.color = GOLD
-    btn.background = BTN_BG_IDLE
-    btn.cornerRadius = 4
-    // Control's own built-in hover cursor - Babylon GUI applies this to the
-    // canvas's CSS cursor automatically while the pointer is over this
-    // control, no manual pointer-event/DOM cursor juggling needed
-    btn.hoverCursor = "pointer"
-
-    const label_ = createText(`${name}_label`, label, { fontFamily: FONT_BODY, fontSize: 15, color: GOLD_BRIGHT })
-    btn.addControl(label_)
-
-    btn.isPointerBlocker = true
-    btn.onPointerClickObservable.add(() => onClick(btn))
-    // hover brightens both the fill AND the border, not just the fill - a
-    // color-only border change with no thickness/cursor cue read as too
-    // subtle on its own (same complaint the original barely-visible idle
-    // state got)
-    btn.onPointerEnterObservable.add(() => {
-        if(btn.metadata?.disabled) return
-        btn.background = BTN_BG_HOVER
-        btn.color = GOLD_BRIGHT
-    })
-    btn.onPointerOutObservable.add(() => {
-        if(btn.metadata?.disabled) return
-        btn.background = BTN_BG_IDLE
-        btn.color = GOLD
-    })
-
-    return btn
-}
-
-function setButtonDisabled(btn, disabled){
-    // merge into whatever metadata the control already carries rather than
-    // replacing the object outright - createGoldButton's hover handlers only
-    // read metadata.disabled today, so a wholesale `= { disabled }` happens to
-    // be harmless right now, but Control.metadata is Babylon GUI's one general
-    // "stash your own state here" slot and the next thing to use it on a
-    // button would get silently wiped every time affordability changed
-    btn.metadata = { ...btn.metadata, disabled }
-    btn.alpha = disabled ? 0.4 : 1
-    btn.isPointerBlocker = !disabled
-    btn.background = BTN_BG_IDLE
-    // resets the border too, not just the fill - a button can go from
-    // affordable to disabled (refresh(), right after a successful craft)
-    // while still mid-hover, and onPointerOut won't fire just because the
-    // mouse hasn't actually moved - without this it could get stuck showing
-    // the brightened GOLD_BRIGHT hover border on a now-unclickable button
-    btn.color = GOLD
-}
 
 // ============================================================
 // requirement checking / spending - same "check first, only spend on

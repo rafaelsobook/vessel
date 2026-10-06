@@ -27,6 +27,7 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
+import { hasDungeonLineOfSight } from "../tools/dungeonSight.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 
 // modelStyles that don't bleed at all (see this file's own bloodps setup
@@ -393,7 +394,13 @@ export default function createEnemy(scene, det) {
     const ENEMY_SKILL_RANGE = 20
     let enemySkillCooldownUntil = 0
     if(det.skills?.length){
-        const enemySkillInterval = setInterval(() => {
+        // started after a random first wait, not straight away - every enemy
+        // created together (a whole dungeon's at once, the moment you walk
+        // in) otherwise checked on the very same tick forever after, so a
+        // room full of ghosts all cast at once and every darkorb landed in
+        // one volley
+        let enemySkillInterval = null
+        const checkSkillCast = () => {
             const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
             if (!thisEnemy) return clearInterval(enemySkillInterval)
             const theEnemyBodyMesh = getSceneDet().scene.getMeshByName(`enemy.${det._id}`)
@@ -407,6 +414,10 @@ export default function createEnemy(scene, det) {
                 if (!closestPlayer) return
                 const charState = getCharState()
                 if (!charState || closestPlayer.owner !== charState.owner) return
+                // in a dungeon, never through a wall - a ghost in the next
+                // room used to cast at you, and its orb fly, straight through
+                // the rock between (tools/dungeonSight.js)
+                if (!hasDungeonLineOfSight(det.currentPlaceId, thisEnemy.body.position, closestPlayer.body?.position)) return
 
                 // a random one of det.skills each cast - was always
                 // det.skills[0], so an enemy given more than one skill (the
@@ -424,7 +435,10 @@ export default function createEnemy(scene, det) {
                     castEnemySkill(scene, thisEnemy, skill, closestPlayer)
                 }
             })
-        }, ENEMY_SKILL_CHECK_INTERVAL_MS)
+        }
+        setTimeout(() => {
+            enemySkillInterval = setInterval(checkSkillCast, ENEMY_SKILL_CHECK_INTERVAL_MS)
+        }, Math.random() * ENEMY_SKILL_CHECK_INTERVAL_MS)
     }
 
     // --- lesserdemon-only: teleport-to-melee instead of chasing (det.
@@ -457,6 +471,9 @@ export default function createEnemy(scene, det) {
                 if (!closestPlayer?.body) return
                 const charState = getCharState()
                 if (!charState || closestPlayer.owner !== charState.owner) return
+                // not through a wall either - the boss would otherwise blink out
+                // of its own hall into whichever corridor you're walking past
+                if (!hasDungeonLineOfSight(det.currentPlaceId, thisEnemy.body.position, closestPlayer.body.position)) return
 
                 const enPos = thisEnemy.body.position
                 const plPos = closestPlayer.body.position

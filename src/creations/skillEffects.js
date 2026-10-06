@@ -48,6 +48,7 @@ import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/consta
 import { SKILLS_BY_NAME, getSkillEffect } from "../staticRecources/skillsData.js"
 import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { isDungeon, isDungeonWallAt } from "../tools/dungeonSight.js"
 import { ATK_COLLIDER_PARKED_Y } from "../charactersystem/createMyCharacter.js"
 import { markDashActive } from "../controllers/inputMovement.js"
 
@@ -4574,6 +4575,23 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         cleanupProjectile()
     }, ENEMY_SKILL_PROJECTILE_TIMEOUT)
 
+    // In a dungeon it bursts against the first wall it reaches - so stepping
+    // behind one while it's cast or in flight actually protects you, instead
+    // of it sailing on through the rock (tools/dungeonSight.js). Other places
+    // have no grid to ask, and keep flying as before.
+    if(isDungeon(projectile.placeId)){
+        const wallWatch = scene.onBeforeRenderObservable.add(() => {
+            if(hasHit || box.isDisposed()){ scene.onBeforeRenderObservable.remove(wallWatch); return }
+            if(!isDungeonWallAt(projectile.placeId, box.position)) return
+            hasHit = true
+            scene.onBeforeRenderObservable.remove(wallWatch)
+            clearTimeout(missTimeout)
+            playImpactSound(skill, box.position)
+            fireGenericBurst(scene, box.position.clone(), 1, null, skill.explosionColor || "red")
+            cleanupProjectile()
+        })
+    }
+
     // registered on EVERY client watching now, not just the intended
     // victim - was gated to `targetOwner === charState.owner` before
     // anything here even ran, so every OTHER client watching the same
@@ -4653,6 +4671,12 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         }
 
         playImpactSound(skill, spawnPos)
+        // "stickAndGrow"/"beam" (darkorb) hang on the target instead of
+        // bursting - stop renderer.js's movement loop carrying it on forward,
+        // the same as the player-cast version above does. This one never did:
+        // a ghost's darkorb latched onto you, swelled - and kept flying
+        // straight on through you.
+        if(getOnHitEffects(skill).some(e => e.type === "stickAndGrow" || e.type === "beam")) projectile.stuck = true
         // onHit (renderGenericProjectile's own return) owns the actual burst/
         // stick dispatch from here - stickBriefly skills embed into the
         // target's bodytarget for MARKER_STICK_DURATION_MS instead of

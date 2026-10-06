@@ -11,6 +11,9 @@ const GROUND_RAY_LENGTH = 200
 // structure snaps to, one for where it's allowed at all) is how a bonfire ends
 // up placeable on a mesh it can't actually sit on
 export function isGroundMesh(mesh){
+    // a place can also just say so - createdungeon.js's floor tiles are named
+    // floor_N, which the name test below would never match
+    if(mesh?._isGround === true) return true
     if(!mesh?.name) return false
     const name = mesh.name.toLowerCase()
     // village ground (createvillage.js's `${namePrefix}_ground`) and
