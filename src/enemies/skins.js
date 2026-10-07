@@ -1,4 +1,4 @@
-import { StandardMaterial, Color3, FresnelParameters, HighlightLayer } from "@babylonjs/core";
+import { StandardMaterial, Color3, FresnelParameters, HighlightLayer, Texture } from "@babylonjs/core";
 
 // diffuse/emissive pair per elementType - the material's actual hue. Every
 // OTHER part of the "translucent gel" look (alpha, Fresnel rim/opacity
@@ -20,6 +20,37 @@ const SLIME_ELEMENT_COLORS = {
     // than diffuse for the same reason, still enough to catch the Fresnel
     // rim glow every slime gets from the shared material below
     dark: { diffuse: new Color3(0.28, 0.05, 0.4), emissive: new Color3(0.35, 0.05, 0.5) },
+}
+
+// CRYSTAL - an enemy whose tcp data says skin: "crystal" (genenemy.ts's frost
+// scorpion): its usual texture (images/textures/enemy/<modelStyle>/<name>.jpg,
+// createMonsterMaterial's path) as ice. Sharp glints off any torch, and a cold
+// glow around its silhouette (Fresnel-driven, strongest where the surface
+// turns away from you) so it reads as crystal even in a dark dungeon. One
+// material per kind, shared by every one of them.
+const CRYSTAL_RIM = new Color3(0.45, 0.85, 1.0)
+export function createCrystalMat(scene, modelStyle, textureName){
+    const name = `${textureName}CrystalMat`
+    const existing = scene.getMaterialByName(name)
+    if(existing) return existing
+
+    const mat = new StandardMaterial(name, scene)
+    mat.diffuseTexture = new Texture(`./images/textures/enemy/${modelStyle}/${textureName}.jpg`, scene, false, false)
+    mat.specularColor = new Color3(0.9, 0.95, 1.0)
+    mat.specularPower = 96
+    // the glow's colour, shaped by the Fresnel below: full at the rim,
+    // a faint frost face-on
+    mat.emissiveColor = CRYSTAL_RIM
+    mat.emissiveFresnelParameters = new FresnelParameters()
+    mat.emissiveFresnelParameters.leftColor = Color3.White()
+    mat.emissiveFresnelParameters.rightColor = new Color3(0.06, 0.08, 0.1)
+    mat.emissiveFresnelParameters.power = 2.5
+    mat.emissiveFresnelParameters.bias = 0.05
+    mat.backFaceCulling = false
+    // dungeon torches - with the default 4 lights the nearest torch often
+    // isn't among them and the glints never show (createdungeon.js uses 8)
+    mat.maxSimultaneousLights = 8
+    return mat
 }
 
 export function createSlimeMat(scene, body, elementType = "water"){

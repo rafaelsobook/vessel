@@ -11,11 +11,13 @@ import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import { createTrunkMesh } from "../assetcreation/createtrunk.js"
 import { hideShowAllScreenUI } from "../charactersystem/uimanagement.js"
 import { findGroundY } from "../tools/position.js"
-import { emitCraftBonfire, emitCraftTrunk } from "../sockets/emits.js"
+import { emitCraftBonfire, emitCraftTrunk, emitCraftStructure } from "../sockets/emits.js"
+import { STRUCTURES, getStructureRoot, createStructureMesh } from "../assetcreation/createstructure.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
 
-// Data for every camp-craftable thing. Only "bonfire" and "treelog" have a
-// real CRAFT_HANDLERS entry (below) so far - anything added here without one
+// Data for every camp-craftable thing. "bonfire", "treelog" and every
+// assetcreation/createstructure.js STRUCTURES kind (leafbedtent, spikes) have a
+// real CRAFT_HANDLERS entry (below) - anything added here without one
 // still renders a full card (icon/desc/cost), it just tells the player it
 // isn't built yet instead of crafting nothing silently. `section` is what
 // buildCampcraftPanel groups cards under ("Structures" vs "Crafting" in the
@@ -46,6 +48,30 @@ export const campcrafts = [
         // qnty is a starting guess, not a balanced number - tune freely
         requiredItems: [
             { name: "wood", qnty: 5 }
+        ],
+        needsPlacement: true
+    },
+    // the two below are assetcreation/createstructure.js's STRUCTURES - their
+    // names are the keys there (and their icons' file names)
+    {
+        name: "leafbedtent",
+        dn: "Leaf Bed Tent",
+        section: "Structures",
+        desc: "A lean-to of poles and hide over a bed of gathered leaves. Somewhere dry to lay your head when you're far from any inn.",
+        // starting guesses, like the others - tune freely
+        requiredItems: [
+            { name: "wood", qnty: 8 },
+            { name: "leather", qnty: 3 }
+        ],
+        needsPlacement: true
+    },
+    {
+        name: "spikes",
+        dn: "Spike Barricade",
+        section: "Structures",
+        desc: "A row of sharpened stakes driven into the ground. Nothing walks through it - monsters have to go around.",
+        requiredItems: [
+            { name: "wood", qnty: 6 }
         ],
         needsPlacement: true
     }
@@ -169,16 +195,40 @@ const CRAFT_HANDLERS = {
     }
 }
 
+// every createstructure.js structure (tent, spikes...) builds the same way: it
+// stands where it was placed, turned to face whoever built it, and is synced
+// through the one generic "craft-structure" event
+Object.keys(STRUCTURES).forEach(kind => {
+    CRAFT_HANDLERS[kind] = (scene, position, craftId, placeId) => {
+        const me = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
+        const rotY = me?.body ? Math.atan2(me.body.position.x - position.x, me.body.position.z - position.z) : 0
+        const built = createStructureMesh(scene, kind, position, craftId, rotY, placeId)
+        if(built){
+            emitCraftStructure({
+                craftId,
+                kind,
+                position: { x: position.x, y: position.y, z: position.z },
+                rotY,
+                placeId
+            })
+        }
+        return built
+    }
+})
+
 // The mesh placementMode clones for the click-to-place preview, keyed the same
 // way CRAFT_HANDLERS is. Looked up lazily (a function, not the mesh itself)
 // because containers.js loads these roots per-scene - grabbing one at module
 // load would capture a mesh belonging to a scene that's since been disposed.
+// May return a Promise - a structure's model only loads the first time it's
+// needed in a place (createstructure.js), and this is that first time.
 const CRAFT_GHOSTS = {
     bonfire: () => getSocketContainers()?.bonfireRoot,
-    treelog: () => getSocketContainers()?.trunkRoot
+    treelog: () => getSocketContainers()?.trunkRoot,
+    ...Object.fromEntries(Object.keys(STRUCTURES).map(kind => [kind, scene => getStructureRoot(scene, kind)])),
 }
 
-function handleCraftClick(craft, refreshCard){
+async function handleCraftClick(craft, refreshCard){
     const charState = getCharState()
     if(!charState) return
 
@@ -206,7 +256,7 @@ function handleCraftClick(craft, refreshCard){
     // first: it's a fullscreen Babylon GUI layer, so leaving it up would mean
     // aiming at the scene through it.
     if(craft.needsPlacement){
-        const ghostSource = CRAFT_GHOSTS[craft.name]?.()
+        const ghostSource = await CRAFT_GHOSTS[craft.name]?.(sceneDet.scene)
         if(!ghostSource){
             // same missing-model case createBonfireMesh's own bonfireRoot
             // check already bails on - no preview mesh means no model to

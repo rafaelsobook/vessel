@@ -544,6 +544,10 @@ let renderCallback = function () {
             case "sitting":
                 player.characterAnimations.setState(ANIM_STATE.SITTING, 8)
             break
+            // a tent's bed - same seating.js re-parenting, lying down instead
+            case "sleeping":
+                player.characterAnimations.setState(ANIM_STATE.SLEEPING, 8)
+            break
             case "inAir":
                 player.characterAnimations.setState(ANIM_STATE.FALLING, 4)
             break

@@ -38,6 +38,8 @@ export const ANIM_STATE = {
     MINNING:    'minning',
     FALLING:    'falling',
     SITTING:    'sitting',
+    // lying in a tent's bed (seating.js's "sleeping" pose)
+    SLEEPING:   'sleeping',
 }
 
 export class CharacterAnimations {
@@ -60,6 +62,7 @@ export class CharacterAnimations {
             [ANIM_STATE.MINNING]:    find('minning'),
             [ANIM_STATE.FALLING]:    find('falling'),
             [ANIM_STATE.SITTING]:    find('sitting'),
+            [ANIM_STATE.SLEEPING]:   find('sleeping'),
         }
 
         const missing = Object.entries(this._anims).filter(([,v]) => !v).map(([k]) => k)

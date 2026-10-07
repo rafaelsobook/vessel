@@ -538,7 +538,8 @@ function setupControls(scene, allsounds) {
         // this, removing the old dedicated "wake up" button would leave
         // touch players with no way to stop resting at all.
         if(getCharState()?.mode === "resting") stopResting();
-        if(getCharState()?.mode === "sitting") standUp();
+        // sitting on a seat or lying in a tent's bed (seating.js) alike
+        if(["sitting", "sleeping"].includes(getCharState()?.mode)) standUp();
         if (!getCanPress()) return;
 
         joystickPointerId = e.pointerId;
@@ -571,7 +572,7 @@ function setupControls(scene, allsounds) {
             stopResting()
         }
         // same auto-stand-up for sitting (charactersystem/seating.js)
-        if(["w","a","s","d"].includes(key) && getCharState()?.mode === "sitting"){
+        if(["w","a","s","d"].includes(key) && ["sitting", "sleeping"].includes(getCharState()?.mode)){
             standUp()
         }
         if(!getCanPress()) return

@@ -133,13 +133,14 @@ export function emitRemoveTreasure(treasureId){
 // tcp/index.ts's "sit-down"/"stand-up" - seating.js has already seated or
 // unseated this player locally; the server settles seat races and tells
 // everyone else
-export function emitSitDown(placeId, seatId){
+// pose: "sitting" on a chair/log, "sleeping" in a tent's bed (seating.js)
+export function emitSitDown(placeId, seatId, pose = "sitting"){
     if (!getIsSocketOn()) return
     const charState = getCharState()
     if(!charState) return
     const socket = getSocket()
     if(!socket) return
-    socket.emit("sit-down", { ownerId: charState.owner, placeId, seatId })
+    socket.emit("sit-down", { ownerId: charState.owner, placeId, seatId, pose })
 }
 export function emitStandUp(){
     if (!getIsSocketOn()) return
@@ -185,6 +186,15 @@ export function emitCraftTrunk({ craftId, position, placeId }){
     const socket = getSocket()
     if(!socket) return
     socket.emit("craft-trunk", { craftId, position, placeId })
+}
+// tcp/index.ts's "craft-structure" handler - every assetcreation/
+// createstructure.js kind (tent, spikes...) through this one event, the kind
+// riding along, instead of a craft-<kind> event per structure
+export function emitCraftStructure({ craftId, kind, position, rotY, placeId }){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("craft-structure", { craftId, kind, position, rotY, placeId })
 }
 // tcp/index.ts's "strike-weapon" handler - same "act locally first, this
 // just syncs everyone else + what a fresh joiner's own userJoined payload

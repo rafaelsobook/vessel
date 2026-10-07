@@ -21,6 +21,9 @@ import { openCloseInteractBtn, openClosePopup } from "../tools/popupUI.js"
 // body center -> bench center. From the aisle side the body gets within
 // ~0.65 of a bench's center, from its end within ~1.2
 const SIT_RADIUS = 1.5
+// the modes being on a seat puts you in - each seat's own pose picks which
+const SEATED_MODES = ["sitting", "sleeping"]
+const poseOf = seat => seat?.pose ?? "sitting"
 const CHECK_EVERY_N_FRAMES = 8
 
 // The current place's seats and who's on them - rebuilt whenever the scene
@@ -88,23 +91,27 @@ function ensureSeatState(scene, placeId){
         const bodyPos = findPlayer(owner)?.body?.position
         if(!bodyPos) return
 
+        // nearest by how far inside its OWN reach each seat is - a tent's
+        // bed reaches further than a chair (seat.radius), but a chair right
+        // beside the tent should still win when you're standing at it
         let best = null
-        let bestDistSq = SIT_RADIUS * SIT_RADIUS
+        let bestScore = 1
         state.seats.forEach(seat => {
             const takenBy = state.occupiedBy.get(seat.seatId)
             if(takenBy && takenBy !== owner) return
             const dx = seat.x - bodyPos.x
             const dz = seat.z - bodyPos.z
-            const distSq = dx * dx + dz * dz
-            if(distSq < bestDistSq){
-                bestDistSq = distSq
+            const reach = seat.radius ?? SIT_RADIUS
+            const score = (dx * dx + dz * dz) / (reach * reach)
+            if(score < bestScore){
+                bestScore = score
                 best = seat
             }
         })
 
         if(best === state.nearest) return
         state.nearest = best
-        if(best) openCloseInteractBtn("normal", true, () => sitDown(best))
+        if(best) openCloseInteractBtn(best.icon ?? "normal", true, () => sitDown(best))
         else openCloseInteractBtn(false, false)
     })
     return state
@@ -121,7 +128,11 @@ function flushPendingRosterSeats(){
 
 // seats: [{ seatId, x, y, z, yaw }] - seatId must be the same on every client
 // (built from the room data), y is the floor under the seat, yaw uses the same
-// atan2(dx, dz) facing convention as inputMovement.js's faceForward(). Used
+// atan2(dx, dz) facing convention as inputMovement.js's faceForward().
+// Optional, per seat: pose - "sitting" (the default) or "sleeping" (a tent's
+// bed, createstructure.js) - which is both the animation and the player's
+// mode while on it; radius - how close you have to be (default SIT_RADIUS);
+// icon - the interact button's picture (default "normal"). Used
 // for a room's whole fixed furniture layout, known upfront in one batch - see
 // addSeat below for the treelog equivalent (placed one at a time, at runtime).
 export function registerSeats(scene, placeId, seats){
@@ -161,8 +172,9 @@ function seatPlayer(ownerId, seatId){
 
     // renderer.js holds the pose off player.mode - set here too so a remote
     // player whose "emitted-mode" hasn't arrived yet doesn't blend back to idle
-    player.mode = "sitting"
-    parentRoot(ownerId, seatNode, "sitting")
+    const pose = poseOf(seat)
+    player.mode = pose
+    parentRoot(ownerId, seatNode, pose)
     if(player.nameMesh) player.nameMesh.parent = seatNode
     if(player.fshadow) player.fshadow.parent = seatNode
 
@@ -202,11 +214,12 @@ export function sitDown(seat){
     forceStopMovement()
     if(!seatPlayer(owner, seat.seatId)) return
 
-    setCharStateMode("sitting")
+    const pose = poseOf(seat)
+    setCharStateMode(pose)
     setCanPress(false)
     if(getIsSocketOn()){
-        emitMode("sitting", equippedWeaponName())
-        emitSitDown(seatState.placeId, seat.seatId)
+        emitMode(pose, equippedWeaponName())
+        emitSitDown(seatState.placeId, seat.seatId, pose)
     }
 }
 
@@ -216,9 +229,9 @@ export function standUp(){
     if(seatState) seatState.nearest = null
 
     // still runs with nothing seated: mode is saved with the character, so a
-    // save made mid-sit reloads as "sitting" with no seat behind it - this
-    // is what gets that player moving again
-    if(getCharState()?.mode !== "sitting") return
+    // save made mid-sit reloads as "sitting" (or "sleeping") with no seat
+    // behind it - this is what gets that player moving again
+    if(!SEATED_MODES.includes(getCharState()?.mode)) return
     setCharStateMode("idle")
     setCanPress(true)
     if(getIsSocketOn()){
@@ -235,6 +248,12 @@ export function isSitting(){
 // chairs never use that prefix, so this is what tells a log apart from them
 export function isSittingOnLog(){
     return !!seatState?.seated.get(myOwner())?.seatId.startsWith("trunk_")
+}
+
+// lying in a tent's bed (createstructure.js) - characterstate.js's faster regen
+export function isSleepingInBed(){
+    const seated = seatState?.seated.get(myOwner())
+    return !!seated && poseOf(seatState.seats.get(seated.seatId)) === "sleeping"
 }
 
 // ── multiplayer entry points (sockets/worldsocket.js) ─────────────────────────

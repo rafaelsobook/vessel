@@ -30,6 +30,7 @@ import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import { createTrunkMesh } from "../assetcreation/createtrunk.js"
+import { placeStructure } from "../assetcreation/createstructure.js"
 import { createGrainMesh, removeGrainMesh } from "../assetcreation/creategrain.js"
 import { createMushroomMesh, removeMushroomMesh } from "../assetcreation/createmushroom.js"
 import { onPlayerSat, onPlayerStood, onSitRejected, applyRosterSeat, syncSeatOccupancy, releaseSeatOf } from "../charactersystem/seating.js"
@@ -45,6 +46,10 @@ let tcpBonfires = []
 // campcraft.js's "treelog" craft - same permanence/sync model as
 // tcpBonfires right above, just for trunk.glb placements
 let tcpTrunks = []
+// campcraft.js's other structures (tent, spikes... - assetcreation/
+// createstructure.js), all in one list with their kind. createstructure.js
+// dedupes by craftId per scene itself, so no ...InScene list alongside.
+let tcpStructures = []
 // tcp/recources/grains.ts - seeded, pickup-able like tcpTreasures. No
 // grainsInScene array alongside it: creategrain.js dedupes by grainId in its
 // own per-scene Map, which also resets itself on every scene change
@@ -296,7 +301,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, grains, mushrooms, struckWeapons, weather, dayNight } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, structures, grains, mushrooms, struckWeapons, weather, dayNight } = allDataFromServer
         // world clock rides on every snapshot too, same reasoning as weather below
         if(dayNight) setDayNightState(dayNight)
         // weather rides on every snapshot, not just its own "weather-changed"
@@ -333,6 +338,7 @@ export function activateOnSocketListeners(socket){
         tcpTreasures = treasures ?? []
         tcpBonfires = bonfires ?? []
         tcpTrunks = trunks ?? []
+        tcpStructures = structures ?? []
         tcpGrains = grains ?? []
         tcpMushrooms = mushrooms ?? []
         tcpStruckWeapons = struckWeapons ?? []
@@ -1108,6 +1114,13 @@ export function activateOnSocketListeners(socket){
         tcpTrunks.push(trunk)
         reCreateMeshesInScene()
     })
+    // tcp/index.ts's "craft-structure" echo - same shape as "trunk-crafted"
+    socket.on("structure-crafted", structure => {
+        if (!isSocketOn) return
+        if (tcpStructures.some(st => st.craftId === structure.craftId)) return
+        tcpStructures.push(structure)
+        reCreateMeshesInScene()
+    })
 
     // tcp/index.ts's "pickupGrain" echo - reaches every client, including the
     // one that picked it (removeGrainMesh is a no-op there, it's already gone)
@@ -1542,6 +1555,12 @@ export function reCreateMeshesInScene() {
 
         const trunk = createTrunkMesh(scene, trunkTcpInfo.pos, trunkTcpInfo.craftId, trunkTcpInfo.currentPlaceId)
         if(trunk) trunksInScene.push({ craftId: trunkTcpInfo.craftId })
+    })
+    // tents, spikes... - placeStructure loads the kind's model the first time
+    // and skips anything already standing
+    tcpStructures.length && tcpStructures.forEach(structure => {
+        if (characterState.currentPlace.placeId !== structure.currentPlaceId) return
+        placeStructure(scene, structure)
     })
     // createGrainMesh dedupes by grainId itself - no getMeshByName fallback
     // here, since that scans every mesh in the scene (15k+ grass/bush

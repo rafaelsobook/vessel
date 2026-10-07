@@ -58,6 +58,14 @@ export function initSounds(scene){
     const giantencounterS = createSoundSafe("giantencounter", "./sounds/monsters/giantencounter.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    // VOICE - eating and drinking (itemInfoSystem.js's consumeItemFunc: a
+    // "food" plays eatS - pears, mushrooms - a "potion" plays drinkS)
+    const eatS = createSoundSafe("eatS", "./sounds/voice/eat.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    const drinkS = createSoundSafe("drinkS", "./sounds/voice/drink.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     // MAGIC
     const magicCircle = createSoundSafe("magicCircle", "./sounds/magic/magiccircle.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
@@ -182,6 +190,7 @@ export function initSounds(scene){
         staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
         weaponblockS,
         throwSpearS,
+        eatS, drinkS,
 
         rainy,
         windy

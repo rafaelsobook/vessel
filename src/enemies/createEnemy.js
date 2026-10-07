@@ -20,7 +20,7 @@ import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
-import { createSlimeMat } from "./skins.js"
+import { createSlimeMat, createCrystalMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 import { createBloodSplatter } from "../tools/particlesystem.js"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
@@ -47,7 +47,7 @@ export default function createEnemy(scene, det) {
     // twice for the same _id) - returning null here early is the one place
     // that can't be bypassed no matter what called this or why
     if(scene.getMeshByName(`enemy.${det._id}`)) return null
-    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot, ghostRoot} = getSocketContainers()
+    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot, ghostRoot, giantScorpionRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
     // on openworld's uneven terrain, so look up the real ground height instead.
     // sampleTerrainSurfaceHeight (not terrainHeight) - matches the coarse,
@@ -134,6 +134,11 @@ export default function createEnemy(scene, det) {
             // "doesn't really matter, just needs to exist" as slime's {size:1}
             bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1 }, det._id)
         break
+        // every kind of scorpion (icescorpion...) - one rig, the kind is det.name
+        case "giantscorpion":
+            entries = giantScorpionRoot?.instantiateModelsToScene()
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1.5 }, det._id)
+        break
         default:
 
         break
@@ -154,6 +159,11 @@ export default function createEnemy(scene, det) {
     mainBodyMeshes.parent = body
     mainBodyMeshes.position.y -= det.bodyHeight/2
     mainBodyMeshes.rotationQuaternion = Quaternion.Identity()
+    // a model exported at the wrong size, or facing away from the way it
+    // walks (genenemy.ts's modelScale/modelYaw - the giant scorpion has both).
+    // scaleInPlace keeps the glTF root's own -1 z (its handedness flip).
+    if(det.modelScale) mainBodyMeshes.scaling.scaleInPlace(det.modelScale)
+    if(det.modelYaw) mainBodyMeshes.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), det.modelYaw)
 
     if (det._dirTarg) body.lookAt(new Vector3(det._dirTarg.x, yPos, det._dirTarg.z))
     
@@ -223,7 +233,11 @@ export default function createEnemy(scene, det) {
         }
         if (enemyasset.name === 'body') {
             // console.warn("set material for body")
-            const mat = createMonsterMaterial(scene, det.modelStyle, det.name)
+            // skin: "crystal" (genenemy.ts - the frost scorpion) - the same
+            // texture, as ice (skins.js's createCrystalMat)
+            const mat = det.skin === "crystal"
+                ? createCrystalMat(scene, det.modelStyle, det.name)
+                : createMonsterMaterial(scene, det.modelStyle, det.name)
             enemyasset.material = mat
 
         }

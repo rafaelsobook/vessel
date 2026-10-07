@@ -69,6 +69,8 @@ export async function setStartingContainers(scene){
         // idle1/running1/attack1/attack2/hit1/hit2/death clips confirmed on
         // disk, same loadMonsterRoot as every other rigged enemy above
         let ghostRoot = await loadMonsterRoot("./models/monsters/ghost.glb", scene)
+        // every kind of scorpion (genenemy.ts's giantScorpionBase) - one rig
+        let giantScorpionRoot = await loadMonsterRoot("./models/monsters/giantscorpion.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
         let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
         // campcraft.js's "treelog" craft (Structures section, same
@@ -260,6 +262,7 @@ export async function setStartingContainers(scene){
             lesserDemonRoot,
             deerRoot,
             ghostRoot,
+            giantScorpionRoot,
             treasureRoot,
             bonfireRoot,
             trunkRoot,

@@ -25,7 +25,7 @@ import {
     STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING
 } from "../constants/weather.js";
 import { triggerSkillWheel } from "./skillWheel.js";
-import { isSittingOnLog } from "./seating.js";
+import { isSittingOnLog, isSleepingInBed } from "./seating.js";
 import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
 
 // LIFE MANA STAMINA
@@ -67,6 +67,12 @@ const REST_SLEEP_REGEN_PER_TICK = 2
 // seating.js's isSittingOnLog - how often (ms) the extra hp/mp/sp regen from
 // sitting on a tree log is applied, on top of the normal regen intervals
 const LOG_SIT_REGEN_EVERY_MS = 1000
+// seating.js's isSleepingInBed (a leaf bed tent, createstructure.js) - the
+// same bonus as sitting on a log, this many times over each tick
+const BED_REGEN_MULTIPLIER = 3
+// and the sleep meter refills this much per restInterval tick while in one -
+// twice what the rest button (REST_SLEEP_REGEN_PER_TICK) gives
+const BED_SLEEP_REGEN_PER_TICK = 4
 
 let hpRegenInterval
 let mpRegenInterval
@@ -400,11 +406,16 @@ export function activateLifeSystem(){
     // SITTING ON A TREE LOG - bonus hp/mp/sp regen while seated on one
     // (seating.js). Same incrementX helpers the normal regen intervals above
     // use, so their own casting/blocking skips and max clamps still apply.
+    // SLEEPING IN A TENT (seating.js's isSleepingInBed) - the same bonus,
+    // BED_REGEN_MULTIPLIER times over: the fastest recovery there is
     logSitRegenInterval = setInterval( () => {
-        if(!isSittingOnLog()) return
-        incrementHp()
-        incrementMp()
-        incrementSp()
+        const ticks = isSleepingInBed() ? BED_REGEN_MULTIPLIER : isSittingOnLog() ? 1 : 0
+        if(!ticks) return
+        for(let i = 0; i < ticks; i++){
+            incrementHp()
+            incrementMp()
+            incrementSp()
+        }
         updateHpMpSp_UI()
     }, LOG_SIT_REGEN_EVERY_MS)
     // BLOCKING - stamina drains continuously while the LOCAL player's own
@@ -442,7 +453,12 @@ export function activateLifeSystem(){
         // is 10x the normal depletion step, so resting from empty to full
         // takes roughly 5 minutes at this same 6.2s cadence instead of the
         // ~50 minutes a straight reversal of the depletion rate would take
-        if(characterState.mode === "resting"){
+        if(characterState.mode === "sleeping"){
+            // in a tent's bed - the sleep meter refills faster than resting
+            // does; hp/mp/sp get their own (bigger) bonus from
+            // logSitRegenInterval above, not from here
+            characterState.survival.sleep = Math.min(100, characterState.survival.sleep + BED_SLEEP_REGEN_PER_TICK)
+        } else if(characterState.mode === "resting"){
             if(characterState.survival.sleep < 100) characterState.survival.sleep += REST_SLEEP_REGEN_PER_TICK
             if(characterState.survival.sleep > 100) characterState.survival.sleep = 100
 

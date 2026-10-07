@@ -4,6 +4,7 @@ import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
 import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL, addEffectsOnStat } from "./characterstate.js"
 import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
+import { getAllSounds } from "../components/soundSystem.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
 import { getSceneDet } from "../main/main.js"
 import { capsuleHeight } from "./createcharacter.js"
@@ -230,6 +231,10 @@ let consumeItemFunc = async () => {
     if(itemDetail.itemCateg !== "consumable") return
     
     openCloseMiniLS(`Consuming ${itemDetail.dn} ...`, true)
+    // foods (pears, mushrooms...) are eaten, potions drunk - plain play(), not
+    // soundSystem's playSound, whose random pitch shift would make a voice squeak
+    const consumeSound = itemDetail.itemType === "potion" ? getAllSounds().drinkS : getAllSounds().eatS
+    consumeSound?.play()
     const { cure, inflict, plusHp, plusMp, plusSp, plusDmg, plusSpd,fillHunger,  fillTireness } = itemDetail.consumeAbilities
     // saving
     const charState = getCharState()
