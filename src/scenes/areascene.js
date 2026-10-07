@@ -392,9 +392,11 @@ export async function areaScene(placeDetail){
 
             // shadowGenerator.addShadowCaster(model)
             // model.receiveShadows = true
-            if(item.cbAfterMade) item.cbAfterMade(scene)
+            // model - the placed mesh, for anything built around it (the
+            // dungeon door's cave)
+            if(item.cbAfterMade) item.cbAfterMade(scene, model)
             // console.log(model.getClassName())
-            if(model.getClassName() === "Mesh") createAggregate(model, item.physics.opt, item.physics.type, scene);
+            if(model.getClassName() === "Mesh" && item.physics) createAggregate(model, item.physics.opt, item.physics.type, scene);
 
             if(item.diffuseTexPath){
                 const mat = createMatV2(scene, item.diffuseTexPath)

@@ -1,5 +1,6 @@
 import { Color3, DirectionalLight, HemisphericLight, PointLight } from "@babylonjs/core"
 import { getSocket } from "../sockets/joinsocket.js"
+import { startDayNightIndicator } from "./dayNightIndicator.js"
 
 // Bridges tcp's world clock (tcp/recources/dayNight.ts) to how outdoor places
 // are lit. tcp owns the time - ONE time of day for the whole world - and sends
@@ -121,6 +122,11 @@ export function startDayNight(scene, areaType){
     }
 
     apply()
+    // the clock on screen (dayNightIndicator.js) - outdoors only, like the rest
+    startDayNightIndicator(scene, {
+        getTimeOfDay,
+        getDaylight: () => sunState(getTimeOfDay()).daylight,
+    })
     let frame = 0
     return scene.onBeforeRenderObservable.add(() => {
         if(++frame % UPDATE_EVERY_FRAMES === 0) apply()

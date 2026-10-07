@@ -92,6 +92,43 @@ export function displaceWithNoise(mesh, noiseFn, seedOffset, radius){
     mesh.updateVerticesData(VertexBuffer.NormalKind, normals);
 }
 
+// One faceted rock: an icosphere pushed about by displaceWithNoise, then
+// flat-shaded. The caller positions/scales it. createOre's peaks are these,
+// and so is every boulder of createCaveEntrance.js's cave.
+export function createJaggedRock(scene, name, radius, noiseFn, seedOffset, subdivisions = 4){
+    const rock = MeshBuilder.CreateIcoSphere(name, {
+        radius,
+        subdivisions,
+        updatable: true,
+        flat: false // smooth during displacement - flat gives shared corners diverging normals, which cracks the seam when displaced (see createRock's own note above). Facet it after instead.
+    }, scene);
+    displaceWithNoise(rock, noiseFn, seedOffset, radius);
+    rock.convertToFlatShadedMesh(); // facet it now that displacement is done and the geometry is final
+    return rock;
+}
+
+// Small flat-shaded chunks strewn on the ground in a ring around (0, 0) -
+// the gravel at the foot of an ore, and of the cave. angleStart/angleSpan
+// narrow the ring to an arc (angle 0 is +X, PI/2 is +Z).
+export function scatterRubble(scene, prefix, { count, minDist, maxDist, minRadius, maxRadius, angleStart = 0, angleSpan = Math.PI * 2 }){
+    const rubble = [];
+    for(let r = 0; r < count; r++){
+        const radius = minRadius + Math.random() * (maxRadius - minRadius);
+        const chunk = MeshBuilder.CreateIcoSphere(`${prefix}${r}`, {
+            radius,
+            subdivisions: 2,
+            flat: true
+        }, scene);
+
+        const angle = angleStart + Math.random() * angleSpan;
+        const dist = minDist + Math.random() * (maxDist - minDist);
+        chunk.position = new Vector3(Math.cos(angle) * dist, radius * 0.5, Math.sin(angle) * dist);
+        chunk.scaling = new Vector3(1, 0.7, 1);
+        rubble.push(chunk);
+    }
+    return rubble;
+}
+
 export function createOre(scene, worldPos){
     const oreNoise = createSimplex(311);
 
@@ -102,40 +139,17 @@ export function createOre(scene, worldPos){
     const peaks = [];
     for(let p = 0; p < peakCount; p++){
         const radius = 0.3 + Math.random() * 0.2;
-        const peak = MeshBuilder.CreateIcoSphere(`orepeak${p}`, {
-            radius,
-            subdivisions: 4,
-            updatable: true,
-            flat: false // smooth during displacement - flat gives shared corners diverging normals, which cracks the seam when displaced (see createRock's own note above). Facet it after instead.
-        }, scene);
+        const peak = createJaggedRock(scene, `orepeak${p}`, radius, oreNoise, p);
 
         const angle = (p / peakCount) * Math.PI * 2 + Math.random() * 0.4;
         const dist = p === 0 ? 0 : 0.15 + Math.random() * 0.25;
         peak.position = new Vector3(Math.cos(angle) * dist, radius * 0.4, Math.sin(angle) * dist);
         peak.scaling = new Vector3(1, 1.05 + Math.random() * 0.25, 1); // just a little taller than wide, not a spike
-
-        displaceWithNoise(peak, oreNoise, p, radius);
-        peak.convertToFlatShadedMesh(); // facet it now that displacement is done and the geometry is final
         peaks.push(peak);
     }
 
     // scattered rubble/gravel around the base of the formation
-    const rubbleCount = 14;
-    const rubble = [];
-    for(let r = 0; r < rubbleCount; r++){
-        const radius = 0.08 + Math.random() * 0.12;
-        const chunk = MeshBuilder.CreateIcoSphere(`orerubble${r}`, {
-            radius,
-            subdivisions: 2,
-            flat: true
-        }, scene);
-
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 0.45 + Math.random() * 0.4;
-        chunk.position = new Vector3(Math.cos(angle) * dist, radius * 0.5, Math.sin(angle) * dist);
-        chunk.scaling = new Vector3(1, 0.7, 1);
-        rubble.push(chunk);
-    }
+    const rubble = scatterRubble(scene, "orerubble", { count: 14, minDist: 0.45, maxDist: 0.85, minRadius: 0.08, maxRadius: 0.2 });
 
     const ore = Mesh.MergeMeshes([...peaks, ...rubble], true, true, undefined, false, true);
     ore.name = "ore";

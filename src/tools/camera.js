@@ -1,4 +1,4 @@
-import { ArcRotateCamera, Ray, Vector3, Tools } from "@babylonjs/core";
+import { ArcRotateCamera, PhysicsMotionType, PhysicsRaycastResult, Ray, Vector3, Tools } from "@babylonjs/core";
 
 let camera
 
@@ -49,9 +49,12 @@ export function createArcCam(scene, placeDetail, head){
     // exactly what that block predicts: mottled patches where a cloth mesh
     // sits a millimetre off the skin mesh beneath it, worse the further the
     // character is from world origin.
-    camera.minZ = 0.5
+    camera.minZ = 0.01
     // camera.checkCollisions = true;
     // camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
+
+    // a new scene - start from this camera's own radius, not the last place's
+    desiredRadius = null
 
     if(head) attachCam(head);
     return camera
@@ -66,6 +69,11 @@ export function attachCam(body){
     if(camera._smoothFollowObserver){
         scene.onBeforeRenderObservable.remove(camera._smoothFollowObserver)
     }
+    // the physics body of whatever's followed (body is usually a child of it
+    // - createcharacter.js's camParent) - the collision ray starts inside it
+    let owner = body
+    while(owner && !owner.physicsBody) owner = owner.parent
+    followedBody = owner?.physicsBody ?? null
     camera._smoothFollowObserver = scene.onBeforeRenderObservable.add(() => {
         const lerpSpeed = 8
         const bodyPos = body.getAbsolutePosition()
@@ -73,7 +81,122 @@ export function attachCam(body){
         smoothTarget.y += (bodyPos.y - smoothTarget.y) * lerpSpeed * (scene.getEngine().getDeltaTime() / 1000)
         smoothTarget.z += (bodyPos.z - smoothTarget.z) * lerpSpeed * (scene.getEngine().getDeltaTime() / 1000)
         camera.target.copyFrom(smoothTarget)
+        // after the target moves, so the ray starts where the camera orbits this frame
+        applyCameraCollision(scene, scene.getEngine().getDeltaTime() / 1000)
     })
+}
+
+// CAMERA COLLISION - a third-person camera's "spring arm": whenever something
+// solid sits between the player and where the camera wants to be (a house,
+// the castle, a hill, the dungeon cave, a room's wall), the camera is pulled
+// in to just in front of it instead of ending up inside or behind it.
+//
+// "Solid" is the PHYSICS world, not the meshes: one ray through Havok
+// (cheap however many meshes a place has) against STATIC bodies only. Every
+// wall, house, rock, fence, tree and the terrain is a mass:0 static body, and
+// that body is what the player actually bumps into - including for merged
+// structures whose visible mesh has no body of its own (createcastle.js,
+// createCaveEntrance.js). The player, other players, bots, enemies and a
+// travelling wagon are dynamic, so they never shove the camera about.
+//
+// The radius the player zoomed to (wheel/pinch) is kept separately in
+// desiredRadius. The camera snaps IN at once - a wall must never show from
+// the inside, even for a frame - and eases back OUT once the way is clear.
+//
+// Runs from attachCam's follow observer: onBeforeRender comes after
+// camera.update() (the zoom input) and before the view matrix is built, so
+// the radius set here is the one rendered this frame.
+const CAM_COLLISION_MARGIN     = 0.3   // stops this far short of whatever it hit
+const CAM_COLLISION_MIN_RADIUS = 0.75  // never closer than this - minZ is 0.5
+const CAM_RETURN_SPEED         = 5     // easing back out, per second
+// Havok hands back only the NEAREST hit (the plugin's multi-hit collector is
+// never enabled), so a moving body in the way (an enemy, another player) is
+// stepped past and the ray cast again from just beyond it, up to this often
+const CAM_RAY_MAX_STEPS        = 4
+const CAM_RAY_STEP_PAST        = 0.05
+
+// A collision-filter membership bit for static shapes the camera should look
+// through rather than be pushed in by - a hall's gallery floor, its posts and
+// railings, stairs (creations/roomHall.js): things you walk UNDER or past,
+// where pulling the camera to your head each time would be worse than seeing
+// them faded (the room occlusion below fades their mesh instead). The
+// player and everything else still collide with them as normal - only the
+// camera's ray skips this bit.
+const CAMERA_PASS_THROUGH = 1 << 30
+export function letCameraPassThrough(physicsShape){
+    physicsShape.filterMembershipMask = CAMERA_PASS_THROUGH
+}
+
+let desiredRadius = null   // where the player zoomed to
+let appliedRadius = null   // what this set last frame
+let followedBody  = null   // attachCam's target's own body - never a blocker
+const _camRayEnd   = new Vector3()
+const _camRayFrom  = new Vector3()
+const _camRayDir   = new Vector3()
+const _camRayHit   = new PhysicsRaycastResult()
+
+// distance from the camera's target to the first static body on the way to
+// `to`, or null if the way is clear
+function distanceToCameraBlocker(physics, from, to){
+    to.subtractToRef(from, _camRayDir)
+    const length = _camRayDir.length()
+    if(length < 1e-4) return null
+    _camRayDir.scaleInPlace(1 / length)
+
+    _camRayFrom.copyFrom(from)
+    const query = { collideWith: ~CAMERA_PASS_THROUGH }
+    if(followedBody) query.ignoreBody = followedBody
+    let travelled = 0
+    for(let step = 0; step < CAM_RAY_MAX_STEPS; step++){
+        physics.raycastToRef(_camRayFrom, to, _camRayHit, query)
+        if(!_camRayHit.hasHit) return null
+        const at = travelled + _camRayHit.hitDistance
+        if(_camRayHit.body?.getMotionType() === PhysicsMotionType.STATIC) return at
+        travelled = at + CAM_RAY_STEP_PAST
+        if(travelled >= length) return null
+        _camRayFrom.copyFrom(from).addInPlace(_camRayDir.scale(travelled))
+    }
+    return null
+}
+
+function applyCameraCollision(scene, dt){
+    const physics = scene.getPhysicsEngine()
+    if(!physics || !camera) return
+
+    const lower = camera.lowerRadiusLimit ?? 0
+    const upper = camera.upperRadiusLimit ?? Infinity
+    if(desiredRadius === null){
+        desiredRadius = camera.radius
+        appliedRadius = camera.radius
+    } else {
+        // whatever camera.update() changed since last frame is the player's
+        // own zoom. It also clamps the radius into its limits, so a pulled-in
+        // radius below lowerRadiusLimit comes back as the limit - compare
+        // against that, or the clamp itself would read as zooming out
+        const expected = Math.min(Math.max(appliedRadius, lower), upper)
+        desiredRadius = Math.min(Math.max(desiredRadius + camera.radius - expected, lower), upper)
+    }
+
+    // where the camera would be at the radius the player wants
+    const sinBeta = Math.sin(camera.beta)
+    _camRayEnd.set(
+        Math.cos(camera.alpha) * sinBeta,
+        Math.cos(camera.beta),
+        Math.sin(camera.alpha) * sinBeta,
+    ).scaleInPlace(desiredRadius).addInPlace(camera.target)
+
+    const blockedAt = distanceToCameraBlocker(physics, camera.target, _camRayEnd)
+    const radius = blockedAt === null
+        ? desiredRadius
+        : Math.max(CAM_COLLISION_MIN_RADIUS, blockedAt - CAM_COLLISION_MARGIN)
+
+    const current = appliedRadius
+    if(radius < current){
+        appliedRadius = radius
+    } else {
+        appliedRadius = current + (radius - current) * Math.min(1, CAM_RETURN_SPEED * dt)
+    }
+    camera.radius = appliedRadius
 }
 // ROOM CAMERA OCCLUSION - areascene.js's "room" case (createroom.js's boxed
 // walls) is the one place this camera can end up INSIDE geometry: the
@@ -84,8 +207,10 @@ export function attachCam(body){
 // with the character rendered small in the distance beyond it. The BSP
 // dungeons (createdungeon.js) have it worse - 3-cell corridors walled by
 // 15-high stone - so they get it too, in their own mode (OCCLUSION_MODES
-// below). Villages/openworld have nothing solid in the way at the radii they
-// use, so it isn't wired in globally.
+// below). Since CAMERA COLLISION (above) keeps the camera in front of every
+// static physics body in every place, this now mostly catches meshes with
+// no collider of their own and anything the camera is pressed against at
+// its minimum radius.
 //
 // Approach: every frame, raycast from the camera's real position toward the
 // target and fade (not hide - still reads as "a wall is there", just not

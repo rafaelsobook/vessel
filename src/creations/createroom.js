@@ -19,6 +19,7 @@ import { openCloseInteractBtn } from '../tools/popupUI';
 import { startQuestionare } from '../components/conversations';
 import { getAllSounds } from '../components/soundSystem';
 import { registerSeats } from '../charactersystem/seating';
+import { buildGallery, placeWallTorches } from './roomHall';
 
 // a chair farther than this from every table is treated as free-standing
 const SEAT_TABLE_RANGE = 1.5
@@ -103,6 +104,16 @@ function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, s
         brick.rotation.y = rotationY;
         if(hasPhysics)createAggregate(brick, { mass: 0 }, "box", scene);
 
+        brick.isVisible = true
+        if (shadowGenerator) {
+            shadowGenerator.addShadowCaster(brick)
+            brick.receiveShadows = true
+        }
+
+        // no capMaster - a hall (roomHall.js) frames its walls with timber
+        // instead; these studs at mid-height would run along its gallery floor
+        if(!capMaster) continue
+
         // brickTop's own footprint is square (size:0.6 for both width/depth -
         // see its own creation below), so rotating it changes nothing visually,
         // but it costs nothing to keep it aligned with its brick either
@@ -110,14 +121,10 @@ function buildWall(name, brickMaster, capMaster, startPos, stepVec, count, wh, s
         cap.position = new Vector3(px, wh/2, pz);
         cap.rotation.y = rotationY;
         if(hasPhysics)createAggregate(cap, { mass: 0 }, "box", scene);
-
-        brick.isVisible = true
         cap.isVisible = true
 
         if (shadowGenerator) {
-            shadowGenerator.addShadowCaster(brick)
             shadowGenerator.addShadowCaster(cap)
-            brick.receiveShadows = true
             cap.receiveShadows = true
         }
     }
@@ -175,6 +182,9 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         height      = 10,
         wallHeight  = WALL_HEIGHT,
         wallTexPath = "./images/modeltex/rockTex.jpg",
+        // repeats of wallTexPath across one 1-wide wall segment - the default
+        // suits rockTex; a texture of boards needs its own
+        wallTexScale = { uScale: wallHeight / 2, vScale: wallHeight },
         // "box" (default, every existing room) keeps today's flat
         // CreateGround plane floor. "cylinder" (Vesper's own Witch House,
         // localroomdb.js's placeId 15) swaps just the FLOOR mesh for a real
@@ -196,7 +206,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     const wt    = WALL_THICKNESS;
 
     const floorMat = createMat("floorMat", false, "./images/modeltex/planks.jpg", scene, { uScale: 2, vScale: 2});
-    const wallMat  = createMat(`${name}_mat_wall`, false, wallTexPath, scene,  { uScale: wh/2, vScale: wh });
+    const wallMat  = createMat(`${name}_mat_wall`, false, wallTexPath, scene, wallTexScale);
 
     // shared by BOTH the floor and the walls below when roomShape is
     // "cylinder" - a true circle now that the walls actually curve too
@@ -270,11 +280,16 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     if(roomShape === "cylinder"){
         buildCylinderWalls(`${name}_wall`, cylinderRadius, wh, wt, wallMat, scene, hasPhysics);
     } else {
-        buildWall(`${name}_wall_n`, brick, brickTop, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics, 0);
-        buildWall(`${name}_wall_s`, brick, brickTop, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics, 0);
-        buildWall(`${name}_wall_e`, brick, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics, Math.PI / 2);
-        buildWall(`${name}_wall_w`, brick, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics, Math.PI / 2);
+        // a hall frames its walls itself (roomHall.js) - no mid-height caps
+        const caps = room.gallery ? null : brickTop;
+        buildWall(`${name}_wall_n`, brick, caps, new Vector3(-halfW + 0.5, 0,  halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics, 0);
+        buildWall(`${name}_wall_s`, brick, caps, new Vector3(-halfW + 0.5, 0, -halfH),  new Vector3(1, 0, 0), nsCount, wh, scene, hasPhysics, 0);
+        buildWall(`${name}_wall_e`, brick, caps, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics, Math.PI / 2);
+        buildWall(`${name}_wall_w`, brick, caps, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics, Math.PI / 2);
     }
+
+    // ── Hall: an upper-floor gallery with stairs, timber framing (roomHall.js)
+    buildGallery(scene, room, hasPhysics);
 
     // ── Painted planes — flat textured overlays laid onto the room (rugs,
     // wall maps, etc). Default rotation lies it flat facing up like a rug;
@@ -344,16 +359,20 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
                 openCloseInteractBtn(false)
 
                 const tcpCharPlaceMD = findPlaceMetaData(exitPlaceDetail.placeId)
+                // where you come out - the place's own spawn, unless this exit
+                // says otherwise (a room up a hall's stairs comes out on its
+                // gallery, not the hall's ground-floor spawn)
+                const startingPos = exitPlaceDetail.startingPos ?? tcpCharPlaceMD.spawn
 
                 getAllSounds().normalDoorOC?.play()
                 await travelToPlace({
                     placeId: exitPlaceDetail.placeId,
                     name: exitPlaceDetail.name,
                     areaType: exitPlaceDetail.areaType,
-                    x: tcpCharPlaceMD.spawn.x,
-                    y: tcpCharPlaceMD.spawn.y,
-                    z: tcpCharPlaceMD.spawn.z,
-                    startingPos: tcpCharPlaceMD.spawn
+                    x: startingPos.x,
+                    y: startingPos.y,
+                    z: startingPos.z,
+                    startingPos
                 })
             })
         })
@@ -384,5 +403,6 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     await Promise.all([
         placeInstancedProps(name, "table", tables, scene, hasPhysics),
         placeInstancedProps(name, "chair", chairs, scene, hasPhysics),
+        placeWallTorches(scene, room),
     ]);
 }

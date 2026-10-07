@@ -20,6 +20,7 @@ import { sampleTerrainSurfaceHeight } from 'infterrain';
 import { OPENWORLD_TERRAIN_VERTS } from './constants.js';
 import { OPENWORLD_GRAVEYARDS } from './graveyards.js';
 import { getSpawnPos } from '../tools/position.js';
+import { createCaveEntrance } from '../assetcreation/createCaveEntrance.js';
 
 // placeId 12's dungeon - built up here instead of inline in metaDatas so the
 // openworld's own door into it (placeId 888's roomPaths, below) can point its
@@ -214,11 +215,13 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null
             },
-            // free-standing "anywhere door" to the dungeon (placeId 12) - the
-            // rooms' own generic door.glb, just with no wall around it. Open
-            // ground beside the south path, ~7.5 from spawn: checked against
-            // this village's generateArea() output and every hand-placed
-            // prop/npc (nearest: light pole {12.7,-19} ~7.6 away, Doran ~11.5).
+            // the door to the dungeon (placeId 12) - the rooms' own generic
+            // door.glb, set into a rocky cave mouth (createCaveEntrance.js)
+            // that runs back into a small hill behind it. Open ground beside
+            // the south path, ~7.5 from spawn: checked against this village's
+            // generateArea() output and every hand-placed prop/npc (nearest:
+            // light pole {12.7,-19} ~7.6 away, Doran ~11.5) - the cave stays
+            // within ~7 of the door, on its far side from the path.
             // door.glb is thin along Z, so rotation PI/2 turns it to face -X,
             // back toward the path, where its roomPaths trigger sits
             {
@@ -234,7 +237,8 @@ export const metaDatas = [
                     opt: {mass: 0},
                     type: "box"
                 },
-                functionBeforeMerge: null
+                functionBeforeMerge: null,
+                cbAfterMade: (scene, door) => createCaveEntrance(scene, door.position, door.rotation.y),
             },
         ],
         roomPaths: [
@@ -362,19 +366,71 @@ export const metaDatas = [
         spawn: {x: 0.6, y: 1, z: -10},
     },
     {
+        // the starting room - your own room up the guild hall's stairs. A
+        // small timber hall of its own (creations/roomHall.js): the bed's up
+        // on a loft along the north wall, reached by stairs up the east wall;
+        // fireplace, table and benches below. {x:0, z:-2} - where a new
+        // character is saved as standing (server/routes/characterR.js) -
+        // stays open floor.
         placeId: 10,
         name: 'Simple Room',
-        width: 7, // ground width
-        height: 10, // ground height
+        width: 14, // ground width
+        height: 14, // ground height
+        wallHeight: 7.5,
+        wallTexPath: "./images/modeltex/wood3.jpg",
+        // wood3 is horizontal boards, ~2.7 units of them per repeat
+        wallTexScale: { uScale: 0.37, vScale: 2.8 },
         areaType: "room",
         layout: { cellSize: 1 },
         spawn: {x: 0, y: 1, z: -2, rotation: 0},
-        
+        gallery: { height: 3.5, depth: 4.5, stairs: "east" },
+        wallTorches: [
+            { wall: "s", along: -3.5, y: 2.4 },
+            { wall: "s", along: 3.5, y: 2.4 },
+            { wall: "w", along: -4.5, y: 2.4 },
+            { wall: "w", along: 1.8, y: 2.4 },
+            { wall: "e", along: -5.2, y: 2.4 },
+            // up on the loft
+            { wall: "n", along: -2, y: 5.6 },
+            { wall: "n", along: 3, y: 5.6 },
+        ],
+        paintedPlanes: [
+            {
+                name: "roomrug",
+                texturePath: "./images/modeltex/decor1.jpg",
+                position: {x: -0.5, y: 0.016, z: -2},
+                width: 3,
+                height: 4.5,
+            }
+        ],
+        woodboxes: [
+            // under the loft, north-west corner
+            { name: "roomcrate1", position: {x: -6.2, y: 0.5, z: 6.1} },
+            { name: "roomcrate2", position: {x: -6.2, y: 1.5, z: 6.1} },
+            { name: "roomcrate3", position: {x: -5.1, y: 0.5, z: 6.1} },
+            // up on the loft, by the bed
+            { name: "roomcrate4", position: {x: -6.2, y: 4, z: 3.2} },
+        ],
+        tables: {
+            mainGlbpath: "./models/indors/tavernTable.glb",
+            locations: [
+                { pos: {x: -3.2, y: 0, z: -3.6}, rotationY: 0 },
+            ]
+        },
+        chairs: {
+            mainGlbpath: "./models/indors/tavChair.glb",
+            locations: [
+                { pos: {x: -3.2, y: 0, z: -4.4}, rotationY: 0 },
+                { pos: {x: -3.2, y: 0, z: -2.8}, rotationY: 0 },
+            ]
+        },
         optionalObjects: [
             {
                 itemId: randNum(0,9999).toString(),
                 name: "roomdoor",
-                position: {x: 0, y: 0, z: -5.5},
+                // set into the south wall (inner face -6.85), proud enough
+                // that the exit trigger in front of it stays reachable
+                position: {x: 0, y: 0, z: -6.6},
                 scale: null,
                 rotation: 0,
                 glbPath: "./models/indors/door.glb",
@@ -387,7 +443,8 @@ export const metaDatas = [
             {
                 itemId: randNum(0,9999).toString(),
                 name: "bed",
-                position: {x: 1, y: 0, z: 2},
+                // on the loft (its floor is at y 3.5)
+                position: {x: -4.6, y: 3.5, z: 4.7},
                 scale: null,
                 rotation: 0,
                 glbPath: "./models/beds/bed1.glb",
@@ -400,16 +457,16 @@ export const metaDatas = [
             {
                 itemId: randNum(1000,9999).toString(),
                 name: "table",
-                position: {x: -2.5, y: 0, z: 2},
+                position: {x: -1, y: 3.5, z: 5.8},
                 scale: null,
-                rotation: Math.PI / 2,
+                rotation: 0,
                 glbPath: "./models/indors/table1.glb",
                 physics: {
                     opt: {mass: 0},
                     type: "box"
                 },
-                functionBeforeMerge:(container) => { 
-                    container.meshes[0].getChildren()[0].dispose() 
+                functionBeforeMerge:(container) => {
+                    container.meshes[0].getChildren()[0].dispose()
 
                     return container.meshes[0].getChildren()[0]
                 } // this table has a transform node we don't need, so dispose it before merging
@@ -417,22 +474,20 @@ export const metaDatas = [
             {
                 itemId: randNum(1000,9999).toString(),
                 name: "book",
-                position: {x: 2.2, y: 0.9, z: 2},
+                position: {x: 0.6, y: 4.4, z: 5.8},
                 scale: null,
                 rotation: Math.PI / 2,
                 glbPath: "./models/indors/book1.glb",
-                physics: {
-                    opt: {mass: 0},
-                    type: "box"
-                },
-                functionBeforeMerge: null // this table has a transform node we don't need, so dispose it before merging
+                
             },
             {
                 itemId: randNum(1000,9999).toString(),
                 name: "fireplace",
-                position: {x: -2.5, y: 0, z: 4},
+                // against the west wall, its opening facing into the room
+                // (east) - checked in a render, 0/±PI/2 show its back or sides
+                position: {x: -6.2, y: 0, z: -1.3},
                 scale: null,
-                rotation: Math.PI + 1,
+                rotation: Math.PI,
                 glbPath: "./models/indors/fireplace.glb",
                 physics: {
                     opt: {mass: 0},
@@ -440,14 +495,14 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null, // this table has a transform node we don't need, so dispose it before merging
                 cbAfterMade: (scene) => {
-                    
+
                     getAllSounds().bonfireS?.play()
                 }
             },
             {
                 itemId: randNum(1000,9999).toString(),
                 name: "particle_fire",
-                position: {x: -2.5, y: 0, z: 4},
+                position: {x: -6.2, y: 0, z: -1.3},
                 scale: null,
                 rotation:0,
                 glbPath: null,
@@ -461,6 +516,10 @@ export const metaDatas = [
             placeId: 9,
             name: "guild house",
             areaType: "room",
+            // out of this room's door onto the guild hall's gallery, in
+            // front of the door back in (that door's own trigger reaches
+            // z 7.9 - this stays clear of it)
+            startingPos: {x: 6, y: 3.6, z: 7.2},
         },
         entryExitPlaceId: {
             exit: {
@@ -470,7 +529,8 @@ export const metaDatas = [
             }
         },
         sceneTemp: {
-            fogDensity: 0.1,
+            // was 0.1 in a room half this size - here that hides the far wall
+            fogDensity: 0.03,
             fogColor:{ r:0.05, g:0.15, b:0.1},
 
             lights: [
@@ -733,25 +793,91 @@ export const metaDatas = [
     },
     {
         placeId: 9, // Guild House
+        // A timber hall (creations/roomHall.js): a gallery along the north
+        // wall, stairs up the east wall to it. Grown from 16x13 around the
+        // same middle - every NPC (npcDetails.js, all within ~6 of the
+        // centre), the desk, board and crystal keep their spots; only the
+        // walls and doors moved out.
         name: 'Guild House',
-        width: 16, // ground width
-        height: 13, // ground height
+        width: 24, // ground width
+        height: 20, // ground height
+        wallHeight: 8,
+        wallTexPath: "./images/modeltex/wood3.jpg",
+        wallTexScale: { uScale: 0.37, vScale: 3 },
         areaType: "room",
         layout: { cellSize: 1 },
         spawn: {x: 4.4, y: 0.4, z: 2.5, rotation: 0},
-        roomPaths: [ // pabalik sa room naten dapat sa taas ng hagdan to e
+        gallery: { height: 3.5, depth: 4, stairs: "east" },
+        wallTorches: [
+            // either side of the front gate
+            { wall: "s", along: -3.2, y: 2.6 },
+            { wall: "s", along: 3.2, y: 2.6 },
+            { wall: "w", along: -6, y: 2.6 },
+            { wall: "w", along: 0.5, y: 2.6 },
+            { wall: "e", along: -6, y: 2.6 },
+            // under the gallery
+            { wall: "n", along: -8.5, y: 2.1 },
+            { wall: "n", along: 1, y: 2.1 },
+            // up on the gallery
+            { wall: "n", along: -6, y: 5.8 },
+            { wall: "n", along: 2, y: 5.8 },
+            { wall: "n", along: 9.5, y: 5.8 },
+        ],
+        paintedPlanes: [
+            {
+                // the walk in from the gate to the desk
+                name: "guildrug",
+                texturePath: "./images/modeltex/decor1.jpg",
+                position: {x: 0, y: 0.016, z: -3.6},
+                width: 3,
+                height: 10,
+            }
+        ],
+        woodboxes: [
+            { name: "guildcrate1", position: {x: -11.2, y: 0.5, z: 9.1} },
+            { name: "guildcrate2", position: {x: -11.2, y: 1.5, z: 9.1} },
+            { name: "guildcrate3", position: {x: -10.1, y: 0.5, z: 9.1} },
+            { name: "guildcrate4", position: {x: 11.2, y: 0.5, z: -9.1} },
+            { name: "guildcrate5", position: {x: -11.2, y: 4, z: 9.1} },
+        ],
+        // the hall's tables, west side - benches either side of each
+        tables: {
+            mainGlbpath: "./models/indors/tavernTable.glb",
+            locations: [
+                { pos: {x: -9, y: 0, z: -6.5}, rotationY: Math.PI/2 },
+                { pos: {x: -9, y: 0, z: -2}, rotationY: Math.PI/2 },
+                // up on the gallery
+                { pos: {x: -2, y: 3.5, z: 8}, rotationY: 0 },
+            ]
+        },
+        chairs: {
+            mainGlbpath: "./models/indors/tavChair.glb",
+            locations: [
+                { pos: {x: -9.8, y: 0, z: -6.5}, rotationY: Math.PI/2 },
+                { pos: {x: -8.2, y: 0, z: -6.5}, rotationY: Math.PI/2 },
+                { pos: {x: -9.8, y: 0, z: -2}, rotationY: Math.PI/2 },
+                { pos: {x: -8.2, y: 0, z: -2}, rotationY: Math.PI/2 },
+                { pos: {x: -2, y: 3.5, z: 7.2}, rotationY: 0 },
+                { pos: {x: -2, y: 3.5, z: 8.8}, rotationY: 0 },
+            ]
+        },
+        roomPaths: [
+            // your room - up the stairs, on the gallery (its floor is y 3.5,
+            // so the trigger box (size 2) is centred 0.5 above it, out of
+            // reach from the floor below)
             {
                 placeId: 10,
                 name: "room",
                 areaType: "room",
-                pos: {x: 6, y: 0.5, z: 5.25},
-                startingPos: {x: 0, y: 1, z: -2}
+                pos: {x: 6, y: 4, z: 8.9},
+                // just inside your room's door, clear of its exit trigger
+                startingPos: {x: 0, y: 0.2, z: -5.2}
             },
             {
                 placeId: 101,
                 name: "Guildmaster's Office",
                 areaType: "room",
-                pos: {x: 0.9, y: 0.5, z: 5.25},
+                pos: {x: -4, y: 0.5, z: 8.9},
                 startingPos: {x: 0, y: 1, z: -3}
             },
             // placeId 101 (Guildmaster's Office) already exists fully built
@@ -769,9 +895,10 @@ export const metaDatas = [
         ],
         optionalObjects: [
             {
+                // your room's door - up on the gallery
                 itemId: randNum(0,9999).toString(),
                 name: "roomdoor",
-                position: {x: 6, y: 0, z: 6.1},
+                position: {x: 6, y: 3.5, z: 9.65},
                 scale: null,
                 rotation: 0,
                 glbPath: "./models/indors/door.glb",
@@ -782,9 +909,10 @@ export const metaDatas = [
                 functionBeforeMerge: null
             },
             {
+                // the Guildmaster's Office - ground floor, under the gallery
                 itemId: randNum(0,9999).toString(),
                 name: "roomdoor",
-                position: {x: 0.9, y: 0, z: 6.1},
+                position: {x: -4, y: 0, z: 9.65},
                 scale: null,
                 rotation: 0,
                 glbPath: "./models/indors/door.glb",
@@ -797,7 +925,10 @@ export const metaDatas = [
             {
                 itemId: randNum(0,9999).toString(),
                 name: "guildgate",
-                position: {x: 0, y: 0, z: -7},
+                // half into the south wall (centred on its line, z -10): its
+                // face is only 0.2 proud, so the exit trigger just in front
+                // (createroom.js, z -9.75..-9.25) stays reachable
+                position: {x: 0, y: 0, z: -10},
                 scale: null,
                 rotation: 0,
                 glbPath: "./models/indors/guilddoor.glb",
@@ -941,7 +1072,8 @@ export const metaDatas = [
 
             lights: [
                 // {name:"directional", intensity: 0.9},
-                {name:"hemispheric", intensity: 0.8},
+                // was 0.8 - the torches carry the warm light now
+                {name:"hemispheric", intensity: 0.6},
             ],
         },
         isMultiplayer: true
