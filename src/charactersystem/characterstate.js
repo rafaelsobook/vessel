@@ -21,12 +21,13 @@ import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 import { getAmbientTemperature } from "../components/weatherSystem.js";
 import {
     temperatureStrain, BODY_TEMP_NORMAL, BODY_TEMP_MIN_SAFE, BODY_TEMP_MAX_SAFE,
-    BODY_TEMP_DRIFT_PER_TICK, BODY_TEMP_RECOVER_PER_TICK, TEMP_DAMAGE_PER_TICK,
+    BODY_TEMP_DRIFT_PER_TICK, BODY_TEMP_RECOVER_PER_TICK, TEMP_DAMAGE_FRACTION_PER_TICK,
     STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING
 } from "../constants/weather.js";
 import { triggerSkillWheel } from "./skillWheel.js";
 import { isSittingOnLog, isSleepingInBed } from "./seating.js";
 import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
+import { showWarning } from "../components/warningUI.js";
 
 // LIFE MANA STAMINA
 const lvlAndName = document.querySelector(".lvl-name")
@@ -643,9 +644,12 @@ export function restoreAll(){
     updateMyDetailsOL(characterState, checkIfTokenSaved())
 }
 export function updateHunger(){
+    const hungerBefore = characterState.survival.hunger
     if(characterState.survival.hunger > 0) characterState.survival.hunger-=1
     updateSurvival_UI();
-    const toDeduct = characterState.maxHp*.05 // 5% of life
+    // the moment it runs out, not every tick after
+    if(hungerBefore > 0 && characterState.survival.hunger <= 0) showWarning("Find Food")
+    const toDeduct = characterState.maxHp*.10 // 10% of life
 
     if(characterState.hp > toDeduct && characterState.survival.hunger < 5){
         characterState.hp -= toDeduct
@@ -1037,6 +1041,7 @@ function tickBodyTemperature(){
         characterState.survival.bodytemp = BODY_TEMP_NORMAL
     }
 
+    const tempBefore = characterState.survival.bodytemp
     const strain = temperatureStrain(getAmbientTemperature(), getTotalTempResistance())
 
     if(strain !== 0){
@@ -1058,13 +1063,17 @@ function tickBodyTemperature(){
     }
 
     const temp = characterState.survival.bodytemp
+    // the moment it drops into the cold that hurts, not every tick after
+    if(tempBefore >= BODY_TEMP_MIN_SAFE && temp < BODY_TEMP_MIN_SAFE) showWarning("Find Warmth")
     if(temp >= BODY_TEMP_MIN_SAFE && temp <= BODY_TEMP_MAX_SAFE) return
 
-    // outside 15-35 costs hp every tick until it's back in band. Guarded the
-    // same way updateHunger's own starvation damage is - never drives hp
-    // below zero here, the death path is playerDeath's job.
-    if(characterState.hp > TEMP_DAMAGE_PER_TICK){
-        characterState.hp -= TEMP_DAMAGE_PER_TICK
+    // outside the band (BODY_TEMP_MIN_SAFE..MAX_SAFE) costs 6% of max hp
+    // every tick until it's back in. Guarded the same way updateHunger's own
+    // starvation damage is - never drives hp below zero here, the death path
+    // is playerDeath's job.
+    const toDeduct = characterState.maxHp * TEMP_DAMAGE_FRACTION_PER_TICK
+    if(characterState.hp > toDeduct){
+        characterState.hp -= toDeduct
         updateHP_UI()
     }
 }

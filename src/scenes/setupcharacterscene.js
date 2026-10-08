@@ -9,12 +9,12 @@ import { createColorPicker } from "../gui/colorpicker";
 import { playAnim, stopAllAnim } from "../tools/animation";
 import { checkIfTokenSaved } from "../tools/tools.js";
 import { createRoom } from "../creations/createroom.js";
-import { metaDatas } from "../constants/localroomdb.js"
+import { WITCH_HOUSE } from "../constants/places/witchTowers.js"
 import { mergeAndLoadModel } from "../tools/loadmodel.js";
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
 import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
-import { FEMALE_ONLY_NAMES, findDeepByName } from "../charactersystem/createcharacter.js";
+import { FEMALE_ONLY_NAMES, findDeepByName, facePartOf, isHiddenFemalePart } from "../charactersystem/createcharacter.js";
 
 // mainbody/femalebody/scalp aren't always a single flat mesh with no
 // children on this rig (see createcharacter.js's own dispose(true) comment -
@@ -48,11 +48,15 @@ export async function setupCharacterScene(engine){
     let clothes = []
     let pants = []
     // female has no cloth/pants/skinColor style choices yet (createcharacter.js's
-    // own isFemale comment) - just a body, 2 hairstyles, and one fixed
-    // default outfit (belt.style1/blindfold/mask.style.1/skirt.style1/bag/
-    // silverine, always on, no picker)
+    // own isFemale comment) - just a body, her own face, 2 hairstyles, and one
+    // fixed default outfit (belt.style1/blindfold/skirt.style1/bag/silverine,
+    // always on, no picker - mask.style.1 is left off)
     let femaleHairs = []
     let femaleAccessories = []
+    // each gender's eyes/eyeback/eyebrows (createcharacter.js's facePartOf) -
+    // swapped by the gender toggle
+    let maleFace = []
+    let femaleFace = []
     // mainbodyhand is a SEPARATE mesh from mainbody, not a child of it (so
     // setTreeVisible's own getChildMeshes() cascade can't reach it) - but its
     // name contains "mainbody" as a substring, so it was already silently
@@ -64,10 +68,11 @@ export async function setupCharacterScene(engine){
     const spawnPos = new Vector3(0,0,0)
     const scene = new Scene(engine)
 
+    // the Witch House (placeId 15) is the backdrop room
     // createRoom() only builds the ground/walls for this scene (characterBody
     // is false here, so it skips optionalObjects entirely) - the bare room
     // otherwise has nothing lining it, so dress the perimeter with shelves.
-    createRoom(scene, metaDatas[3], false, false)
+    createRoom(scene, WITCH_HOUSE, false, false)
 
     const hemLight = new HemisphericLight("HemiLight", new Vector3(0, 1, 0), scene);
     hemLight.intensity = .6
@@ -79,12 +84,12 @@ export async function setupCharacterScene(engine){
     shadowGenerator.useBlurExponentialShadowMap = true
     shadowGenerator.blurKernel = 16
 
-    placeCornerShelves(scene, metaDatas[3].width, metaDatas[3].height, shadowGenerator)
+    placeCornerShelves(scene, WITCH_HOUSE.width, WITCH_HOUSE.height, shadowGenerator)
     // placeCornerShelves only insets 2.5 units from each corner, leaving the
     // low room wall exposed (with black void above it, since there's no
     // ceiling/skybox) along the middle stretch of every wall - fill the one
     // visible behind the character (north wall) with a plain textured box.
-    coverBackWallGap(scene, metaDatas[3].width, metaDatas[3].height, shadowGenerator)
+    coverBackWallGap(scene, WITCH_HOUSE.width, WITCH_HOUSE.height, shadowGenerator)
 
     const cam = new ArcRotateCamera("camera",-Math.PI/2 + Math.PI/10, Math.PI/2 - 0.2,5,new Vector3(0,0.8,0), scene)
     // cam.attachControl()
@@ -148,7 +153,16 @@ export async function setupCharacterScene(engine){
         if(meshPartName.includes("boots")) return mesh.dispose(true)
         if(meshPartName.includes("armor")) return mesh.dispose(true)
         if(meshPartName.includes("gear")) return mesh.dispose(true)
+        // her mask - left off, as in the game (createcharacter.js)
+        if(isHiddenFemalePart(meshPartName)) return setTreeVisible(mesh, false)
 
+        // the face - each gender has its own set; only the current one shows
+        const face = facePartOf(meshPartName)
+        if(face){
+            (face.female ? femaleFace : maleFace).push(mesh)
+            setTreeVisible(mesh, face.female === (toSave.gender === "female"))
+            return
+        }
 
         // createcharacter.js's own FEMALE_ONLY_NAMES/isFemale comment -
         // avatar.glb bundles both genders' meshes together now, hidden
@@ -302,6 +316,8 @@ export async function setupCharacterScene(engine){
 
         if(femaleBodyMesh) setTreeVisible(femaleBodyMesh, isFemale)
         femaleAccessories.forEach(mesh => mesh.isVisible = isFemale)
+        maleFace.forEach(mesh => setTreeVisible(mesh, !isFemale))
+        femaleFace.forEach(mesh => setTreeVisible(mesh, isFemale))
 
         // a hair style picked under the OTHER gender never matches this
         // one's own mesh suffixes (style1/2 vs hair1/2) - fall back to this

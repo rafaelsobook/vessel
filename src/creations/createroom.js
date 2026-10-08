@@ -11,13 +11,9 @@ import {
 import { createAggregate } from '../tools/physics';
 import { loadModelByIndx, mergeAndLoadModel } from '../tools/loadmodel';
 import { createMat, createMatV2 } from '../tools/materials';
-import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
-import { findMyCurrentPlace, findPlaceMetaData } from '../states/placestates';
-import { travelToPlace } from '../tools/travel';
-import { openCloseInteractBtn } from '../tools/popupUI';
+import { findMyCurrentPlace } from '../states/placestates';
 
 import { startQuestionare } from '../components/conversations';
-import { getAllSounds } from '../components/soundSystem';
 import { registerSeats } from '../charactersystem/seating';
 import { buildGallery, placeWallTorches } from './roomHall';
 
@@ -198,7 +194,6 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         tables,
         chairs,
         spawn,
-        exitPlaceDetail
     } = room;
     const halfW = width  / 2;
     const halfH = height / 2;
@@ -216,7 +211,7 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     // halfH), not min or an average - guarantees the new circular wall
     // still fully contains everything that was already positioned relative
     // to the ORIGINAL rectangular footprint along its LONGER axis (this
-    // room's own spawn/exitPlaceDetail door trigger, both z-positioned
+    // room's own spawn and south-wall exit door, both z-positioned
     // against halfH) - using the smaller half would leave those outside
     // the new wall entirely. The tradeoff is open floor space near the
     // shorter axis's own former wall line (the circle extends past it) -
@@ -348,38 +343,6 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
     //     })
     // }, 2000)
 
-    if (exitPlaceDetail && characterBody) {
-        const exitTrigger = MeshBuilder.CreateBox(`${name}_exit_trig`, { width: width/4, height: 2, depth: 1/2 }, scene)
-        exitTrigger.position = new Vector3(0, 1, -halfH + 0.5)
-        exitTrigger.isVisible = false
-        exitTrigger.isPickable = false
-
-        onIntersecEnterTrig(exitTrigger, characterBody, scene, () => {
-            openCloseInteractBtn("normal", "none", async () => {
-                openCloseInteractBtn(false)
-
-                const tcpCharPlaceMD = findPlaceMetaData(exitPlaceDetail.placeId)
-                // where you come out - the place's own spawn, unless this exit
-                // says otherwise (a room up a hall's stairs comes out on its
-                // gallery, not the hall's ground-floor spawn)
-                const startingPos = exitPlaceDetail.startingPos ?? tcpCharPlaceMD.spawn
-
-                getAllSounds().normalDoorOC?.play()
-                await travelToPlace({
-                    placeId: exitPlaceDetail.placeId,
-                    name: exitPlaceDetail.name,
-                    areaType: exitPlaceDetail.areaType,
-                    x: startingPos.x,
-                    y: startingPos.y,
-                    z: startingPos.z,
-                    startingPos
-                })
-            })
-        })
-        onIntersecExitTrig(exitTrigger, characterBody, scene, () => {
-            openCloseInteractBtn(false, false)
-        })
-    }
 
     // chairs are sittable - only with a real character to seat (the
     // character-creation backdrop passes characterBody false)
@@ -398,8 +361,8 @@ export async function createRoom(scene, room, characterBody, hasPhysics = true) 
         }))
     }
 
-    // last, after the exit trigger - these load glbs, and the way out of the
-    // room shouldn't wait on furniture finishing
+    // last - these load glbs, and nothing else in the room should wait on
+    // furniture finishing
     await Promise.all([
         placeInstancedProps(name, "table", tables, scene, hasPhysics),
         placeInstancedProps(name, "chair", chairs, scene, hasPhysics),

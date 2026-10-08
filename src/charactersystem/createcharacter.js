@@ -633,13 +633,35 @@ function createMainBodyTargetToClone(scene){
 // exact same avatar.glb and needs the identical gender split, not a
 // hand-copied second list that could drift out of sync with this one
 export const FEMALE_ONLY_NAMES = [
-    "femalebody", 
-    "female.hair", 
-    "belt.style1", 
-    "mask.style", 
+    "femalebody",
+    "female.hair",
+    "belt.style1",
+    "mask.style",
     "skirt.style",
     "female"
 ]
+
+// Each body has its own face: eyes, eyeback (the whites behind them) and
+// eyebrows - the male's plain-named, the female's "female."-prefixed copies
+// fitted to her head (avatar.glb; female.eyes is the same mesh and material
+// as eyes). Every character keeps exactly its own gender's set.
+// { part: "eyes"|"eyeback"|"eyebrows", female } for a face mesh's
+// (lowercased) name, null for anything else. Exported - setupcharacterscene.js's
+// preview swaps the same two sets on its gender toggle.
+const FACE_PARTS = ["eyes", "eyeback", "eyebrows"]
+export function facePartOf(name){
+    if(FACE_PARTS.includes(name)) return { part: name, female: false }
+    if(name.startsWith("female.") && FACE_PARTS.includes(name.slice("female.".length))){
+        return { part: name.slice("female.".length), female: true }
+    }
+    return null
+}
+
+// her mask (mask.style.1) - part of the female outfit in avatar.glb, left off
+const HIDDEN_FEMALE_PARTS = ["mask.style"]
+export function isHiddenFemalePart(name){
+    return HIDDEN_FEMALE_PARTS.some(n => name.includes(n))
+}
 
 // finds a bone/node anywhere under root whose name matches, instead of
 // assuming it sits at a fixed getChildren()[0] position - the pelvis search
@@ -700,14 +722,31 @@ function disposeMeshTree(mesh){
     mesh.dispose(true)
 }
 
+// The eyes' race look (eyes or female.eyes - one mesh and material shared by
+// both): ./images/modeltex/eyes/<race>eye.jpg as their emissive texture.
+// instantiateModelsToScene() doesn't clone materials, so every character
+// shares the mesh's original material - mutating it in place would make the
+// last-created character's race win for everyone, hence the clone. Falls back
+// to "human" (the common case, see npcDetails.js) instead of loading
+// "undefinedeye.jpg" - det.race can be missing for synced players
+// (getCharSocket()'s payload didn't use to include it) or any NPC entry that
+// forgot to set one.
+function giveRaceEyes(eyes, det, scene){
+    const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
+    const eyeMat = eyes.material.clone(`eye_mat_${det._id}`)
+    eyeMat.emissiveTexture = eyeTexture
+    eyes.material = eyeMat
+}
+
 function createAnimeBody(containers, body, bodytarget, det, scene){
     const { animeBody, hairs } = containers
     let headBone, spineBone, rHand, lowerArmL, lowerArmR, shoulderL, shoulderR
 
     // female has no pants/cloth/skinColor style choices yet (only a body +
-    // 2 hairstyles + one fixed default outfit: belt.style1/blindfold/
-    // mask.style.1/skirt.style1/bag/silverine, always on, no equip system
-    // behind them) - see this function's own gender branch below
+    // her own face + 2 hairstyles + one fixed default outfit: belt.style1/
+    // blindfold/skirt.style1/bag/silverine, always on, no equip system
+    // behind them - mask.style.1 is left off) - see this function's own
+    // gender branch below
     const isFemale = det.gender === "female"
     if(!isFemale) det.gender = "male"
 
@@ -830,25 +869,17 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(mes.name.includes("tripo_node")) return disposeMeshTree(mes)
         // log(mes.name)
 
-        // "eyes" is shared by both bodies (parented under the common head
-        // bone, not part of either body's own node group) - handle it before
-        // the gender-exclusivity dispose below so it survives for both
         if(mes.name === "mainbodylegs"){
             mainBodyLegs = mes;
         }
-        if(mes.name === "eyes") {
-            if(isFemale) return mes.dispose()
-            // instantiateModelsToScene() above doesn't clone materials, so every
-            // character shares this mesh's original material - mutating it in
-            // place would make the last-created character's race win for everyone
-            // falls back to "human" (the common case, see npcDetails.js) instead
-            // of trying to load "undefinedeye.jpg" - det.race can be missing for
-            // synced players (getCharSocket()'s payload didn't use to include it)
-            // or any NPC entry that forgot to set one
-            const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
-            const eyeMat = mes.material.clone(`eye_mat_${det._id}`)
-            eyeMat.emissiveTexture = eyeTexture
-            mes.material = eyeMat
+        // the face - this character's own gender's eyes/eyeback/eyebrows
+        // (facePartOf), the other set disposed. Handled before the gender
+        // split below, which would only hide the other set.
+        const face = facePartOf(mes.name)
+        if(face){
+            if(face.female !== isFemale) return disposeMeshTree(mes)
+            showHideEquip(mes, true)
+            if(face.part === "eyes") giveRaceEyes(mes, det, scene)
             return
         }
 
@@ -886,10 +917,11 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
                 characterHairs.push(mes)
                 return
             }
-            // belt.style1/blindfold/mask.style.1/skirt.style1/bag/silverine -
-            // her one fixed default look (no style/equip system behind any
-            // of these yet, see this function's own isFemale comment above) -
-            // always on
+            // her mask - left off (isHiddenFemalePart)
+            if(isHiddenFemalePart(mes.name)) return showHideEquip(mes, false)
+            // belt.style1/blindfold/skirt.style1/bag/silverine - her one
+            // fixed default look (no style/equip system behind any of these
+            // yet, see this function's own isFemale comment above) - always on
             mes.isVisible = true
         }
 

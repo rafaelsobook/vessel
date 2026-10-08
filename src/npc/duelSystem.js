@@ -649,27 +649,14 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // the "Ha!/...alright" dialogue's own "next" button - without this, the
     // dialogue just closes and does nothing, leaving the player stuck inside
     // placeId 200 with no way out (confirmed: this was previously a no-op
-    // () => {} at every one of these call sites). Same exact teleport-out
-    // sequence createduelarena.js's own walk-to-the-south-wall exit trigger
-    // already uses (findPlaceMetaData -> set currentPlace/x/y/z from the
-    // destination's own spawn -> save -> exitScene -> changeScene), just
-    // triggered by the post-fight dialogue instead of walking to the exit.
+    // () => {} at every one of these call sites). Sends you out through the
+    // arena's own exit door - its roomPaths entry (localroomdb.js), the same
+    // one you'd walk out of - just triggered by the post-fight dialogue
+    // instead of walking to it.
     async function returnToExitPlace(){
-        const exitPlaceDetail = placeDetail.exitPlaceDetail
-        if(!exitPlaceDetail) return console.warn("[duel] no exitPlaceDetail on this arena - can't send the player anywhere after the fight")
-
-        const destMeta = findPlaceMetaData(exitPlaceDetail.placeId)
-        if(!destMeta) return console.warn(`[duel] findPlaceMetaData found nothing for exitPlaceDetail.placeId ${exitPlaceDetail.placeId}`)
-
-        await travelToPlace({
-            placeId: exitPlaceDetail.placeId,
-            name: exitPlaceDetail.name,
-            areaType: exitPlaceDetail.areaType,
-            x: destMeta.spawn.x,
-            y: destMeta.spawn.y,
-            z: destMeta.spawn.z,
-            startingPos: destMeta.spawn
-        })
+        const exit = placeDetail.roomPaths?.[0]
+        if(!exit) return console.warn("[duel] this arena has no exit door (roomPaths) - can't send the player anywhere after the fight")
+        await travelToPlace(exit)
     }
 
     // Shared damage-application path for anything that can hit this

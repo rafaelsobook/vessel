@@ -39,11 +39,12 @@ export const INDOOR_AMBIENT_TEMP = WEATHER_AMBIENT_TEMP.clear
 // what a healthy character sits at, and what they recover back toward once
 // they're out of the weather. Note this is also BODY_TEMP_MAX_SAFE - a
 // character rests at the TOP of the safe band, so heat has much less headroom
-// than cold before it starts hurting. That's intentional per the spec
-// (maintain 15-35), just worth knowing when tuning: any sustained heat
-// exposure crosses the line quickly, while cold has 20 degrees of slack.
+// than cold before it starts hurting. Worth knowing when tuning: any
+// sustained heat exposure crosses the line quickly, while cold has 15
+// degrees of slack (35 down to 20).
 export const BODY_TEMP_NORMAL = 35
-export const BODY_TEMP_MIN_SAFE = 15
+// below this, cold costs hp (was 15)
+export const BODY_TEMP_MIN_SAFE = 20
 
 // 40, not 35 - a deliberate deviation from the stated "maintain 15-35", and
 // the one number here worth a second look.
@@ -53,7 +54,7 @@ export const BODY_TEMP_MIN_SAFE = 15
 // survival cadence, a sandstorm with no heat gear started costing hp after
 // SIX SECONDS and ran body temp up to 75 - which contradicts the other half of
 // the spec, that a 40-degree sandstorm is "normal, a little heat". The cold
-// end has 20 degrees of slack before damage (35 down to 15); the hot end had
+// end has 15 degrees of slack before damage (35 down to 20); the hot end had
 // literally none.
 //
 // 40 gives heat 5 degrees of the same kind of slack, which at scaled drift
@@ -62,8 +63,9 @@ export const BODY_TEMP_MIN_SAFE = 15
 // a wall. Set this back to 35 if instant heat damage was actually intended.
 export const BODY_TEMP_MAX_SAFE = 40
 
-// hp lost per survival tick while body temp is outside the safe band
-export const TEMP_DAMAGE_PER_TICK = 1
+// share of max hp lost per survival tick (6.2s) while body temp is outside
+// the safe band, too cold or too hot - 6% (was a flat 1 hp, then 1%)
+export const TEMP_DAMAGE_FRACTION_PER_TICK = 0.06
 
 // how far body temp moves per tick at FULL strain. Drift, not a jump, so
 // sprinting through a snowfield is survivable and stopping to fight in one

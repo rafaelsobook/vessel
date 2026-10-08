@@ -440,7 +440,6 @@ function buildSpawn(entry, halfW, halfH, isEnclosed) {
  */
 export function generateArea({
     isMultiplayer = true,
-    entryExitPlaceIds,
     sceneTemp,
     name             = 'village',
     width            = 200,
@@ -592,7 +591,6 @@ export function generateArea({
 
     return {
         isMultiplayer,
-        entryExitPlaceIds,
         placeId,
         areaType,
 

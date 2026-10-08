@@ -52,14 +52,7 @@ import {
     Quaternion
 } from '@babylonjs/core';
 import { createGroundMat, createPathMat } from '../tools/groundmat';
-import { onIntersecEnterTrig,onIntersecExitTrig } from '../components/actionManager';
-import { getCharState, setCharState, updateMyDetailsOL } from '../charactersystem/characterstate';
-import { exitScene } from '../sockets/exitsocket';
-import { findMyCurrentPlace, findPlaceMetaData } from '../states/placestates';
-import { getEngine, changeScene, getSceneDet, getGameStatus } from '../main/main';
-import { openCloseInteractBtn } from '../tools/popupUI';
 import { randNum } from '../tools/random';
-import { checkIfTokenSaved } from '../tools/tools';
 
 // ─── Material helper ──────────────────────────────────────────────────────────
 /**
@@ -308,81 +301,27 @@ function buildOuterWall(scene, outerPalisade, namePrefix) {
     });
 }
 // ─── Gate slabs ───────────────────────────────────────────────────────────────
+// A gate model (with its collider) in each palisade gap the generator cut for
+// entry/exit (genareamd.js). Just the gates - ways out of the village to
+// other places are roomPaths doors (localroomdb.js, areascene.js).
 // If you want to move the gate inside change the INSET
-function buildGates(scene, palisade, entry, exit, entryExitPlaceIds, characterBody, gateTemplate) {
-    if (!palisade) return;
-    if(!entryExitPlaceIds) return
+function buildGates(scene, palisade, entry, exit, gateTemplate) {
+    if (!palisade || !gateTemplate) return;
 
-    const { entryPlaceDetail, exitPlaceDetail } = entryExitPlaceIds
-    const { stakeHeight, doorWidth } = palisade;
     const hw   = palisade.outerWidth  / 2;
     const hh   = palisade.outerHeight / 2;
-    const SLAB = 0.8;
+    const INSET = 4;
 
     function place(dir, pathname) {
         const isNS = dir === 'north' || dir === 'south';
-        const w = isNS ? doorWidth : SLAB;
-        const d = isNS ? SLAB      : doorWidth;
-        const INSET = 4;
         const x = dir === 'east' ? hw - INSET : dir === 'west' ? -hw + INSET : 0;
         const z = dir === 'north' ? hh - INSET : dir === 'south' ? -hh + INSET : 0;
 
-        // Offset the trigger toward the player's approach side so they hit it before the gate model's physics
-        const approachOffset =
-            dir === 'south' ? new Vector3(0, 0,  3) :
-            dir === 'north' ? new Vector3(0, 0, -3) :
-            dir === 'east'  ? new Vector3(-3, 0, 0) :
-                              new Vector3( 3, 0, 0);
-
-        // const triggerBox = MeshBuilder.CreateBox(`gate_${pathname}`, {
-        //     width: w/2, height: stakeHeight/2, depth: d,
-        // }, scene);
-        // triggerBox.position  = new Vector3(x + approachOffset.x, stakeHeight / 4, z + approachOffset.z);
-        // triggerBox.isVisible = false;
-        // triggerBox.isPickable = false;
-
-        if (gateTemplate) {
-            const gateModel = gateTemplate.createInstance(`gate_model_${pathname}`)
-            gateModel.position  = new Vector3(x, 0, z)
-            gateModel.rotation.y = isNS ? 0 : Math.PI / 2
-            gateModel.isVisible = true
-            new PhysicsAggregate(gateModel, PhysicsShapeType.BOX, { mass: 0 }, scene)
-        }
-
-        // onIntersecEnterTrig(triggerBox, characterBody, scene, async () => {
-        //     openCloseInteractBtn("normal", true, async () => {
-        //         let placeDetailShort
-
-        //         switch(pathname){
-        //             case "entry":
-        //                 placeDetailShort = entryPlaceDetail
-        //             break
-        //             case "exit":
-        //                 placeDetailShort = exitPlaceDetail
-        //             break
-        //         }
-        //         const charState = getCharState()
-        //         const tcpCharPlaceMD = findPlaceMetaData(placeDetailShort.placeId)
-
-        //         charState.currentPlace.placeId = placeDetailShort.placeId
-        //         charState.currentPlace.name = placeDetailShort.name
-        //         charState.currentPlace.areaType = placeDetailShort.areaType
-
-        //         charState.x = tcpCharPlaceMD.spawn.x
-        //         charState.y = tcpCharPlaceMD.spawn.y
-        //         charState.z = tcpCharPlaceMD.spawn.z
-                
-        //         const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
-        //         exitScene(charState.owner);
-
-        //         const placeDetail = findMyCurrentPlace()
-        //         await changeScene(placeDetail, "whatever")
-        //     })
-            
-        // })
-        // onIntersecExitTrig(triggerBox, characterBody, scene, () => {
-        //     openCloseInteractBtn(false, false)
-        // })
+        const gateModel = gateTemplate.createInstance(`gate_model_${pathname}`)
+        gateModel.position  = new Vector3(x, 0, z)
+        gateModel.rotation.y = isNS ? 0 : Math.PI / 2
+        gateModel.isVisible = true
+        new PhysicsAggregate(gateModel, PhysicsShapeType.BOX, { mass: 0 }, scene)
     }
 
     if (entry?.direction) place(entry.direction, 'entry');
@@ -440,7 +379,6 @@ function spawnPoleLights(scene, poles, namePrefix) {
  */
 export function createVillage(scene, village, assetRegistry = {}, characterBody) {
 
-    const {entryExitPlaceIds} = village
     const prefix = village.meta?.name ?? 'village';
 
     // ── 1. Lighting ───────────────────────────────────────────────────────────
@@ -455,7 +393,7 @@ export function createVillage(scene, village, assetRegistry = {}, characterBody)
 
     buildPalisade(scene, village.palisade, assetRegistry.woodenstake, prefix);
     buildOuterWall(scene, village.outerPalisade, `${prefix}_outerwall`);
-    buildGates(scene, village.palisade, village.entry, village.exit, entryExitPlaceIds, characterBody, assetRegistry.gate);
+    buildGates(scene, village.palisade, village.entry, village.exit, assetRegistry.gate);
 
     // ── 4. Props ──────────────────────────────────────────────────────────────
     // Houses — with physics so the player can't walk through them.

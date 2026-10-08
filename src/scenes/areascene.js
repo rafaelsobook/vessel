@@ -527,7 +527,13 @@ export async function areaScene(placeDetail){
     // not-yet-loaded chunks won't get a collider until this runs again on a
     // fresh scene load.
     let currentChoppingTree = null
- 
+
+    // DOORS - every way from one place to another, in every kind of place:
+    // { placeId, name, areaType, pos, startingPos?, doorSound? }. pos is the
+    // middle of a 2x2x2 trigger - put it just in front of the door's model
+    // (optionalObjects), where the player stops against it. startingPos is
+    // where you stand in the new place - left out, its spawn (travelToPlace).
+    // doorSound plays the door creak as you go through.
     placeDetail.roomPaths?.forEach(path => {
         const { name, pos,startingPos, placeId ,areaType } = path
         const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { size: 2 }, scene)
@@ -542,6 +548,8 @@ export async function areaScene(placeDetail){
             openCloseInteractBtn("normal", true, async () => {
                 openCloseInteractBtn(false)
 
+                // a real door (a model in optionalObjects) creaks open
+                if(path.doorSound) getAllSounds().normalDoorOC?.play()
                 await travelToPlace(path)
             })
         })

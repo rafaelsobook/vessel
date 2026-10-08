@@ -19,11 +19,6 @@ import {
 } from '@babylonjs/core';
 import { createAggregate } from '../tools/physics';
 import { createMat } from '../tools/materials';
-import { onIntersecEnterTrig, onIntersecExitTrig } from '../components/actionManager';
-import { findPlaceMetaData } from '../states/placestates';
-import { openCloseInteractBtn } from '../tools/popupUI';
-import { getAllSounds } from '../components/soundSystem';
-import { travelToPlace } from '../tools/travel';
 
 const WALL_HEIGHT    = 0.5; // same knee-wall height every "room" defaults to
 const WALL_THICKNESS = 0.3;
@@ -54,7 +49,6 @@ export async function createDuelArena(scene, room, characterBody, hasPhysics = t
         height      = 50,
         wallHeight  = WALL_HEIGHT,
         wallTexPath = "./images/modeltex/rockTex.jpg",
-        exitPlaceDetail
     } = room;
     const halfW = width  / 2;
     const halfH = height / 2;
@@ -95,34 +89,4 @@ export async function createDuelArena(scene, room, characterBody, hasPhysics = t
     buildWall(`${name}_wall_e`, brickEW, brickTop, new Vector3( halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
     buildWall(`${name}_wall_w`, brickEW, brickTop, new Vector3(-halfW, 0, -halfH + 0.5),  new Vector3(0, 0, 1), ewCount, wh, scene, hasPhysics);
 
-    // ── Exit (optional) - same south-wall trigger createroom.js uses, only
-    // wired up if this place actually has somewhere to send you back to
-    if (exitPlaceDetail && characterBody) {
-        const exitTrigger = MeshBuilder.CreateBox(`${name}_exit_trig`, { width: width/8, height: 2, depth: 1/2 }, scene)
-        exitTrigger.position = new Vector3(0, 1, -halfH + 0.5)
-        exitTrigger.isVisible = false
-        exitTrigger.isPickable = false
-
-        onIntersecEnterTrig(exitTrigger, characterBody, scene, () => {
-            openCloseInteractBtn("normal", "none", async () => {
-                openCloseInteractBtn(false)
-
-                const tcpCharPlaceMD = findPlaceMetaData(exitPlaceDetail.placeId)
-
-                getAllSounds().normalDoorOC?.play()
-                await travelToPlace({
-                    placeId: exitPlaceDetail.placeId,
-                    name: exitPlaceDetail.name,
-                    areaType: exitPlaceDetail.areaType,
-                    x: tcpCharPlaceMD.spawn.x,
-                    y: tcpCharPlaceMD.spawn.y,
-                    z: tcpCharPlaceMD.spawn.z,
-                    startingPos: tcpCharPlaceMD.spawn
-                })
-            })
-        })
-        onIntersecExitTrig(exitTrigger, characterBody, scene, () => {
-            openCloseInteractBtn(false, false)
-        })
-    }
 }
