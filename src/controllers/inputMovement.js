@@ -403,8 +403,10 @@ function setupControls(scene, allsounds) {
                 break
             }
             // no footstep/run sound while airborne - moving your input stick mid-jump
-            // shouldn't start the sound up; landing/mode-change handles resuming it
-            if(value && player.mode !== "inAir"){
+            // shouldn't start the sound up; landing/mode-change handles resuming it.
+            // None while worn out either (characterstate.js's isCharacterTired) -
+            // a tired character drags along, no run sound
+            if(value && player.mode !== "inAir" && !player.isTired){
                 if(!runsound.isPlaying) playHalfSound(runsound)
             }
             if(!value) {
@@ -1031,7 +1033,7 @@ function setupControls(scene, allsounds) {
                 if(myPlayer.fshadow) myPlayer.fshadow.isVisible = true
                 // landing while still holding a movement key - resume the sound setPlayerMoving()
                 // was blocked from starting (or was stopped from) while inAir
-                if(isMoving && !runsound.isPlaying) playHalfSound(runsound)
+                if(isMoving && !runsound.isPlaying && !myPlayer.isTired) playHalfSound(runsound)
 
                 // hard landing - only react to an actual fall, not every small
                 // hop/step off a curb
@@ -1088,7 +1090,10 @@ function setupControls(scene, allsounds) {
             // would double-apply time scaling (and onBeforePhysicsObservable,
             // which this runs on, fires once per fixed-size physics substep,
             // not once per render frame - not a 1:1 deltaTime to begin with).
-            _velocityVec.set(fwd.x * currentSpeed, vel.y, fwd.z * currentSpeed)
+            // worn out (characterstate.js's isCharacterTired) - walking pace
+            // only, fighting mode and shift included
+            const speed = myPlayer?.isTired ? walkSpeed : currentSpeed
+            _velocityVec.set(fwd.x * speed, vel.y, fwd.z * speed)
             aggregate.body.setLinearVelocity(_velocityVec);
             const now = performance.now();
             if (now - lastEmit > 50) {

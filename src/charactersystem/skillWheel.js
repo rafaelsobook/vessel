@@ -8,7 +8,7 @@
 // own popup) once the arrow actually lands, same "surprise" a real prize
 // wheel has. The wheel itself never moves - GO spins a clock-hand style
 // arrow from the center instead, which lands pointing at the result.
-import { getCharState, updateHpMpSp_UI, updateMyDetailsOL } from "./characterstate.js"
+import { getCharState, updateHpMpSp_UI, updateMyDetailsOL, raiseBaseMaxHp } from "./characterstate.js"
 import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { receiveAbilities } from "./abilitySystem.js"
 import { skillsData } from "../staticRecources/skillsData.js"
@@ -157,8 +157,8 @@ function grantReward(reward){
 function grantHeartReward(){
     const charState = getCharState()
     if(!charState) return
-    charState.hp += HEART_BONUS
-    charState.maxHp += HEART_BONUS
+    // max hp through the life system - the new capacity comes filled
+    raiseBaseMaxHp(HEART_BONUS)
     charState.mp += HEART_BONUS
     charState.maxMp += HEART_BONUS
     charState.sp += HEART_BONUS

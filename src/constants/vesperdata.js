@@ -1,5 +1,5 @@
 import { startQuestionare } from '../components/conversations'
-import { getCharState, healPlayer, updateHpMpSp_UI, rankOrder } from '../charactersystem/characterstate'
+import { getCharState, healPlayer, healToFull, updateHpMpSp_UI, rankOrder } from '../charactersystem/characterstate'
 import { buyOrSell } from "../components/buyorsell"
 import { getPlayerCoord } from '../charactersystem/createcharacter'
 import { createMagicCircle } from '../creations/magiccircles'
@@ -137,7 +137,7 @@ export function vesperData(){
                 } },
                 { text: "Full heal", cb: () => {
                     const charState = getCharState()
-                    charState.hp = charState.maxHp
+                    healToFull()
                     charState.mp = charState.maxMp
                     charState.sp = charState.maxSp
                     updateHpMpSp_UI()

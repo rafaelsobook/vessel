@@ -2,7 +2,7 @@ import { getSceneDet } from "../main/main.js"
 import { checkIfTokenSaved, createElement, setBtnsPointerAndVisibility, setDisplayElem } from "../tools/tools.js"
 import { hideAbilityDesc, receiveAbilities, showAbilityDesc } from "./abilitySystem.js"
 // import { beginOrRestartAttack } from "./attackingSystem.js"
-import { getAdditionalsFromAbilities, getCharState, updateMyDetailsOL } from "./characterstate.js"
+import { getAdditionalsFromAbilities, getCharState, updateMyDetailsOL, raiseBaseMaxHp } from "./characterstate.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { openClosePopup } from "../tools/popupUI.js"
@@ -58,8 +58,9 @@ export function initOnceStatsSystem(){
 
                     state.stats.weapon+=10
 
-                    state.hp+=50
-                    state.maxHp+=50
+                    // max hp through the life system (characterstate.js's
+                    // LIFE) - the new capacity comes filled
+                    raiseBaseMaxHp(50)
                     state.mp+=5
                     state.maxMp+=5
                     state.sp+=30

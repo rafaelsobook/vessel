@@ -18,7 +18,7 @@ import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
 import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
-import { emitDied, emitEnemyIsHit } from "./emits"
+import { emitEnemyIsHit } from "./emits"
 import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
@@ -655,8 +655,8 @@ export function activateOnSocketListeners(socket){
                     return
                 }
 
-                const isDead = await deductHp(data.dmg, data.effects)
-                if (isDead) emitDied()
+                // a death reports itself (characterstate.js's die)
+                await deductHp(data.dmg, data.effects)
 
             }, data.atkSpd / 5)
         }
@@ -705,9 +705,8 @@ export function activateOnSocketListeners(socket){
             // it already does for a real enemy target (see npcDetails.js's
             // own comment: "nothing currently reads a WEAPON item's own
             // effectsWhenHit on a melee swing" - not a gap unique to PvP)
-            deductHp(dmgToApply, []).then(isDead => {
-                if (isDead) emitDied()
-            })
+            // a death reports itself (characterstate.js's die)
+            deductHp(dmgToApply, [])
         }
     })
     // SERVANTS - tcp/index.ts's own "recruit-bot"/"dismiss-bot" handlers
@@ -750,8 +749,10 @@ export function activateOnSocketListeners(socket){
                     // getAllSounds().struckS.play()
                     scene.getSoundByName(rangeAtkDetails.soundWhenHit).play()
                     camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
-                    const isDead = deductHp(dmg, effects)
-                    if (isDead) emitDied()
+                    // a death reports itself (characterstate.js's die) - this
+                    // used to test deductHp's promise itself, always truthy,
+                    // so every ranged hit told tcp the player had died
+                    deductHp(dmg, effects)
                 })
             }
             
@@ -1341,6 +1342,21 @@ export function activateOnSocketListeners(socket){
         // and simply stops re-triggering once it sees false, so setting the
         // flag above is enough for the false case on its own
         if(isBlocking) playBlockingLoop(player)
+    })
+    // another player wore out or recovered (emits.js's emitTired) - renderer.js
+    // picks the tired walk/stand clips off this flag. Skips this client's own
+    // echo like the handler above.
+    socket.on("emitted-tired", data => {
+        const { ownerId, isTired, currentPlaceId } = data
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (!charState) return
+        if (getGameStatus() === "loading") return
+        if (currentPlaceId !== charState.currentPlace.placeId) return
+        if (ownerId === charState.owner) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if (!player) return
+        player.isTired = !!isTired
     })
     socket.on("emitted-loc", data => {
         const { ownerId, pos, dirTarg, mode, weaponName} = data

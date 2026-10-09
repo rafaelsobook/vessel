@@ -590,7 +590,11 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         // static npcDetails.js entry can opt a fighter in from the start.
         weaponBlocking: det.weaponBlocking ? det.weaponBlocking : false,
         magicBlocking: det.magicBlocking ? det.magicBlocking : false,
-        IsInVulnerable: det.IsInVulnerable ? det.IsInVulnerable : false
+        IsInVulnerable: det.IsInVulnerable ? det.IsInVulnerable : false,
+        // worn out (characterstate.js's isCharacterTired) - renderer.js plays
+        // the tired walk/stand clips off it. Seeded from det so a player who
+        // was already tired when this client met them shows it straight away.
+        isTired: !!det.isTired,
     }
 }
 
@@ -904,7 +908,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
                 // mes.getChildMeshes().forEach(child => child.material = skinMat)
                 return
             }
-            if(mes.name.includes("femaile.hair") || mes.name.includes("female.hair")){
+            if(mes.name.includes("female.hair")){
                 const hairStyleName = mes.name.split(".")[1]
                 if(hairStyleName !== det.hair) return showHideEquip(mes, false)
                 // hair2 gets its own strand-texture bump map, hair1 its own
@@ -914,6 +918,17 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
                 // own femaleHair1Mat/femaleHair2Mat comment)
                 mes.material = hairStyleName === "hair2" ? femaleHair2Mat : femaleHair1Mat
 
+                characterHairs.push(mes)
+                return
+            }
+            // her scalp under the hair (scalpHairInside.female) - on from the
+            // start, in her hair's colour, and in characterHairs so a helmet
+            // hides it and taking the helmet off brings it back, same as the
+            // male scalphairinside below. Returned here so the male scalp
+            // rule further down ("scalp" -> dispose for female) never sees it.
+            if(mes.name === "scalphairinside.female"){
+                mes.material = femaleHair1Mat
+                showHideEquip(mes, true)
                 characterHairs.push(mes)
                 return
             }

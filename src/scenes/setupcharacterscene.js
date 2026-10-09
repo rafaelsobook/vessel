@@ -57,13 +57,17 @@ export async function setupCharacterScene(engine){
     // swapped by the gender toggle
     let maleFace = []
     let femaleFace = []
-    // mainbodyhand is a SEPARATE mesh from mainbody, not a child of it (so
-    // setTreeVisible's own getChildMeshes() cascade can't reach it) - but its
-    // name contains "mainbody" as a substring, so it was already silently
-    // matching the plain includes("mainbody") check below too, racing with
-    // the real torso mesh for the one mainBodyMesh variable. Tracked
-    // separately here so gender toggles actually reach both.
-    let mainBodyMesh, mainBodyHandMesh, scalpMesh, femaleBodyMesh
+    // the male body - split across several separate meshes in avatar.glb
+    // (mainBodyhand, mainBodyhead, mainbodylegs), none a child of another, so
+    // each is tracked on its own and the gender toggle reaches every one. One
+    // variable per name kept only whichever matched last, leaving the others
+    // showing on the female body.
+    let maleBodyMeshes = []
+    let femaleBodyMesh
+    // the male scalp hair - avatar.glb has several of these (scalphair,
+    // scalphair.001, scalpHairInside, scalphairtip), all hidden for female;
+    // one variable kept only the last one, leaving the rest on her head
+    let scalpMeshes = []
 
     const spawnPos = new Vector3(0,0,0)
     const scene = new Scene(engine)
@@ -199,23 +203,18 @@ export async function setupCharacterScene(engine){
 
         if(meshPartName.includes("scalp")){
             mesh.material = hairMat
-            scalpMesh = mesh
+            scalpMeshes.push(mesh)
             setTreeVisible(mesh, toSave.gender !== "female")
             return
         }
 
         const toPush = mesh.name.split(".")[1]
 
-        // checked BEFORE the plain "mainbody" match below, which would
-        // otherwise also match this name (see this file's own
-        // mainBodyHandMesh comment up top)
-        if(meshPartName.includes("mainbodyhand")){
+        // every male body part - hand, head, legs (maleBodyMeshes up top) -
+        // skin material, and hidden for female
+        if(meshPartName.includes("mainbody")){
             mesh.material = skinMat
-            mainBodyHandMesh = mesh
-            setTreeVisible(mesh, toSave.gender !== "female")
-        } else if(meshPartName.includes("mainbody")){
-            mesh.material = skinMat
-            mainBodyMesh = mesh
+            maleBodyMeshes.push(mesh)
             setTreeVisible(mesh, toSave.gender !== "female")
         }
         if(toPush === undefined) return
@@ -308,9 +307,8 @@ export async function setupCharacterScene(engine){
         toSave.gender = gender
         const isFemale = gender === "female"
 
-        if(mainBodyMesh) setTreeVisible(mainBodyMesh, !isFemale)
-        if(mainBodyHandMesh) setTreeVisible(mainBodyHandMesh, !isFemale)
-        if(scalpMesh) setTreeVisible(scalpMesh, !isFemale)
+        maleBodyMeshes.forEach(mesh => setTreeVisible(mesh, !isFemale))
+        scalpMeshes.forEach(mesh => setTreeVisible(mesh, !isFemale))
         clothes.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.cloth)
         pants.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.pants)
 

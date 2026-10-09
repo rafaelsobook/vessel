@@ -33,8 +33,8 @@ import { getEnemiesOnScene, getPlayersOnScene, getSocketContainers, pushProjecti
 import { pickAnimVariant } from "../tools/animation.js"
 import { fireAimProbe } from "./aimProbe.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
-import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitDied, emitRegisterPlayerAsEnemy, emitEnemyChase, emitSpawnCircle, emitEnemyTeleport, emitEnemyWillAttack } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect } from "../charactersystem/characterstate.js"
+import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitRegisterPlayerAsEnemy, emitEnemyChase, emitSpawnCircle, emitEnemyTeleport, emitEnemyWillAttack } from "../sockets/emits.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect, raiseBaseMaxHp } from "../charactersystem/characterstate.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { randNum, randBetween } from "../tools/random.js"
@@ -1997,8 +1997,9 @@ function applyAbsorbEffects(skill, enemy, freshCharState){
         let healedAnything = false
         if(absorbStats.includes("hp") && enemy.det?.hp){
             const drained = enemy.det.hp * absorbPercent
-            freshCharState.maxHp += drained
-            freshCharState.hp += drained
+            // max hp through the life system (characterstate.js's LIFE) -
+            // the drained capacity comes filled
+            raiseBaseMaxHp(drained)
             healedAnything = true
         }
         if(absorbStats.includes("mp") && enemy.det?.mp){
@@ -4399,7 +4400,7 @@ function triggerEnemyGroundTrap(scene, enemy, skill, targetPlayer){
             ...(burnEffect ? [burnEffect] : []),
         ]
 
-        deductHp(totalDmg, incomingEffects).then(isDead => { if(isDead) emitDied() })
+        deductHp(totalDmg, incomingEffects) // a death reports itself (characterstate.js's die)
     }, skill.castDuration * 1000)
 }
 
@@ -4494,7 +4495,7 @@ function spawnEnemyLightningStrike(scene, enemy, skill, targetPlayer){
             ...(burnEffect ? [burnEffect] : []),
         ]
 
-        deductHp(totalDmg, incomingEffects).then(isDead => { if(isDead) emitDied() })
+        deductHp(totalDmg, incomingEffects) // a death reports itself (characterstate.js's die)
     }, THUNDERCLAP_STRIKE_DELAY_MS)
 }
 
@@ -4754,7 +4755,7 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
             ...(burnEffect ? [burnEffect] : []),
         ]
 
-        const isDead = await deductHp(totalDmg, incomingEffects)
-        if(isDead) emitDied()
+        // a death reports itself (characterstate.js's die)
+        await deductHp(totalDmg, incomingEffects)
     })
 }

@@ -1,6 +1,6 @@
 
 import { getSpawnPos } from "../tools/position.js";
-import { useFetch, checkIfTokenSaved } from "../tools/tools.js";
+import { useFetch, checkIfTokenSaved, apiOpt } from "../tools/tools.js";
 import { APIURL } from "../constants/constants.js";
 import { createElement, setLoadingInAList, poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js";
@@ -10,7 +10,7 @@ import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
 import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worldsocket.js";
-import { emitMode, emitWeaponBlock, emitEnemyIsHit } from "../sockets/emits.js";
+import { emitMode, emitWeaponBlock, emitEnemyIsHit, emitTired, emitDied } from "../sockets/emits.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord, capsuleHeight } from "./createcharacter.js";
 import { getAllSounds, playSound } from "../components/soundSystem.js";
@@ -213,11 +213,11 @@ export function debugLevelUp(){
 export function getTotal(){
     summarizeStats()
 
-    const hp = characterState.hp + addStats.additionalHp
+    const hp = getHp()
     const mp = characterState.mp + addStats.additionalMp
     const sp = characterState.sp + addStats.additionalSp
 
-    const maxHp = characterState.maxHp + addStats.additionalHp
+    const maxHp = getMaxHp()
     const maxMp = characterState.maxMp + addStats.additionalMp
     const maxSp = characterState.maxSp + addStats.additionalSp
 
@@ -226,6 +226,151 @@ export function getTotal(){
     const spRegen = addStats.totalSpRegen
 
     return { hp,maxHp, mp,maxMp, sp,maxSp, hpRegen, mpRegen, spRegen, }
+}
+// ── LIFE ──────────────────────────────────────────────────────────────────────
+// characterState.hp is the hp the character has RIGHT NOW, everything
+// included - one number, and the one that's saved. What it can have at most is
+// derived, never stored: getMaxHp() = the character's own maxHp (grown by
+// strength points, heart rewards, life drain - all through raiseBaseMaxHp)
+// plus the bonus from abilities (addStats.additionalHp, from summarizeStats).
+//
+// (It used to be the other way round: hp held only the "base" part and the
+// bonus was added on top wherever hp was shown, so every bit of damage came
+// off the base alone, each place clamped against a different max, and the
+// saved hp meant something different from the hp on screen.)
+//
+// Nothing outside this section writes characterState.hp - damage, healing,
+// regen and max-hp grants all go through the functions below, which clamp,
+// refresh the hp bar, decide death in ONE place, and mark the vitals for the
+// next save (SAVING VITALS below).
+
+// Whether running out of hp to each kind of damage kills (gameOver - which
+// deletes the character) or stops at 1 hp. Only real fights kill, as before:
+// nothing environmental ever called gameOver.
+const LETHAL_DAMAGE = {
+    combat: true,   // enemies, other players, skills, the curse backfire
+    burn: true,     // fire's burn ticks (deductHp's "burn" effects)
+    hunger: false,  // starving (updateHunger)
+    cold: false,    // body temperature too low / too high (tickBodyTemperature)
+    heat: false,
+    poison: false,  // a permanent status effect's hpcost (restInterval)
+    food: false,    // eating something with a negative plusHp
+}
+// a non-lethal source never takes hp below this
+const NON_LETHAL_FLOOR = 1
+
+// the max hp the current hp was last measured against (syncMaxHp) - null
+// until a character's life system starts - and whose (character _id)
+let trackedMaxHp = null
+let trackedHpFor = null
+// set the moment a lethal hit lands (die()) - nothing changes hp after that
+let isLifeOver = false
+// die()'s promise while the death sequence runs - deductHp waits on it, so
+// its callers still get back "dead" only once gameOver has finished
+let dying = null
+
+export function getMaxHp(){
+    if(!characterState) return 0
+    return characterState.maxHp + addStats.additionalHp
+}
+export function getHp(){
+    if(!characterState) return 0
+    return characterState.hp
+}
+// 0..1 - how full the hp bar is
+export function getHpRatio(){
+    const max = getMaxHp()
+    return max > 0 ? getHp() / max : 0
+}
+// kept for the callers written against it - the same as getHp() now that hp
+// IS the total
+export function getTotalHp(){
+    return getHp()
+}
+
+// Takes `amount` hp. source - a LETHAL_DAMAGE key ("combat" if unknown).
+// Returns true if this killed the character. A lethal source can only kill
+// where death is allowed (setAllowDeath - a duel stops you at 1 hp instead).
+export function damageHp(amount, source = "combat"){
+    if(!characterState || isLifeOver || !(amount > 0)) return false
+    const lethal = (LETHAL_DAMAGE[source] ?? true) && allowDeath
+    const floor = lethal ? 0 : NON_LETHAL_FLOOR
+    // already at (or under) its floor - a non-lethal source has nothing to take
+    if(characterState.hp <= floor) return false
+    characterState.hp = Math.max(floor, characterState.hp - amount)
+    hpChanged()
+    if(characterState.hp > 0) return false
+    dying = die()
+    return true
+}
+// Gives back up to `amount` hp, never past getMaxHp(). Returns how much it
+// actually healed.
+export function healHp(amount){
+    if(!characterState || isLifeOver || !(amount > 0)) return 0
+    const before = characterState.hp
+    characterState.hp = Math.min(getMaxHp(), characterState.hp + amount)
+    if(characterState.hp !== before) hpChanged()
+    return characterState.hp - before
+}
+export function healToFull(){
+    return healHp(getMaxHp())
+}
+// A permanent raise of the character's own max hp (a strength point, a heart
+// reward, life drain). The new capacity comes filled - current hp rises by
+// exactly as much as max hp does, ability bonus included.
+export function raiseBaseMaxHp(amount){
+    if(!characterState || isLifeOver || !(amount > 0)) return
+    syncMaxHp()                      // settle any earlier max change first
+    const maxBefore = getMaxHp()
+    characterState.maxHp += amount
+    recomputeAddStats()              // the ability bonus scales with maxHp
+    const maxAfter = getMaxHp()
+    characterState.hp = Math.min(maxAfter, characterState.hp + (maxAfter - maxBefore))
+    trackedMaxHp = maxAfter
+    hpChanged()
+}
+
+// Max hp moved (an ability gained or lost, gear that grants hp) - current hp
+// keeps its SHARE of the bar rather than its number: half full stays half
+// full. So swapping gear back and forth can neither heal nor hurt, and a
+// moment where the bonus isn't known yet can't permanently cost hp - it comes
+// back with the bonus. Runs from summarizeStats, so on every change.
+function syncMaxHp(){
+    if(!characterState) return
+    const max = getMaxHp()
+    if(trackedMaxHp > 0 && max > 0 && max !== trackedMaxHp && !isLifeOver){
+        characterState.hp *= max / trackedMaxHp
+    }
+    trackedMaxHp = max
+    if(characterState.hp > max) characterState.hp = max
+    if(characterState.hp < 0) characterState.hp = 0
+}
+
+// hp regen - `ticks` ticks of the ability regen rate (addStats.totalHpRegen)
+function regenHp(ticks = 1){
+    if(!characterState || isLifeOver) return
+    const perTick = getTotal().hpRegen
+    if(perTick > 0) healHp(perTick * ticks)
+}
+
+// after every change to hp: the bar (which also re-checks tiredness), and the
+// next vitals save picks it up
+function hpChanged(){
+    updateHP_UI()
+}
+
+// The one death path. Tells everyone else first (tcp's "will-die" - frees the
+// enemies chasing me, shows my death), then gameOver (which deletes the
+// character). Runs once.
+async function die(){
+    if(isLifeOver) return
+    isLifeOver = true
+    characterState.hp = 0
+    if(getIsSocketOn()) emitDied()
+    await gameOver()
+}
+export function isDead(){
+    return isLifeOver
 }
 // Summed `tempResistance: { cold, heat }` across everything equipped - armors,
 // pauldrons, helmets, gauntlets, boots. Same iteration shape getTotalDefense
@@ -279,6 +424,9 @@ export function getTotalAtkSpd(){
 }
 export function setCharState(_characterDetail){
     characterState = _characterDetail;
+    // possibly someone else - their hp gets measured against their own max afresh
+    trackedMaxHp = null
+    trackedHpFor = null
 }
 
 export function getCharSocket(){
@@ -312,6 +460,9 @@ export function getCharSocket(){
         maxMp: characterState.maxMp,
         maxHp: characterState.maxHp,
         maxSp: characterState.maxSp,
+        // worn out right now (isCharacterTired) - so everyone already in the
+        // place I'm joining sees me tired from the start
+        isTired: isCharacterTired(),
     }
 }
 
@@ -367,22 +518,35 @@ export function activateLifeSystem(){
     lvlAndName.innerHTML = `Lvl ${lvl} ${name}`
 
     clearIntervals()
+    // what the server has right now (this runs on every load - each place
+    // change loads the character again - and after new abilities are saved)
+    const loadedVitals = JSON.stringify(vitalsOf(characterState))
+    isLifeOver = false
+    dying = null
+    // the same character keeps its max-hp reference, so a newly accepted
+    // ability that grants hp still goes through syncMaxHp's share-of-the-bar
+    // rule; anyone else starts fresh
+    if(trackedHpFor !== characterState._id) trackedMaxHp = null
+    trackedHpFor = characterState._id
     // receiveAbilities(10)
-    summarizeStats()
+    summarizeStats()    // the ability bonus, then hp kept in 0..max
+    // a character that loads is alive - dying deletes it - so an old save left
+    // at 0 hp (starving used to stop there) comes back on its feet
+    if(characterState.hp < NON_LETHAL_FLOOR) characterState.hp = NON_LETHAL_FLOOR
+    startVitalsAutosave(loadedVitals)
     openCloseLifeDisplay(true)
     // HP
     hpRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
-        incrementHp()
+        regenHp()
         updateHP_UI()
-        
-    }, 700)
+    }, 1000)
     // MANA
     mpRegenInterval = setInterval( () => {
         // if(getGameStatus() === "gameover") return
         incrementMp()
         updateMP_UI()
-    }, 700)
+    }, 1000)
     // CASTING - mana drains continuously while mode is "casting" (see the
     // cast button in uimanagement.js's walkRunBtns handler). Separate
     // interval/cadence from mpRegenInterval above by design (-1 flat per
@@ -403,7 +567,7 @@ export function activateLifeSystem(){
         // if(getGameStatus() === "gameover") return
         incrementSp()
         updateSP_UI()
-    }, 500)
+    }, 1000)
     // SITTING ON A TREE LOG - bonus hp/mp/sp regen while seated on one
     // (seating.js). Same incrementX helpers the normal regen intervals above
     // use, so their own casting/blocking skips and max clamps still apply.
@@ -412,8 +576,8 @@ export function activateLifeSystem(){
     logSitRegenInterval = setInterval( () => {
         const ticks = isSleepingInBed() ? BED_REGEN_MULTIPLIER : isSittingOnLog() ? 1 : 0
         if(!ticks) return
+        regenHp(ticks)
         for(let i = 0; i < ticks; i++){
-            incrementHp()
             incrementMp()
             incrementSp()
         }
@@ -446,7 +610,7 @@ export function activateLifeSystem(){
     hungerInterval = setInterval(() => {
         // if(getGameStatus() === "gameover") return
         updateHunger()
-    }, 40.5 * 1000)
+    }, 2500)
     // I PUT THE STATS DEDCUTION HERE
     restInterval = setInterval(() => {
         // if(getGameStatus() === "gameover") return
@@ -463,7 +627,7 @@ export function activateLifeSystem(){
             if(characterState.survival.sleep < 100) characterState.survival.sleep += REST_SLEEP_REGEN_PER_TICK
             if(characterState.survival.sleep > 100) characterState.survival.sleep = 100
 
-            incrementHp()
+            regenHp()
             incrementMp()
             incrementSp()
         } else {
@@ -488,29 +652,21 @@ export function activateLifeSystem(){
                     // createTextMesh(makeRandNum(), `poisoned ${effect.dmgPm}`, "green", myChar.bx.position, 90, _scene, true, false)
                 break
             }
-            characterState.hp -= effect.hpcost
+            damageHp(effect.hpcost, "poison")
             characterState.mp -= effect.mpcost
             characterState.sp -= effect.spcost
-        
+
             characterState.survival.hunger -= effect.hungercost
             characterState.survival.sleep -= effect.energycost
         })
-        if(characterState.hp+addStats.additionalHp <= 0){
-            clearIntervals()
-            // emitDied() uncomment if everything is ready
-            // gameOver() uncomment if everything is ready
-        }
-        // hp/mp/sp had no floor at all in this tick, unlike every other
+        // mp/sp had no floor at all in this tick, unlike every other
         // interval in this file that touches them (castingDrainInterval/
         // spRegenInterval/blockingDrainInterval above all clamp to 0
         // immediately) - a permanent status effect with a nonzero
-        // hpcost/mpcost/spcost (poisoned/spdrain, tcp's own enemyData.ts)
-        // just kept draining past zero forever on this 6.2s cadence,
-        // exactly what let sp show as a negative number in the UI. Doesn't
-        // touch the hp<=0 branch just above (death handling is deliberately
-        // still disabled there, not something to enable as a side effect
-        // of this fix) - just stops the raw numbers from going negative.
-        if(characterState.hp <= 0) characterState.hp = 0
+        // mpcost/spcost (poisoned/spdrain, tcp's own enemyData.ts) just kept
+        // draining past zero forever on this 6.2s cadence, exactly what let
+        // sp show as a negative number in the UI. (hp's hpcost goes through
+        // damageHp above - "poison" is non-lethal, so it stops at 1 hp.)
         if(characterState.mp <= 0) characterState.mp = 0
         if(characterState.sp <= 0) characterState.sp = 0
         if(characterState.survival.sleep <=0)characterState.survival.sleep = 0
@@ -523,8 +679,14 @@ export function activateLifeSystem(){
         updateHpMpSp_UI()
     }, 6.2 * 1000)
 }
+// recomputes the ability bonuses (addStats), then lets current hp follow any
+// change in max hp (syncMaxHp)
 export function summarizeStats(){
     // if(getGameStatus() === "gameover") return
+    recomputeAddStats()
+    syncMaxHp()
+}
+function recomputeAddStats(){
     try {
         summarizeStatsUnsafe()
     } catch (err) {
@@ -532,7 +694,7 @@ export function summarizeStats(){
     }
 }
 function summarizeStatsUnsafe(){
-    const {hp,maxHp,mp, maxMp,sp,maxSp,stats} = characterState
+    const {maxHp,mp, maxMp,sp,maxSp,stats} = characterState
 
     const {
         totalHpPercent,
@@ -547,9 +709,9 @@ function summarizeStatsUnsafe(){
         resistance
     } = getMyAbilitiesInfo()
 
-    if(totalHpPercent){
-        addStats.additionalHp = maxHp*totalHpPercent   
-    }
+    // always assigned, 0 included - an `if(totalHpPercent)` here left the old
+    // bonus in place forever once the ability granting it was gone
+    addStats.additionalHp = maxHp * (totalHpPercent || 0)
     if(totalMpPercent){
         addStats.additionalMp = maxMp*totalMpPercent
         
@@ -623,17 +785,17 @@ export function clearIntervals(){
     clearInterval(blockingDrainInterval)
     clearInterval(hungerInterval)
     clearInterval(restInterval)
+    clearInterval(vitalsSaveInterval)
 }
 // DEBUG CHEAT - bound to the "f" key in controllers/inputMovement.js. Tops
 // off hp/mp/sp and both survival stats (hunger, sleep - the "moral"/rest
-// meter shown as restStat in the UI - see updateSurvival_UI). hp/mp/sp cap
-// at characterState.max*, not getTotal()'s ability-boosted total, matching
-// exactly how hpRegenInterval/mpRegenInterval/spRegenInterval above already
-// clamp overflow (ability bonuses are added back in at read-time via
-// getTotal(), not something that needs "filling" here).
+// meter shown as restStat in the UI - see updateSurvival_UI). hp fills to
+// getMaxHp() (ability bonus included - hp is the whole total, see LIFE);
+// mp/sp cap at characterState.max*, matching how mpRegenInterval/
+// spRegenInterval above clamp them.
 export function restoreAll(){
     if(!characterState) return
-    characterState.hp = characterState.maxHp
+    healToFull()
     characterState.mp = characterState.maxMp
     characterState.sp = characterState.maxSp
     characterState.survival.hunger = 100
@@ -648,28 +810,39 @@ export function updateHunger(){
     if(characterState.survival.hunger > 0) characterState.survival.hunger-=1
     updateSurvival_UI();
     // the moment it runs out, not every tick after
-    if(hungerBefore > 0 && characterState.survival.hunger <= 0) showWarning("Find Food")
-    const toDeduct = characterState.maxHp*.10 // 10% of life
-
-    if(characterState.hp > toDeduct && characterState.survival.hunger < 5){
-        characterState.hp -= toDeduct
-        // _statPopUp(`- ${toDeduct}hp hunger`, 500, 'crimson');
-        // if(characterState.hp <= 0) return playerDeath(myChar)
-    }
+    
     if(characterState.survival.hunger <=0)characterState.survival.hunger = 0
 
     if(characterState.survival.hunger < 13){
         hungStat.parentElement.children[0].style.animation = "blinkingRed .5s infinite"
+        
+        showWarning("Find Food")
+        let toDeduct = getMaxHp()*.10 // 10% of life
+        toDeduct += 100
+        // if(characterState.hp > toDeduct && characterState.survival.hunger < 5){
+        //     characterState.hp -= toDeduct
+        //     // _statPopUp(`- ${toDeduct}hp hunger`, 500, 'crimson');
+        //     // if(characterState.hp <= 0) return playerDeath(myChar)
+        //     showWarning("STARVED")
+        // }
+
+        // _statPopUp(`- ${toDeduct}hp hunger`, 500, 'crimson');
+        showWarning("STARVED")
+        // starving stops at 1 hp - LETHAL_DAMAGE.hunger (set it true to let
+        // starvation kill; death deletes the character)
+        damageHp(toDeduct, "hunger")
     }else{
         hungStat.parentElement.children[0].style.animation = "none"
     }
 }
-// only for checking if dmg has effect
-// then will add to your sickness status
-// reads the module-level allowDeath flag above (not a parameter) - see its
-// own comment for why. false (duelSystem.js's soft-loss duels) clamps hp at
-// 1 instead of running the normal gameOver() flow.
-export async function deductHp(dmg, effects, enemyStats){
+// A hit taken in a fight (enemies, other players, skills, a duel opponent,
+// the curse backfire): defense comes off, then the hit's effects apply, then
+// the hp loss goes through damageHp as "combat" - the one place that decides
+// death (and, in a duel - allowDeath false - stops it at 1 hp instead).
+// Resolves to true if this hit killed the character, once the death sequence
+// (telling tcp, gameOver) has finished - callers don't report the death
+// themselves anymore, damageHp's die() already did.
+export async function deductHp(dmg, effects = [], enemyStats){
 
     let totalDmg = dmg
     totalDmg -= getTotalDefense()
@@ -700,8 +873,9 @@ export async function deductHp(dmg, effects, enemyStats){
                 return
             }
 
-            // characterState.hp -= // wag muna to sa dulo na to
-            characterState.hp -= effect.hpcost
+            // the effect's hp cost lands with the hit itself (below) - one
+            // damageHp call, one death check
+            totalDmg += effect.hpcost || 0
             characterState.mp -= effect.mpcost
             characterState.sp -= effect.spcost
         
@@ -741,20 +915,13 @@ export async function deductHp(dmg, effects, enemyStats){
             timeOutCount+=600
         })
     }
-    characterState.hp -= totalDmg
-    characterState.hp = Math.floor(characterState.hp)
-
     if(characterState.mp <= 0) characterState.mp = 0
     if(characterState.sp+addStats.additionalSp <=0) characterState.sp = 0
-    if(characterState.hp+addStats.additionalHp <= 0) {
-        if(!allowDeath){
-            characterState.hp = Math.max(1, characterState.hp)
-            updateHpMpSp_UI()
-            updateSurvival_UI()
-            return false
-        }
-        await gameOver()
-        return true;
+
+    const killed = damageHp(totalDmg, "combat")
+    if(killed){
+        await dying
+        return true
     }
     updateHpMpSp_UI()
     updateSurvival_UI()
@@ -762,18 +929,11 @@ export async function deductHp(dmg, effects, enemyStats){
 }
 
 // deductHp's own positive mirror - a flat, undefended, one-shot hp gain
-// (no getTotalDefense() involved, same as deductHp's own poisoned/spdrain
-// hpcost lump - defense only ever reduces incoming HARM, not healing),
-// clamped to maxHp same as every consumable's own plusHp already is
-// (itemInfoSystem.js's consumeItemFunc). First caller: skillEffects.js's
-// castHealSkill (a "heal" effectType skill, e.g. a healing ground circle -
-// skillsData.js). No save/updateMyDetailsOL call here, matching
-// deductHp/startBurnDamage's own convention of mutating in-memory + UI
-// only, relying on whatever save already happens elsewhere.
+// (defense only ever reduces incoming HARM, not healing). The name the heal
+// skills (skillEffects.js's castHealSkill) and Vesper's heal call - it's
+// healHp (LIFE above), capped at getMaxHp(). Saved with the next vitals save.
 export function healPlayer(amount){
-    if(!characterState || !amount) return
-    characterState.hp = Math.min(characterState.maxHp, characterState.hp + amount)
-    updateHpMpSp_UI()
+    healHp(amount)
 }
 
 // FIRE'S BURN (skillsData.js's own "burn" effect entries, e.g.
@@ -782,10 +942,9 @@ export function healPlayer(amount){
 // ticks, rounded), then stops on its own. Deliberately NOT routed back
 // through deductHp/getTotalDefense - same flat, undefended-by-armor
 // treatment poisoned/spdrain's own hpcost already gets above, just spread
-// out over time instead of applied in one lump. Respects the same soft-loss
-// allowDeath clamp deductHp itself does (a duel/whatever else sets
-// allowDeath:false shouldn't let a burn tick kill outright either) - see
-// setAllowDeath's own comment for the full reasoning on that flag.
+// out over time instead of applied in one lump. Each tick is damageHp's
+// "burn" - lethal like any fight, so the same death path (and the same duel
+// soft-loss stop at 1 hp) as every other hit.
 const BURN_TICK_MS = 1000
 function startBurnDamage(effect){
     const totalTicks = Math.max(1, Math.round(effect.duration / BURN_TICK_MS))
@@ -805,9 +964,12 @@ function startBurnDamage(effect){
         : null
 
     const burnInterval = setInterval(() => {
+        // the character died meanwhile (this burn or anything else) - stop
+        if(isLifeOver){
+            clearInterval(burnInterval)
+            return
+        }
         ticksDone++
-        characterState.hp -= effect.dmgPm
-        characterState.hp = Math.floor(characterState.hp)
 
         popStatusEffect(`${effect.dn ?? "Burn"} -${effect.dmgPm}`, '#ff6a00')
         // effect.soundPlayPerDmg (skillsData.js's fire family) - a plain
@@ -815,20 +977,9 @@ function startBurnDamage(effect){
         // allSounds object actually stores it under (dmgpmS) - same
         // convention every other *S-suffixed sound already follows
         if(effect.soundPlayPerDmg) getAllSounds()[`${effect.soundPlayPerDmg}S`]?.play()
-        updateHpMpSp_UI()
 
-        if(characterState.hp+addStats.additionalHp <= 0){
-            clearInterval(burnInterval)
-            if(!allowDeath){
-                characterState.hp = Math.max(1, characterState.hp)
-                updateHpMpSp_UI()
-                return
-            }
-            gameOver()
-            return
-        }
-
-        if(ticksDone >= totalTicks) clearInterval(burnInterval)
+        const killed = damageHp(effect.dmgPm, "burn")
+        if(killed || ticksDone >= totalTicks) clearInterval(burnInterval)
     }, BURN_TICK_MS)
 
     setTimeout(() => {
@@ -943,7 +1094,10 @@ export async function gameOver(){
     closeAllPopupAndUI()
 
     clearIntervals()
-    
+
+    // die() normally set this already; set here too so nothing - a burn
+    // tick, a late hit, a vitals save - touches this character's hp again
+    isLifeOver = true
     characterState.hp = 0
     characterState.mp = 0
     characterState.sp = 0
@@ -985,10 +1139,9 @@ export function getCanPress(){
 // UPDATING UI
 
 export function updateHP_UI(){
-    const lifeCHp = characterState.hp + addStats.additionalHp
-    const lifeFullHp = characterState.maxHp + addStats.additionalHp
-    lifeBar.style.width = `${(lifeCHp/lifeFullHp) * 100}%`
-    lifeCap.innerHTML = `${Math.floor(lifeCHp)}/${Math.floor(lifeFullHp)}`
+    lifeBar.style.width = `${getHpRatio() * 100}%`
+    lifeCap.innerHTML = `${Math.floor(getHp())}/${Math.floor(getMaxHp())}`
+    refreshTiredness()
 }
 export function updateMP_UI(){
     let manaCurrent = getTotal().mp
@@ -1003,6 +1156,41 @@ export function updateSP_UI(){
     const lifeFullSp = characterState.maxSp+addStats.additionalSp
     stamBar.style.width = `${(lifeCSp/lifeFullSp) * 100}%`
     stamCap.innerHTML = `${Math.floor(lifeCSp)}/${Math.floor(lifeFullSp)}`
+    refreshTiredness()
+}
+
+// TIRED - worn out: under TIRED_HP_FRACTION of max hp, or under TIRED_SP
+// stamina. A tired character can only walk, even in fighting mode
+// (inputMovement.js), and moves with the "walk_tired" clip and stands in the
+// "structed" one instead of walk/running/idle/combatIdle (sockets/renderer.js).
+// Lives on the player object (player.isTired), not in characterState, so it's
+// never saved - it's worked out fresh from hp/sp. Synced: everyone else sees
+// it too (emitTired, and getCharSocket's isTired for anyone joining later).
+const TIRED_HP_FRACTION = 0.18
+const TIRED_SP = 50
+export function isCharacterTired(){
+    if(!characterState) return false
+    const sp = characterState.sp + addStats.additionalSp
+    return getHpRatio() < TIRED_HP_FRACTION || sp < TIRED_SP
+}
+// re-checked on every hp/sp display update (updateHP_UI/updateSP_UI), so it
+// switches the moment either crosses the line. Compared against the player
+// object itself, which is rebuilt on every place change - so arriving
+// somewhere new while tired sets it again on the new scene's player.
+function refreshTiredness(){
+    const me = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+    if(!me) return
+    const tired = isCharacterTired()
+    if(!!me.isTired === tired) return
+    me.isTired = tired
+    // worn out mid-stride - cut the run sound now; inputMovement.js won't
+    // start it again until the character has recovered
+    if(tired){
+        const sounds = getAllSounds()
+        if(sounds?.runningS?.isPlaying) sounds.runningS.stop()
+        if(sounds?.woodrunS?.isPlaying) sounds.woodrunS.stop()
+    }
+    if(getIsSocketOn()) emitTired(tired)
 }
 
 export function updateSurvival_UI(){
@@ -1068,14 +1256,9 @@ function tickBodyTemperature(){
     if(temp >= BODY_TEMP_MIN_SAFE && temp <= BODY_TEMP_MAX_SAFE) return
 
     // outside the band (BODY_TEMP_MIN_SAFE..MAX_SAFE) costs 6% of max hp
-    // every tick until it's back in. Guarded the same way updateHunger's own
-    // starvation damage is - never drives hp below zero here, the death path
-    // is playerDeath's job.
-    const toDeduct = characterState.maxHp * TEMP_DAMAGE_FRACTION_PER_TICK
-    if(characterState.hp > toDeduct){
-        characterState.hp -= toDeduct
-        updateHP_UI()
-    }
+    // every tick until it's back in - non-lethal (LETHAL_DAMAGE.cold/heat),
+    // so it stops at 1 hp
+    damageHp(getMaxHp() * TEMP_DAMAGE_FRACTION_PER_TICK, temp < BODY_TEMP_MIN_SAFE ? "cold" : "heat")
 }
 export function updateHpMpSp_UI(){
     updateHP_UI()
@@ -1127,10 +1310,71 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
             console.warn(`[charstate-swap] SAVED as owner=${toSave.owner} (_id=${toSave._id}) but server returned owner=${data?.owner} (_id=${data?._id}) - about to replace my own characterState with this`)
         }
         if(willUpdateCharState) characterState = data
+        // these vitals are on the server now - the vitals autosave needn't
+        // send them again
+        if(characterState && toSave._id === characterState._id) lastSavedVitals = JSON.stringify(vitalsOf(toSave))
         return data
     } catch (error) {
         return error.message
     }
+}
+
+// ── SAVING VITALS ─────────────────────────────────────────────────────────────
+// hp/mp/sp and the survival meters change all the time - every hit, every
+// regen tick - but nothing saved the character after a fight: only some
+// unrelated event (an item picked up, a door) did, so reloading brought back
+// whatever hp that last save happened to hold. This saves just the vitals,
+// small: every VITALS_SAVE_EVERY_MS while they've changed, and the moment the
+// page is hidden or closed. The server's updateall is a partial update
+// (findByIdAndUpdate sets only the fields it's sent), so the rest of the
+// character is untouched.
+const VITALS_SAVE_EVERY_MS = 10 * 1000
+let vitalsSaveInterval = null
+// JSON of the vitals the server last confirmed - nothing's sent while they match
+let lastSavedVitals = null
+let vitalsPageHooked = false
+
+function vitalsOf(state){
+    return {
+        hp: state.hp,
+        mp: state.mp,
+        sp: state.sp,
+        survival: state.survival,
+        status: state.status,
+    }
+}
+
+// keepalive - for a page that's going away: the request still completes after
+// the page is gone (the body is tiny, far under keepalive's 64KB limit)
+async function saveVitals(keepalive = false){
+    if(!characterState?._id || isLifeOver) return
+    const vitals = vitalsOf(characterState)
+    const json = JSON.stringify(vitals)
+    if(json === lastSavedVitals) return
+    const accountDet = checkIfTokenSaved()
+    if(!accountDet?.token) return
+    try {
+        const res = await fetch(`${APIURL}/characters/updateall/${characterState._id}`, { ...apiOpt("PATCH", vitals, accountDet.token), keepalive })
+        if(res.ok) lastSavedVitals = json
+    } catch (err) {
+        // offline, or the server asleep - the next tick tries again
+    }
+}
+
+// loadedVitals - JSON of the vitals as they came from the server
+function startVitalsAutosave(loadedVitals){
+    lastSavedVitals = loadedVitals
+    clearInterval(vitalsSaveInterval)
+    vitalsSaveInterval = setInterval(() => saveVitals(), VITALS_SAVE_EVERY_MS)
+
+    if(vitalsPageHooked) return
+    vitalsPageHooked = true
+    // hidden - switched to another tab, minimised, or (browsers fire it before
+    // unloading) a reload/close on its way; pagehide - the page itself going
+    document.addEventListener("visibilitychange", () => {
+        if(document.visibilityState === "hidden") saveVitals(true)
+    })
+    window.addEventListener("pagehide", () => saveVitals(true))
 }
 
 
@@ -1155,14 +1399,6 @@ export function setCharStateMode(_newMode){
     }
 
     setPlayerMode(characterState.owner, _newMode, weapon ? weapon.name : undefined)
-}
-
-function incrementHp(){
-    const totalCLife = characterState.hp+addStats.additionalHp
-    const totalMaxLife = characterState.maxHp+addStats.additionalHp
-    if(totalCLife <= 0) return clearIntervals()
-    if(totalCLife <= totalMaxLife) characterState.hp += getTotal().hpRegen
-    if(totalCLife > totalMaxLife) characterState.hp = characterState.maxHp
 }
 
 function incrementMp(){

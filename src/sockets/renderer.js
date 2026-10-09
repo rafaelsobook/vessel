@@ -503,7 +503,17 @@ let renderCallback = function () {
         if(player._attacking || player.characterAnimations.isActionPlaying()) return
         player.characterAnimations.tickBlend()
 
+        // worn out (characterstate.js's isCharacterTired, synced as
+        // player.isTired) - "walk_tired" takes over moving and "structed"
+        // takes over standing, in or out of a fight. Every other mode
+        // (casting, mining, sitting, falling...) keeps its own clip.
+        const tiredPose = player.isTired && (player.mode === "idle" || player.mode === "fighting")
+
         if(player._moving && player.mode !== "inAir"){
+            if(tiredPose){
+                player.characterAnimations.setState(ANIM_STATE.WALK_TIRED, 8)
+                return
+            }
             switch(player.mode){
                 case "idle":
                     player.characterAnimations.setState(ANIM_STATE.WALK, 8)
@@ -512,6 +522,11 @@ let renderCallback = function () {
                     player.characterAnimations.setState(ANIM_STATE.RUNNING, 8)
                 break
             }
+            return
+        }
+
+        if(tiredPose){
+            player.characterAnimations.setState(ANIM_STATE.STRUCTED, 8)
             return
         }
 

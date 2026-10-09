@@ -345,6 +345,23 @@ export function emitWeaponBlock(isBlocking) {
     })
 }
 
+// worn out or recovered (characterstate.js's refreshTiredness) - relayed
+// through tcp/index.ts like emitWeaponBlock right above, so every other
+// client's worldsocket.js "emitted-tired" handler can switch this player to
+// (or off) the tired walk/stand clips (sockets/renderer.js)
+export function emitTired(isTired) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("emitTired", {
+        ownerId: charState.owner,
+        isTired,
+        currentPlaceId: charState.currentPlace.placeId,
+    })
+}
+
 export function emitEquipItem(itemDet, isHiding) {
 
     const charState = getCharState()

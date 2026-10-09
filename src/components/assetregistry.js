@@ -10,9 +10,16 @@ import { createSinglePlane } from "../assetcreation/createGrasses";
 // with it, every village scene load) - createvillage.js's spawnProps/
 // spawnNonPhysics already guard against a null template (`if (!mainMesh)
 // return`), so returning null here is safe for every consumer downstream
-async function loadVillagePropSafe(path){
+// opts.diffuseTexPath - optional texture that replaces the glb's own material
+// (same createMatV2 swap areascene.js does for item.diffuseTexPath). Set on
+// the template, so every instance spawned from it picks it up
+async function loadVillagePropSafe(path, { diffuseTexPath } = {}){
     try {
-        return await mergeAndLoadModel(path)
+        const mesh = await mergeAndLoadModel(path)
+        if(mesh && diffuseTexPath){
+            mesh.material = createMatV2(mesh.getScene(), diffuseTexPath)
+        }
+        return mesh
     } catch (error) {
         console.warn(`[assetregistry] failed to load village prop "${path}"`, error)
         return null
@@ -28,7 +35,9 @@ export async function getVillageAssetRegistry() {
     const mediumTree = await loadVillagePropSafe("./models/trees/dead_tree_1.glb");
     const smallTree = await loadVillagePropSafe("./models/trees/tree_1.glb");
 
-    const pole = await loadVillagePropSafe("./models/poleslamp/polelamp.glb");
+    const pole = await loadVillagePropSafe("./models/poleslamp/polelamp.glb", 
+        { diffuseTexPath: "./images/modeltex/iron2.jpg" }
+    );
 
     const woodenstake = await loadVillagePropSafe("./models/poleslamp/stake1.glb");
     const gate = await loadVillagePropSafe("./models/houses/gate1.glb");

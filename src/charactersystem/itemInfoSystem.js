@@ -2,7 +2,7 @@ import { Vector3 } from "@babylonjs/core"
 import { createElement } from "../tools/GUITools.js"
 import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
-import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL, addEffectsOnStat } from "./characterstate.js"
+import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp } from "./characterstate.js"
 import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
@@ -238,12 +238,15 @@ let consumeItemFunc = async () => {
     const { cure, inflict, plusHp, plusMp, plusSp, plusDmg, plusSpd,fillHunger,  fillTireness } = itemDetail.consumeAbilities
     // saving
     const charState = getCharState()
-    charState.hp+=plusHp
+    // hp through the life system (characterstate.js's LIFE) - healHp caps it
+    // at the full max (ability bonus included); food that hurts goes through
+    // damageHp as non-lethal "food"
+    if(plusHp > 0) healHp(plusHp)
+    else if(plusHp < 0) damageHp(-plusHp, "food")
     charState.mp+=plusMp
     charState.sp+=plusSp
     charState.stats.strength+= plusDmg
     charState.stats.spd+= plusSpd
-    if(charState.hp > charState.maxHp) charState.hp = charState.maxHp
     if(charState.mp > charState.maxMp) charState.mp = charState.maxMp
     if(charState.sp > charState.maxSp) charState.sp = charState.maxSp
     

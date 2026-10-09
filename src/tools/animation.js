@@ -40,6 +40,9 @@ export const ANIM_STATE = {
     SITTING:    'sitting',
     // lying in a tent's bed (seating.js's "sleeping" pose)
     SLEEPING:   'sleeping',
+    // worn out (characterstate.js's isCharacterTired) - moves with this
+    // instead of walk/running (standing still, it's STRUCTED)
+    WALK_TIRED: 'walk_tired',
 }
 
 export class CharacterAnimations {
@@ -63,6 +66,7 @@ export class CharacterAnimations {
             [ANIM_STATE.FALLING]:    find('falling'),
             [ANIM_STATE.SITTING]:    find('sitting'),
             [ANIM_STATE.SLEEPING]:   find('sleeping'),
+            [ANIM_STATE.WALK_TIRED]: find('walk_tired'),
         }
 
         const missing = Object.entries(this._anims).filter(([,v]) => !v).map(([k]) => k)
@@ -158,6 +162,7 @@ export class CharacterAnimations {
     setMoveSpeedRatio(ratio) {
         if (this._anims[ANIM_STATE.WALK])    this._anims[ANIM_STATE.WALK].speedRatio    = ratio
         if (this._anims[ANIM_STATE.RUNNING]) this._anims[ANIM_STATE.RUNNING].speedRatio = ratio
+        if (this._anims[ANIM_STATE.WALK_TIRED]) this._anims[ANIM_STATE.WALK_TIRED].speedRatio = ratio
     }
 
     // Pass freezeAfter = true to hold the last frame without restoring looping anims (e.g. death).

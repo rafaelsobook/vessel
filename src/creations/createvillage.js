@@ -173,6 +173,9 @@ function spawnProps(scene, items, mainMesh, addPhysics, shapeType) {
     let sharedShape = null;
     if (addPhysics) {
         switch(shapeType){
+            case "box":
+                sharedShape = PhysicsShapeBox.FromMesh(mainMesh);
+            break
             case "mesh":
                 sharedShape = new PhysicsShapeMesh(mainMesh, scene);
             break
@@ -407,7 +410,7 @@ export function createVillage(scene, village, assetRegistry = {}, characterBody)
     spawnProps(scene, village.smallTrees,  assetRegistry.smallTree,   true, "mesh");
 
     // Light poles — with physics.
-    spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true);
+    spawnProps(scene, village.lightPoles, assetRegistry.lightPole, true, "box");
 
     // Foliage — no physics (purely decorative, high count, no collision needed).
     spawnNonPhysics(scene, village.grass, assetRegistry.grass);
