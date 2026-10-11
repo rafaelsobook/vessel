@@ -35,8 +35,13 @@ import { giveSkill } from "../components/skillsui.js"
 import { receiveTitle } from "../components/titleUI.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
 import { getSkillEffect } from "../staticRecources/skillsData.js"
+import { cheerArenaCrowd } from "../creations/createduelarena.js"
 
 const DUEL_PLACE_ID     = 200
+// the arena's crowd (createduelarena.js's cheerArenaCrowd) - the share of it
+// that jumps when a blow lands, and how long it roars once someone's down
+const CROWD_HIT_CHEER   = 0.25
+const CROWD_FINISH_MS   = 6000
 const ATTACK_INTERVAL_MS = 1500
 // createMyCharacter.js's own atkCollider positioning is the established
 // reach convention here: punch ~0.8 units forward of the body, collider only
@@ -737,6 +742,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // same call skillEffects.js's own stickBriefly hit reaction already
         // uses for a player getting hit by a skill
         opponent.bloodps?.play()
+        cheerArenaCrowd(CROWD_HIT_CHEER)
 
         // this skill's own curse effect (skillsData.js) - if it lands,
         // curses THIS opponent (mirrors a player's dark skill cursing a
@@ -760,6 +766,9 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             opponentDefeated = true
             stopFight()
             playFirstAction(opponent.characterAnimations, opponent.anims, DEATH_CLIP_CANDIDATES, { freezeAfter: true })
+            // the whole arena on its feet for the winning blow, a lesser
+            // roar for an assistant going down
+            cheerArenaCrowd(isMainOpponent ? 1 : 0.5, isMainOpponent ? CROWD_FINISH_MS : 2500)
             // isMainOpponent-gated - an assistant (localroomdb.js's own
             // per-main-entry `assistants` array) dying is just one fewer
             // fighter in the gauntlet, not a win: no dialogue (assistants
@@ -819,6 +828,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // createCharacter() rig), not on characterBody (just the bare mesh
         // this closure was handed)
         myOwnPlayer?.bloodps?.play()
+        // the crowd loves it either way - and roars when the player goes down
+        // (a duel stops them at 1 hp - setAllowDeath)
+        const downed = getCharState().hp <= 1
+        cheerArenaCrowd(downed ? 0.8 : CROWD_HIT_CHEER * 0.6, downed ? CROWD_FINISH_MS : undefined)
     }
 
     // Runs once, the moment the PLAYER wins this fight - grants

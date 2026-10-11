@@ -325,8 +325,8 @@ function renderStoryQuests(){
 // this codebase already calls - npcDetails.js's own cbAfterNewQuestReceived
 // chains, questOffer.js's offerStarterQuest, questHelpers.js's
 // grantStoryQuest, changeStory/checkStoryQuestIfCompleted below - and
-// characterstate.js's initiateCharacter (runs at the top of every single
-// areaScene() call, i.e. on login AND every scene change) for restoring the
+// characterstate.js's initiateCharacter (runs on every scene load, from
+// loadScene.js, i.e. on login AND every scene change) for restoring the
 // tracker after a reload. Every one of those already pushes/mutates
 // charState.quests BEFORE calling this, so a full fresh re-render from that
 // same state is always correct here - the `story` argument itself is kept

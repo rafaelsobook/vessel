@@ -2,7 +2,7 @@ import { Vector3 } from "@babylonjs/core"
 import { createElement } from "../tools/GUITools.js"
 import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
-import { getCharState, setCharStateMode, updateHunger, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp } from "./characterstate.js"
+import { getCharState, setCharStateMode, refreshHungerUI, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp, getMaxMp, getMaxSp } from "./characterstate.js"
 import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
@@ -247,8 +247,10 @@ let consumeItemFunc = async () => {
     charState.sp+=plusSp
     charState.stats.strength+= plusDmg
     charState.stats.spd+= plusSpd
-    if(charState.mp > charState.maxMp) charState.mp = charState.maxMp
-    if(charState.sp > charState.maxSp) charState.sp = charState.maxSp
+    // capped at the max WITH the blessing bonus (characterstate.js's MANA /
+    // STAMINA) - the bare maxMp/maxSp would cut the bonus part off
+    if(charState.mp > getMaxMp()) charState.mp = getMaxMp()
+    if(charState.sp > getMaxSp()) charState.sp = getMaxSp()
     
     if(fillHunger){
         charState.survival.hunger += fillHunger
@@ -296,7 +298,9 @@ let consumeItemFunc = async () => {
         // identical last-copy-spent case)
         if(theItemAfterDeducted) showItemInfo(theItemAfterDeducted)
         else closeItemInfo()
-        updateHunger()
+        // the readout only - updateHunger (a hunger TICK) used to run here,
+        // so eating cost a point of hunger
+        refreshHungerUI()
         updateStatUI()
     })
 }

@@ -1,5 +1,5 @@
 import { startQuestionare } from '../components/conversations'
-import { getCharState, healPlayer, healToFull, updateHpMpSp_UI, rankOrder } from '../charactersystem/characterstate'
+import { getCharState, healPlayer, healToFull, updateHpMpSp_UI, rankOrder, getMaxMp, getMaxSp } from '../charactersystem/characterstate'
 import { buyOrSell } from "../components/buyorsell"
 import { getPlayerCoord } from '../charactersystem/createcharacter'
 import { createMagicCircle } from '../creations/magiccircles'
@@ -138,8 +138,9 @@ export function vesperData(){
                 { text: "Full heal", cb: () => {
                     const charState = getCharState()
                     healToFull()
-                    charState.mp = charState.maxMp
-                    charState.sp = charState.maxSp
+                    // the full max, blessing bonus included (characterstate.js's MANA / STAMINA)
+                    charState.mp = getMaxMp()
+                    charState.sp = getMaxSp()
                     updateHpMpSp_UI()
                     circleAtMe("apt_earth_second")
                     startQuestionare(502)

@@ -22,8 +22,9 @@ import { getAmbientTemperature } from "../components/weatherSystem.js";
 import {
     temperatureStrain, BODY_TEMP_NORMAL, BODY_TEMP_MIN_SAFE, BODY_TEMP_MAX_SAFE,
     BODY_TEMP_DRIFT_PER_TICK, BODY_TEMP_RECOVER_PER_TICK, TEMP_DAMAGE_FRACTION_PER_TICK,
-    STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING
+    STRAIN_FOR_FULL_DRIFT, BODY_TEMP_FLOOR, BODY_TEMP_CEILING, BONFIRE_WARMTH_RADIUS
 } from "../constants/weather.js";
+import { isNearBonfire } from "../assetcreation/createbonfire.js";
 import { triggerSkillWheel } from "./skillWheel.js";
 import { isSittingOnLog, isSleepingInBed } from "./seating.js";
 import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
@@ -174,28 +175,30 @@ function expToNextLevel(lvl){
 // as the amount earned covers in one pass (a big single kill or a future
 // EXP-boosting effect shouldn't need to be re-triggered separately per
 // level). Each level-up: +1 statPoints (the pool statsSystem.js's
-// upgrade-btn UI now spends from), a "Level Up!" popup, then the skill
-// wheel reveal (skillWheel.js - kept in its own file rather than bloating
-// this one with wheel DOM/animation code).
+// upgrade-btn UI now spends from) and a skill wheel spin (skillWheel.js -
+// kept in its own file rather than bloating this one with wheel
+// DOM/animation code); one "Level Up!" banner shows the level reached.
 export function gainExp(amount){
     if(!characterState || !amount) return
     characterState.exp = (characterState.exp || 0) + amount
 
-    let leveledUp = false
+    let levelsGained = 0
     while(characterState.exp >= expToNextLevel(characterState.lvl)){
         characterState.exp -= expToNextLevel(characterState.lvl)
         characterState.lvl += 1
         characterState.statPoints = (characterState.statPoints || 0) + 1
-        leveledUp = true
+        levelsGained++
     }
 
-    if(!leveledUp) return
+    if(!levelsGained) return
     lvlAndName.innerHTML = `Lvl ${characterState.lvl} ${characterState.name}`
     popupReceiveLevelUpUI(characterState.lvl)
     updateStatUI()
     updateMyDetailsOL(characterState, checkIfTokenSaved())
     setTimeout(() => {
-        triggerSkillWheel()
+        // one spin per level gained, not per kill - skillWheel.js queues
+        // them and shows them one after another
+        for(let i = 0; i < levelsGained; i++) triggerSkillWheel()
     }, 1200)
 }
 // DEBUG CHEAT - bound to the "t" key in controllers/inputMovement.js (was
@@ -214,18 +217,33 @@ export function getTotal(){
     summarizeStats()
 
     const hp = getHp()
-    const mp = characterState.mp + addStats.additionalMp
-    const sp = characterState.sp + addStats.additionalSp
+    const mp = characterState.mp
+    const sp = characterState.sp
 
     const maxHp = getMaxHp()
-    const maxMp = characterState.maxMp + addStats.additionalMp
-    const maxSp = characterState.maxSp + addStats.additionalSp
+    const maxMp = getMaxMp()
+    const maxSp = getMaxSp()
 
     const hpRegen = addStats.totalHpRegen
     const mpRegen = addStats.totalMpRegen
     const spRegen = addStats.totalSpRegen
 
     return { hp,maxHp, mp,maxMp, sp,maxSp, hpRegen, mpRegen, spRegen, }
+}
+// ── MANA / STAMINA ────────────────────────────────────────────────────────────
+// The same rule as hp (LIFE below): characterState.mp/.sp is what the
+// character has right now, everything included, and only the max carries the
+// blessing bonus (addStats.additionalMp/Sp). They used to add the bonus to the
+// current value too - a floor the bar could never drop below, "out of stamina"
+// while it still showed some, and a regen check that compared that total
+// against the bare maxMp, so mana stopped refilling short of full.
+export function getMaxMp(){
+    if(!characterState) return 0
+    return characterState.maxMp + addStats.additionalMp
+}
+export function getMaxSp(){
+    if(!characterState) return 0
+    return characterState.maxSp + addStats.additionalSp
 }
 // ── LIFE ──────────────────────────────────────────────────────────────────────
 // characterState.hp is the hp the character has RIGHT NOW, everything
@@ -250,7 +268,7 @@ export function getTotal(){
 const LETHAL_DAMAGE = {
     combat: true,   // enemies, other players, skills, the curse backfire
     burn: true,     // fire's burn ticks (deductHp's "burn" effects)
-    hunger: false,  // starving (updateHunger)
+    hunger: false,  // starving (tickHunger)
     cold: false,    // body temperature too low / too high (tickBodyTemperature)
     heat: false,
     poison: false,  // a permanent status effect's hpcost (restInterval)
@@ -352,6 +370,16 @@ function regenHp(ticks = 1){
     const perTick = getTotal().hpRegen
     if(perTick > 0) healHp(perTick * ticks)
 }
+// resting, a log, a bed - the ability regen plus a base share of max hp. The
+// ability regen alone is 0 without an hp-regen blessing, which left all three
+// restoring no hp at all for most characters. (The passive hpRegenInterval
+// stays ability-only: outside of these, hp still only returns with a blessing.)
+const RECOVERY_HP_FRACTION_PER_TICK = 0.01
+function recoverHp(ticks = 1){
+    if(!characterState || isLifeOver) return
+    const perTick = getTotal().hpRegen + getMaxHp() * RECOVERY_HP_FRACTION_PER_TICK
+    healHp(perTick * ticks)
+}
 
 // after every change to hp: the bar (which also re-checks tiredness), and the
 // next vitals save picks it up
@@ -393,11 +421,15 @@ export function getTotalTempResistance(){
 }
 
 export function getTotalDefense(){
+    // dex counts double, here only - a second `+= dex` at the end, after the
+    // percent bonus, made it triple (the shipped builds have it double)
     let totalD = characterState.stats.dex*2
     // log(`normal def ${totalD}`)
     characterState.items.forEach(itm => {
         if(itm.itemCateg === 'equipable' && itm.equiped){
-            if(itm.equipAbilities.def){
+            // ?. - a piece without equipAbilities threw here, and every
+            // deductHp with it, before any damage landed
+            if(itm.equipAbilities?.def){
                 totalD+=itm.equipAbilities.def
             }
         }
@@ -410,9 +442,8 @@ export function getTotalDefense(){
     }
     if(abilityDef && abilityDef.percent){
         const additionalDefByPercent = totalD*abilityDef.percent
-        totalD += additionalDefByPercent 
+        totalD += additionalDefByPercent
     }
-    totalD+=characterState.stats.dex;
     // log(`total def ${totalD}`)
     return totalD
 }
@@ -518,9 +549,6 @@ export function activateLifeSystem(){
     lvlAndName.innerHTML = `Lvl ${lvl} ${name}`
 
     clearIntervals()
-    // what the server has right now (this runs on every load - each place
-    // change loads the character again - and after new abilities are saved)
-    const loadedVitals = JSON.stringify(vitalsOf(characterState))
     isLifeOver = false
     dying = null
     // the same character keeps its max-hp reference, so a newly accepted
@@ -533,7 +561,7 @@ export function activateLifeSystem(){
     // a character that loads is alive - dying deletes it - so an old save left
     // at 0 hp (starving used to stop there) comes back on its feet
     if(characterState.hp < NON_LETHAL_FLOOR) characterState.hp = NON_LETHAL_FLOOR
-    startVitalsAutosave(loadedVitals)
+    startVitalsAutosave()
     openCloseLifeDisplay(true)
     // HP
     hpRegenInterval = setInterval( () => {
@@ -576,7 +604,7 @@ export function activateLifeSystem(){
     logSitRegenInterval = setInterval( () => {
         const ticks = isSleepingInBed() ? BED_REGEN_MULTIPLIER : isSittingOnLog() ? 1 : 0
         if(!ticks) return
-        regenHp(ticks)
+        recoverHp(ticks)
         for(let i = 0; i < ticks; i++){
             incrementMp()
             incrementSp()
@@ -605,12 +633,13 @@ export function activateLifeSystem(){
         }
         updateSP_UI()
     }, 500)
-    updateHunger()
-    
+    // the readout only - a load (every place change) isn't a hunger tick
+    refreshHungerUI()
+
     hungerInterval = setInterval(() => {
         // if(getGameStatus() === "gameover") return
-        updateHunger()
-    }, 2500)
+        tickHunger()
+    }, HUNGER_TICK_MS)
     // I PUT THE STATS DEDCUTION HERE
     restInterval = setInterval(() => {
         // if(getGameStatus() === "gameover") return
@@ -627,7 +656,7 @@ export function activateLifeSystem(){
             if(characterState.survival.sleep < 100) characterState.survival.sleep += REST_SLEEP_REGEN_PER_TICK
             if(characterState.survival.sleep > 100) characterState.survival.sleep = 100
 
-            regenHp()
+            recoverHp()
             incrementMp()
             incrementSp()
         } else {
@@ -652,12 +681,14 @@ export function activateLifeSystem(){
                     // createTextMesh(makeRandNum(), `poisoned ${effect.dmgPm}`, "green", myChar.bx.position, 90, _scene, true, false)
                 break
             }
+            // || 0 - a missing cost would turn the stat into NaN, which none
+            // of the <= 0 clamps below catch (and which saves as null)
             damageHp(effect.hpcost, "poison")
-            characterState.mp -= effect.mpcost
-            characterState.sp -= effect.spcost
+            characterState.mp -= effect.mpcost || 0
+            characterState.sp -= effect.spcost || 0
 
-            characterState.survival.hunger -= effect.hungercost
-            characterState.survival.sleep -= effect.energycost
+            characterState.survival.hunger -= effect.hungercost || 0
+            characterState.survival.sleep -= effect.energycost || 0
         })
         // mp/sp had no floor at all in this tick, unlike every other
         // interval in this file that touches them (castingDrainInterval/
@@ -677,7 +708,7 @@ export function activateLifeSystem(){
         // without the hp/mp/sp bars ever visibly updating until something
         // else incidentally refreshed them
         updateHpMpSp_UI()
-    }, 6.2 * 1000)
+    }, 2.2 * 1000)
 }
 // recomputes the ability bonuses (addStats), then lets current hp follow any
 // change in max hp (syncMaxHp)
@@ -709,54 +740,49 @@ function summarizeStatsUnsafe(){
         resistance
     } = getMyAbilitiesInfo()
 
-    // always assigned, 0 included - an `if(totalHpPercent)` here left the old
-    // bonus in place forever once the ability granting it was gone
+    // every field assigned on every run, 0 included - behind an `if(value)` a
+    // bonus stayed in place forever once nothing granted it anymore (and a
+    // character loaded later in the same session inherited it: gameOver's
+    // reset gets refilled from the dead one's blessings right after)
     addStats.additionalHp = maxHp * (totalHpPercent || 0)
-    if(totalMpPercent){
-        addStats.additionalMp = maxMp*totalMpPercent
-        
-    }
-    if(totalSpPercent){
-        addStats.additionalSp = maxSp*totalSpPercent
-      
-    }
-    if(totalSpdPercent){
-        addStats.additionalSpd = stats.spd*totalSpdPercent
-    }
-    if(totalAtkSpdPercent){
-        addStats.additionalAtkSpd = stats.atkSpd*totalAtkSpdPercent
-    }
+    addStats.additionalMp = maxMp * (totalMpPercent || 0)
+    addStats.additionalSp = maxSp * (totalSpPercent || 0)
+    addStats.additionalSpd = stats.spd * (totalSpdPercent || 0)
+    addStats.additionalAtkSpd = stats.atkSpd * (totalAtkSpdPercent || 0)
 
-    if(totalMeeleeDmg.toAdd){
-        addStats.additionalMeeleeDmg.toAdd = totalMeeleeDmg.toAdd
-    }
-    if(totalMeeleeDmg.percent){
-        addStats.additionalMeeleeDmg.percent = totalMeeleeDmg.percent
-    }
-
-    if(totalMagicDmg.toAdd){
-        addStats.additionalMagicDmg.toAdd = totalMagicDmg.toAdd
-    }
-    if(totalMagicDmg.percent){
-        addStats.additionalMagicDmg.percent = totalMagicDmg.percent
-    }
-
-    if(totalDefense.toAdd){
-        addStats.additionalDefense.toAdd = totalDefense.toAdd
-    }
-    if(totalDefense.percent){
-        addStats.additionalDefense.percent = totalDefense.percent
-    }
+    // in place - these three stay the same objects
+    addStats.additionalMeeleeDmg.toAdd = totalMeeleeDmg.toAdd || 0
+    addStats.additionalMeeleeDmg.percent = totalMeeleeDmg.percent || 0
+    addStats.additionalMagicDmg.toAdd = totalMagicDmg.toAdd || 0
+    addStats.additionalMagicDmg.percent = totalMagicDmg.percent || 0
+    addStats.additionalDefense.toAdd = totalDefense.toAdd || 0
+    addStats.additionalDefense.percent = totalDefense.percent || 0
 
     addStats.totalHpRegen = totalRegens.hp
     addStats.totalMpRegen = totalRegens.mp
     addStats.totalSpRegen = totalRegens.sp
 }
 export async function initiateCharacter(_accountDet){
-    characterState = await getHeroDetail(_accountDet)
-    if(!characterState){
+    const loaded = await getHeroDetail(_accountDet)
+    // only an actual character becomes characterState - getHeroDetail passes on
+    // whatever came back (undefined when the request failed, "notfound" or an
+    // error object from the server), and the last scene's timers are still
+    // running at this point: assigning first left them reading a
+    // non-character every 500ms. loadScene logs out on null, so they stop here.
+    if(!isCharacterDoc(loaded)){
+        clearIntervals()
         return null
     }
+    // this character died but the server never confirmed the delete (see
+    // gameOver) - finish it now rather than let a reload bring it back
+    if(getPendingDelete() === loaded._id){
+        clearIntervals()
+        if(await deleteCharacterOnServer(loaded._id)) clearPendingDelete()
+        return null
+    }
+    characterState = loaded
+    // what the server has right now - the vitals autosave only sends changes
+    lastSavedVitals = JSON.stringify(vitalsOf(characterState))
 
     activateLifeSystem()
     updateSkillListUI(characterState.skills)
@@ -790,14 +816,13 @@ export function clearIntervals(){
 // DEBUG CHEAT - bound to the "f" key in controllers/inputMovement.js. Tops
 // off hp/mp/sp and both survival stats (hunger, sleep - the "moral"/rest
 // meter shown as restStat in the UI - see updateSurvival_UI). hp fills to
-// getMaxHp() (ability bonus included - hp is the whole total, see LIFE);
-// mp/sp cap at characterState.max*, matching how mpRegenInterval/
-// spRegenInterval above clamp them.
+// getMaxHp(), mp/sp to getMaxMp()/getMaxSp() - ability bonus included, each
+// is the whole total (see LIFE and MANA / STAMINA).
 export function restoreAll(){
     if(!characterState) return
     healToFull()
-    characterState.mp = characterState.maxMp
-    characterState.sp = characterState.maxSp
+    characterState.mp = getMaxMp()
+    characterState.sp = getMaxSp()
     characterState.survival.hunger = 100
     characterState.survival.sleep = 100
 
@@ -805,35 +830,35 @@ export function restoreAll(){
     updateSurvival_UI()
     updateMyDetailsOL(characterState, checkIfTokenSaved())
 }
-export function updateHunger(){
-    const hungerBefore = characterState.survival.hunger
-    if(characterState.survival.hunger > 0) characterState.survival.hunger-=1
-    updateSurvival_UI();
-    // the moment it runs out, not every tick after
-    
-    if(characterState.survival.hunger <=0)characterState.survival.hunger = 0
+// HUNGER - one point per tick. 40.5s, as in the shipped builds: full to empty
+// in about 68 minutes, near the sleep meter's ~52 (the 2.5s this was set to
+// emptied it in about 4)
+const HUNGER_TICK_MS = 40.5 * 1000
+// under this the icon blinks, and crossing it says "Find Food"
+const HUNGER_WARN_BELOW = 13
 
-    if(characterState.survival.hunger < 13){
-        hungStat.parentElement.children[0].style.animation = "blinkingRed .5s infinite"
-        
-        showWarning("Find Food")
-        let toDeduct = getMaxHp()*.10 // 10% of life
-        toDeduct += 100
-        // if(characterState.hp > toDeduct && characterState.survival.hunger < 5){
-        //     characterState.hp -= toDeduct
-        //     // _statPopUp(`- ${toDeduct}hp hunger`, 500, 'crimson');
-        //     // if(characterState.hp <= 0) return playerDeath(myChar)
-        //     showWarning("STARVED")
-        // }
+// the hunger readout and its blinking icon - also what eating something
+// refreshes (itemInfoSystem.js), which unlike a tick costs no hunger
+export function refreshHungerUI(){
+    updateSurvival_UI()
+    hungStat.parentElement.children[0].style.animation = characterState.survival.hunger < HUNGER_WARN_BELOW ? "blinkingRed .5s infinite" : "none"
+}
+// one hunger tick (hungerInterval). "Find Food" the moment it runs low - the
+// blinking icon keeps saying it after that. Hp only goes once it's actually
+// empty: 10% of max hp + 100 a tick, each with a "STARVED" warning, until fed.
+// Non-lethal - starving stops at 1 hp (LETHAL_DAMAGE.hunger; set it true to
+// let starvation kill, death deletes the character)
+function tickHunger(){
+    const survival = characterState.survival
+    const hungerBefore = survival.hunger
+    survival.hunger = Math.max(0, survival.hunger - 1)
+    refreshHungerUI()
 
-        // _statPopUp(`- ${toDeduct}hp hunger`, 500, 'crimson');
-        showWarning("STARVED")
-        // starving stops at 1 hp - LETHAL_DAMAGE.hunger (set it true to let
-        // starvation kill; death deletes the character)
-        damageHp(toDeduct, "hunger")
-    }else{
-        hungStat.parentElement.children[0].style.animation = "none"
-    }
+    if(hungerBefore >= HUNGER_WARN_BELOW && survival.hunger < HUNGER_WARN_BELOW) showWarning("Find Food")
+    if(survival.hunger > 0) return
+
+    showWarning("STARVED")
+    damageHp(getMaxHp() * .10 + 100, "hunger")
 }
 // A hit taken in a fight (enemies, other players, skills, a duel opponent,
 // the curse backfire): defense comes off, then the hit's effects apply, then
@@ -874,15 +899,17 @@ export async function deductHp(dmg, effects = [], enemyStats){
             }
 
             // the effect's hp cost lands with the hit itself (below) - one
-            // damageHp call, one death check
+            // damageHp call, one death check. Every cost || 0: a missing one
+            // would turn the stat into NaN, which no <= 0 clamp catches (and
+            // which saves as null)
             totalDmg += effect.hpcost || 0
-            characterState.mp -= effect.mpcost
-            characterState.sp -= effect.spcost
-        
-            characterState.survival.hunger -= effect.hungercost
-            characterState.survival.sleep -= effect.energycost
+            characterState.mp -= effect.mpcost || 0
+            characterState.sp -= effect.spcost || 0
 
-            if(characterState.sp+addStats.additionalSp <=0) characterState.sp = 0
+            characterState.survival.hunger -= effect.hungercost || 0
+            characterState.survival.sleep -= effect.energycost || 0
+
+            if(characterState.sp <=0) characterState.sp = 0
             if(characterState.survival.hunger <=0)characterState.survival.hunger = 0
             if(characterState.survival.sleep <=0)characterState.survival.sleep = 0
 
@@ -903,7 +930,7 @@ export async function deductHp(dmg, effects = [], enemyStats){
                     break;
                 }
                 const labelColor = labelColors.find(clr=>clr.name===effect.effectType)
-                popStatusEffect(`${effect.dn} ${labelToDisplay}`, labelColor ? labelColor:'#f5f5f5')
+                popStatusEffect(`${effect.dn} ${labelToDisplay}`, labelColor ? labelColor.color : '#f5f5f5')
                 // effect.soundPlayPerDmg - same property/lookup convention
                 // startBurnDamage's own burn tick uses. Nothing sets this on
                 // poisoned/spdrain's own data yet (tcp's enemyData.ts/
@@ -916,7 +943,7 @@ export async function deductHp(dmg, effects = [], enemyStats){
         })
     }
     if(characterState.mp <= 0) characterState.mp = 0
-    if(characterState.sp+addStats.additionalSp <=0) characterState.sp = 0
+    if(characterState.sp <= 0) characterState.sp = 0
 
     const killed = damageHp(totalDmg, "combat")
     if(killed){
@@ -1118,16 +1145,48 @@ export async function gameOver(){
         console.warn("[gameOver] UI update failed, continuing with cleanup", err)
     }
 
-    const res = await useFetch(`${APIURL}/characters/delete/${characterState._id}`, "DELETE", checkIfTokenSaved().token)
+    setTimeout(() => showLoadingScreen(["I expected more from you", "You Died"]), 5000)
+    // remembered until the server confirms the delete - one failed request (or
+    // the tab closed mid-request) used to leave the character on the server
+    // with its last autosaved hp, alive again after a reload. initiateCharacter
+    // finishes a delete that's still pending
+    const charId = characterState._id
+    setPendingDelete(charId)
+    if(await deleteCharacterOnServer(charId)) clearPendingDelete()
     // characterState.deadCount++
     // characterState.isDead=true;
-    setTimeout(() => showLoadingScreen(["I expected more from you", "You Died"]), 5000)
     // await updateMyDetailsOL({...characterState,
     //     hp: Math.floor(characterState.maxHp*.3),
     //     mp: Math.floor(characterState.maxMp*.3),
     //     sp: Math.floor(characterState.maxSp*.3),
     //     status: []
     // }, checkIfTokenSaved())
+}
+// a death whose delete the server hasn't confirmed yet (gameOver) - in
+// localStorage, so neither a reload nor a closed tab skips it
+const PENDING_DELETE_KEY = "dungeonwar_pendingDelete"
+function setPendingDelete(id){
+    try { localStorage.setItem(PENDING_DELETE_KEY, id) } catch (err) {}
+}
+function getPendingDelete(){
+    try { return localStorage.getItem(PENDING_DELETE_KEY) } catch (err) { return null }
+}
+function clearPendingDelete(){
+    try { localStorage.removeItem(PENDING_DELETE_KEY) } catch (err) {}
+}
+// the delete route answers with the remaining characters (an array) once it's
+// gone, or { message: "not found char" } when it already was - both mean
+// done. A few tries before it's left to the next load
+const DELETE_ATTEMPTS = 3
+const DELETE_RETRY_MS = 2000
+async function deleteCharacterOnServer(id){
+    for(let attempt = 1; attempt <= DELETE_ATTEMPTS; attempt++){
+        const res = await useFetch(`${APIURL}/characters/delete/${id}`, "DELETE", checkIfTokenSaved().token)
+        if(Array.isArray(res) || res?.message === "not found char") return true
+        if(attempt < DELETE_ATTEMPTS) await new Promise(resolve => setTimeout(resolve, DELETE_RETRY_MS))
+    }
+    console.warn(`[gameOver] the server never confirmed deleting character ${id} - the next load tries again`)
+    return false
 }
 // Enables disables
 export function setCanPress(_canPress){
@@ -1143,19 +1202,21 @@ export function updateHP_UI(){
     lifeCap.innerHTML = `${Math.floor(getHp())}/${Math.floor(getMaxHp())}`
     refreshTiredness()
 }
+// display only - this used to add the mana regen itself on every call, so it
+// landed twice a second, more while sitting or getting hit, and kept coming
+// during casting (which incrementMp skips on purpose)
 export function updateMP_UI(){
-    let manaCurrent = getTotal().mp
-    const manaTotal = getTotal().maxMp
-    if(manaCurrent < manaTotal) characterState.mp += getTotal().mpRegen
-    if(manaCurrent <= 0) manaCurrent = 0
-    manaBar.style.width = `${(manaCurrent/manaTotal) * 100}%`
-    manaCap.innerHTML = `${Math.floor(manaCurrent)}/${Math.floor(manaTotal)}`
+    const mp = Math.max(0, characterState.mp)
+    const maxMp = getMaxMp()
+    // capped - mp can sit above a max that just shrank until the next regen tick
+    manaBar.style.width = `${maxMp > 0 ? Math.min(100, (mp / maxMp) * 100) : 0}%`
+    manaCap.innerHTML = `${Math.floor(mp)}/${Math.floor(maxMp)}`
 }
 export function updateSP_UI(){
-    const lifeCSp = characterState.sp+addStats.additionalSp
-    const lifeFullSp = characterState.maxSp+addStats.additionalSp
-    stamBar.style.width = `${(lifeCSp/lifeFullSp) * 100}%`
-    stamCap.innerHTML = `${Math.floor(lifeCSp)}/${Math.floor(lifeFullSp)}`
+    const sp = Math.max(0, characterState.sp)
+    const maxSp = getMaxSp()
+    stamBar.style.width = `${maxSp > 0 ? Math.min(100, (sp / maxSp) * 100) : 0}%`
+    stamCap.innerHTML = `${Math.floor(sp)}/${Math.floor(maxSp)}`
     refreshTiredness()
 }
 
@@ -1170,8 +1231,7 @@ const TIRED_HP_FRACTION = 0.18
 const TIRED_SP = 50
 export function isCharacterTired(){
     if(!characterState) return false
-    const sp = characterState.sp + addStats.additionalSp
-    return getHpRatio() < TIRED_HP_FRACTION || sp < TIRED_SP
+    return getHpRatio() < TIRED_HP_FRACTION || characterState.sp < TIRED_SP
 }
 // re-checked on every hp/sp display update (updateHP_UI/updateSP_UI), so it
 // switches the moment either crosses the line. Compared against the player
@@ -1204,7 +1264,12 @@ export function updateSurvival_UI(){
         // inside the band - the warning arrives before the damage does, which
         // is the whole point of showing a drifting number rather than a flag
         const unsafe = temp < BODY_TEMP_MIN_SAFE || temp > BODY_TEMP_MAX_SAFE
-        const drifting = !unsafe && temp < BODY_TEMP_NORMAL - 5
+        // a third of the way to either limit - 30 on the cold side, ~36.7 on
+        // the hot one, which has far less room (35 to 40)
+        const drifting = !unsafe && (
+            temp < BODY_TEMP_NORMAL - (BODY_TEMP_NORMAL - BODY_TEMP_MIN_SAFE) / 3 ||
+            temp > BODY_TEMP_NORMAL + (BODY_TEMP_MAX_SAFE - BODY_TEMP_NORMAL) / 3
+        )
         // blinks the thermometer icon, matching exactly how the sleep row
         // above signals its own low state (restStat.parentElement.children[0])
         tempStat.parentElement.children[0].style.animation = unsafe ? "blinkingRed .5s infinite" : "none"
@@ -1230,7 +1295,12 @@ function tickBodyTemperature(){
     }
 
     const tempBefore = characterState.survival.bodytemp
-    const strain = temperatureStrain(getAmbientTemperature(), getTotalTempResistance())
+    let strain = temperatureStrain(getAmbientTemperature(), getTotalTempResistance())
+    // by a bonfire the cold doesn't reach you - no cold strain, so body temp
+    // stops dropping and warms back toward normal below, like stepping indoors.
+    // Holding it where it was wouldn't do: you'd arrive already freezing and
+    // keep losing hp beside the fire.
+    if(strain < 0 && isWarmedByBonfire()) strain = 0
 
     if(strain !== 0){
         // scaled by how far past your limit you are, not a flat step - see
@@ -1251,14 +1321,20 @@ function tickBodyTemperature(){
     }
 
     const temp = characterState.survival.bodytemp
-    // the moment it drops into the cold that hurts, not every tick after
+    // the moment it crosses into the cold or heat that hurts, not every tick after
     if(tempBefore >= BODY_TEMP_MIN_SAFE && temp < BODY_TEMP_MIN_SAFE) showWarning("Find Warmth")
+    if(tempBefore <= BODY_TEMP_MAX_SAFE && temp > BODY_TEMP_MAX_SAFE) showWarning("Find Shade")
     if(temp >= BODY_TEMP_MIN_SAFE && temp <= BODY_TEMP_MAX_SAFE) return
 
     // outside the band (BODY_TEMP_MIN_SAFE..MAX_SAFE) costs 6% of max hp
     // every tick until it's back in - non-lethal (LETHAL_DAMAGE.cold/heat),
     // so it stops at 1 hp
     damageHp(getMaxHp() * TEMP_DAMAGE_FRACTION_PER_TICK, temp < BODY_TEMP_MIN_SAFE ? "cold" : "heat")
+}
+// within BONFIRE_WARMTH_RADIUS of any bonfire in this place (createbonfire.js)
+function isWarmedByBonfire(){
+    const me = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+    return !!me?.body && isNearBonfire(me.body.position, BONFIRE_WARMTH_RADIUS)
 }
 export function updateHpMpSp_UI(){
     updateHP_UI()
@@ -1291,32 +1367,60 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
     // willUpdateCharState true, because if it is save in the database if you reload it will automatically update the ui
     // this is only used if you want to save it in the database but what is happening in real time
     // some ui on the scene is updating per second so be careful in updating the state using this function
-    const hasBeenHere = toSave.places.some(placeId=>placeId === toSave.currentPlace.placeId)
-    if(!hasBeenHere && !doNotSavePlace) toSave.places.push(toSave.currentPlace)
+    rememberCurrentPlace(toSave, doNotSavePlace)
+    // the vitals as sent - what the server holds once this lands, not whatever
+    // they've moved on to by the time it answers
+    const sentVitals = JSON.stringify(vitalsOf(toSave))
     try {
         const data = await useFetch(`${APIURL}/characters/updateall/${toSave._id}`, "PATCH", accountDet.token, toSave)
-        // TEMP DIAGNOSTIC - remove once the "other player gets exp too,
-        // eventually" report is confirmed/resolved. This is the ONLY place
-        // characterState can be wholesale REPLACED (not just mutated) -
-        // with the server's own PATCH response, whatever it returns. If
-        // the server ever hands back a document belonging to a DIFFERENT
-        // owner than what was actually saved (a real server-side bug,
-        // e.g. under concurrent load from multiple players saving around
-        // the same time), this is where it would first show up - and
-        // characterState would silently become someone else's data from
-        // this point on for the rest of the session, explaining why it's
-        // fine for the first few kills and then "eventually" breaks.
-        if(willUpdateCharState && data?.owner !== toSave.owner){
-            console.warn(`[charstate-swap] SAVED as owner=${toSave.owner} (_id=${toSave._id}) but server returned owner=${data?.owner} (_id=${data?._id}) - about to replace my own characterState with this`)
+        // useFetch gives back undefined when the request fails, and the server
+        // answers its own failures with a 200 as well ('tokenfailed',
+        // "notfound", an error object) - only this character coming back
+        // means it was saved
+        if(!isCharacterDoc(data, toSave._id)){
+            // TEMP DIAGNOSTIC (the "other player gets exp too, eventually"
+            // report) - someone else's document coming back would be a
+            // server-side bug worth seeing. It's never adopted anymore.
+            if(data?.owner && data.owner !== toSave.owner) console.warn(`[charstate-swap] SAVED as owner=${toSave.owner} (_id=${toSave._id}) but server returned owner=${data.owner} (_id=${data._id}) - ignored`)
+            else console.warn(`[updateMyDetailsOL] save of ${toSave._id} not confirmed by the server:`, data)
+            return data
         }
-        if(willUpdateCharState) characterState = data
-        // these vitals are on the server now - the vitals autosave needn't
-        // send them again
-        if(characterState && toSave._id === characterState._id) lastSavedVitals = JSON.stringify(vitalsOf(toSave))
+        // willUpdateCharState no longer swaps the live object for the server's
+        // echo: the echo is only what was sent, so the swap undid whatever
+        // changed while the request was out (a hit, regen, an item obtain()
+        // added) and left everything already holding getCharState() writing
+        // to an object nothing saved. Saving the live state itself (every
+        // caller today) has nothing to bring back; a separate copy is copied
+        // INTO the live object.
+        if(willUpdateCharState && characterState && toSave !== characterState && data._id === characterState._id) Object.assign(characterState, data)
+        if(characterState && toSave._id === characterState._id) lastSavedVitals = sentVitals
         return data
     } catch (error) {
         return error.message
     }
+}
+// a character document as the server sends one - nothing else it can hand
+// back ('tokenfailed', "notfound", an error object, or undefined from a failed
+// request) is one. id - and it has to be this character
+function isCharacterDoc(data, id){
+    return !!data && typeof data === "object" && !!data._id && (id === undefined || data._id === id)
+}
+// places - the currentPlace entries ({placeId, name, areaType}) visited so far.
+// Matched by placeId: the old check compared whole entries to a placeId, never
+// matched, and appended another copy on every save. Pushed as a copy, since
+// travel.js edits currentPlace in place (which rewrote every entry sharing
+// it), and a list that already grew that way is deduped here as well.
+function rememberCurrentPlace(toSave, doNotSavePlace){
+    if(!Array.isArray(toSave.places)) return
+    const seen = new Set()
+    toSave.places = toSave.places.filter(place => {
+        const placeId = place?.placeId ?? place
+        if(seen.has(placeId)) return false
+        seen.add(placeId)
+        return true
+    })
+    if(doNotSavePlace || !toSave.currentPlace || seen.has(toSave.currentPlace.placeId)) return
+    toSave.places.push({ ...toSave.currentPlace })
 }
 
 // ── SAVING VITALS ─────────────────────────────────────────────────────────────
@@ -1348,22 +1452,26 @@ function vitalsOf(state){
 // the page is gone (the body is tiny, far under keepalive's 64KB limit)
 async function saveVitals(keepalive = false){
     if(!characterState?._id || isLifeOver) return
+    const id = characterState._id
     const vitals = vitalsOf(characterState)
     const json = JSON.stringify(vitals)
     if(json === lastSavedVitals) return
     const accountDet = checkIfTokenSaved()
     if(!accountDet?.token) return
     try {
-        const res = await fetch(`${APIURL}/characters/updateall/${characterState._id}`, { ...apiOpt("PATCH", vitals, accountDet.token), keepalive })
-        if(res.ok) lastSavedVitals = json
+        const res = await fetch(`${APIURL}/characters/updateall/${id}`, { ...apiOpt("PATCH", vitals, accountDet.token), keepalive })
+        // not res.ok - the server answers its failures with a 200 too
+        // ('tokenfailed', an error object); only the character coming back
+        // means these vitals are on it
+        if(isCharacterDoc(await res.json(), id)) lastSavedVitals = json
     } catch (err) {
         // offline, or the server asleep - the next tick tries again
     }
 }
 
-// loadedVitals - JSON of the vitals as they came from the server
-function startVitalsAutosave(loadedVitals){
-    lastSavedVitals = loadedVitals
+// lastSavedVitals is set by whoever knows what the server has -
+// initiateCharacter on a load, updateMyDetailsOL after a save
+function startVitalsAutosave(){
     clearInterval(vitalsSaveInterval)
     vitalsSaveInterval = setInterval(() => saveVitals(), VITALS_SAVE_EVERY_MS)
 
@@ -1405,9 +1513,10 @@ function incrementMp(){
     // regen and the casting drain (castingDrainInterval) would otherwise just
     // fight each other every tick instead of actually draining anything
     if(characterState.mode === "casting") return
-    const totalMpRegen = 0.5 + getTotal().mpRegen
-    if(getTotal().mp < characterState.maxMp) characterState.mp += totalMpRegen
-    if(characterState.mp > characterState.maxMp) characterState.mp = characterState.maxMp
+    // up to the max WITH the blessing bonus (MANA / STAMINA) - and back down
+    // to it when that max just shrank
+    const { mp, maxMp, mpRegen } = getTotal()
+    characterState.mp = Math.min(maxMp, mp + 0.5 + mpRegen)
 }
 
 function incrementSp(){
@@ -1419,6 +1528,6 @@ function incrementSp(){
     // look the local player up rather than just reading a characterState field
     const myPlayer = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
     if(myPlayer?.weaponBlocking) return
-    characterState.sp += (1+getTotal().spRegen)
-    if(characterState.sp > characterState.maxSp) characterState.sp = characterState.maxSp
+    const { sp, maxSp, spRegen } = getTotal()
+    characterState.sp = Math.min(maxSp, sp + 1 + spRegen)
 }

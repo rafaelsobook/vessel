@@ -27,6 +27,7 @@ import { createPBRMat, createHeightBumpTexture, createAlbedoTexture } from '../t
 import { createFireParticles } from '../tools/particlesystem';
 import { createDungeonFloorMat } from '../tools/dungeonFloorMat';
 import { buildRivers, buildGrass, spawnVases, spawnTorchStands, TORCH_STAND_HEIGHT } from './dungeonNature';
+import { spawnDungeonDoors } from './dungeonDoors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FLOOR_THICKNESS = 0.3;
@@ -366,6 +367,9 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     ceilTemplate.isVisible = false;
 
     let wallCount = 0, floorCount = 0, ceilCount = 0, plinthCount = 0;
+    // "gx_gz" -> that wall cell's column of cubes (its occlusion group) - the
+    // doors join the columns they're set in (dungeonDoors.js)
+    const wallColumns = new Map();
 
     for (let gz = 0; gz < grid.length; gz++) {
         for (let gx = 0; gx < grid[gz].length; gx++) {
@@ -389,6 +393,7 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
                 // (tools/camera.js's occlusion) - a whole column at a time,
                 // never one cube left floating over a gap
                 const column = [];
+                wallColumns.set(`${gx}_${gz}`, column);
                 for (let i = 0; i < cubes; i++) {
                     const cube = wallTemplate.createInstance(`wall_${wallId}_${i}`);
                     cube.position.set(cx, top - cs / 2 - i * cs, cz);
@@ -682,6 +687,9 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     ];
     spawnVases(scene, vaseProps, cs, floorAt, lightCount);
     spawnTorchStands(scene, torchProps, lightCount);
+    // the entrance and the boss hall's exit - their walk-up triggers are the
+    // dungeon's roomPaths (areascene.js)
+    spawnDungeonDoors(scene, dungeon.doors, { maxLights: lightCount, wallColumnAt: (gx, gz) => wallColumns.get(`${gx}_${gz}`) });
 
     const propMats = [...propTemplates.values()].map(tpl => tpl.material);
     [wallMat, floorMat, bossFloorMat, ceilMat, ...propMats, ...Object.values(stairMats), ...natureMats]

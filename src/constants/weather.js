@@ -91,6 +91,14 @@ export const BODY_TEMP_CEILING = 60
 // feels like relief rather than a second slow crawl
 export const BODY_TEMP_RECOVER_PER_TICK = 2
 
+// Standing this close (XZ) to a bonfire keeps the cold off, gear or not: cold
+// strain counts as none (characterstate.js's tickBodyTemperature), so body
+// temp stops dropping and warms back toward normal at the recovery rate above.
+// Snow is the only weather cold enough for that to matter. Cold only - a fire
+// is no help in a sandstorm. The reach of its own light (tools/
+// particlesystem.js's createFireParticles, range 5): you're warm where it lights you.
+export const BONFIRE_WARMTH_RADIUS = 5
+
 // ── Resistance ────────────────────────────────────────────────────────────
 // Gear carries `tempResistance: { cold: N, heat: N }` (armors, pauldrons,
 // helmets, gauntlets, boots). Totals are summed across everything equipped.

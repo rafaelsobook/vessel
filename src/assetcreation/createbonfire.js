@@ -20,6 +20,20 @@ import { randomNum } from "../tools/tools.js"
 // has it) or another player's (doesn't yet). Left undefined falls back to
 // a fresh randomNum() - fine for one-off local/scripted placements that
 // have no server-tracked craftId to stay in sync with at all.
+// every bonfire burning in the place you're in - each takes itself out when
+// its scene is disposed (changeScene), so it never holds a past place's
+const burning = new Set()
+
+// Is `pos` within `radius` (XZ) of a bonfire? characterstate.js's body
+// temperature asks: a fire keeps the cold off (constants/weather.js's
+// BONFIRE_WARMTH_RADIUS) - anyone's fire, not only one you built.
+export function isNearBonfire(pos, radius){
+    for(const bonfire of burning){
+        if(Math.hypot(bonfire.position.x - pos.x, bonfire.position.z - pos.z) <= radius) return true
+    }
+    return false
+}
+
 export function createBonfireMesh(scene, position, craftId){
     const bonfireRoot = getSocketContainers()?.bonfireRoot
     if(!bonfireRoot){
@@ -45,6 +59,9 @@ export function createBonfireMesh(scene, position, craftId){
 
     // you can cook over it - walk up, press interact (components/bonfireCooking.js)
     makeCookingSpot(scene, bonfire)
+    // and warm up by it (isNearBonfire above)
+    burning.add(bonfire)
+    bonfire.onDisposeObservable.add(() => burning.delete(bonfire))
 
     return bonfire
 }

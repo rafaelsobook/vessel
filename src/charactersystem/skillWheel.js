@@ -30,7 +30,7 @@ const SPIN_DURATION_MS = 4200
 
 // fixed composition (5 heart / 1 blessing / 2 skill = SLICE_COUNT) -
 // shuffled into a random order each time the wheel opens, see
-// shuffledComposition/triggerSkillWheel. WHEEL_COMPOSITION itself is never
+// shuffledComposition/showNextSpin. WHEEL_COMPOSITION itself is never
 // mutated - each spin gets its own shuffled copy.
 const WHEEL_COMPOSITION = [
     { type: "heart" }, { type: "heart" }, { type: "heart" }, { type: "heart" }, { type: "heart" },
@@ -48,6 +48,15 @@ const HEART_BONUS = 50 // flat +hp/+mp/+sp
 
 let currentReward = null // this spin's own shuffled WHEEL_COMPOSITION, index-aligned to the fixed wheel positions
 let spinning = false
+// spins earned but not shown yet - gainExp can cross several levels at once
+// and each one earns a spin, shown one after another
+let pendingSpins = 0
+// from the wheel opening until its reward is granted - a spin earned meanwhile
+// waits its turn instead of resetting the one on screen
+let wheelBusy = false
+// after a reward lands, before the next queued spin opens - the reward's own
+// popup renders BELOW the wheel (see spinWheel), so it gets this long first
+const NEXT_SPIN_DELAY_MS = 2500
 
 // Fisher-Yates on a copy - WHEEL_COMPOSITION's own array/order never changes
 function shuffledComposition(){
@@ -87,7 +96,14 @@ function renderWheelIcons(rewards){
 
 export function triggerSkillWheel(){
     if(!wheelContainer || !wheelEl || !arrowEl || !goBtn) return
-    if(spinning) return
+    pendingSpins++
+    showNextSpin()
+}
+
+function showNextSpin(){
+    if(wheelBusy || pendingSpins <= 0) return
+    pendingSpins--
+    wheelBusy = true
 
     currentReward = shuffledComposition()
     renderWheelIcons(currentReward)
@@ -135,7 +151,13 @@ function spinWheel(){
         // confirmation completely hidden behind the still-open wheel for
         // its whole visible lifetime.
         setTimeout(() => {
-            grantReward(reward)
+            // finally - a reward that throws mustn't leave the wheel busy for good
+            try {
+                grantReward(reward)
+            } finally {
+                wheelBusy = false
+                if(pendingSpins > 0) setTimeout(showNextSpin, NEXT_SPIN_DELAY_MS)
+            }
         }, 1100)
     }, SPIN_DURATION_MS + 100)
 }

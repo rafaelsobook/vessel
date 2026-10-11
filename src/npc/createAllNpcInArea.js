@@ -181,21 +181,15 @@ export function createAllNpcInArea(hero, scene){
                                 // MUST be synchronous, not staggered via
                                 // setTimeout (as this briefly was) - the
                                 // updateMyDetailsOL(myState, ..., true) call
-                                // below saves myState (and, since
-                                // willUpdateCharState is true, REPLACES the
-                                // whole characterState singleton with
-                                // whatever the server echoes back -
-                                // characterstate.js's own updateMyDetailsOL)
-                                // right after this loop returns. A deferred
-                                // obtain() would still be pending when that
-                                // fires, so its items would never make it
-                                // into the saved snapshot - obtain() would
-                                // go on to add them to the OLD, by-then-
-                                // orphaned object a moment later, silently
-                                // wiped from what getCharState() actually
-                                // returns from then on (only reappearing
-                                // after a refresh re-pulls obtain()'s own
-                                // later save from the server). The "acquired
+                                // below saves myState right after this loop
+                                // returns. A deferred obtain() would still be
+                                // pending when that fires, so its items
+                                // would miss that save. (This used to be
+                                // worse: updateMyDetailsOL swapped the whole
+                                // characterState for the server's echo, so a
+                                // late obtain() landed on an orphaned object
+                                // and vanished - it doesn't swap anymore,
+                                // see characterstate.js.) The "acquired
                                 // X" popups rendering stacked on top of each
                                 // other when several fire at once is instead
                                 // handled inside showItemAcquiredPopUp

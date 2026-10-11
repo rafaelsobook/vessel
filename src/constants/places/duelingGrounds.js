@@ -1,5 +1,4 @@
 // The duel arenas (areaType "duel") - one per challenger roster.
-import { randNum } from '../../tools/random.js';
 import { randomNum } from '../../tools/tools.js';
 
 export const DUELING_GROUNDS = {
@@ -29,40 +28,29 @@ export const DUELING_GROUNDS = {
     wallHeight: 0.5,
     layout: { cellSize: 1 },
     spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
-    optionalObjects: [
-        {
-            // the way out - in the middle of the south wall (z -25)
-            itemId: randNum(0,9999).toString(),
-            name: "arenadoor",
-            position: {x: 0, y: 0, z: -24.75},
-            scale: null,
-            rotation: 0,
-            glbPath: "./models/indors/door.glb",
-            physics: {
-                opt: {mass: 0},
-                type: "box"
-            },
-            functionBeforeMerge: null
-        },
-    ],
-    // through the door ("arenadoor") - also how duelSystem.js sends you
-    // out after the fight. You arrive at the destination's spawn.
+    // through the gate in the middle of the south wall (z -25) - the gate
+    // itself is part of the arena (createduelarena.js), this is the trigger
+    // in front of it. Also how duelSystem.js sends you out after the fight.
+    // You arrive at the destination's spawn.
     roomPaths: [
         {
             placeId: 1,
             name: "village",
             areaType: "village",
             pos: {x: 0, y: 0.5, z: -24},
-            doorSound: true,
+            // no door to creak - the gate stands open, portcullis up
         },
     ],
+    // night - createduelarena.js puts the moon where this directional light
+    // shines from, and builds the sky and the fires around it
     sceneTemp: {
         fogDensity: 0,
-        fogColor:{ r:0.05, g:0.15, b:0.1},
+        fogColor:{ r:0.03, g:0.045, b:0.09},
+        skyColor:{ r:0.01, g:0.015, b:0.035},
 
         lights: [
-            {name:"directional", intensity: 0.9},
-            {name:"hemispheric", intensity: 0.6},
+            {name:"directional", intensity: 0.9, color:{ r:0.62, g:0.72, b:1 }, direction:{ x:-0.35, y:-0.6, z:-0.72 }},
+            {name:"hemispheric", intensity: 0.5},
         ],
     },
     swordsStrucked: [
@@ -131,40 +119,29 @@ export const COLOUSA_DUELING_GROUNDS = {
     wallHeight: 0.5,
     layout: { cellSize: 1 },
     spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
-    optionalObjects: [
-        {
-            // the way out - in the middle of the south wall (z -25)
-            itemId: randNum(0,9999).toString(),
-            name: "arenadoor",
-            position: {x: 0, y: 0, z: -24.75},
-            scale: null,
-            rotation: 0,
-            glbPath: "./models/indors/door.glb",
-            physics: {
-                opt: {mass: 0},
-                type: "box"
-            },
-            functionBeforeMerge: null
-        },
-    ],
-    // through the door ("arenadoor") - also how duelSystem.js sends you
-    // out after the fight. You arrive at the destination's spawn.
+    // through the gate in the middle of the south wall (z -25) - the gate
+    // itself is part of the arena (createduelarena.js), this is the trigger
+    // in front of it. Also how duelSystem.js sends you out after the fight.
+    // You arrive at the destination's spawn.
     roomPaths: [
         {
             placeId: 1,
             name: "village",
             areaType: "village",
             pos: {x: 0, y: 0.5, z: -24},
-            doorSound: true,
+            // no door to creak - the gate stands open, portcullis up
         },
     ],
+    // night - createduelarena.js puts the moon where this directional light
+    // shines from, and builds the sky and the fires around it
     sceneTemp: {
         fogDensity: 0,
-        fogColor:{ r:0.05, g:0.15, b:0.1},
+        fogColor:{ r:0.03, g:0.045, b:0.09},
+        skyColor:{ r:0.01, g:0.015, b:0.035},
 
         lights: [
-            {name:"directional", intensity: 0.9},
-            {name:"hemispheric", intensity: 0.6},
+            {name:"directional", intensity: 0.9, color:{ r:0.62, g:0.72, b:1 }, direction:{ x:-0.35, y:-0.6, z:-0.72 }},
+            {name:"hemispheric", intensity: 0.5},
         ],
     },
     isMultiplayer: false
@@ -191,41 +168,33 @@ export const VESPER_DUELING_GROUNDS = {
     wallHeight: 0.5,
     layout: { cellSize: 1 },
     spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
-    optionalObjects: [
-        {
-            // the way out - in the middle of the south wall (z -25)
-            itemId: randNum(0,9999).toString(),
-            name: "arenadoor",
-            position: {x: 0, y: 0, z: -24.75},
-            scale: null,
-            rotation: 0,
-            glbPath: "./models/indors/door.glb",
-            physics: {
-                opt: {mass: 0},
-                type: "box"
-            },
-            functionBeforeMerge: null
-        },
-    ],
-    // through the door ("arenadoor") - also how duelSystem.js sends you
-    // out after the fight. You arrive at the destination's spawn.
+    // through the gate in the middle of the south wall (z -25) - the gate
+    // itself is part of the arena (createduelarena.js), this is the trigger
+    // in front of it. Also how duelSystem.js sends you out after the fight.
+    // You arrive at the destination's spawn.
     roomPaths: [
         {
             placeId: 15,
             name: "Witch House",
             areaType: "room",
             pos: {x: 0, y: 0.5, z: -24},
-            doorSound: true,
+            // no door to creak - the gate stands open, portcullis up
         },
     ],
+    // night under a violet moon
     sceneTemp: {
         fogDensity: 0,
-        fogColor:{ r:0.1, g:0.05, b:0.16},
+        fogColor:{ r:0.06, g:0.03, b:0.1},
+        skyColor:{ r:0.02, g:0.01, b:0.04},
 
         lights: [
-            {name:"directional", intensity: 0.9},
-            {name:"hemispheric", intensity: 0.6},
+            {name:"directional", intensity: 0.9, color:{ r:0.78, g:0.62, b:1 }, direction:{ x:-0.35, y:-0.6, z:-0.72 }},
+            {name:"hemispheric", intensity: 0.5},
         ],
     },
+    // a witch's arena - the forest has taken it back (createduelarena.js's
+    // THEMES: "colosseum", the default, or "forest"), her banners in her own
+    // colours. Just theme: "forest" keeps the forest's own green.
+    theme: { name: "forest", banner: "#3e1460", trim: "#c7c9d6" },
     isMultiplayer: false
 }

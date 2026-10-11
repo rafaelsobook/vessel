@@ -21,11 +21,11 @@ import { getVillageAssetRegistry } from "../components/assetregistry.js";
 import { getSocket, joinWorld } from "../sockets/joinsocket.js";
 import { getEngine, setGameStatus } from "../main/main.js";
 import { travelToPlace } from "../tools/travel.js";
-import { getCharState, initiateCharacter, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
+import { getCharState, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
 import { pushPlayer, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
-import { checkIfTokenSaved, randomNum } from "../tools/tools.js";
+import { randomNum } from "../tools/tools.js";
 import { startMyOwnSpeech } from "../components/conversations.js";
 import { loadMeshOnlyParts } from "../tools/loadmodel.js";
 import { spawnProjectile } from "../creations/skills.js";
@@ -79,7 +79,10 @@ export async function areaScene(placeDetail){
     }
     await setStartingContainers(scene)
     
-    const charState = await initiateCharacter(checkIfTokenSaved())
+    // already loaded - loadScene.js runs initiateCharacter right before this.
+    // Fetching it again here (as this did) cost a second request per scene
+    // load and threw that first load's work away
+    const charState = getCharState()
     const myCharacter = createMyCharacter(charState, scene, allsounds)
     pushPlayer(myCharacter)
     // only the 5 point lights nearest this player are ever on - see lightBudget.js
@@ -120,18 +123,13 @@ export async function areaScene(placeDetail){
             // BSP dungeons (generatebsp.js) - the rock and floor tile templates
             // the old standalone dungeonscene.js built them with. No sun rays:
             // a closed dungeon has no sun to shine through the ceiling.
-            const { floorTopY } = createDungeon(scene, placeDetail, {}, createRock(scene), await loadModel("./models/tiles/tile1.glb", scene));
+            // Its doors - the entrance and the exit at the far end of the boss
+            // hall - are built with it (dungeonDoors.js); their walk-up
+            // triggers are its roomPaths, built below like any place's, the
+            // generator having put each 1 above the floor in front of its door.
+            createDungeon(scene, placeDetail, {}, createRock(scene), await loadModel("./models/tiles/tile1.glb", scene));
             // walls between the camera and the player get hidden (camera.js's "dungeon" mode)
             enableRoomCameraOcclusion(scene, cam, myCharacter.body, placeDetail.areaType)
-            placeDetail.roomPaths?.forEach(path => {
-                // 1 above the walkable surface createDungeon reports (y 0 today)
-                // - set before the roomPaths trigger loop further down builds
-                // the door from path.pos (same value every load, so rewriting
-                // the shared data is safe)
-                path.pos.y = floorTopY + 1
-                createDungeonExitMarker(scene, path.pos)
-            })
-            
         break;
         case "openworld":
             receiveAchievement("into-the-wild")
@@ -602,25 +600,4 @@ export async function areaScene(placeDetail){
 
 
     return {scene, isSocketOn: isMultiplayer }
-}
-
-// A dungeon's exit (generatebsp.js's roomPaths door) is just an invisible
-// trigger in a room corner - unlike the openworld's doors, there's no building
-// around it to show where it is. A slowly spinning upright ring marks the
-// spot. pos.y is 1 above the floor surface, so the ring's bottom sits 0.6 up,
-// just off the floor (the exit cell never gets a raised slab).
-function createDungeonExitMarker(scene, pos){
-    const ring = MeshBuilder.CreateTorus("dungeon_exit_marker", { diameter: 2, thickness: 0.1, tessellation: 48 }, scene)
-    ring.position.set(pos.x, pos.y + 0.6, pos.z)
-    ring.rotation.x = Math.PI / 2
-    ring.isPickable = false
-
-    const mat = new StandardMaterial("dungeon_exit_marker_mat", scene)
-    mat.emissiveColor = new Color3(0.4, 0.8, 1)
-    mat.disableLighting = true
-    ring.material = mat
-
-    scene.onBeforeRenderObservable.add(() => {
-        ring.rotation.y += scene.getEngine().getDeltaTime() * 0.001
-    })
 }
