@@ -8,7 +8,7 @@ import { getEnemiesOnScene, getIsSocketOn, getPlayersOnScene, getProjectilesOnSc
 import { createTextMesh } from "../gui/textmesh.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
-import { getCharState, gainExp, dealDamageToEnemy } from "../charactersystem/characterstate.js"
+import { getCharState, gainExp, dealDamageToEnemy, isDead } from "../charactersystem/characterstate.js"
 import { getGameStatus, getSceneDet } from "../main/main.js"
 import { playAnim, playRandomAnim, pickAnimVariant, findAnimVariants } from "../tools/animation.js"
 import { getSocket } from "../sockets/joinsocket.js"
@@ -47,7 +47,7 @@ export default function createEnemy(scene, det) {
     // twice for the same _id) - returning null here early is the one place
     // that can't be bypassed no matter what called this or why
     if(scene.getMeshByName(`enemy.${det._id}`)) return null
-    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot, ghostRoot, giantScorpionRoot} = getSocketContainers()
+    const {goblinRoot, monolithRoot, slimeRoot, lesserDemonRoot, deerRoot, ghostRoot, giantScorpionRoot, wolfroot, standingWolfRoot} = getSocketContainers()
     // tcp's enemyDetails/genenemy.ts hardcode y:0 (flat-ground assumption) - wrong
     // on openworld's uneven terrain, so look up the real ground height instead.
     // sampleTerrainSurfaceHeight (not terrainHeight) - matches the coarse,
@@ -137,6 +137,18 @@ export default function createEnemy(scene, det) {
         // every kind of scorpion (icescorpion...) - one rig, the kind is det.name
         case "giantscorpion":
             entries = giantScorpionRoot?.instantiateModelsToScene()
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1.5 }, det._id)
+        break
+        // stray wolf (genenemy.ts's strayWolfBase) - same clip names as the
+        // ghost/scorpion, so nothing else here needs a special case
+        case "wolf":
+            entries = wolfroot?.instantiateModelsToScene()
+            bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1 }, det._id)
+        break
+        // the four standing wolves (vargoth/zareth/morvane/skallgrim) - one
+        // rig, the kind is det.name, which picks its skin
+        case "standingwolf":
+            entries = standingWolfRoot?.instantiateModelsToScene()
             bodytarget = getBodyTargetInstance(scene, det.modelStyle, { size: 1.5 }, det._id)
         break
         default:
@@ -276,6 +288,8 @@ export default function createEnemy(scene, det) {
         // stopped at bind-time (see applyEnemyBind), this is the safety net
         // for whatever's still in flight the instant the bind lands
         if (thisEnemy._disabled) return
+        // still roaring at you (startEnemyRoar) - the swing comes after
+        if (isEnemyRoaring(thisEnemy)) return
         if (thisEnemy._targetId) {
             const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
             if (!targetHero) return
@@ -385,6 +399,38 @@ export default function createEnemy(scene, det) {
         //     initAttack(det)
         // }
     })
+
+    // --- sight (det.detectRange - genenemy.ts, the standing wolves): notices
+    // you from this far off, any direction, and comes for you - instead of
+    // only once you walk into its atkDetection box (or hit it). Each client
+    // reports only its OWN character, like the atkDetection triggers above;
+    // tcp's registerTargetIfNone keeps whoever's first, and that
+    // registration is what sets off its roar (startEnemyRoar) on every client.
+    const SIGHT_CHECK_MS = 250
+    // a report already in flight - don't send it again while the server's
+    // answer is on its way back
+    const SIGHT_REPORT_COOLDOWN_MS = 1500
+    if(det.detectRange){
+        let lastSightReport = 0
+        const sightInterval = setInterval(() => {
+            const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
+            if(!thisEnemy || thisEnemy.body.isDisposed()) return clearInterval(sightInterval)
+            if(thisEnemy._targetId || thisEnemy._disabled || thisEnemy.isDead) return
+            if(isDead() || !myChar.body || myChar.body.isDisposed()) return
+            if(getGameStatus() === "loading" || !getIsSocketOn()) return
+            if(Date.now() - lastSightReport < SIGHT_REPORT_COOLDOWN_MS) return
+            const enPos = thisEnemy.body.position
+            const plPos = myChar.body.position
+            if(Math.hypot(enPos.x - plPos.x, enPos.z - plPos.z) > det.detectRange) return
+            // in a dungeon, not through a wall (tools/dungeonSight.js)
+            if(!hasDungeonLineOfSight(det.currentPlaceId, enPos, plPos)) return
+            lastSightReport = Date.now()
+            const myCharId = myChar.body.name.split(".")[1]
+            emitRegisterAsEnemy(thisEnemy._id, myCharId, { x: plPos.x, y: yPos, z: plPos.z })
+            emitChase(thisEnemy._id, myCharId, det.currentPlaceId, det.actionType)
+        }, SIGHT_CHECK_MS)
+        body.onDisposeObservable.add(() => clearInterval(sightInterval))
+    }
 
     // --- enemy skill casting (det.skills - only fireslime/electricslime
     // for now, see tcp/recources/enemyDetails.ts) - deliberately its own
@@ -1179,6 +1225,39 @@ export function stopEnemyEating(enemy){
     enemy._eatingAnim?.stop()
     enemy._eatingAnim = null
     enemy._eatingUntil = 0
+}
+
+// ENEMY ROAR - a rig with a "roar" clip (the standing wolves' roar1) roars
+// the moment it first takes a target (worldsocket.js's
+// "registered-playerAsEnemy", which every client gets - so everyone nearby
+// sees it). It stands its ground facing them while it lasts - renderer.js
+// holds it in place and attack() won't swing - then the chase picks up.
+// A rig without the clip just goes straight for them, as before. Plays over
+// the idle loop underneath, the same way startEnemyEating's clip does.
+const MAX_ROAR_MS = 4000
+export function startEnemyRoar(enemy){
+    if(enemy.isDead) return
+    const roar = pickAnimVariant(enemy.anims, "roar")
+    if(!roar) return
+    stopEnemyEating(enemy)
+    findAnimVariants(enemy.anims, "running").forEach(anim => anim.stop())
+    if(enemy.runSound?.isPlaying) enemy.runSound.stop()
+    roar.stop()
+    roar.play(false)
+    const fps = roar.targetedAnimations[0]?.animation.framePerSecond || 60
+    const roarMs = (roar.to - roar.from) / fps * 1000 / (roar.speedRatio || 1)
+    enemy._roarAnim = roar
+    enemy._roaringUntil = performance.now() + Math.min(MAX_ROAR_MS, roarMs)
+}
+
+export function isEnemyRoaring(enemy){
+    return !!enemy._roaringUntil && performance.now() < enemy._roaringUntil
+}
+
+export function stopEnemyRoar(enemy){
+    enemy._roarAnim?.stop()
+    enemy._roarAnim = null
+    enemy._roaringUntil = 0
 }
 
 export function applyEnemyBind(scene, targetId, shape, bindDuration){

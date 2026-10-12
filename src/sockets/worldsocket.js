@@ -16,7 +16,7 @@ import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
-import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating } from "../enemies/createEnemy"
+import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating, startEnemyRoar } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitEnemyIsHit } from "./emits"
 import { castEnemySkill } from "../creations/skillEffects.js"
@@ -154,6 +154,9 @@ let containers = {
     lesserDemonRoot: null,
     deerRoot: null,
     ghostRoot: null,
+    giantScorpionRoot: null,
+    wolfroot: null,
+    standingWolfRoot: null,
     wagonRoot: null,
     wagonWheelFrontRoot: null,
     wagonWheelRearRoot: null,
@@ -206,6 +209,9 @@ export function resetArray(){
         lesserDemonRoot: null,
         deerRoot: null,
         ghostRoot: null,
+        giantScorpionRoot: null,
+        wolfroot: null,
+        standingWolfRoot: null,
         wagonRoot: null,
         wagonWheelFrontRoot: null,
         wagonWheelRearRoot: null,
@@ -820,11 +826,18 @@ export function activateOnSocketListeners(socket){
                     // resumeAttack() again here would just restart their
                     // attack cadence for no reason.
                     const justAcquiredBotTarget = !enem._targetId && typeof enemDetail._targetId === "string" && enemDetail._targetId.startsWith("bot_")
+                    // it just noticed someone (nobody before, someone now) -
+                    // a rig with a roar clip roars at them first
+                    // (createEnemy.js's startEnemyRoar). Here, not on the
+                    // detecting client alone, so everyone watching sees it.
+                    const justAcquiredTarget = !enem._targetId && !!enemDetail._targetId
 
                     enem._targetId = enemDetail._targetId
                     enem._dirTarg = enemDetail._dirTarg
                     // enem._isMoving = enemDetail._isMoving
                     enem._attacking = enemDetail._attacking
+
+                    if(justAcquiredTarget) startEnemyRoar(enem)
 
                     if(justAcquiredBotTarget){
                         enem.resumeAttack?.()

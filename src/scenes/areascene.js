@@ -53,6 +53,7 @@ import { receiveAchievement } from "../charactersystem/achievement.js";
 import { createWagon } from "../assetcreation/createwagon.js";
 import { startPointLightBudget } from "../tools/lightBudget.js";
 import { startDayNight } from "../components/dayNightSystem.js";
+import { startSleepDeprivation } from "../components/sleepDeprivation.js";
 
 export async function areaScene(placeDetail){
     // showHideIcons()
@@ -71,7 +72,7 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    // const wagon = await SceneLoader.ImportMeshAsync("", "", "./models/outdors/wagon.glb", scene);
+    const wagon = await SceneLoader.ImportMeshAsync("", "", "./models/monsters/standingwolf.glb", scene);
     // wagon.meshes[0].position = new Vector3(0, 2, 503);
     let reg
     if(placeDetail.areaType === "village"){
@@ -87,6 +88,8 @@ export async function areaScene(placeDetail){
     pushPlayer(myCharacter)
     // only the 5 point lights nearest this player are ever on - see lightBudget.js
     startPointLightBudget(scene, () => myCharacter.body?.position)
+    // short on sleep, the eyes start to fail - see sleepDeprivation.js
+    startSleepDeprivation(scene)
 
     // default true (normal death) on every scene load - only the "duel" case
     // below overrides it. This is what makes duelSystem.js's soft-loss

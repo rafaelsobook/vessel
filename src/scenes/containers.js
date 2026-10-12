@@ -71,6 +71,10 @@ export async function setStartingContainers(scene){
         let ghostRoot = await loadMonsterRoot("./models/monsters/ghost.glb", scene)
         // every kind of scorpion (genenemy.ts's giantScorpionBase) - one rig
         let giantScorpionRoot = await loadMonsterRoot("./models/monsters/giantscorpion.glb", scene)
+        let wolfroot = await loadMonsterRoot("./models/monsters/wolf.glb", scene)
+        // the four standing wolves (genenemy.ts's standingWolfBase) - one rig,
+        // the kind is det.name (vargoth/zareth/morvane/skallgrim skins)
+        let standingWolfRoot = await loadMonsterRoot("./models/monsters/standingwolf.glb", scene)
         let treasureRoot = await loadPropRootSafe("./models/indors/treasure.glb", scene)
         let bonfireRoot = await loadPropRootSafe("./models/outdors/bonfire.glb", scene)
         // campcraft.js's "treelog" craft (Structures section, same
@@ -263,6 +267,8 @@ export async function setStartingContainers(scene){
             deerRoot,
             ghostRoot,
             giantScorpionRoot,
+            wolfroot,
+            standingWolfRoot,
             treasureRoot,
             bonfireRoot,
             trunkRoot,

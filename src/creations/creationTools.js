@@ -158,6 +158,12 @@ export function createItemMaterial(scene, itemType,textureName){
     // mat.specularColor = new Color3(1,1,1)
     return mat
 }
+// A normal map one rig's skins all share - images/textures/enemy/<modelStyle>/<file>.
+// The four standing wolves (vargoth/zareth/morvane/skallgrim) are one model
+// with one fur relief under four colourings.
+const MONSTER_NORMAL_MAPS = {
+    standingwolf: "standingwolfnormal.jpg",
+}
 export function createMonsterMaterial(scene, mosterModelStyle,textureName){
 
     const tex1 = new Texture(`./images/textures/enemy/${mosterModelStyle}/${textureName}.jpg`, scene, false, false)
@@ -176,6 +182,15 @@ export function createMonsterMaterial(scene, mosterModelStyle,textureName){
     // if(tex1normal) mat.bumpTexture = tex1normal
     // if(tex1rough) mat.specularTexture = tex1rough
     // mat.bumpScale = 1
+    const normalMap = MONSTER_NORMAL_MAPS[mosterModelStyle]
+    if(normalMap){
+        // same unflipped read as the skin above (glTF UVs), and the same
+        // X inversion Babylon's own glTF loader sets for a left-handed scene -
+        // otherwise the fur's relief lights from the wrong side
+        mat.bumpTexture = new Texture(`./images/textures/enemy/${mosterModelStyle}/${normalMap}`, scene, false, false)
+        mat.invertNormalMapX = !scene.useRightHandedSystem
+        mat.invertNormalMapY = scene.useRightHandedSystem
+    }
     mat.backFaceCulling = false
     mat.specularColor = new Color3(0,0,0)
     return mat

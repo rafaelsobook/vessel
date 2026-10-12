@@ -8,7 +8,7 @@ import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
 import { emitEnemyChasePosition } from "./emits.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
-import { stopEnemyEating } from "../enemies/createEnemy.js";
+import { stopEnemyEating, isEnemyRoaring, stopEnemyRoar } from "../enemies/createEnemy.js";
 import { findPlaceMetaData } from "../states/placestates.js";
 
 let scene;
@@ -627,6 +627,21 @@ let renderCallback = function () {
         // enemyBind) - "cannot move" while true, regardless of
         // _isMoving/_targetId state
         if(en._disabled) return
+
+        // roaring at the target it just picked (createEnemy.js's
+        // startEnemyRoar) - stands its ground, turned to face them, until
+        // the roar's done; the chase below picks up from there
+        if(en._roaringUntil){
+            if(isEnemyRoaring(en)){
+                const roarTarget = en._targetId && getPlayersOnScene().find(pl => pl.owner === en._targetId)?.body
+                if(roarTarget){
+                    _lookTarget.set(roarTarget.position.x, en.body.position.y, roarTarget.position.z)
+                    en.body.lookAt(_lookTarget)
+                }
+                return
+            }
+            stopEnemyRoar(en)
+        }
 
         // wander/dodge - moving toward a plain waypoint (tcp/index.ts's
         // own wander interval, or a locally-detected projectile dodge -
