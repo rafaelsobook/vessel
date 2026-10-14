@@ -53,6 +53,8 @@ export class CharacterAnimations {
         this._blendFrom   = null
         this._blendTo     = null
         this._activeAction = null
+        // state -> the state it really plays, see setStateClip
+        this._stateAlias  = {}
 
         const find = name => animationGroups.find(a => a.name.toLowerCase() === name.toLowerCase())
         this._anims = {
@@ -101,7 +103,23 @@ export class CharacterAnimations {
         return !!this._anims[name]
     }
 
+    // Makes `state` play a different clip until cleared - SITTING holding a
+    // pose of its own (seating.js's sitHere) instead of the default sitting
+    // clip, without renderer.js's per-frame setState(SITTING) pulling it back.
+    // The clip is registered as a state of its own, so leaving it (a
+    // setState to anything else) blends out of it like any other state.
+    // Pass no clip to put the state's own clip back.
+    setStateClip(state, clip) {
+        if (!clip) {
+            delete this._stateAlias[state]
+            return
+        }
+        this._anims[clip.name] = clip
+        this._stateAlias[state] = clip.name
+    }
+
     setState(next, blendFrames = 8) {
+        next = this._stateAlias[next] ?? next
         if (this._state === next && !this._blendFrom) return
 
         const fromAnim = this._anims[this._state]

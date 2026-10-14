@@ -23,6 +23,7 @@ import { getEngine, setGameStatus } from "../main/main.js";
 import { travelToPlace } from "../tools/travel.js";
 import { getCharState, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
+import { sitHere } from "../charactersystem/seating.js";
 import { pushPlayer, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
 import { randomNum } from "../tools/tools.js";
@@ -75,7 +76,8 @@ export async function areaScene(placeDetail){
     const bigwolf = await SceneLoader.ImportMeshAsync("", "", "./models/monsters/standingwolf.glb", scene);
     bigwolf.meshes[0].position = new Vector3(0, 0, 84)
     // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
-    bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren().forEach(bone => console.log(bone.name))
+    const wolfLowerSpine = bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren()[0]
+    sitHere(wolfLowerSpine, getCharState().owner, "sittinglower1", { rotation: {x:Math.PI/2, y:Math.PI/2,z:0}, position: {x:0,y:1,z:0} })
     bigwolf.animationGroups.forEach(anim => {
         // console.log("anim.name", anim.name)
         if(anim.name === "death") {

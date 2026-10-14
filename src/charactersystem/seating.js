@@ -1,6 +1,7 @@
-import { TransformNode } from "@babylonjs/core"
+import { TransformNode, Vector3, Matrix, Quaternion } from "@babylonjs/core"
 import { getCharState, setCanPress, setCharStateMode } from "./characterstate.js"
-import { parentRoot } from "./createcharacter.js"
+import { parentRoot, findDeepByName } from "./createcharacter.js"
+import { ANIM_STATE } from "../tools/animation.js"
 import { getPlayersOnScene, getIsSocketOn } from "../sockets/worldsocket.js"
 import { emitMode, emitSitDown, emitStandUp } from "../sockets/emits.js"
 import { forceStopMovement } from "../controllers/inputMovement.js"
@@ -192,7 +193,13 @@ function unseatPlayer(ownerId){
     if(player){
         parentRoot(ownerId, player.body)
         if(player.nameMesh) player.nameMesh.parent = player.body
-        if(player.fshadow) player.fshadow.parent = player.body
+        if(player.fshadow){
+            player.fshadow.parent = player.body
+            // sitHere hides it - it lies on the floor, not under a bone
+            player.fshadow.setEnabled(true)
+        }
+        // the next seat sits in the ordinary clip again (sitHere's own pose)
+        player.characterAnimations?.setStateClip(ANIM_STATE.SITTING, null)
     }
     entry.seatNode.dispose()
 
@@ -238,6 +245,142 @@ export function standUp(){
         emitMode("idle", equippedWeaponName())
         emitStandUp()
     }
+}
+
+// how long sitHere waits for a player who isn't on the scene yet before it
+// gives up - about ten seconds of frames
+const SIT_HERE_WAIT_FRAMES = 600
+
+// Where the pelvis ends up while `clip` holds its pose, in the frame the
+// avatar's root hangs in (the body's). The sitting clips key the pelvis'
+// position to lift the hips to seat height, so this is read off the clip's own
+// keys - no hand-measured number per clip. Null when there's no pelvis to find.
+function hipsInPose(root, clip){
+    const pelvis = findDeepByName(root, node => node.name.toLowerCase().includes("pelvis"))
+    if(!pelvis) return null
+    const keyed = clip?.targetedAnimations.find(ta => ta.target === pelvis && ta.animation.targetProperty === "position")
+    const local = keyed?.animation.getKeys()[0]?.value ?? pelvis.position
+
+    root.parent.computeWorldMatrix(true)
+    pelvis.parent.computeWorldMatrix(true)
+    const world = Vector3.TransformCoordinates(local, pelvis.parent.getWorldMatrix())
+    return Vector3.TransformCoordinates(world, Matrix.Invert(root.parent.getWorldMatrix()))
+}
+
+// Sits a player on a bone or node of any model - not one of the registered
+// seats above - and keeps them there while that model animates.
+//   where     the Bone (a skeleton's getChildren() chain) or TransformNode to
+//             sit on - the player's hips land on it
+//   ownerId   who sits - getCharState().owner for me
+//   animName  the player's own clip to sit in, e.g. "sittinglower1" - the
+//             plain "sitting" pose when the player has no clip by that name
+//   opts      position { x, y, z } - moves the hips off the bone, in WORLD axes
+//             as they are right now, same frame as rotation below (a bone
+//             usually sits inside its model's body, so push the player out
+//             onto the surface). offset is the same thing under its older
+//             name - give both and they add;
+//             yaw - which way they face, in radians, 0 faces +z like a seat's yaw;
+//             rotation { x, y, z } - tilts them on top of that, radians, same as
+//             a mesh's .rotation and in world axes as they are right now (y adds
+//             to yaw). They turn about their hips, so those stay on the bone.
+//             Like everything here it's what the bone's pose looks like at the
+//             moment of sitting - the model moving on from it carries the
+//             player along, tilt and all, so "up 1" while the model stands
+//             turns into whatever way its bone has swung by the time it's down.
+// Stays on the bone through whatever the model does until standUp() - a
+// movement key does that, same as any seat. Local to this screen: nothing is
+// emitted, so other players don't see it (the model isn't theirs either).
+// Safe to call before the player exists (areascene.js builds its models first)
+// - they sit as soon as they do. Returns whether they sat right now.
+export function sitHere(where, ownerId, animName, opts = {}){
+    const scene = where?.getScene?.()
+    if(!scene){
+        console.warn("sitHere: needs a Bone or TransformNode to sit on")
+        return false
+    }
+    if(findPlayer(ownerId)?.root) return sitOnNode(scene, where, ownerId, animName, opts)
+
+    let frames = 0
+    const wait = scene.onBeforeRenderObservable.add(() => {
+        const ready = !!findPlayer(ownerId)?.root
+        if(!ready && ++frames < SIT_HERE_WAIT_FRAMES) return
+        scene.onBeforeRenderObservable.remove(wait)
+        if(ready) sitOnNode(scene, where, ownerId, animName, opts)
+        else console.warn(`sitHere: player "${ownerId}" never showed up on the scene`)
+    })
+    return false
+}
+
+function sitOnNode(scene, where, ownerId, animName, opts){
+    const player = findPlayer(ownerId)
+    // a Bone from the skeleton is driven through the node the loader linked to it
+    const boneNode = where.getTransformNode?.() ?? where
+    if(!boneNode.computeWorldMatrix){
+        console.warn("sitHere: that bone isn't linked to a node, nothing to sit on")
+        return false
+    }
+
+    const isMe = ownerId === myOwner()
+    if(isMe){
+        openCloseInteractBtn(false, false)
+        // before setCanPress(false) - same reason sitDown gives
+        forceStopMovement()
+    }
+    ensureSeatState(scene, player.currentPlaceId)
+    // off whatever they were on first: root is back on the body (the frame the
+    // hips are measured in) and the pose clip is back to the default
+    unseatPlayer(ownerId)
+
+    const named = animName ? player.anims.find(a => a.name.toLowerCase() === animName.toLowerCase()) : null
+    if(animName && !named) console.warn(`sitHere: no "${animName}" clip on this player, using the plain sitting pose`)
+    const pose = named ?? player.anims.find(a => a.name.toLowerCase() === "sitting")
+    if(named) player.characterAnimations?.setStateClip(ANIM_STATE.SITTING, named)
+
+    // The seat node's WORLD transform: its origin put where the hips, turned
+    // to face yaw (and tilt by rotation), land on the bone (plus position)
+    const rotation = Quaternion.RotationYawPitchRoll(
+        (opts.yaw ?? 0) + (opts.rotation?.y ?? 0), opts.rotation?.x ?? 0, opts.rotation?.z ?? 0)
+    const hips = hipsInPose(player.root, pose) ?? player.root.position.clone()
+    boneNode.computeWorldMatrix(true)
+    const goal = boneNode.getAbsolutePosition().add(new Vector3(
+        (opts.position?.x ?? 0) + (opts.offset?.x ?? 0),
+        (opts.position?.y ?? 0) + (opts.offset?.y ?? 0),
+        (opts.position?.z ?? 0) + (opts.offset?.z ?? 0)))
+    const origin = goal.subtract(hips.rotateByQuaternionToRef(rotation, new Vector3()))
+    const seatWorld = Matrix.Compose(Vector3.One(), rotation, origin)
+
+    // Parented under the bone so it follows it. A glTF model's root is
+    // mirrored (scaling z -1), which flips the bone's world matrix and would
+    // flip the player with it - so the seat's LOCAL matrix is solved from the
+    // world one above instead. Its local scaling comes out negative, cancelling
+    // the flip; its world matrix, and the player under it, stay rigid.
+    const seatLocal = seatWorld.multiply(Matrix.Invert(boneNode.getWorldMatrix()))
+    const scaling = new Vector3()
+    const rotationQ = new Quaternion()
+    const position = new Vector3()
+    seatLocal.decompose(scaling, rotationQ, position)
+    const seatNode = new TransformNode(`seatNode_${ownerId}`, scene)
+    seatNode.parent = boneNode
+    seatNode.scaling = scaling
+    seatNode.rotationQuaternion = rotationQ
+    seatNode.position = position
+
+    // same as seatPlayer, bar the shadow: that one lies on the floor under the
+    // body, which is nowhere near a bone
+    player.mode = "sitting"
+    parentRoot(ownerId, seatNode, "sitting")
+    if(player.nameMesh) player.nameMesh.parent = seatNode
+    player.fshadow?.setEnabled(false)
+
+    const seatId = `bone_${ownerId}`
+    seatState.seated.set(ownerId, { seatId, seatNode })
+    seatState.occupiedBy.set(seatId, ownerId)
+
+    if(isMe){
+        setCharStateMode("sitting")
+        setCanPress(false)
+    }
+    return true
 }
 
 export function isSitting(){
