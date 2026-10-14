@@ -17,11 +17,12 @@ import { SKIN_TEXTURES } from '../constants/skinColors';
 import { getPlayersOnScene, getSocketContainers } from '../sockets/worldsocket';
 import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
-import { createBloodParticle, createBloodSplatter, createCustomizedSmoke } from '../tools/particlesystem';
+import { createBloodParticle, createBloodSplatter } from '../tools/particlesystem';
 import { CharacterAnimations, playAnim } from '../tools/animation';
 import { createMesh, putFakeShadow } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 import { attachLightning } from '../effects/lightning';
+import { createBodyAura } from '../effects/aura';
 import { onIntersecExitTrig } from '../components/actionManager';
 import { getCharState } from './characterstate';
 import { calcDmg } from './attackingSystem';
@@ -153,11 +154,10 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     let fakeShadowRoot = scene.getMeshByName("fakeShadow")
 
     const fshadow = fakeShadowRoot ? putFakeShadow(body, fakeShadowRoot, 1, -capsuleHeight / 2 + 0.02) : null
+    // the flex aura (effects/aura.js) - builds nothing until it's first shown.
     // npcs never reach a code path that grants/activates skills, and auraz isn't
-    // even part of the isNpc return value below - two 8000-capacity particle
-    // systems were getting built and immediately stopped for every single npc
-    // spawned, for nothing. Skip it entirely for them.
-    const auraz = isNpc ? null : createBodyAura(det, scene, body)
+    // even part of the isNpc return value below, so they skip it entirely.
+    const auraz = isNpc ? null : createBodyAura(det, scene, body, capsuleHeight)
 
     if(!isNpc){
         // det.skills is normally the player's own array of equipped skills
@@ -172,6 +172,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         // own trace logging that caught this. A fighter has no flexaura
         // concept anyway, so skipping cleanly here is correct, not just safe.
         const auraSkill = Array.isArray(det.skills) ? det.skills.find(skl => skl.name === "flexaura") : undefined
+        // no profile passed - another player's comes in det.aura (getCharSocket),
+        // mine is worked out from det and kept live by characterstate.js
         if(auraSkill && auraSkill.isActive) auraz.start()
     }
 
@@ -182,6 +184,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         shoulderL, shoulderR, characterHairs, mainBodyLegs} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
+    nameMesh.isVisible = false
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
     {x:0.8, y:2, z: 1}, 1, false, true, {x: -Math.PI/2 + (Math.PI/10), y:Math.PI/2, z:0.2 })
 
@@ -488,6 +491,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const bloodps = createBloodSplatter(scene)
     bloodps.ps.emitter = spineBone
+    // already bleeding when this client met them (getCharSocket's isBleeding)
+    if(det.isBleeding) bloodps.setBleeding(true)
 
     // const sec = createBloodParticle(scene)
     // sec.emitter =spineBone
@@ -595,6 +600,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         // the tired walk/stand clips off it. Seeded from det so a player who
         // was already tired when this client met them shows it straight away.
         isTired: !!det.isTired,
+        // bleeding (characterstate.js's refreshBleeding) - bloodps runs
+        // non-stop while it's true. Seeded from det like isTired above.
+        isBleeding: !!det.isBleeding,
     }
 }
 
@@ -1114,87 +1122,6 @@ function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
         camParent, 
         aggregate
     }
-}
-function getAuraTemplates(scene, aurabox){
-    if(scene._auraTemplates) return scene._auraTemplates
-    scene._auraTemplates = {
-        human: {
-            main: createCustomizedSmoke(scene, aurabox, "smoke2", false, {min:1,max:1.1}, {min:1,max:1}, 1, new Vector3(0,1.2,0), {r:0,g:0.22,b:0.55}, {r:0.32,g:0.55,b:0.89}, false, "sphere", 0.6),
-            sec:  createCustomizedSmoke(scene, aurabox, "thin1", {min:1,max:1.5}, {min:1,max:5}, false, 1, new Vector3(0,1.2,0), {r:0.09,g:0.49,b:0.81}, {r:0,g:0.76,b:1}, false, "mesh", .4)
-        },
-        demon: {
-            main: createCustomizedSmoke(scene, aurabox, "blood", false, {min:1,max:1.1}, {min:1,max:1}, 1, new Vector3(0,0.2,0), {r:0.8,g:0.11,b:0.11}, {r:0.14,g:0.04,b:0.04}, false, "cone", 0.03),
-            sec:  createCustomizedSmoke(scene, aurabox, "thin1", {min:1,max:1.5}, {min:1,max:5}, false, 1, false, {r:0.09,g:0.49,b:0.81}, {r:0.59,g:0,b:0.51}, false, "mesh", .4)
-        }
-    }
-    return scene._auraTemplates
-}
-
-function createBodyAura(det, scene, body, auraType = "human"){
-    let auras = []
-    let aurabox = scene.getMeshByName("aurabox")
-    if(!aurabox){
-        aurabox = MeshBuilder.CreatePlane("aurabox", { }, scene);
-        aurabox.isVisible=false
-        aurabox.isPickable=false
-    }
-
-    const auramesh = aurabox.createInstance()
- 
-    auramesh.isVisible = false
-    auramesh.parent = body
-    auramesh.position.y -= 0.5
-
-    // const templates = getAuraTemplates(scene, aurabox)
-
-    switch(auraType){
-        case "human":
-            const auraPS = createCustomizedSmoke(scene, auramesh, "smoke2", false, {min:1,max:1.1}, {min:1,max:1}, 1, new Vector3(0,1.2,0), {r:0,g:0.22,b:0.55}, {r:0.32,g:0.55,b:0.89}, false, "sphere", 0.2)
-            auraPS.stop()
-            auraPS.emitRate = det.maxMp/12
-            auraPS.minScaleY = parseFloat(det.lvl/2)
-            auraPS.maxScaleY = parseFloat(det.lvl)
-            auraPS.updateSpeed = 0.01
-            auraPS.isLocal = true
-            // setTimeout(() => { auraPS.emitRate = 4000 }, 10000)
-            auras.push(auraPS)
-
-            const secAura = createCustomizedSmoke(scene, auramesh, "thin1", {min:1,max:1.5}, {min:1,max:5}, false, 1, new Vector3(0,1.2,0), {r:0.09,g:0.49,b:0.81}, {r:0,g:0.76,b:1}, false, "mesh", .4)
-            secAura.stop()
-            secAura.emitRate =det.maxMp/15
-            secAura.minScaleY = parseFloat(det.lvl/4)
-            secAura.maxScaleY = parseFloat(det.lvl/2)
-            secAura.isLocal = false
-            // setTimeout(() => { secAura.emitRate = 4000 }, 10000)
-            auras.push(secAura)
-        break;
-        case "demon":
-            const demonaura1 = templates.demon.main.clone("demonaura1", auramesh)
-            demonaura1.stop()
-            demonaura1.emitRate = det.lvl * 2
-            demonaura1.minScaleY = parseFloat(det.lvl/2)
-            demonaura1.maxScaleY = parseFloat(det.lvl/2+2)
-            demonaura1.updateSpeed = 0.01
-            demonaura1.isLocal = true
-            auras.push(demonaura1)
-
-            const demonSecAura = templates.demon.sec.clone("demonSecAura", auramesh)
-            demonSecAura.stop()
-            demonSecAura.emitRate = Math.floor(det.lvl/2)
-            demonSecAura.minScaleY = 2
-            demonSecAura.maxScaleY = 4
-            demonSecAura.isLocal = false
-            auras.push(demonSecAura)
-        break;
-    }
-    auras.start = function(){
-        auras.forEach(ps => ps.start())
-    }
-    auras.stop = function(){
-        auras.forEach(ps => ps.stop())
-    }
-    // auras.forEach(ps => ps.start())
-    return auras
 }
 
 

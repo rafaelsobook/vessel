@@ -3192,6 +3192,124 @@ export default [
         forQuests: []
     },
     {
+        // Mushruu - a mushroom forager who sits by the dungeon's cave mouth
+        // and knows every mushroom growing inside it: what each does, how deep
+        // it grows, how to cook it (constants/mushruudata.js, questionId 590).
+        // He doesn't sell anything - he only talks.
+        //
+        // Stands at (4, -17.5), in front of the "dungeondoor" at (7, -14)
+        // (constants/places/village.js), facing the spawn at (0.6, -10) where
+        // players come from. Clear of the door's walk-up trigger (a 2x2x2 box
+        // at (5.8, -14), 2.6 away) so the two prompts never meet, and of the
+        // cave's colliders, which start 2.8 off (the hill itself at x ~8).
+        // Nothing the village generator placed is within 3.9 - checked by
+        // running generateArea with this village's own seed.
+        glbPath: null,
+        currentPlaceId: 1,
+        mode: "idle",
+        _id: "121_mushruu",
+        name: "Mushruu",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "Careful! You'll bruise the caps in my basket!",
+            "Ow! Eat what I tell you to - not whatever you swing at.",
+            "Violence among the mushrooms? The spores will remember that.",
+        ],
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x: 4,
+        y: 0.01,
+        z: -17.5,
+        _dirTarg: {x:0.6, z:-10},
+        // Doran's outfit fields (106_doran), different colors. Not optional for
+        // a male npc: createAnimeBodyMaterials (createcharacter.js) reads
+        // clothColor.r and pantsColor.r, and leaving them off means the npc
+        // never spawns.
+        cloth: 'style2',
+        pants: 'style2',
+        hair: 'style2',
+        boots: 'style1',
+        skinColor: "skin2",
+        hairColor: ADVENTURER_COLORS.white,
+        clothColor: ADVENTURER_COLORS.maroon,
+        pantsColor: ADVENTURER_COLORS.darkBrown,
+        items: [
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "farmhat", // is also the image name
+                modelName: "farmhat",
+                dn: "Farmer's Hat",
+                itemCateg: "equipable",
+                itemType: "helmet",
+                weaponType: undefined,
+                equipAbilities: {
+                    dmg: 0, def: 20, resistance: 10, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 1, },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 10 },
+                qnty: 1,
+                desc: undefined,
+                rarity: "rare"
+            },
+            {
+                itemId: randomNum(), // should be string also in client
+                name: "leatherboots", // is also the image name
+                dn: "Leather Boots",
+                itemCateg: "equipable",
+                itemType: "boots",
+                equipAbilities: {
+                    dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+                },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0, },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false,
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100},
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "This Boots is light and useful for first time adventurers",
+                rarity: "common"
+            }
+        ],
+        titles: ['forager'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 50,
+        aptitude: ['earth'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        // plays through in full, then callbackAfterRandomSpeech opens his menu
+        // (constants/mushruudata.js, questionId 590), where the "which one?" is
+        // asked alongside its answers
+        randomSpeech: [
+            {name: "", message: "Shh - mind your step. That damp patch by your boot is somebody's front door."},
+            {name: "", message: "Down in that cave the caps grow thick as rumours, and I've spent more years among them than I care to count. Cap, stalk and spore - I know every one."},
+            {name: "", message: "Ask me what any of them does, where it grows, how to cook it. Just ask before you eat. Please."},
+        ],
+        callbackAfterRandomSpeech: () => startQuestionare(590),
+        forQuests: []
+    },
+    {
         glbPath: null,
         currentPlaceId: 1,
         mode: "idle",

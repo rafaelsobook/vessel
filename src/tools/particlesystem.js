@@ -33,7 +33,7 @@ import { randNum } from "./random.js"
 // cached against.
 const particleTextureCache = new Map()
 let particleTextureCacheScene = null
-function getParticleTexture(scene, path){
+export function getParticleTexture(scene, path){
     if(particleTextureCacheScene !== scene){
         particleTextureCache.clear()
         particleTextureCacheScene = scene
@@ -55,7 +55,7 @@ function getParticleTexture(scene, path){
 // load just shows nothing rather than throwing). Delete a name from this
 // set once its real .webp file actually exists.
 const PARTICLE_TEXTURE_STILL_PNG = new Set(["thin1"])
-function particleTexturePath(name){
+export function particleTexturePath(name){
     const ext = PARTICLE_TEXTURE_STILL_PNG.has(name) ? "png" : "webp"
     return `./images/particles/${name}.${ext}`
 }
@@ -666,12 +666,22 @@ export function createBloodSplatter(scene, pos, burst, color){
     // setTimeout(() => ps.stop(), stopDelay);
     // setTimeout(() => ps.dispose(), stopDelay + 3000);
 
+    // bleeding (characterstate.js's refreshBleeding, worldsocket.js's
+    // "emitted-bleeding") - keeps the splatter running non-stop until it's
+    // turned off again. A hit's play() while bleeding leaves it running
+    // instead of cutting it off after its stopDelay.
+    let bleeding = false
     function play(stopDelay = 1000){
         ps.start()
-        setTimeout(() => ps.stop(), stopDelay);
+        setTimeout(() => { if(!bleeding) ps.stop() }, stopDelay);
+    }
+    function setBleeding(on){
+        bleeding = on
+        if(on) ps.start()
+        else ps.stop()
     }
 
-    return { ps, play }
+    return { ps, play, setBleeding }
 }
 export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSize, minMaxLifeTime, minMaxEmitPower, qnty, gravityVector3, rgb1, rgb2, isDefaultSizeGrad, particleType, particleTypeRadius, activateRotations){
     const particleSystem = new ParticleSystem("particles", 8000, scene);

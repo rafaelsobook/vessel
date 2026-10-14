@@ -1,8 +1,8 @@
 import { Vector3 } from "@babylonjs/core"
 import { createElement } from "../tools/GUITools.js"
-import { openCloseMiniLS, openClosePopup } from "../tools/popupUI.js"
+import { openCloseMiniLS, openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
-import { getCharState, setCharStateMode, refreshHungerUI, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp, getMaxMp, getMaxSp } from "./characterstate.js"
+import { getCharState, setCharStateMode, refreshHungerUI, refreshBleeding, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp, getMaxMp, getMaxSp } from "./characterstate.js"
 import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
@@ -264,7 +264,11 @@ let consumeItemFunc = async () => {
         cure.forEach(effectTypeName => {
             const hasCure = charState.status.find(effect => effect.effectType === effectTypeName)
             charState.status = charState.status.filter(effect => effect.effectType !== effectTypeName)
+            if(hasCure && effectTypeName === "bleed") popStatusEffect("Bleeding stopped", "#ff9b9b")
         })
+        // a cured bleed stops the blood now, not on the next bleed tick
+        // (characterstate.js's tickBleed)
+        refreshBleeding()
     }
     // the bad side of a food - status effects eating it GIVES you (the white
     // mushroom's poison, tcp's mushroomLibrary.ts), in the same shape the

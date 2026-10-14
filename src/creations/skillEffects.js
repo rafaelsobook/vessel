@@ -34,7 +34,7 @@ import { pickAnimVariant } from "../tools/animation.js"
 import { fireAimProbe } from "./aimProbe.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitRegisterPlayerAsEnemy, emitEnemyChase, emitSpawnCircle, emitEnemyTeleport, emitEnemyWillAttack } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect, raiseBaseMaxHp } from "../charactersystem/characterstate.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect, raiseBaseMaxHp, cureBleeding, refreshBleeding } from "../charactersystem/characterstate.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { randNum, randBetween } from "../tools/random.js"
@@ -3923,6 +3923,9 @@ function spawnHealingCircle(scene, skill, groundPos, powerScale){
 
         const healAmount = Math.round((healEffect.plusHp || 0) * powerScale)
         healPlayer(healAmount)
+        // closes a bleed too (characterstate.js's tickBleed) - only the
+        // bleed; poison/curse still need purification
+        if(cureBleeding()) poppingTextMesh("Wound closed", "#ff9b9b", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 1, z: -1 + Math.random() * 2 }, myPlayer.body, true)
         // green "+40" popup, mirroring the red "-dmg" popup every damage
         // path here already uses (createEnemy.js's enemyIsHit,
         // duelSystem.js's applyDamageToOpponent) just positive and green
@@ -3998,6 +4001,8 @@ function spawnPurificationCircle(scene, skill, groundPos){
         // updateStatUI() next (opening the stats panel, etc), well after
         // the actual cure already took effect
         updateStatUI()
+        // a bleed was in there too - stop the blood now, not on the next tick
+        refreshBleeding()
         poppingTextMesh("Purified!", "#e0d0ff", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
         playSoundNear(getAllSounds().healS, groundPos)
     }, MASS_TRAP_ACTIVATE_DELAY_MS)

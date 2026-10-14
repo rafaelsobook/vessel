@@ -72,8 +72,17 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    const wagon = await SceneLoader.ImportMeshAsync("", "", "./models/monsters/standingwolf.glb", scene);
-    // wagon.meshes[0].position = new Vector3(0, 2, 503);
+    const bigwolf = await SceneLoader.ImportMeshAsync("", "", "./models/monsters/standingwolf.glb", scene);
+    bigwolf.meshes[0].position = new Vector3(0, 0, 84)
+    // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
+    bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren().forEach(bone => console.log(bone.name))
+    bigwolf.animationGroups.forEach(anim => {
+        // console.log("anim.name", anim.name)
+        if(anim.name === "death") {
+            // console.log("play roar1")
+            anim.play();
+        }else anim.stop()
+    });
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()

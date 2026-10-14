@@ -1,4 +1,4 @@
-import { getCharState, setCharStateMode, getTotal, updateMP_UI, updateMyDetailsOL, getCanPress } from "../charactersystem/characterstate.js";
+import { getCharState, setCharStateMode, getTotal, updateMP_UI, updateMyDetailsOL, getCanPress, getMyAuraProfile } from "../charactersystem/characterstate.js";
 import { getSocket } from "../sockets/joinsocket.js";
 import { getIsSocketOn } from "../sockets/worldsocket.js";
 import { createElement, checkIfTokenSaved } from "../tools/tools.js";
@@ -433,7 +433,10 @@ slotbuttons.forEach(btn => {
                     ownerId: charState.owner, 
                     skill, 
                     currentPlaceId: charState.currentPlace.placeId,
-                    casterStats: charState.stats
+                    casterStats: charState.stats,
+                    // flexaura - how strong it looks on everyone else's screen
+                    // (effects/auraProfile.js); tcp keeps it for late joiners
+                    aura: skill.name === "flexaura" ? getMyAuraProfile() : undefined,
                 })
         } else{
             activateSkill(charState.owner, skill, charState.stats)

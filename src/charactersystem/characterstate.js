@@ -10,7 +10,8 @@ import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
 import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worldsocket.js";
-import { emitMode, emitWeaponBlock, emitEnemyIsHit, emitTired, emitDied } from "../sockets/emits.js";
+import { emitMode, emitWeaponBlock, emitEnemyIsHit, emitTired, emitBleeding, emitAura, emitDied } from "../sockets/emits.js";
+import { computeAuraProfile } from "../effects/auraProfile.js";
 import { closeAllPopupAndUI, disableEnableAttackButtonsContainer, hideShowAllScreenUI, openCloseLifeDisplay } from "./uimanagement.js";
 import { getPlayerCoord, capsuleHeight } from "./createcharacter.js";
 import { getAllSounds, playSound } from "../components/soundSystem.js";
@@ -82,6 +83,8 @@ let spRegenInterval
 let logSitRegenInterval
 let castingDrainInterval
 let blockingDrainInterval
+let bleedInterval
+let auraInterval
 
 let hungerInterval
 let restInterval
@@ -268,6 +271,7 @@ export function getMaxSp(){
 const LETHAL_DAMAGE = {
     combat: true,   // enemies, other players, skills, the curse backfire
     burn: true,     // fire's burn ticks (deductHp's "burn" effects)
+    bleed: true,    // the standing wolves' bleed (tickBleed) - until cured or dead
     hunger: false,  // starving (tickHunger)
     cold: false,    // body temperature too low / too high (tickBodyTemperature)
     heat: false,
@@ -394,6 +398,8 @@ async function die(){
     if(isLifeOver) return
     isLifeOver = true
     characterState.hp = 0
+    // the blood stops with me - refreshBleeding reads isLifeOver
+    refreshBleeding()
     if(getIsSocketOn()) emitDied()
     await gameOver()
 }
@@ -494,6 +500,11 @@ export function getCharSocket(){
         // worn out right now (isCharacterTired) - so everyone already in the
         // place I'm joining sees me tired from the start
         isTired: isCharacterTired(),
+        // and bleeding, the same way (isBleeding)
+        isBleeding: isBleeding(),
+        // how strong my flex aura looks (effects/aura.js) - so anyone meeting
+        // me with it already up sees it at my strength
+        aura: getMyAuraProfile(),
     }
 }
 
@@ -633,6 +644,10 @@ export function activateLifeSystem(){
         }
         updateSP_UI()
     }, 500)
+    // BLEEDING - see tickBleed
+    bleedInterval = setInterval(tickBleed, BLEED_TICK_MS)
+    // FLEX AURA - see refreshMyAura
+    auraInterval = setInterval(refreshMyAura, AURA_REFRESH_MS)
     // the readout only - a load (every place change) isn't a hunger tick
     refreshHungerUI()
 
@@ -809,6 +824,8 @@ export function clearIntervals(){
     clearInterval(logSitRegenInterval)
     clearInterval(castingDrainInterval)
     clearInterval(blockingDrainInterval)
+    clearInterval(bleedInterval)
+    clearInterval(auraInterval)
     clearInterval(hungerInterval)
     clearInterval(restInterval)
     clearInterval(vitalsSaveInterval)
@@ -917,6 +934,7 @@ export async function deductHp(dmg, effects = [], enemyStats){
             let labelColors = [
                 {name: "spdrain", color:'#bdc000'},
                 {name: "poisoned", color:'green'},
+                {name: "bleed", color: BLEED_COLOR},
             ]
             setTimeout(()=>{
                 let labelToDisplay = ''
@@ -1029,6 +1047,53 @@ export function addEffectsOnStat(effect){
     }
     characterState.status.push(effect)
     updateStatUI()
+    // the blood starts with the hit, not on the next bleed tick
+    if(effect.effectType === "bleed") refreshBleeding()
+}
+
+// BLEEDING (the standing wolves' claws - tcp's genenemy.ts bleedEffect).
+// Unlike poison/curse it isn't a one-off cost: every BLEED_TICK_MS it takes
+// BLEED_HP_FRACTION of max hp, lethal, for as long as a "bleed" entry sits in
+// characterState.status - full to dead in about 50 seconds. Nothing times it
+// out. Only a cure lifts it: the Purification skill or Vesper's purification
+// (both wipe status), the healing circle (cureBleeding), or an item whose
+// consumeAbilities.cure names "bleed". Each tick also re-checks the blood
+// (refreshBleeding), so whichever of those removed the entry, it stops.
+const BLEED_TICK_MS = 1000
+const BLEED_HP_FRACTION = 0.02
+const BLEED_COLOR = '#c0392b'
+function tickBleed(){
+    refreshBleeding()
+    if(!isBleeding()) return
+    const dmg = Math.max(1, Math.round(getMaxHp() * BLEED_HP_FRACTION))
+    popStatusEffect(`Bleeding -${dmg}`, BLEED_COLOR)
+    damageHp(dmg, "bleed")
+}
+export function isBleeding(){
+    return !!characterState?.status?.some(status => status.effectType === "bleed")
+}
+// my rig's blood splatter (createcharacter.js's bloodps) runs non-stop while I
+// bleed. Compared against the player object like refreshTiredness, so it only
+// toggles - and tells everyone else (emitBleeding) - on a change; the rig a
+// new place builds picks it up on the next tick.
+export function refreshBleeding(){
+    if(!characterState) return
+    const me = getPlayersOnScene().find(pl => pl.owner === characterState.owner)
+    if(!me) return
+    const bleeding = isBleeding() && !isLifeOver
+    if(!!me.isBleeding === bleeding) return
+    me.isBleeding = bleeding
+    me.bloodps?.setBleeding(bleeding)
+    if(getIsSocketOn()) emitBleeding(bleeding)
+}
+// the healing circle (skillEffects.js's spawnHealingCircle) - closes the
+// wound. Returns whether there was one.
+export function cureBleeding(){
+    if(!isBleeding()) return false
+    characterState.status = characterState.status.filter(status => status.effectType !== "bleed")
+    updateStatUI()
+    refreshBleeding()
+    return true
 }
 
 // PLAYER-SIDE CURSE - the mirror of createEnemy.js's own enemy._cursed
@@ -1251,6 +1316,23 @@ function refreshTiredness(){
         if(sounds?.woodrunS?.isPlaying) sounds.woodrunS.stop()
     }
     if(getIsSocketOn()) emitTired(tired)
+}
+
+// FLEX AURA - how strong my aura looks (effects/auraProfile.js): the maxes
+// WITH blessing bonuses, so anything that makes me stronger shows in it
+export function getMyAuraProfile(){
+    if(!characterState) return null
+    return computeAuraProfile({ maxHp: getMaxHp(), maxMp: getMaxMp(), maxSp: getMaxSp(), aptitude: characterState.aptitude })
+}
+// While my aura is up, it keeps up with my stats: a stat point, a heart, a
+// blessing - each grows it on the spot (with a flare), and everyone else's
+// copy of it with it (emitAura). Polled, since those come from all over.
+const AURA_REFRESH_MS = 2000
+function refreshMyAura(){
+    const me = getPlayersOnScene().find(pl => pl.owner === characterState?.owner)
+    if(!me?.auraz?.isRunning) return
+    const profile = getMyAuraProfile()
+    if(me.auraz.update(profile) && getIsSocketOn()) emitAura(profile)
 }
 
 export function updateSurvival_UI(){

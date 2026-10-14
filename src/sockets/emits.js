@@ -362,6 +362,38 @@ export function emitTired(isTired) {
     })
 }
 
+// started or stopped bleeding (characterstate.js's refreshBleeding) - relayed
+// like emitTired right above, so every other client's worldsocket.js
+// "emitted-bleeding" handler turns this player's blood splatter on or off
+export function emitBleeding(isBleeding) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("emitBleeding", {
+        ownerId: charState.owner,
+        isBleeding,
+        currentPlaceId: charState.currentPlace.placeId,
+    })
+}
+
+// my flex aura grew (or changed) while it was up (characterstate.js's
+// refreshMyAura) - relayed like emitBleeding above, so every other client's
+// worldsocket.js "emitted-aura" handler redraws it at the new strength
+export function emitAura(aura) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("emitAura", {
+        ownerId: charState.owner,
+        aura,
+        currentPlaceId: charState.currentPlace.placeId,
+    })
+}
+
 export function emitEquipItem(itemDet, isHiding) {
 
     const charState = getCharState()

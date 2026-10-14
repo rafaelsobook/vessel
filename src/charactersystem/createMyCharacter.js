@@ -32,7 +32,7 @@ import { attachCam } from "../tools/camera.js"
 import { getSpawnPos } from "../tools/position.js"
 import { createCharacter } from "./createcharacter.js"
 import { ActionManager, MeshBuilder, Quaternion, Vector3 } from "@babylonjs/core"
-import { getCharState, setCharStateMode } from "./characterstate"
+import { getCharState, setCharStateMode, getMyAuraProfile } from "./characterstate"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 
 
@@ -47,7 +47,10 @@ export function createMyCharacter(charState, scene, allsounds){
         // mode would be by default always Idle if newly joined
     // addiditonal infos because our tcpCharDet does not come from tcp(in tcp we put this additional info) 
     _moving: false,
-    _minning: false, 
+    _minning: false,
+    // the flex aura at my live strength (blessing bonuses included), so one
+    // that's already up comes back at full strength on every place change
+    aura: getMyAuraProfile(),
     }, true)
     if(!player) return
     attachCam(player.camParent)

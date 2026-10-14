@@ -16,6 +16,10 @@ import { getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { skillsData } from "../staticRecources/skillsData.js"
+import { getPlayerCoord } from "./createcharacter.js"
+import { createMagicCircle } from "../creations/magiccircles.js"
+import { getSceneDet } from "../main/main.js"
+import { emitSpawnCircle } from "../sockets/emits.js"
 
 // skillsData.js element -> server aptitude element name. Exported -
 // skillWheel.js's own eligibleSkillsFor reuses this exact table instead of
@@ -121,4 +125,49 @@ export function trackAptitudeUsage(skillElement){
         openClosePopup(`${capitalize(trackedElement)} aptitude reached level ${apt.level}!`, true, 2000)
         updateMyDetailsOL(charState, checkIfTokenSaved())
     }
+}
+
+// what an aptitude can be - generateAptitudes' own five (server/routes/
+// characterR.js). Not lightning: that one has no slot, it unlocks off fire
+// (LIGHTNING_UNLOCK_FIRE_LEVEL above).
+const APTITUDE_ELEMENTS = ["fire", "water", "earth", "light", "darkness"]
+
+// Grants the character an aptitude it doesn't have yet, at level 1 - the same
+// entry generateAptitudes would have rolled for it. Takes the server's name
+// or the skills' ("darkness" or "dark"). Its magic circle (apt_<element>, the
+// art the guild crystal shows aptitudes with) flares on the character for
+// everyone in the place, a popup says so, and it's saved. Returns whether it
+// was granted - false for an unknown element or one the character already has.
+//
+// Everything that reads charState.aptitude picks it up from there: the skill
+// wheel's offers (skillWheel.js), Halric's ritual, and the flex aura (a
+// darkness aptitude shows in it within a couple of seconds).
+export function receiveAptitude(elementalType){
+    const charState = getCharState()
+    if(!charState) return false
+
+    const element = ELEMENT_TO_APTITUDE_NAME[elementalType] ?? elementalType
+    if(!APTITUDE_ELEMENTS.includes(element)){
+        console.warn(`receiveAptitude: "${elementalType}" isn't an aptitude - one of ${APTITUDE_ELEMENTS.join(", ")} (or "dark")`)
+        return false
+    }
+
+    charState.aptitude = charState.aptitude || []
+    const alreadyHas = charState.aptitude.some(apt => (ELEMENT_TO_APTITUDE_NAME[apt.element] ?? apt.element) === element)
+    if(alreadyHas){
+        openClosePopup(`You already have the ${capitalize(element)} aptitude`, true, 1500)
+        return false
+    }
+
+    charState.aptitude.push({ element, level: 1, uses: 0 })
+
+    const coord = getPlayerCoord(charState.owner)
+    const scene = getSceneDet()?.scene
+    if(coord && scene){
+        createMagicCircle(coord.pos, scene, `apt_${element}`)
+        emitSpawnCircle(coord.pos, element)
+    }
+    openClosePopup(`You received the ${capitalize(element)} aptitude!`, true, 2000)
+    updateMyDetailsOL(charState, checkIfTokenSaved())
+    return true
 }

@@ -179,13 +179,78 @@ export async function obtainAll(itemsArray){
 
     await updateMyDetailsOL(charState, checkIfTokenSaved())
 }
+// The metal-tinted armour the game has meshes for (avatar.glb's armor.*,
+// helmets.glb, pauldrons.glb, gauntlets.glb), at the base stats its plain iron
+// version already carries (the entries in giveAllItems, constants/questions.js,
+// npcDetails.js). A pauldron and a gauntlet are one mesh cloned onto both
+// shoulders/hands (createcharacter.js), so each is already a matched pair.
+// Hats and boots are left out: they are painted from a texture, not tinted, so
+// a metal colour would change nothing about them.
+const TINTED_ARMOR = [
+    { name: "knightscale", dn: "Knight's Scale", itemType: "armor", def: 20, resistance: 10, price: 45 },
+    { name: "lightarmor", dn: "Light Armor", itemType: "armor", def: 10, resistance: 5, price: 30 },
+    { name: "ironpaul", dn: "Pauldron", itemType: "pauldron", def: 20, resistance: 0, price: 30 },
+    { name: "gauntler", dn: "Gauntlet", itemType: "gauntlet", def: 20, resistance: 10, price: 22 },
+    { name: "ironjaw", modelName: "ironjaw", dn: "Knight's Helm III", itemType: "helmet", def: 20, resistance: 10, price: 35 },
+    { name: "orionhelm", modelName: "orionhelm", dn: "Orion Helm", itemType: "helmet", def: 20, resistance: 10, price: 32 },
+    { name: "ironmask", modelName: "ironmask", dn: "Mask", itemType: "helmet", def: 12, resistance: 5, price: 25, hairVisible: true },
+    { name: "kraunmask", modelName: "kraunmask", dn: "Kraun Mask", itemType: "helmet", def: 18, resistance: 8, price: 30, hairVisible: true },
+]
+// What each metal does to a piece - mirrors tcp/recources/botItems.ts's
+// METAL_TIERS, so a piece from here matches one a bot earns (a black Knight's
+// Scale is def 60 against iron's 20). rarity is "legendary" for both: tcp calls
+// black "mythic", but the inventory has no mythic border or background yet, so
+// it would show up as a common slot.
+const ARMOR_METAL_TIERS = {
+    [METAL_COLOR.DRAGONSCALE]: { prefix: "Dragonscale", rarity: "legendary", defMult: 2.6, resMult: 2.4, priceMult: 14 },
+    [METAL_COLOR.BLACK]:       { prefix: "Black",       rarity: "legendary", defMult: 3.0, resMult: 3.0, priceMult: 20 },
+}
+// the metals the "i" key hands the armour out in - one full set of each. For
+// another metal, add its METAL_COLOR here and its tier above.
+const GIVE_ALL_ARMOR_METALS = [METAL_COLOR.BLACK, METAL_COLOR.DRAGONSCALE]
+
+function createTintedArmorItem(piece, metalColor){
+    const tier = ARMOR_METAL_TIERS[metalColor]
+    return {
+        itemId: randomNum(),
+        name: piece.name,
+        modelName: piece.modelName,
+        dn: `${tier.prefix} ${piece.dn}`,
+        itemCateg: "equipable",
+        itemType: piece.itemType,
+        weaponType: undefined,
+        equipAbilities: {
+            dmg: 0,
+            def: Math.round(piece.def * tier.defMult),
+            resistance: Math.round(piece.resistance * tier.resMult),
+            magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
+        },
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true,
+        enhancedLevel: 0,
+        slots: [],
+        durability: { current: 100, max: 100 },
+        price: { coinType: "bronze", pieces: Math.round(piece.price * tier.priceMult) },
+        qnty: 1,
+        desc: undefined,
+        rarity: tier.rarity,
+        metalColor,
+        hairVisible: piece.hairVisible,
+    }
+}
+
 // DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Drops
 // one of every craftable material (resourceLoot.js's lootNames - ores, gems,
 // wood/leather/stone) straight into the inventory, for testing the crafting
 // UI without actually mining. createLootItem() already mints a fresh itemId
-// per call, so no extra work needed here to keep pickups distinct.
+// per call, so no extra work needed here to keep pickups distinct. Also hands
+// out every metal-tinted armour piece (TINTED_ARMOR) in each of
+// GIVE_ALL_ARMOR_METALS.
 export function giveAllItems(){
     obtainAll([...lootNames.map(name => createLootItem(name)),
+        ...GIVE_ALL_ARMOR_METALS.flatMap(metal => TINTED_ARMOR.map(piece => createTintedArmorItem(piece, metal))),
         // same item shapes toSell.js's sellerBram stall already trusts
         // (armor/pauldron/gauntlet art under images/items/equipable/* is
         // guaranteed to exist for these three) - added for fit-testing

@@ -459,7 +459,8 @@ export function activateOnSocketListeners(socket){
         // client, caster included, so activateSkill needs to know the
         // actual caster's stats rather than assuming "me". See
         // activateSkill's own comment for why this matters.
-        const { ownerId, skill, currentPlaceId, casterStats, dirYaw, weaponName, parts, weaponType, metalColor, debugTargetId, debugTargetPos } = data
+        // aura - flexaura only, how strong the caster's aura looks (effects/auraProfile.js)
+        const { ownerId, skill, currentPlaceId, casterStats, aura, dirYaw, weaponName, parts, weaponType, metalColor, debugTargetId, debugTargetPos } = data
         const charState = getCharState()
         if (!charState) return
         if (charState.currentPlace.placeId !== currentPlaceId) return
@@ -526,7 +527,7 @@ export function activateOnSocketListeners(socket){
             }
         }
 
-        activateSkill(ownerId, skill, casterStats)
+        activateSkill(ownerId, skill, casterStats, aura)
     })
     socket.on("player-attacked", data => {
         if (!isSocketOn) return
@@ -1371,6 +1372,36 @@ export function activateOnSocketListeners(socket){
         if (!player) return
         player.isTired = !!isTired
     })
+    // another player started or stopped bleeding (emits.js's emitBleeding) -
+    // their blood splatter runs non-stop while it lasts. Skips this client's
+    // own echo like the handler above (refreshBleeding already did mine).
+    socket.on("emitted-bleeding", data => {
+        const { ownerId, isBleeding, currentPlaceId } = data
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (!charState) return
+        if (getGameStatus() === "loading") return
+        if (currentPlaceId !== charState.currentPlace.placeId) return
+        if (ownerId === charState.owner) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if (!player) return
+        player.isBleeding = !!isBleeding
+        player.bloodps?.setBleeding(player.isBleeding)
+    })
+    // another player's flex aura grew while it was up (emits.js's emitAura) -
+    // redrawn at the new strength. Skips this client's own echo like the
+    // handlers above (refreshMyAura already redrew mine).
+    socket.on("emitted-aura", data => {
+        const { ownerId, aura, currentPlaceId } = data
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (!charState) return
+        if (getGameStatus() === "loading") return
+        if (currentPlaceId !== charState.currentPlace.placeId) return
+        if (ownerId === charState.owner) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        player?.auraz?.update(aura)
+    })
     socket.on("emitted-loc", data => {
         const { ownerId, pos, dirTarg, mode, weaponName} = data
         const charState = getCharState()
@@ -1626,6 +1657,9 @@ export function playerDied(ownerId, currentPlaceId) {
     player._attacking = false
     player._minning = false
     player.mode = "death"
+    // a bleeding player stops bleeding once dead
+    player.isBleeding = false
+    player.bloodps?.setBleeding(false)
 
     player.anims.forEach(anim => {
         anim.weight = 0
@@ -1674,6 +1708,10 @@ export function removePlayer({ ownerId, playerName, placeId }){
     // playersOnScene filter, since seating.js finds the player through it
     releaseSeatOf(ownerId)
     playerToRemove.anims.forEach(anim => anim.dispose())
+    // the body's dispose below doesn't take the blood splatter with it - a
+    // bleeding one would keep spraying where they stood. (false) keeps
+    // particlesystem.js's shared texture cache
+    playerToRemove.bloodps?.ps.dispose(false)
     playersOnScene = playersOnScene.filter(playr => playr.owner !== ownerId)
 
     // remove this owner from the enemy target

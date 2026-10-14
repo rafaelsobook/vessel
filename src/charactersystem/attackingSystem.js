@@ -1,5 +1,5 @@
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
-import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd, updateMyDetailsOL } from "./characterstate"
+import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd, updateMyDetailsOL, getMyAuraProfile } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 import { getSceneDet } from "../main/main"
 import { castOffenseSkill, castMulticast, castBuffSkill, castDashSkill, castHealSkill, castPurificationSkill, castBarrierSkill, castBlinkstrikeSkill, cancelPendingCast } from "../creations/skillEffects"
@@ -84,7 +84,9 @@ export function attack(_attackInfo, attackAnimName){
         weaponEntry?.mesh.addRotation(-Math.PI, 0, 0)
     }
 }
-export function activateSkill(ownerId, skillDetail, casterStats){
+// aura - flexaura only: the caster's aura profile (effects/auraProfile.js),
+// riding the same relay as casterStats (skillsui.js's activate-skill emit)
+export function activateSkill(ownerId, skillDetail, casterStats, aura){
     const player = getPlayersOnScene().find(pl => pl.owner === ownerId)
     if(!player) return
 
@@ -129,7 +131,9 @@ export function activateSkill(ownerId, skillDetail, casterStats){
     switch(skillDetail.name){
         case "flexaura":
             if(skillDetail.isActive){
-                player.auraz.start()
+                // how strong it looks (effects/aura.js) - mine from my live
+                // stats, anyone else's from what their own client sent
+                player.auraz.start(isMe ? getMyAuraProfile() : aura)
             } else {
                 player.auraz.stop()
             }
