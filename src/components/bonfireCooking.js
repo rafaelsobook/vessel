@@ -1,4 +1,4 @@
-import { Color3, MeshBuilder, StandardMaterial, Texture, TransformNode } from "@babylonjs/core"
+import { Color3, LoadAssetContainerAsync, Matrix, Mesh, MeshBuilder, StandardMaterial, Texture, TransformNode, Vector3 } from "@babylonjs/core"
 import * as GUI from "@babylonjs/gui"
 import { getCharState, updateMyDetailsOL } from "../charactersystem/characterstate.js"
 import { obtain, openUpdateInventory } from "../charactersystem/inventory.js"
@@ -485,17 +485,101 @@ function buildSpit(s, bonfire){
     barAnchor.position.y = SPIT_HEIGHT + (1 - ROD_THROUGH_AT) * MUSHROOM_ON_SPIT + BAR_ABOVE_MUSHROOM
     cook.barAnchor = barAnchor
 
-    // the raw item's name is its mushroom kind (tcp's mushroomLibrary.ts) -
-    // its skin on the shared model
-    createMushroomModel(s.scene, cook.raw.name, MUSHROOM_ON_SPIT).then(model => {
+    createSpitFood(s.scene, cook.raw).then(food => {
         // picked up (or the place left) before the model finished loading
-        if(!model || bonfire._cook !== cook){ model?.root.dispose(); return }
-        model.root.parent = axle
-        model.root.position.y = -ROD_THROUGH_AT * MUSHROOM_ON_SPIT
-        model.mesh.material.maxSimultaneousLights = SPIT_MAX_LIGHTS
-        cook.mat = model.mesh.material
-        cook.startGlow = cook.mat.emissiveColor.clone()
+        if(!food || bonfire._cook !== cook){ food?.root.dispose(); return }
+        food.root.parent = axle
+        const mat = food.mesh.material
+        mat.maxSimultaneousLights = SPIT_MAX_LIGHTS
+        cook.mat = mat
+        cook.startGlow = mat.emissiveColor.clone()
+        barAnchor.position.y = SPIT_HEIGHT + food.top + BAR_ABOVE_MUSHROOM
     })
+}
+
+// ── what goes on the spit ─────────────────────────────────────────────────────
+
+// Cookables with a model of their own, by item name - laid along the rod,
+// `length` long (bonfire-local units), the rod through their middle. Anything
+// not listed is a mushroom (tcp's mushroomLibrary.ts - the item's name is its
+// kind, its skin on the shared mushroom model).
+const SPIT_MODELS = {
+    // tcp's meatLoots.ts - the standing werewolves' Beast Meat
+    standingwolfmeat: { path: "./models/outdors/standingwolfmeat.glb", length: 0.6 },
+}
+
+// scene -> Map(path -> Promise<Mesh|null>): each model loaded once, off its glTF
+// __root__ and baked (the same as createmushroom.js's base), hidden - every
+// roast is a clone of it
+const foodBases = new WeakMap()
+function loadFoodBase(scene, path){
+    let bases = foodBases.get(scene)
+    if(!bases){ bases = new Map(); foodBases.set(scene, bases) }
+    if(bases.has(path)) return bases.get(path)
+    const loading = (async () => {
+        const container = await LoadAssetContainerAsync(path, scene)
+        if(scene.isDisposed){ container.dispose(); return null }
+        container.addAllToScene()
+        const parts = container.meshes.filter(m => m.getTotalVertices() > 0)
+        parts.forEach(m => { m.setParent(null); m.bakeCurrentTransformIntoVertices() })
+        const base = parts.length > 1 ? Mesh.MergeMeshes(parts, true, true, undefined, false, true) : parts[0]
+        container.meshes.filter(m => m !== base && !m.isDisposed()).forEach(m => m.dispose())
+        base.isVisible = false
+        base.isPickable = false
+        base.refreshBoundingInfo()
+        // its own textures on a StandardMaterial, like the mushroom's - the
+        // browning and ember glow (ROASTED_TINT/GLOW) and the fire's light are
+        // tuned for that. On the glb's PBR material the fire's close point
+        // light and the glow washed it out to a flat, untextured peach.
+        const pbr = base.material
+        const mat = new StandardMaterial(`${base.name}_spitMat`, scene)
+        mat.diffuseTexture = pbr?.albedoTexture ?? pbr?.diffuseTexture ?? null
+        mat.bumpTexture = pbr?.bumpTexture ?? null
+        mat.specularColor = new Color3(0.08, 0.08, 0.08)
+        base.material = mat
+        pbr?.dispose(false, false)
+        return base
+    })().catch(error => {
+        console.warn(`[bonfireCooking] ${path} didn't load - that food roasts as a mushroom`, error?.message ?? error)
+        return null
+    })
+    bases.set(path, loading)
+    return loading
+}
+
+// The item on the spit, in the axle's space (the rod along x through its
+// origin): { root, mesh, top } - top is how far its highest point sits above
+// the rod. Its material is its own copy, free to brown as it roasts.
+async function createSpitFood(scene, item){
+    const own = SPIT_MODELS[item.name]
+    const base = own ? await loadFoodBase(scene, own.path) : null
+    if(scene.isDisposed) return null
+    if(!base){
+        const model = await createMushroomModel(scene, item.name, MUSHROOM_ON_SPIT)
+        if(!model) return null
+        // the rod through its stem
+        model.root.position.y = -ROD_THROUGH_AT * MUSHROOM_ON_SPIT
+        return { ...model, top: (1 - ROD_THROUGH_AT) * MUSHROOM_ON_SPIT }
+    }
+    const root = new TransformNode(`spitFood_${item.name}`, scene)
+    const mesh = base.clone(`spitFood_${item.name}_mesh`)
+    mesh.isVisible = true
+    mesh.isPickable = false
+    mesh.material = base.material.clone(`${base.material.name}_spit`)
+    mesh.parent = root
+    // lengthwise along the rod, scaled to its length, centred on it - so it
+    // turns about its own length. (The clone's baked quaternion would
+    // override rotation.)
+    const { minimum, maximum } = base.getBoundingInfo().boundingBox
+    const size = maximum.subtract(minimum)
+    const turn = size.z > size.x ? Math.PI / 2 : 0
+    const scale = own.length / Math.max(size.x, size.z)
+    mesh.rotationQuaternion = null
+    mesh.rotation.y = turn
+    mesh.scaling.setAll(scale)
+    const centre = Vector3.TransformCoordinates(minimum.add(maximum).scaleInPlace(0.5 * scale), Matrix.RotationY(turn))
+    mesh.position.copyFrom(centre.negateInPlace())
+    return { root, mesh, top: size.y * scale / 2 }
 }
 
 // "Roasting Ember Cap" over a bar that fills, above the mushroom on the spit

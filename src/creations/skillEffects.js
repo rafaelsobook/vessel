@@ -43,8 +43,8 @@ import { getSceneDet } from "../main/main.js"
 import { updateStatUI } from "../charactersystem/statsSystem.js"
 import { camShake } from "../tools/camera.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
-import { sampleTerrainSurfaceHeight } from 'infterrain'
-import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
+import { openworldGroundY } from '../tools/groundHeight.js'
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 import { SKILLS_BY_NAME, getSkillEffect } from "../staticRecources/skillsData.js"
 import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
@@ -508,7 +508,7 @@ function computeSelfCastGroundPos(charState, player){
     const x = player.body.position.x
     const z = player.body.position.z
     const y = isOpenworld
-        ? sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS)
+        ? openworldGroundY(x, z)
         : player.body.position.y - capsuleHeight / 2
     return new Vector3(x, y, z)
 }
@@ -3001,7 +3001,7 @@ function triggerGroundSpikeLine(scene, charState, skill, player, spawnPos, forwa
         const lateral = randNum(-GROUND_SPIKE_LATERAL_JITTER, GROUND_SPIKE_LATERAL_JITTER)
         const groundX = spawnPos.x + flatForward.x * dist + perp.x * lateral
         const groundZ = spawnPos.z + flatForward.z * dist + perp.z * lateral
-        const groundY = isOpenworld ? sampleTerrainSurfaceHeight(groundX, groundZ, OPENWORLD_TERRAIN_VERTS) : flatGroundY
+        const groundY = isOpenworld ? openworldGroundY(groundX, groundZ) : flatGroundY
         const groundPos = new Vector3(groundX, groundY, groundZ)
         setTimeout(() => spawnGroundSpike(scene, charState, skill, groundPos, powerScale), i * staggerMs)
     }
@@ -3736,7 +3736,7 @@ function computeGroundAOEPos(charState, player, distance, forward){
     const groundX = originX + flatForward.x * distance
     const groundZ = originZ + flatForward.z * distance
     const groundY = isOpenworld
-        ? sampleTerrainSurfaceHeight(groundX, groundZ, OPENWORLD_TERRAIN_VERTS)
+        ? openworldGroundY(groundX, groundZ)
         : player.body.position.y - capsuleHeight / 2
     return new Vector3(groundX, groundY, groundZ)
 }

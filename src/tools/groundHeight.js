@@ -1,6 +1,16 @@
 import { Vector3 } from "@babylonjs/core"
 import { sampleTerrainSurfaceHeight } from 'infterrain'
 import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
+import { castleSurfaceY } from "../creations/createcastle.js"
+
+// The openworld's ground at (x, z) for anything placed by height rather than
+// by physics - enemies, bots, projectiles, skill effects. The terrain, unless
+// a castle (creations/createcastle.js) stands there: its courtyard sits on a
+// terrace above the terrain, and its wall walks, stairs and gate ramp above
+// that, so the terrain alone left everything there buried under the castle.
+export function openworldGroundY(x, z){
+    return Math.max(sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS), castleSurfaceY(x, z))
+}
 
 // sampleTerrainSurfaceHeight (infterrain) is a coarse, interpolated
 // approximation of the terrain's real height - fine for enemy Y

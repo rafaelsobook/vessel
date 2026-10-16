@@ -322,9 +322,9 @@ function sitOnNode(scene, where, ownerId, animName, opts){
 
     const isMe = ownerId === myOwner()
     if(isMe){
-        openCloseInteractBtn(false, false)
+        // openCloseInteractBtn(false, false)
         // before setCanPress(false) - same reason sitDown gives
-        forceStopMovement()
+        // forceStopMovement()
     }
     ensureSeatState(scene, player.currentPlaceId)
     // off whatever they were on first: root is back on the body (the frame the

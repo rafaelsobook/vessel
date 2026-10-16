@@ -23,8 +23,8 @@ import { receiveAchievement } from "../charactersystem/achievement.js"
 import { createSlimeMat, createCrystalMat } from "./skins.js"
 import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 import { createBloodSplatter } from "../tools/particlesystem.js"
-import { sampleTerrainSurfaceHeight } from 'infterrain'
-import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
+import { openworldGroundY } from "../tools/groundHeight.js"
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
 import { hasDungeonLineOfSight } from "../tools/dungeonSight.js"
@@ -54,8 +54,9 @@ export default function createEnemy(scene, det) {
     // interpolated grid the actual rendered chunk mesh was built from
     // (OPENWORLD_TERRAIN_VERTS), rather than the exact analytical noise
     // curve, which the mesh only approximates between samples - see that
-    // constant's own comment.
-    const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? sampleTerrainSurfaceHeight(det.x, det.z, OPENWORLD_TERRAIN_VERTS) : det.y
+    // constant's own comment. openworldGroundY - that, or a castle's surface
+    // where one stands (tools/groundHeight.js)
+    const groundY = det.currentPlaceId === OPENWORLD_PLACE_ID ? openworldGroundY(det.x, det.z) : det.y
     let yPos = groundY+(det.bodyHeight/2) + 0.05
     const body = createMesh(scene, `enemy.${det._id}`, { size: det.bodyWidenes, height: det.bodyHeight }, //height 1.7 // size: .5
         { x: det.x, y:yPos , z: det.z }, 0.3, false, true)
@@ -69,7 +70,7 @@ export default function createEnemy(scene, det) {
     if(det.currentPlaceId === OPENWORLD_PLACE_ID){
         const Y_CORRECTION_THRESHOLD = 1 // ignore tiny float noise, only correct real desync
         const yCheckInterval = setInterval(() => {
-            const correctY = sampleTerrainSurfaceHeight(body.position.x, body.position.z, OPENWORLD_TERRAIN_VERTS) + det.bodyHeight / 2 + 0.05
+            const correctY = openworldGroundY(body.position.x, body.position.z) + det.bodyHeight / 2 + 0.05
             if(Math.abs(body.position.y - correctY) > Y_CORRECTION_THRESHOLD){
                 body.position.y = correctY
                 emitEnemyYCorrection(det._id, correctY, body.position.x, body.position.z)
@@ -747,7 +748,7 @@ export default function createEnemy(scene, det) {
     playRandomAnim(entries.animationGroups, "idle", true)
 
     //  sounds
-    const  { runSound, deathSound, hitSound, attackSound } = monsterSounds(scene, det, body)
+    const  { runSound, deathSound, hitSound, attackSound, roarSound } = monsterSounds(scene, det, body, entries.animationGroups)
 
     // blood splatter on hit - same createBloodSplatter (tools/particlesystem.js)
     // createcharacter.js's own player bloodps already uses, just emitting
@@ -818,6 +819,7 @@ export default function createEnemy(scene, det) {
         deathSound,
         hitSound,
         attackSound,
+        roarSound,
         bloodps,
 
         intervalWillAttack
@@ -834,29 +836,39 @@ function createSoundSafe(name, url, scene, options){
         return null
     }
 }
-function monsterSounds(scene, det, body){
-    const runSound = createSoundSafe(`${det.modelStyle}run`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}run.mp3`, scene, {
+function monsterSounds(scene, det, body, anims){
+    const runSound = createSoundSafe(`${det.modelStyle}run`, `./sounds/monsters/${det.modelStyle}/run.mp3`, scene, {
         maxDistance: 30, spatialSound: true, loop: false, autoplay: false
     })
     runSound?.setPlaybackRate(0.5)
 
-    const deathSound = createSoundSafe(`${det.modelStyle}death`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}death.mp3`, scene, {
+    const deathSound = createSoundSafe(`${det.modelStyle}death`, `./sounds/monsters/${det.modelStyle}/death.mp3`, scene, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
 
-    const hitSound = createSoundSafe(`${det.modelStyle}hitbynosharp`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}hitbynosharp.mp3`, scene, {
+    const hitSound = createSoundSafe(`${det.modelStyle}hitbynosharp`, `./sounds/monsters/${det.modelStyle}/hitbynosharp.mp3`, scene, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
-    const attackSound = createSoundSafe(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/${det.modelStyle}attack.mp3`, scene, {
+    const attackSound = createSoundSafe(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/attack.mp3`, scene, {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
+
+    // roar.mp3 in the monster's own folder, played with its roar clip
+    // (startEnemyRoar) - only loaded for a rig that has one to play it with.
+    // Carries further than the rest: it's the warning that one's coming.
+    const roarSound = pickAnimVariant(anims, "roar")
+        ? createSoundSafe(`${det.modelStyle}roar`, `./sounds/monsters/${det.modelStyle}/roar.mp3`, scene, {
+            maxDistance: 80, spatialSound: true, loop: false, autoplay: false
+        })
+        : null
 
     runSound?.attachToMesh(body)
     deathSound?.attachToMesh(body)
     hitSound?.attachToMesh(body)
     attackSound?.attachToMesh(body)
+    roarSound?.attachToMesh(body)
 
-    return { runSound, deathSound, hitSound, attackSound }
+    return { runSound, deathSound, hitSound, attackSound, roarSound }
 }
 function createChaseDetector(scene){
     const detector = createMesh(scene, "chasedetector", { size: 19, height: 0.1 }, { x: 0, y: 0, z: 0 }, 1, false, false)
@@ -1244,6 +1256,8 @@ export function startEnemyRoar(enemy){
     if(enemy.runSound?.isPlaying) enemy.runSound.stop()
     roar.stop()
     roar.play(false)
+    enemy.roarSound?.stop()
+    enemy.roarSound?.play()
     const fps = roar.targetedAnimations[0]?.animation.framePerSecond || 60
     const roarMs = (roar.to - roar.from) / fps * 1000 / (roar.speedRatio || 1)
     enemy._roarAnim = roar

@@ -1,6 +1,7 @@
 import { setWorldWeather } from "../components/weatherSystem.js";
+import { showHitmark } from "../effects/hitmarks.js"
 import { setDayNightState } from "../components/dayNightSystem.js";
-import { deductHp, getCharState } from "../charactersystem/characterstate"
+import { deductHp, getCharState, getTotalDefense } from "../charactersystem/characterstate"
 import { createCharacter, capsuleHeight } from "../charactersystem/createcharacter"
 import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
@@ -24,8 +25,8 @@ import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
 import { popStatusEffect } from "../tools/popupUI"
 import { receiveWorldChatMessage, appendSystemMessage, sendWorldMessage } from "../components/worldChatSystem"
-import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
-import { sampleTerrainSurfaceHeight } from 'infterrain'
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
+import { openworldGroundY } from '../tools/groundHeight.js'
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
@@ -500,7 +501,7 @@ export function activateOnSocketListeners(socket){
                     // first, the circle spawns using that stale height instead
                     // of waiting for the next render frame's own correction.
                     if(player.currentPlaceId === OPENWORLD_PLACE_ID){
-                        player.body.position.y = sampleTerrainSurfaceHeight(player.body.position.x, player.body.position.z, OPENWORLD_TERRAIN_VERTS) + capsuleHeight / 2 + 0.05
+                        player.body.position.y = openworldGroundY(player.body.position.x, player.body.position.z) + capsuleHeight / 2 + 0.05
                     }
                 }
 
@@ -590,59 +591,101 @@ export function activateOnSocketListeners(socket){
         const victimPos = victimPlayer.body.position
         theEnemyToAttack.body.lookAt(new Vector3(victimPos.x, theEnemyToAttack.body.position.y, victimPos.z), 0,0,0)
         
-        // stopAnim(theEnemyToAttack.anims, data.attackAnimName, true)
-        // enemy animation
-        playAnim(theEnemyToAttack.anims, data.attackAnimName)
-        // player hit animation
-        // playAnim(victimPlayer.anims, "hit1")
-        // victimPlayer.characterAnimations.playAction(victimPlayer.anims, "hit1", 1)
-        theEnemyToAttack.attackSound?.play()
+        // One attack is one swing - or, for an enemy whose det.attackCombo
+        // lists several (the standing werewolves' attack1 then attack2, tcp
+        // genenemy.ts), those swings back to back. The attack's damage is
+        // split evenly across them, each share landing as its swing starts,
+        // so a combo hurts no more in total than a single swing did. Bleed
+        // and the other effects ride on the first swing only, same odds as
+        // before. (deductHp takes the victim's defense off EVERY call, so
+        // the shares are worked out on the victim's client from what's left
+        // after defense - see landEnemyHit - not by halving the raw number,
+        // which would have taken defense off twice.)
+        const enemy = theEnemyToAttack
+        const swings = enemy.det?.attackCombo?.length ? enemy.det.attackCombo : [data.attackAnimName]
+        const clips = swings.map(name => enemy.anims.find(a => a.name.toLowerCase() === name.toLowerCase()))
+        const clipMs = clip => clip
+            ? (clip.to - clip.from) / (clip.targetedAnimations[0]?.animation.framePerSecond || 60) * 1000
+            : 0
+        // the whole combo has to be over before this enemy's next attack
+        // (createEnemy.js schedules one every atkSpd * 900 ms) - a quick
+        // attacker plays it a little faster rather than cut into it
+        const comboMs = clips.reduce((sum, clip) => sum + clipMs(clip), 0)
+        const speed = swings.length > 1 ? Math.max(1, comboMs / (data.atkSpd * 900 * 0.95)) : 1
+        // a new attack cancels what's left of the last one's combo
+        const comboId = enemy._comboId = (enemy._comboId ?? 0) + 1
 
-        // weaponBlocking (createcharacter.js/inputMovement.js's own r-click
-        // hold-to-block, duelSystem.js's applyDamageToOpponent for the
-        // reverse direction) - a blocking victim gets NO blood and no hit
-        // reaction, just the block sound instead. Read off victimPlayer
-        // itself (playersOnScene's own createCharacter() rig, kept in sync
-        // multiplayer-wide by emits.js's emitWeaponBlock/worldsocket.js's
-        // own "emitted-weaponblock" handler above), not charState - so
-        // EVERY client watching this fight sees the same outcome, not just
-        // the victim's own client.
-        //
-        // data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD - a hit this weak reads
-        // as deflected/absorbed rather than a real wound, same visual
-        // treatment as an actual block (weaponblockS, no blood), just
-        // triggered by the damage number instead of the player's own
-        // blocking state. Unconditional/everyone-sees-it, same reasoning as
-        // weaponBlocking right above - this is armor/toughness reading as
-        // "shrugged off", not something only the victim's own client knows.
-        if(victimPlayer.weaponBlocking || data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD){
-            getAllSounds().weaponblockS?.play()
-        } else {
-            // bloodps (createcharacter.js's createBloodSplatter, emitter
-            // parented to spineBone) - victimPlayer comes from
-            // playersOnScene, the same createMyCharacter()/createCharacter()
-            // rig object that already carries one. Same one-shot play() call
-            // skillEffects.js's own stickBriefly hit reaction and
-            // duelSystem.js's melee hits use. Unconditional (not gated to
-            // victimPlayer.owner === charState.owner like the deductHp block
-            // below) - purely visual, same as the anim/sound calls right
-            // above it, everyone watching should see it land
-            victimPlayer.bloodps?.play()
+        const swing = i => {
+            if(enemy._comboId !== comboId || !enemiez.includes(enemy) || enemy.body.isDisposed()) return
+            // a follow-up swing: not if it's already turned to chasing, and
+            // it only lands on a victim still within reach (createEnemy.js's
+            // own attack range) - otherwise it's a swing at the air
+            let lands = true
+            if(i > 0){
+                if(enemy._isMoving) return
+                const victim = playersOnScene.find(pl => pl.owner === targetId)
+                if(!victim?.body) return
+                const dx = victim.body.position.x - enemy.body.position.x
+                const dz = victim.body.position.z - enemy.body.position.z
+                lands = Math.hypot(dx, dz) <= enemy.det.maxDistance + 1.3
+                if(lands) enemy.body.lookAt(new Vector3(victim.body.position.x, enemy.body.position.y, victim.body.position.z), 0, 0, 0)
+            }
+            if(clips[i]) clips[i].speedRatio = speed
+            playAnim(enemy.anims, swings[i])
+            enemy.attackSound?.play()
+            if(lands) landEnemyHit(enemy, swings.length, i === 0 ? data.effects : [], swings[i])
+            if(i + 1 < swings.length) setTimeout(() => swing(i + 1), clipMs(clips[i]) / speed)
         }
-        // playAnim(theEnemyToAttack.anims, data.attackAnimName, false, ()=>{
-        //     theEnemyToAttack = enemiez.find(enem => enem._id === data._id)
-        //     if(!theEnemyToAttack) return
-        //     if(theEnemyToAttack._isMoving) return
-        //     playAnim(theEnemyToAttack.anims, "0Idle", true)
-        // })
-        if (victimPlayer.owner === charState.owner && !victimPlayer.weaponBlocking) {
+
+        // one swing connecting with the victim - everyone watching sees it,
+        // only the victim's own client takes the damage
+        // shares: how many swings this attack's damage is split across;
+        // swingAnim: the clip this swing plays
+        const landEnemyHit = (enemy, shares, effects, swingAnim) => {
+            const victimPlayer = playersOnScene.find(victim => victim.owner === targetId)
+            if(!victimPlayer) return
+            // weaponBlocking (createcharacter.js/inputMovement.js's own r-click
+            // hold-to-block, duelSystem.js's applyDamageToOpponent for the
+            // reverse direction) - a blocking victim gets NO blood and no hit
+            // reaction, just the block sound instead. Read off victimPlayer
+            // itself (playersOnScene's own createCharacter() rig, kept in sync
+            // multiplayer-wide by emits.js's emitWeaponBlock/worldsocket.js's
+            // own "emitted-weaponblock" handler above), not charState - so
+            // EVERY client watching this fight sees the same outcome, not just
+            // the victim's own client.
+            //
+            // data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD - a hit this weak reads as
+            // deflected/absorbed rather than a real wound, same visual
+            // treatment as an actual block (weaponblockS, no blood), just
+            // triggered by the damage number instead of the player's own
+            // blocking state. Unconditional/everyone-sees-it, same reasoning as
+            // weaponBlocking right above - this is armor/toughness reading as
+            // "shrugged off", not something only the victim's own client knows.
+            // (the whole attack's damage - a combo's swings bleed as much as the one swing did)
+            if(victimPlayer.weaponBlocking || data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD){
+                getAllSounds().weaponblockS?.play()
+            } else {
+                // bloodps (createcharacter.js's createBloodSplatter, emitter
+                // parented to spineBone) - the same one-shot play() call
+                // skillEffects.js's own stickBriefly hit reaction and
+                // duelSystem.js's melee hits use. Unconditional (not gated to
+                // the victim's own client like the deductHp block below) -
+                // purely visual, everyone watching should see it land
+                victimPlayer.bloodps?.play()
+                // and if this swing leaves a mark (det.hitmarks - the
+                // werewolves' claw rake on attack2), it shows on the victim -
+                // in the world, so everyone watching sees it (effects/hitmarks.js)
+                const mark = enemy.det?.hitmarks?.find(h => h.attackType === "normal" && h.animationName?.toLowerCase() === swingAnim?.toLowerCase())
+                if(mark) showHitmark(enemy.body.getScene(), mark.hitmarkTexture, victimPlayer.body)
+            }
+            if (victimPlayer.owner !== charState.owner || victimPlayer.weaponBlocking) return
+            // this swing's raw share: deductHp takes defense off it, leaving
+            // 1/shares of what the single swing would have dealt after defense
+            const defense = getTotalDefense()
+            const dmg = (data.dmg + defense * (shares - 1)) / shares
             setTimeout( async () => {
-                // const vPos = victimPlayer.body.position;
-                // const enemPos = theEnemyToAttack.body.position;
-                // const enemyAccuracy = theEnemyToAttack.det.stats.accuracy
-                // if (charState.stats.accuracy >= Math.random() * enemyAccuracy * 15) return popStatusEffect('missed', "#f5f5f5")
-                camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
-                // victimPlayer.punchedS.play()
+                const shakeScene = getSceneDet().scene
+                if(shakeScene) camShake(shakeScene, shakeScene.activeCamera, .01, true)
 
                 // dark magic's curse (see skillsData.js's header comment,
                 // skillEffects.js's hit handler) - a cursed enemy's own
@@ -652,21 +695,22 @@ export function activateOnSocketListeners(socket){
                 // (only the victim's own client acts on it) so this doesn't
                 // fire once per client watching the fight and multi-apply
                 // the self-damage.
-                if(theEnemyToAttack._cursed){
+                if(enemy._cursed){
                     emitEnemyIsHit({
                         playerId: charState.owner,
-                        dmgDetails: { physicalDmg: data.dmg, weaponDmg: 0 },
-                        targetId: theEnemyToAttack._id,
+                        dmgDetails: { physicalDmg: dmg, weaponDmg: 0 },
+                        targetId: enemy._id,
                         currentPlaceId: charState.currentPlace.placeId,
                     })
                     return
                 }
 
                 // a death reports itself (characterstate.js's die)
-                await deductHp(data.dmg, data.effects)
-
+                await deductHp(dmg, effects)
             }, data.atkSpd / 5)
         }
+
+        swing(0)
     })
     // OPEN PVP - tcp/index.ts's own "playerIsHit" handler relays this the
     // moment ANY player's own atkCollider exit trigger (createcharacter.js's
@@ -990,7 +1034,7 @@ export function activateOnSocketListeners(socket){
         enemy.body.position.x = data.x
         enemy.body.position.z = data.z
         if(enemy.det.currentPlaceId === OPENWORLD_PLACE_ID){
-            enemy.body.position.y = sampleTerrainSurfaceHeight(data.x, data.z, OPENWORLD_TERRAIN_VERTS) + enemy.det.bodyHeight / 2 + 0.05
+            enemy.body.position.y = openworldGroundY(data.x, data.z) + enemy.det.bodyHeight / 2 + 0.05
         }
     })
     // MAGIC CIRCLES (see emits.js's emitSpawnCircle) - purely visual sync,
@@ -1630,7 +1674,7 @@ export function reCreateMeshesInScene() {
         const { x, z } = grainTcpInfo.pos
         // tcp has no terrain - openworld ground height only exists client-side
         const groundY = grainTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
-            ? sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS)
+            ? openworldGroundY(x, z)
             : grainTcpInfo.pos.y
         createGrainMesh(scene, { x, y: groundY, z }, grainTcpInfo.grainId)
     })

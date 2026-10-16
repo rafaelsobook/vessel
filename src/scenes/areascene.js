@@ -13,6 +13,7 @@ import { createArea } from "../creations/createArea.js";
 import { createVillage } from "../creations/createvillage.js";
 import { createRoom } from "../creations/createroom.js";
 import { createCastle } from "../creations/createcastle.js";
+import { OPENWORLD_CASTLES } from "../constants/castles.js";
 import { createGraveyards, streamGraveyards } from "../creations/creategraveyard.js";
 import { createStoneScriptures } from "../creations/createstonescripture.js";
 import { createDuelArena } from "../creations/createduelarena.js";
@@ -73,18 +74,23 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    const bigwolf = await SceneLoader.ImportMeshAsync("", "", "./models/monsters/standingwolf.glb", scene);
-    bigwolf.meshes[0].position = new Vector3(0, 0, 84)
-    // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
-    const wolfLowerSpine = bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren()[0]
-    sitHere(wolfLowerSpine, getCharState().owner, "sittinglower1", { rotation: {x:Math.PI/2, y:Math.PI/2,z:0}, position: {x:0,y:1,z:0} })
-    bigwolf.animationGroups.forEach(anim => {
-        // console.log("anim.name", anim.name)
-        if(anim.name === "death") {
-            // console.log("play roar1")
-            anim.play();
-        }else anim.stop()
-    });
+    // const bigwolf = await SceneLoader.ImportMeshAsync("", "", "./models/monsters/standingwolf.glb", scene);
+    // bigwolf.meshes[0].position = new Vector3(0, 0, 84)
+    // // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
+    // const wolfLowerSpine = bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren()[0]
+    // sitHere(wolfLowerSpine, getCharState().owner, "sittinglower1", { rotation: {x:0, y:Math.PI/2,z:Math.PI/2}, position: {x:0,y:0.5,z:0.22} })
+    // setInterval(() => {
+    //     setCanPress(true)
+    //     // sitHere(wolfLowerSpine, getCharState().owner, "sittinglower1", { rotation: {x:0, y:Math.PI/2,z:Math.PI/2}, position: {x:0,y:0.5,z:0.22} })
+    //     openCloseInteractBtn(false, false)
+    // }, 5000)
+    // bigwolf.animationGroups.forEach(anim => {
+    //     // console.log("anim.name", anim.name)
+    //     if(anim.name === "death") {
+    //         // console.log("play roar1")
+    //         anim.play();
+    //     }else anim.stop()
+    // });
     let reg
     if(placeDetail.areaType === "village"){
         reg = await getVillageAssetRegistry()
@@ -255,18 +261,16 @@ export async function areaScene(placeDetail){
 
             
 
-            // medieval castle (placeId 888 only), ~100 units north of the
-            // player's own openworld spawn (0, 500) - see createcastle.js's
-            // own header comment for the full build/merge/physics rundown.
-            // Called here (not from a data-driven optionalObjects entry) so
-            // it can sample the REAL terrain height at (0, 600) live via
-            // sampleTerrainSurfaceHeight, now that createOpenWorld above has
-            // actually generated the chunk covering it - a plain
-            // localroomdb.js data entry has no scene/terrain access at
-            // author time to do that itself (see the witch towers' own
+            // the castles (placeId 888 only) - the original ~100 units north
+            // of the spawn (0, 500) and four more ~1000 out, one each way (see
+            // constants/castles.js; createcastle.js's header for how they sit
+            // on uneven ground). Built here, not from optionalObjects data,
+            // because each samples the real terrain under it live via
+            // sampleTerrainSurfaceHeight - a localroomdb.js data entry has no
+            // scene/terrain access at author time (see the witch towers' own
             // hardcoded y guess for what that limitation looks like).
             if(placeDetail.placeId === 888){
-                createCastle(scene, { x: 0, z: 600 })
+                OPENWORLD_CASTLES.forEach(spot => createCastle(scene, spot))
                 // four stone scriptures, one per cardinal direction, ringed
                 // 15 units out from the player's own spawn point (0, 500) -
                 // see createstonescripture.js's own header comment for the

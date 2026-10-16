@@ -4,8 +4,9 @@ import { playAnim, ANIM_STATE, findAnimVariants } from "../tools/animation.js";
 import { getGameStatus } from "../main/main.js";
 import { Vector3, PhysicsRaycastResult } from "@babylonjs/core";
 import { updateNpcPatrol } from "../npc/npcPatrol.js";
-import { sampleTerrainSurfaceHeight } from 'infterrain'
-import { OPENWORLD_PLACE_ID, OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js";
+import { openworldGroundY } from '../tools/groundHeight.js'
+import { isNearCastle } from "../creations/createcastle.js";
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js";
 import { emitEnemyChasePosition } from "./emits.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
 import { stopEnemyEating, isEnemyRoaring, stopEnemyRoar } from "../enemies/createEnemy.js";
@@ -27,6 +28,9 @@ const OPENWORLD_ENEMY_HIDE_DIST = 200
 const OPENWORLD_ENEMY_SHOW_DIST = 180
 const OPENWORLD_ENEMY_HIDE_DIST_SQ = OPENWORLD_ENEMY_HIDE_DIST * OPENWORLD_ENEMY_HIDE_DIST
 const OPENWORLD_ENEMY_SHOW_DIST_SQ = OPENWORLD_ENEMY_SHOW_DIST * OPENWORLD_ENEMY_SHOW_DIST
+// how close to a castle a wandering enemy starts steering around its walls
+// (createcastle.js isNearCastle) - past its avoidance rays' reach
+const CASTLE_STEER_MARGIN = 6
 
 // openworld projectile ground-following (see the getProjectilesOnScene loop
 // below) - a straight-line projectile fired across sloping terrain will
@@ -429,7 +433,7 @@ let renderCallback = function () {
         // willDetectSurface === false opts out entirely (see that constant
         // block's own comment) - default (unset/true) still gets this.
         if(proj.placeId === OPENWORLD_PLACE_ID && proj.willDetectSurface !== false){
-            const groundY = sampleTerrainSurfaceHeight(proj.body.position.x, proj.body.position.z, OPENWORLD_TERRAIN_VERTS)
+            const groundY = openworldGroundY(proj.body.position.x, proj.body.position.z)
             const clearance = proj.body.position.y - groundY
             if(clearance <= PROJECTILE_GROUND_FAR){
                 if(clearance < PROJECTILE_GROUND_LOW){
@@ -493,7 +497,7 @@ let renderCallback = function () {
             // first frame instead of staying stuck underground until it
             // happens to move again.
             if(player.currentPlaceId === OPENWORLD_PLACE_ID){
-                player.body.position.y = sampleTerrainSurfaceHeight(player.body.position.x, player.body.position.z, OPENWORLD_TERRAIN_VERTS) + capsuleHeight / 2 + 0.05
+                player.body.position.y = openworldGroundY(player.body.position.x, player.body.position.z) + capsuleHeight / 2 + 0.05
             }
         }
 
@@ -654,7 +658,7 @@ let renderCallback = function () {
         // branch stops claiming the frame.
         if(en._isMoving && en._wanderTarget){
             if(en.det.currentPlaceId === OPENWORLD_PLACE_ID){
-                en.body.position.y = sampleTerrainSurfaceHeight(en.body.position.x, en.body.position.z, OPENWORLD_TERRAIN_VERTS) + en.det.bodyHeight / 2 + 0.05
+                en.body.position.y = openworldGroundY(en.body.position.x, en.body.position.z) + en.det.bodyHeight / 2 + 0.05
             }
 
             const dx = en.body.position.x - en._wanderTarget.x
@@ -672,7 +676,21 @@ let renderCallback = function () {
                 // frame instead of the enemy freezing in place post-dodge.
                 if(!en._targetId) en._isMoving = false
             } else {
+                // near a castle, around its walls rather than through them -
+                // the chase's own steering (chaseHeading), toward the waypoint.
+                // Boxed in, it gives up on the waypoint. Elsewhere it strolls
+                // straight there as it always has.
                 _lookTarget.set(en._wanderTarget.x, en.body.position.y, en._wanderTarget.z)
+                if(en.det.currentPlaceId === OPENWORLD_PLACE_ID && isNearCastle(en.body.position.x, en.body.position.z, CASTLE_STEER_MARGIN)){
+                    const heading = chaseHeading(en, en._wanderTarget, dist)
+                    if(!heading){
+                        en._wanderTarget = null
+                        en._isDodging = false
+                        if(!en._targetId) en._isMoving = false
+                        return
+                    }
+                    _lookTarget.set(en.body.position.x + heading.x, en.body.position.y, en.body.position.z + heading.z)
+                }
                 en.body.lookAt(_lookTarget)
 
                 // a plain wander (not a dodge burst) strolls at its own pace
@@ -741,7 +759,7 @@ let renderCallback = function () {
                 // it never ran once close enough to attack - the enemy would freeze
                 // at its last pre-attack height and visibly float/sink while attacking.
                 if(en.det.currentPlaceId === OPENWORLD_PLACE_ID){
-                    en.body.position.y = sampleTerrainSurfaceHeight(en.body.position.x, en.body.position.z, OPENWORLD_TERRAIN_VERTS) + en.det.bodyHeight / 2 + 0.05
+                    en.body.position.y = openworldGroundY(en.body.position.x, en.body.position.z) + en.det.bodyHeight / 2 + 0.05
                 }
 
                 // see emitEnemyChasePosition's own header comment
