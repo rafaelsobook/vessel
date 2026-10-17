@@ -29,10 +29,16 @@
 // the result.
 
 export const PUSH_WEIGHT_KIND = "depthPushWeight"
+// how far under the cover's nearest edge (a hem, cuff or collar) a vertex is,
+// in metres - negative out in the open. Blended across a triangle that
+// straddles a hem it crosses 0 right about at the hem, which is where
+// tools/tuckClip.js cuts it off
+export const TUCK_DEPTH_KIND = "tuckDepth"
 
 const REACH_OUT = 0.06
 const REACH_IN = 0.03
 const CELL = 0.05
+const EDGE_RINGS = 2
 
 const resultByOutfit = new Map()  // outfit key -> Map(mesh name -> { indices, weights })
 // by lowercased name - the game lowercases avatar.glb's mesh names, the
@@ -41,8 +47,9 @@ const nameOf = mesh => mesh.name.toLowerCase()
 const fullIndices = new WeakMap() // mesh -> its indices before any were dropped
 
 // innerMeshes: the layer to tuck in; coverMeshes: what's worn over it;
-// outfitKey: names that pairing, e.g. "skin|style1|style2"
-export function tuckUnder(innerMeshes, coverMeshes, outfitKey){
+// outfitKey: names that pairing, e.g. "skin|style1|style2"; reachOut: how far
+// out from the inner layer the cover may hang and still count as over it
+export function tuckUnder(innerMeshes, coverMeshes, outfitKey, reachOut = REACH_OUT){
     innerMeshes = innerMeshes.filter(mesh => mesh.getIndices?.() && mesh.getVerticesData?.("position"))
     innerMeshes.forEach(mesh => {
         if(!fullIndices.has(mesh)) fullIndices.set(mesh, mesh.getIndices().slice())
@@ -51,7 +58,7 @@ export function tuckUnder(innerMeshes, coverMeshes, outfitKey){
     if(!result){
         result = new Map()
         const covers = buildCoverGrid(coverMeshes)
-        innerMeshes.forEach(mesh => result.set(nameOf(mesh), tuck(mesh, fullIndices.get(mesh), covers)))
+        innerMeshes.forEach(mesh => result.set(nameOf(mesh), tuck(mesh, fullIndices.get(mesh), covers, reachOut)))
         resultByOutfit.set(outfitKey, result)
     }
     innerMeshes.forEach(mesh => {
@@ -62,6 +69,7 @@ export function tuckUnder(innerMeshes, coverMeshes, outfitKey){
         mesh.makeGeometryUnique()
         mesh.setIndices(tucked.indices)
         mesh.setVerticesData(PUSH_WEIGHT_KIND, tucked.weights, false, 1)
+        mesh.setVerticesData(TUCK_DEPTH_KIND, tucked.depth, false, 1)
     })
 }
 
@@ -91,12 +99,62 @@ function buildCoverGrid(coverMeshes){
     })
     // seen[triangle] = the query that last tested it, so one segment never
     // tests the same triangle twice when it sits in several of its cells
-    return { tris, cells, seen: new Int32Array(tris.length).fill(-1), query: 0 }
+    return { tris, cells, seen: new Int32Array(tris.length).fill(-1), query: 0, hems: coverHems(coverMeshes) }
+}
+
+// the cover's open edges - its hems, cuffs, collar, waist: edges only one of
+// its triangles uses. Counted on welded positions, so a UV seam (one edge,
+// split into two vertices a side) doesn't count as one
+function coverHems(coverMeshes){
+    const hems = []
+    coverMeshes.forEach(mesh => {
+        const pos = mesh.getVerticesData("position")
+        const idx = fullIndices.get(mesh) ?? mesh.getIndices()
+        if(!pos || !idx) return
+        const welded = new Map()
+        const id = new Int32Array(pos.length / 3)
+        for(let v = 0; v < id.length; v++){
+            const p = v * 3
+            const key = `${Math.round(pos[p] * 1e4)},${Math.round(pos[p + 1] * 1e4)},${Math.round(pos[p + 2] * 1e4)}`
+            if(!welded.has(key)) welded.set(key, v)
+            id[v] = welded.get(key)
+        }
+        const uses = new Map()
+        const edge = (a, b) => {
+            const key = a < b ? `${a},${b}` : `${b},${a}`
+            uses.set(key, (uses.get(key) ?? 0) + 1)
+        }
+        for(let i = 0; i < idx.length; i += 3){
+            const a = id[idx[i]], b = id[idx[i + 1]], c = id[idx[i + 2]]
+            edge(a, b); edge(b, c); edge(c, a)
+        }
+        uses.forEach((count, key) => {
+            if(count !== 1) return
+            const [a, b] = key.split(",").map(Number)
+            hems.push([pos[a * 3], pos[a * 3 + 1], pos[a * 3 + 2], pos[b * 3], pos[b * 3 + 1], pos[b * 3 + 2]])
+        })
+    })
+    return hems
+}
+
+// distance from a point to the nearest of the cover's hem edges
+function distanceToHem(hems, x, y, z){
+    let best = Infinity
+    for(const h of hems){
+        const dx = h[3] - h[0], dy = h[4] - h[1], dz = h[5] - h[2]
+        const len2 = dx * dx + dy * dy + dz * dz
+        let t = len2 ? ((x - h[0]) * dx + (y - h[1]) * dy + (z - h[2]) * dz) / len2 : 0
+        t = Math.max(0, Math.min(1, t))
+        const ex = h[0] + dx * t - x, ey = h[1] + dy * t - y, ez = h[2] + dz * t - z
+        const d2 = ex * ex + ey * ey + ez * ez
+        if(d2 < best) best = d2
+    }
+    return Math.sqrt(best)
 }
 
 // { indices: the triangles that keep a corner in the open, weights: 1 on
 // every vertex of a triangle that still has a corner under the cover }
-function tuck(mesh, indices, covers){
+function tuck(mesh, indices, covers, reachOut){
     const pos = mesh.getVerticesData("position")
     const nor = mesh.getVerticesData("normal")
     if(!pos || !nor || !covers.tris.length) return null
@@ -109,7 +167,7 @@ function tuck(mesh, indices, covers){
         // inside to a little outside
         covered[v] = segmentHitsCover(covers,
             pos[p] - nx * REACH_IN, pos[p + 1] - ny * REACH_IN, pos[p + 2] - nz * REACH_IN,
-            pos[p] + nx * REACH_OUT, pos[p + 1] + ny * REACH_OUT, pos[p + 2] + nz * REACH_OUT) ? 1 : 0
+            pos[p] + nx * reachOut, pos[p + 1] + ny * reachOut, pos[p + 2] + nz * reachOut) ? 1 : 0
     }
     const kept = []
     const weights = new Float32Array(count)
@@ -119,7 +177,47 @@ function tuck(mesh, indices, covers){
         kept.push(a, b, c)
         if(covered[a] || covered[b] || covered[c]) weights[a] = weights[b] = weights[c] = 1
     }
-    return { indices: kept, weights }
+    // a UV seam (down the back of a calf, say) splits one point of the
+    // surface into separate vertices, one per side - the weight has to cross
+    // it, or the band stops dead at the seam and half of it is never pushed
+    const twins = new Map()
+    for(let v = 0; v < count; v++){
+        const p = v * 3
+        const key = `${Math.round(pos[p] * 1e4)},${Math.round(pos[p + 1] * 1e4)},${Math.round(pos[p + 2] * 1e4)}`
+        if(!twins.has(key)) twins.set(key, [])
+        twins.get(key).push(v)
+    }
+    const acrossSeams = () => twins.forEach(group => {
+        if(group.length < 2 || !group.some(v => weights[v])) return
+        group.forEach(v => weights[v] = 1)
+    })
+    acrossSeams()
+    // the band reaches EDGE_RINGS more triangles out from the cover - where a
+    // hem hangs loose (the back of a pant cuff, over a bending knee) the skin
+    // just inside it is too far off the cloth to count as covered, yet still
+    // pokes out through it when the knee bends
+    for(let ring = 0; ring < EDGE_RINGS; ring++){
+        const before = weights.slice()
+        for(let i = 0; i < kept.length; i += 3){
+            const a = kept[i], b = kept[i + 1], c = kept[i + 2]
+            if(before[a] || before[b] || before[c]) weights[a] = weights[b] = weights[c] = 1
+        }
+        acrossSeams()
+    }
+    // how far under the cover's edge each vertex is (TUCK_DEPTH_KIND) - only
+    // the vertices of triangles that straddle a hem matter, the rest are
+    // either dropped or nowhere near one
+    const depth = new Float32Array(count).fill(-1)
+    for(let i = 0; i < kept.length; i += 3){
+        const tri = [kept[i], kept[i + 1], kept[i + 2]]
+        if(!tri.some(v => covered[v])) continue
+        tri.forEach(v => {
+            const p = v * 3
+            const d = distanceToHem(covers.hems, pos[p], pos[p + 1], pos[p + 2])
+            depth[v] = covered[v] ? d : -d
+        })
+    }
+    return { indices: kept, weights, depth }
 }
 
 function segmentHitsCover(covers, ax, ay, az, bx, by, bz){

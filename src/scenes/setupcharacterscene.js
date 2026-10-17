@@ -135,7 +135,7 @@ export async function setupCharacterScene(engine){
     const skinMat = createMat("skin_mat", null, SKIN_TEXTURES[toSave.skinColor], scene)
     // his skin under his clothes, his hair over his scalp - the same layering
     // the in-game avatar gets (avatarLayers.js)
-    layerAvatarMaterials({ skinMat, pantsMat, hairMat })
+    layerAvatarMaterials({ skinMat, clothMat, pantsMat, hairMat })
 
     // const clothMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
     // const pantsMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })

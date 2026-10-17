@@ -2093,7 +2093,42 @@ export const zoltraakSkill = {
     desc: "A chain of radiant segments extends forward one link at a time like a growing laser, punching through whatever the leading edge touches.",
 }
 
+// --- FLEX AURA - every character's starting skill, slot 1: show or hide
+// your aura (effects/aura.js; attackingSystem.js casts it by name). The
+// server gives it to every new character (server/routes/characterR.js) and
+// this is the client's copy of that same entry - keep the two in step if it's
+// retuned. Here so "l" (giveAllSkills) and the skill-book/tip lists know it,
+// for a character made before it existed. starter: true keeps it out of the
+// random rolls (eligibleSkillsFor, giveRandomSkill) - everyone has it already,
+// so landing on it would be a wasted roll.
+export const flexauraSkill = {
+    slotNumber: 1,
+    equiped: true,
+    isActive: false,
+    name: "flexaura",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "normal",
+    starter: true,
+    // requireMode left out on purpose - see the server's copy
+    skillType: "na",
+    animationLoop: false,
+    displayName: "Flex aura",
+    castDuration: 10,
+    returnModeDura: 900,
+    skillCoolDown: 2000,
+    demand: [{ name: "mp", minCost: 1, cost: 0.3 }],
+    // an array here (the server's copy has a bare object) - getSkillEffect
+    // .find()s over every client skill's effects
+    effects: [{ effectType: "buff", dmgPm: 0, plusDmg: 0, chance: 0, bashPower: 0 }],
+    skillrank: 0,
+    upgradePlus: 60,
+    desc: "You can conceal and show your aura, best to do when you want someone to easily spot you in certain places. It grows with your strength - from faint glitter to a towering blaze as your life, mana and stamina rise - and a darkness aptitude shows in it as black flame.",
+}
+
 export const skillsData = [
+    flexauraSkill,
     singlecastSkill,
     flamebrandSkill, infernorushSkill,
     tidalspikeSkill, maelstromboltSkill,

@@ -140,7 +140,9 @@ export function giveAllSkills(){
 // something already owned just shows giveSkill's own "Already know X" popup
 // instead of silently no-oping.
 export function giveRandomSkill(){
-    const skillDetail = skillsData[Math.floor(Math.random() * skillsData.length)]
+    // not a starter skill (flexaura) - everyone has those already
+    const pool = skillsData.filter(skill => !skill.starter)
+    const skillDetail = pool[Math.floor(Math.random() * pool.length)]
     giveSkill(skillDetail)
 }
 

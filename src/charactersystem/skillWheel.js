@@ -235,6 +235,8 @@ export function eligibleSkillsFor(charState){
     const lightningUnlocked = (fireApt?.level ?? 0) > LIGHTNING_UNLOCK_FIRE_LEVEL
 
     return skillsData.filter(sk => {
+        // everyone starts with these (flexaura) - never an offer
+        if(sk.starter) return false
         if(sk.element === "normal") return true
         if(sk.element === "lightning") return lightningUnlocked
         return myElements.has(sk.element)

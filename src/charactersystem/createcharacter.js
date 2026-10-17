@@ -127,7 +127,7 @@ function createAnimeBodyMaterials(scene, det){
     skinMat.emissiveIntensity = 0
 
     // his skin under his clothes, his hair over his scalp - avatarLayers.js
-    if(det.gender !== "female") layerAvatarMaterials({ skinMat, pantsMat, hairMat })
+    if(det.gender !== "female") layerAvatarMaterials({ skinMat, clothMat, pantsMat, hairMat })
 
     return {
         hairMat,

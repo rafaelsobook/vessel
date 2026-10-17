@@ -7,7 +7,7 @@ import { getGameStatus, getSceneDet } from "../main/main"
 import { findPlaceMetaData } from "../states/placestates"
 import { attachCam, camShake } from "../tools/camera"
 import { getSpawnPos } from "../tools/position"
-import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction, Quaternion } from "@babylonjs/core"
+import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction, Quaternion, Sound } from "@babylonjs/core"
 import { createTransparentMat } from "../tools/materials"
 import { createTextMesh } from "../gui/textmesh"
 import { showGuildQuest, questToItem } from "../charactersystem/guildQuest"
@@ -23,7 +23,7 @@ import { emitEnemyIsHit } from "./emits"
 import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
-import { popStatusEffect } from "../tools/popupUI"
+import { popStatusEffect, openClosePopup } from "../tools/popupUI"
 import { receiveWorldChatMessage, appendSystemMessage, sendWorldMessage } from "../components/worldChatSystem"
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 import { openworldGroundY } from '../tools/groundHeight.js'
@@ -1023,6 +1023,17 @@ export function activateOnSocketListeners(socket){
     // landing instead of waiting on createEnemy.js's own 500ms yCheckInterval
     // to catch up - that interval still exists as the fallback/ongoing
     // corrector, this is just the one-frame head start.
+    // tcp/index.ts's werewolf hunts - I went far enough out that a standing
+    // wolf is coming for me. It's brought in out of sight, too far off for
+    // its own roar to carry, so the warning and a distant roar come here.
+    socket.on("being-hunted", ({ name }) => {
+        if (!isSocketOn) return
+        openClosePopup(`${name} is hunting you`, true, 3500)
+        const huntScene = getSceneDet()?.scene
+        if (!huntScene) return
+        const roar = new Sound("huntRoar", "./sounds/monsters/standingwolf/roar.mp3", huntScene, () => roar.play(), { volume: 0.5 })
+        roar.onEndedObservable.add(() => roar.dispose())
+    })
     socket.on("enemy-teleported", data => {
         if (!isSocketOn) return
         const charState = getCharState()
@@ -1193,6 +1204,21 @@ export function activateOnSocketListeners(socket){
         if (!isSocketOn) return
         tcpMushrooms = tcpMushrooms.filter(mushroom => mushroom.mushroomId !== mushroomId)
         removeMushroomMesh(mushroomId)
+    })
+    // a picked grain / mushroom grown back where it was (tcp/index.ts's
+    // GRAIN_REGROW_MS / MUSHROOM_REGROW_MS) - same dedup-and-replay shape as
+    // "bonfire-crafted" above
+    socket.on("grain-added", grain => {
+        if (!isSocketOn) return
+        if (tcpGrains.some(known => known.grainId === grain.grainId)) return
+        tcpGrains.push(grain)
+        reCreateMeshesInScene()
+    })
+    socket.on("mushroom-added", mushroom => {
+        if (!isSocketOn) return
+        if (tcpMushrooms.some(known => known.mushroomId === mushroom.mushroomId)) return
+        tcpMushrooms.push(mushroom)
+        reCreateMeshesInScene()
     })
     // the item for a mushroom THIS player picked - tcp sends it only to the
     // picker, and only if nobody took that mushroom first (mushroomLibrary.ts

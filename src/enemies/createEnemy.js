@@ -1219,7 +1219,8 @@ export function defeatedAmonster(data){
         }, 1000)
     }
     // log("killed a monster ", data)
-    // getSocket().emit('respawnEnemy', data)
+    // no respawn request from here - tcp brings a killed enemy back itself
+    // (index.ts's respawnLater)
 }
 // ENEMY WHEN HIT RELATED
 export function enemyDispose(enemy) {
