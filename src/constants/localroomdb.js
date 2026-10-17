@@ -11,7 +11,7 @@ import { getSpawnPos } from '../tools/position.js';
 import { DUNGEON_12 } from './places/dungeons.js';
 import { VILLAGE } from './places/village.js';
 import { STARTING_ROOM, GUILD_HALL, GUILDMASTER_OFFICE } from './places/guildHall.js';
-import { WITCH_HOUSE, ILVARA_TOWER, SABLE_TOWER } from './places/witchTowers.js';
+import { WITCH_HOUSE, ILVARA_TOWER, SABLE_TOWER, TOWER_SPOTS, TOWER_FOOTPRINT, TOWER_DOOR, towerDoor } from './places/witchTowers.js';
 import { DUELING_GROUNDS, COLOUSA_DUELING_GROUNDS, VESPER_DUELING_GROUNDS } from './places/duelingGrounds.js';
 import { TAVERN } from './places/tavern.js';
 
@@ -52,38 +52,21 @@ export const metaDatas = [
                 },
                 functionBeforeMerge: null
             },
-            {
+            // the three witch towers - same tower.glb/rotation/physics,
+            // a different witch inside each one (npcDetails.js's
+            // "117_vesper"/"118_ilvara"/"119_sable", interiors placeId
+            // 15/16/17). Where they stand is witchTowers.js's TOWER_SPOTS;
+            // how high is measured off the real ground as each is placed
+            // (groundSnap - creations/groundBuilding.js), so y here is unused.
+            ...[
+                ["Vesper's Tower", TOWER_SPOTS.vesper],
+                ["Ilvara's Tower", TOWER_SPOTS.ilvara],
+                ["Sable's Tower",  TOWER_SPOTS.sable],
+            ].map(([name, spot]) => ({
                 itemId: randNum(0,9999).toString(),
-                name: "Vesper's Tower",
-                position: {x: -1893, y:7.5, z: 563},
-                scale: null,
-                rotation:-Math.PI/2,
-                glbPath: "./models/outdors/tower.glb",
-                diffuseTexPath:null,
-                // bumpTexPath: "./images/textures/houses/guild1.jpg",
-                physics: {
-                    opt: {mass: 0},
-                    type: "cylinder"
-                },
-                functionBeforeMerge: null
-            },
-            // Two more witch towers scattered elsewhere across this same
-            // 300x300 openworld, same tower.glb/rotation/physics as
-            // Vesper's own above - just a different witch inside each one
-            // (see npcDetails.js's "118_ilvara"/"119_sable" and the matching
-            // interior rooms, placeId 16/17, below). y:7.5 reused as a
-            // starting guess from Vesper's own tower, NOT independently
-            // sampled against the terrain at these new x/z spots - this is
-            // procedurally generated ground (generateArea, seed:12365), so
-            // there's no way to know the real height here without actually
-            // loading the game at these coordinates. Flagging this
-            // explicitly: if either tower ends up floating or sunk into the
-            // ground, adjust its own y (and the matching door-trigger/
-            // startingPos y values below) after checking in-game.
-            {
-                itemId: randNum(0,9999).toString(),
-                name: "Ilvara's Tower",
-                position: {x: 1200, y: 7.5, z: 800},
+                name,
+                position: { x: spot.x, y: 0, z: spot.z },
+                groundSnap: { footprint: TOWER_FOOTPRINT, anchor: TOWER_DOOR },
                 scale: null,
                 rotation: -Math.PI/2,
                 glbPath: "./models/outdors/tower.glb",
@@ -93,21 +76,7 @@ export const metaDatas = [
                     type: "cylinder"
                 },
                 functionBeforeMerge: null
-            },
-            {
-                itemId: randNum(0,9999).toString(),
-                name: "Sable's Tower",
-                position: {x: -600, y: 7.5, z: -1400},
-                scale: null,
-                rotation: -Math.PI/2,
-                glbPath: "./models/outdors/tower.glb",
-                diffuseTexPath: null,
-                physics: {
-                    opt: {mass: 0},
-                    type: "cylinder"
-                },
-                functionBeforeMerge: null
-            }
+            })),
         ],
         roomPaths: [
             {
@@ -132,34 +101,29 @@ export const metaDatas = [
                 pos: {x: -1.5, y: 3, z: 510},
                 startingPos: getSpawnPos(DUNGEON_12)
             },
+            // the three witch towers' doors - each tower's own door spot
+            // (witchTowers.js's towerDoor). Like every door in the openworld,
+            // its trigger is put 1 above the measured ground there
+            // (areascene.js), so the y is unused.
             {
-                // door into the Witch House (this same optionalObjects
-                // entry above, {x:20,z:10}) - same "+1 off the sampled
-                // ground" trigger-height convention as that building's own
-                // ground-snap, not a guessed flat number, since this spot
-                // is on the same uneven openworld terrain
                 placeId: 15,
                 name: "Witch House",
                 areaType: "room",
-                pos: {x: -1888.8, y: 7.5, z: 562.9},
+                pos: towerDoor(TOWER_SPOTS.vesper),
                 startingPos: {x: 0, y: 1, z: -4}
             },
-            // doors into the two new witch towers above - same +4.2/-0.1
-            // offset from each tower's own base position Vesper's own door
-            // trigger uses relative to HER tower (same glb, same rotation,
-            // so the modeled door sits at the same relative spot every time)
             {
                 placeId: 16,
                 name: "Ilvara's Tower",
                 areaType: "room",
-                pos: {x: 1204.2, y: 7.5, z: 799.9},
+                pos: towerDoor(TOWER_SPOTS.ilvara),
                 startingPos: {x: 0, y: 1, z: -4}
             },
             {
                 placeId: 17,
                 name: "Sable's Tower",
                 areaType: "room",
-                pos: {x: -595.8, y: 7.5, z: -1400.1},
+                pos: towerDoor(TOWER_SPOTS.sable),
                 startingPos: {x: 0, y: 1, z: -4}
             },
         ],

@@ -1,3 +1,4 @@
+import { layerAvatarMaterials, layerFacePart, tuckOutfit } from "./avatarLayers.js";
 import { 
     Vector3, 
     Quaternion, 
@@ -124,6 +125,9 @@ function createAnimeBodyMaterials(scene, det){
     skinMat.environmentIntensity = 0.3
     skinMat.directIntensity = 1
     skinMat.emissiveIntensity = 0
+
+    // his skin under his clothes, his hair over his scalp - avatarLayers.js
+    if(det.gender !== "female") layerAvatarMaterials({ skinMat, pantsMat, hairMat })
 
     return {
         hairMat,
@@ -795,7 +799,13 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         // instead of "nothing after this point works for anyone".
         const lowerSpine = pelvisBone.getChildren()[0]
         spineBone = lowerSpine?.getChildren()[0]
-        rHand = spineBone?.getChildren()[2]?.getChildren()[0]?.getChildren()[0]?.getChildren()[1]
+        // the hand is found by NAME among the lower arm's children, not by its
+        // position there: re-exporting avatar.glb reordered them ([thumbstart.R,
+        // hand.R] became [hand.R, thumbstart.R]), and the old [1] then landed
+        // on the thumb - sword gripped by the thumb bone, off the hand.
+        // [1] stays as the fallback for a rig whose bone isn't named "hand".
+        const lowerArmRBones = spineBone?.getChildren()[2]?.getChildren()[0]?.getChildren()[0]?.getChildren()
+        rHand = lowerArmRBones?.find(bne => bne.name.toLowerCase().includes("hand")) ?? lowerArmRBones?.[1]
         headBone = spineBone?.getChildren()[0]?.getChildren()[0]
 
         shoulderL = spineBone?.getChildren()[1]
@@ -892,6 +902,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             if(face.female !== isFemale) return disposeMeshTree(mes)
             showHideEquip(mes, true)
             if(face.part === "eyes") giveRaceEyes(mes, det, scene)
+            // eyes behind his eyelids, eyebrows on his skin - avatarLayers.js
+            if(!isFemale) layerFacePart(mes)
             return
         }
 
@@ -952,6 +964,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             mes.material = skinMat
 
         }
+        // his face's lines (nose, mouth) - on his skin, see avatarLayers.js
+        if(mes.name === "headlines") layerFacePart(mes)
         if(mes.name.includes("cloth")){
             mes.name.split(".")[1] !== det.cloth && disposeMeshTree(mes)
             mes.material = clothMat
@@ -1011,6 +1025,15 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             armors.push({name: armorName, mesh:mes, isUsed: false})
         }
     })
+    // what his own shirt and pants cover of his skin isn't drawn, nor the top
+    // of his pants under his shirt - avatarLayers.js
+    if(!isFemale){
+        const parts = mainBodyMeshes.getChildren()
+        tuckOutfit(
+            parts.filter(part => part.name.startsWith("mainbody")),
+            parts.find(part => part.name === `cloth.${det.cloth}`),
+            parts.find(part => part.name === `pants.${det.pants}`))
+    }
     if(!isFemale){
         hairs.forEach(hairMsh => {
             if(hairMsh.name.includes("root")) return hairMsh.parent = headBone

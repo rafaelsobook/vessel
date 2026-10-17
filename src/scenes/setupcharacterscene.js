@@ -15,6 +15,7 @@ import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanage
 import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
 import { FEMALE_ONLY_NAMES, findDeepByName, facePartOf, isHiddenFemalePart } from "../charactersystem/createcharacter.js";
+import { layerAvatarMaterials, layerFacePart, tuckOutfit } from "../charactersystem/avatarLayers.js";
 
 // mainbody/femalebody/scalp aren't always a single flat mesh with no
 // children on this rig (see createcharacter.js's own dispose(true) comment -
@@ -132,6 +133,9 @@ export async function setupCharacterScene(engine){
     // as a tie and letting pants win at random) - see that file's comment
     clothMat.zOffset = -2
     const skinMat = createMat("skin_mat", null, SKIN_TEXTURES[toSave.skinColor], scene)
+    // his skin under his clothes, his hair over his scalp - the same layering
+    // the in-game avatar gets (avatarLayers.js)
+    layerAvatarMaterials({ skinMat, pantsMat, hairMat })
 
     // const clothMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
     // const pantsMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
@@ -152,6 +156,8 @@ export async function setupCharacterScene(engine){
         // tripo_node_<uuid> - leftover Tripo3D import artifact bundled
         // alongside the new female body parts, same category as ref/hiddenbody
         if(meshPartName.includes("tripo_node")) return mesh.dispose(true);
+        // his face's lines (nose, mouth) - on his skin (avatarLayers.js)
+        if(meshPartName === "headlines") layerFacePart(mesh)
         if(meshPartName.includes("cloak.")) return mesh.dispose(true);
         if(meshPartName.includes("belt.") && !meshPartName.includes("belt.style1")) return mesh.dispose(true);
         if(meshPartName.includes("boots")) return mesh.dispose(true)
@@ -164,6 +170,7 @@ export async function setupCharacterScene(engine){
         const face = facePartOf(meshPartName)
         if(face){
             (face.female ? femaleFace : maleFace).push(mesh)
+            if(!face.female) layerFacePart(mesh)
             setTreeVisible(mesh, face.female === (toSave.gender === "female"))
             return
         }
@@ -234,6 +241,13 @@ export async function setupCharacterScene(engine){
             mesh.isVisible = toSave.gender !== "female" && toPush === toSave.pants
         }
     })
+    // what the chosen shirt and pants cover of his skin isn't drawn - redone
+    // whenever either changes (avatarLayers.js)
+    const retuck = () => tuckOutfit(maleBodyMeshes,
+        clothes.find(mesh => mesh.name.split(".")[1] === toSave.cloth),
+        pants.find(mesh => mesh.name.split(".")[1] === toSave.pants))
+    retuck()
+
     let HairModel
     try {
         HairModel = await SceneLoader.ImportMeshAsync("", "./models/avatar/", "hairModels.glb", scene)
@@ -296,6 +310,7 @@ export async function setupCharacterScene(engine){
         arr.forEach(mesh => {
             mesh.isVisible = mesh.name.split(".")[1] === styleName
         })
+        retuck()
     }
 
     // switches which body/hair/outfit set is showing - see this file's own

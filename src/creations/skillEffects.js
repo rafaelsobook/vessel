@@ -3957,13 +3957,15 @@ export function castPurificationSkill(scene, player, skill, charState){
 
     const timeoutId = setTimeout(() => {
         pendingCasts.delete(skill.name)
-        spawnPurificationCircle(scene, skill, groundPos)
+        spawnPurificationCircle(scene, skill, groundPos, charState)
     }, skill.castDuration * 1000)
 
     pendingCasts.set(skill.name, { skill, timeoutIds: [timeoutId] })
 }
 
-function spawnPurificationCircle(scene, skill, groundPos){
+// charState is the CASTER's (a relayed stand-in on everyone else's client) -
+// only the real caster's own client sends the ghost kills below, once
+function spawnPurificationCircle(scene, skill, groundPos, charState){
     const radius = getGroundTrapRadius(skill)
     const durationMs = skill.groundTrap?.duration ?? GROUND_TRAP_DEFAULT_DURATION_MS
 
@@ -3971,6 +3973,8 @@ function spawnPurificationCircle(scene, skill, groundPos){
     createMagicCircle(groundPos, scene, circleImg, 0.8, durationMs, null, groundTrapCircleScale(radius))
 
     setTimeout(() => {
+        purifyEnemiesInCircle(skill, groundPos, radius, charState)
+
         // MY OWN local player, not the caster - same reasoning
         // spawnHealingCircle's own header comment gives in full
         const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
@@ -4006,6 +4010,30 @@ function spawnPurificationCircle(scene, skill, groundPos){
         poppingTextMesh("Purified!", "#e0d0ff", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight + 0.5, z: -1 + Math.random() * 2 }, myPlayer.body, true)
         playSoundNear(getAllSounds().healS, groundPos)
     }, MASS_TRAP_ACTIVATE_DELAY_MS)
+}
+
+// every purifiable enemy (ghosts - genenemy.ts's ghostBase) inside the circle
+// when it blooms is destroyed outright. The hit carries no damage of its own,
+// just isPurify - tcp/index.ts's applyDamageToEnemy turns it into the ghost's
+// full remaining hp. emitEnemyIsHit directly, not dealDamageToEnemy: that one
+// redirects a cursed caster's hit onto their own hp, and this hit's size is
+// only known on the server.
+function purifyEnemiesInCircle(skill, groundPos, radius, charState){
+    if(charState?.owner !== getCharState()?.owner) return
+    const me = getCharState()
+    getEnemiesOnScene().forEach(enemy => {
+        if(!enemy.body || !enemy.det?.purifiable || (enemy.det.hp ?? 1) <= 0) return
+        const dx = enemy.body.position.x - groundPos.x
+        const dz = enemy.body.position.z - groundPos.z
+        if((dx * dx + dz * dz) > radius * radius) return
+
+        emitEnemyIsHit({
+            playerId: me.owner,
+            dmgDetails: { isPurify: true, physicalDmg: 0, weaponDmg: 0 },
+            targetId: enemy._id,
+            currentPlaceId: me.currentPlace.placeId,
+        })
+    })
 }
 
 // --- ROTATING BARRIER (effectType "barrier", e.g. aegiswardSkill) - a

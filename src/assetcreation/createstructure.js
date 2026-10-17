@@ -1,6 +1,6 @@
 import { Color3, LoadAssetContainerAsync, Mesh, PhysicsAggregate, PhysicsShapeType, StandardMaterial, Texture } from "@babylonjs/core"
 import "@babylonjs/loaders"
-import { addSeat } from "../charactersystem/seating.js"
+import { addBedSeat } from "../charactersystem/seating.js"
 import { armSpikes } from "../components/spikeTraps.js"
 
 // Camp structures from campcraft.js that are just "build it and it stands
@@ -175,17 +175,7 @@ export function createStructureMesh(scene, kind, position, craftId, rotY = 0, pl
 // seat yaw = rotY + 90°), and set back so the body, not the root, is centred
 // on the leaves. The interact button shows the rest (zZ) icon.
 function addBed(scene, placeId, bed, position, rotY, craftId){
-    const yaw = rotY + Math.PI / 2
-    addSeat(scene, placeId, {
-        seatId: `bed_${craftId}`,
-        x: position.x - Math.sin(yaw) * bed.bodyCentre,
-        y: position.y + bed.height,
-        z: position.z - Math.cos(yaw) * bed.bodyCentre,
-        yaw,
-        pose: "sleeping",
-        radius: bed.radius,
-        icon: "rest",
-    })
+    addBedSeat(scene, placeId, `bed_${craftId}`, position, rotY + Math.PI / 2, bed)
 }
 
 // a structure someone built, from the server (worldsocket.js) - loads its

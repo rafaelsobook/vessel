@@ -29,7 +29,7 @@ import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSy
 import { createAggregate } from '../tools/physics.js';
 import { attachCam } from '../tools/camera.js';
 
-
+let ISINDEVEMODE = true
 // the most recent enemy MY OWN melee attack actually landed on (see
 // createEnemy.js's atkCollider hit handler, right alongside its own
 // faceForward call) - createMyCharacter.js's positionAtkCollider reads this
@@ -325,7 +325,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = 10;
+    let sprintSpeed = 300;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
@@ -651,6 +651,7 @@ function setupControls(scene, allsounds) {
             case "d": input.right   = 0; break;
             case "shift": currentSpeed = walkSpeed; break;
             case "c":
+                if(!ISINDEVEMODE) return
                 clearLocTimeOut()
                 myPlayer.body.position.x = -1880
                 myPlayer.body.position.z = 500
@@ -659,6 +660,7 @@ function setupControls(scene, allsounds) {
                 hideUIToggle = !hideUIToggle
             break
             case "e":
+                if(!ISINDEVEMODE) return
                 if(weaponLightning){
                     weaponLightning.dispose()
                     weaponLightning = null
@@ -672,6 +674,7 @@ function setupControls(scene, allsounds) {
                 }
             break
             case " ":
+                if(!ISINDEVEMODE) return
                 // updateStoryQuestUI()
                 console.log(myPlayer.body.position)
                 // sendWorldMessage(`${getCharState().name} joined !`)
@@ -679,6 +682,7 @@ function setupControls(scene, allsounds) {
 
             break
             case "x":
+                if(!ISINDEVEMODE) return
                 // changeStory({
                 //         qName: "meet-bram",
                 //         qTtle: "Steel Before Skill",
@@ -770,9 +774,11 @@ function setupControls(scene, allsounds) {
 
             break
             case "r":
+                if(!ISINDEVEMODE) return
                 reCreateMeshesInScene()
             break
             case "y":
+                if(!ISINDEVEMODE) return
                 // cycles the WORLD weather through tcp (clear -> rain -> fog
                 // -> snow -> sandstorm), not just this client's own view -
                 // weather is global and server-owned, so forcing it locally
@@ -783,11 +789,13 @@ function setupControls(scene, allsounds) {
                 cycleWeatherDebug()
             break
             case "o":
+                if(!ISINDEVEMODE) return
                 // jumps the WORLD clock 3 in-game hours ahead through tcp
                 // (dayNightSystem.js) - same everyone-at-once scope as "y"
                 skipTimeOfDayDebug()
             break
             case "v":
+                if(!ISINDEVEMODE) return
                 // tcp/index.ts's own "toggle-spawn-bots" handler - flips a
                 // server-side flag its BOT PLAYERS spawn interval checks
                 // every 5s (recources/npcBrain.ts's Brain class). No local
@@ -798,6 +806,7 @@ function setupControls(scene, allsounds) {
                 emitToggleSpawnBots()
             break
             case "g":
+                if(!ISINDEVEMODE) return
                 // tcp/index.ts's own "spawn-bot-near-me" handler - drops
                 // exactly one caster-attitude bot right beside wherever
                 // this character currently is, for quick on-demand
@@ -807,43 +816,55 @@ function setupControls(scene, allsounds) {
                 emitSpawnBotNearMe()
             break
             case "k":
+                if(!ISINDEVEMODE) return
                 
 
             break;
             case "i":
+                if(!ISINDEVEMODE) return
                 giveAllItems()
             break
             case "p":
+                if(!ISINDEVEMODE) return
                 wipeAllItems()
             break
             case "n":
+                if(!ISINDEVEMODE) return
                 giveSkill(singlecastSkill)                
             break
             case "l":
+                if(!ISINDEVEMODE) return
                 giveAllSkills()
             break
             case "t":
+                if(!ISINDEVEMODE) return
                 debugLevelUp()
             break
             case "b":
+                if(!ISINDEVEMODE) return
                 giveRandomSkill()
             break
             case "u":
+                if(!ISINDEVEMODE) return
                 giveRandomTitle()
             break
             case "h":
+                if(!ISINDEVEMODE) return
                 upgradeAllOwnedSkills()
             break
             case "m":
+                if(!ISINDEVEMODE) return
                 // DEBUG CHEAT - quick trial of tools/speechgui.js's new
                 // Babylon GUI dialogue box, same call shape as
                 // conversations.js's own startConv([{speech}], cb)
                 // displaySpeech([{ speech: "hello" }], false, 100, true)
             break
             case "f":
+                if(!ISINDEVEMODE) return
                 restoreAll()
             break
             case "1":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 myPlayer?.characterAnimations?.setMoveSpeedRatio(0.65)
                 if(myPlayer?.body) camTrick.playTrickOne(scene, myPlayer.body, {
@@ -859,6 +880,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "2":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickTwo(scene, myPlayer.body, {
                     startRadius: 10,
@@ -871,6 +893,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "3":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickThree(scene, myPlayer.body, {
                     startHeight: (-capsuleHeight / 2) + 1,
@@ -882,6 +905,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "4":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickFour(scene, myPlayer.body, {
                     height: (-capsuleHeight / 2) + 1,
@@ -894,6 +918,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "5":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickFive(scene, myPlayer.body, {
                     lookHeight: capsuleHeight / 2,
@@ -903,6 +928,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "6":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickSix(scene, myPlayer.body, {
                     // lookHeight: capsuleHeight / 2,
@@ -914,6 +940,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "7":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickSeven(scene, myPlayer.body, {
                     // lookHeight: capsuleHeight / 2,
@@ -928,6 +955,7 @@ function setupControls(scene, allsounds) {
                 })
             break
             case "8":
+                if(!ISINDEVEMODE) return
                 hideShowAllScreenUI(false)
                 if(myPlayer?.body) camTrick.playTrickEight(scene, myPlayer.body, {
                     lookHeight: capsuleHeight / 2,

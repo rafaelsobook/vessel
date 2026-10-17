@@ -1,6 +1,6 @@
 import { Vector3 } from "@babylonjs/core"
-import { sampleTerrainSurfaceHeight } from 'infterrain'
-import { OPENWORLD_TERRAIN_VERTS } from "../constants/constants.js"
+import { sampleTerrainSurfaceHeight, terrainHeight } from 'infterrain'
+import { OPENWORLD_TERRAIN_VERTS, TERRAIN_CHUNK_SIZE } from "../constants/constants.js"
 import { castleSurfaceY } from "../creations/createcastle.js"
 
 // The openworld's ground at (x, z) for anything placed by height rather than
@@ -10,6 +10,38 @@ import { castleSurfaceY } from "../creations/createcastle.js"
 // that, so the terrain alone left everything there buried under the castle.
 export function openworldGroundY(x, z){
     return Math.max(sampleTerrainSurfaceHeight(x, z, OPENWORLD_TERRAIN_VERTS), castleSurfaceY(x, z))
+}
+
+// The openworld terrain's EXACT rendered height at (x, z) - the surface you
+// see and stand on. infterrain builds every chunk off its terrainHeight grid
+// (a vertex each TERRAIN_CELL units) and cuts each cell into two triangles
+// along the (x+1, z)-(x, z+1) diagonal; this interpolates over those same two
+// triangles. sampleTerrainSurfaceHeight blends the cell's four corners
+// instead, which on a hillside lands up to ~1.7 off the drawn surface
+// (measured against the chunk meshes) - fine for a walking monster, not for
+// a building's foundation or a door. Matches the mesh to float precision.
+// Like any infterrain height, only right once the openworld has been created
+// (createOpenWorld sets the river's minimum width the heights depend on).
+const TERRAIN_CELL = TERRAIN_CHUNK_SIZE / (OPENWORLD_TERRAIN_VERTS - 1)
+export function exactTerrainY(x, z){
+    const gx = Math.floor(x / TERRAIN_CELL) * TERRAIN_CELL
+    const gz = Math.floor(z / TERRAIN_CELL) * TERRAIN_CELL
+    const fx = (x - gx) / TERRAIN_CELL
+    const fz = (z - gz) / TERRAIN_CELL
+    const h10 = terrainHeight(gx + TERRAIN_CELL, gz)
+    const h01 = terrainHeight(gx, gz + TERRAIN_CELL)
+    if(fx + fz <= 1){
+        const h00 = terrainHeight(gx, gz)
+        return h00 + (h10 - h00) * fx + (h01 - h00) * fz
+    }
+    const h11 = terrainHeight(gx + TERRAIN_CELL, gz + TERRAIN_CELL)
+    return h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz)
+}
+
+// openworldGroundY's exact twin - the drawn terrain, or a castle's surface
+// where one stands
+export function openworldSurfaceY(x, z){
+    return Math.max(exactTerrainY(x, z), castleSurfaceY(x, z))
 }
 
 // sampleTerrainSurfaceHeight (infterrain) is a coarse, interpolated

@@ -21,10 +21,12 @@ import { startDuel } from "../npc/duelSystem.js";
 import { getVillageAssetRegistry } from "../components/assetregistry.js";
 import { getSocket, joinWorld } from "../sockets/joinsocket.js";
 import { getEngine, setGameStatus } from "../main/main.js";
-import { travelToPlace } from "../tools/travel.js";
+import { travelToPlace, takeDoorArrival } from "../tools/travel.js";
+import { settleOnGround } from "../creations/groundBuilding.js";
+import { exactTerrainY, openworldSurfaceY } from "../tools/groundHeight.js";
 import { getCharState, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
-import { sitHere } from "../charactersystem/seating.js";
+import { sitHere, addBedSeat } from "../charactersystem/seating.js";
 import { pushPlayer, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
 import { openCloseInteractBtn, openCloseLScreen, openClosePopup } from "../tools/popupUI.js";
 import { randomNum } from "../tools/tools.js";
@@ -40,7 +42,7 @@ import { createFireParticles, createDemoParticles } from "../tools/particlesyste
 import { initSounds, getAllSounds, playSound } from "../components/soundSystem.js";
 import { createOriginal, createSky, createMainShadow, putFakeShadow } from "../creations/creationTools.js";
 import { setWorldChatAvailable } from "../components/worldChatSystem.js";
-import { clearLocTimeOut, faceForward } from "../controllers/inputMovement.js";
+import { clearLocTimeOut, faceForward, relocatePos } from "../controllers/inputMovement.js";
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
@@ -61,6 +63,8 @@ export async function areaScene(placeDetail){
     // showHideIcons()
     const { placeId, sceneTemp, isMultiplayer } = placeDetail
     const spawnPos = getSpawnPos(placeDetail);
+    // read on every load, so it never carries over to a later one
+    const arrivedThroughDoor = takeDoorArrival()
     const scene = new Scene(getEngine())
     const cam = createArcCam(scene, placeDetail)
     const lights = setupLighting(scene, placeDetail)
@@ -282,6 +286,9 @@ export async function areaScene(placeDetail){
                 createStoneScriptures(scene, myCharacter.body, 0, 500, 15)
             }
 
+            // the terrain and castles exist now - put me on the real ground
+            settleArrival(myCharacter.body, arrivedThroughDoor)
+
             // showGamePerformanceUI(scene.getEngine(), scene, chunks)
 
 
@@ -382,7 +389,7 @@ export async function areaScene(placeDetail){
         // warm/already-connected socket (i.e. any in-app scene transition,
         // as opposed to a fresh page load where the socket has to connect
         // first) usually won, leaving the board silently blank.
-        await Promise.all(placeDetail.optionalObjects.map(async item => {
+        await Promise.all(placeDetail.optionalObjects.map(async (item, itemIndx) => {
             if (item.name.includes("particle_fire")) {
                 createFireParticles(item.position, scene)
                 return
@@ -396,6 +403,18 @@ export async function areaScene(placeDetail){
             model.position = new Vector3(item.position.x, item.position.y, item.position.z);
             model.addRotation(0, item.rotation, 0);
             model.name = item.name
+            // a building on the openworld's uneven ground (the witch towers) -
+            // its y is measured off the real ground right here, before its
+            // physics below is made (creations/groundBuilding.js)
+            if(item.groundSnap && placeDetail.areaType === "openworld") settleOnGround(scene, model, item.groundSnap)
+            // a bed you can sleep in - item.seat: { height, bodyCentre, radius,
+            // yawOffset } (charactersystem/seating.js addBedSeat). The id is the
+            // entry's place in this list, the same on every client - itemId is
+            // random per load, so it can't be what tcp matches seat claims on.
+            if(item.seat){
+                addBedSeat(scene, placeDetail.placeId, `obj_${item.name}_${itemIndx}`, item.position,
+                    item.rotation + (item.seat.yawOffset ?? 0), item.seat)
+            }
 
             if(item.bumpTexPath){
                 // if model.material.unlit = true bumpTexture has no effect because there's nothing reflecting the light
@@ -553,7 +572,10 @@ export async function areaScene(placeDetail){
     placeDetail.roomPaths?.forEach(path => {
         const { name, pos,startingPos, placeId ,areaType } = path
         const pathTrigger = MeshBuilder.CreateBox(`trig_${placeId}`, { size: 2 }, scene)
-        pathTrigger.position = new Vector3(pos.x, pos.y, pos.z)
+        // on the openworld's uneven terrain a door's y is measured, not data:
+        // 1 above the ground there, so you walk into it wherever it stands
+        const triggerY = placeDetail.areaType === "openworld" ? openworldSurfaceY(pos.x, pos.z) + 1 : pos.y
+        pathTrigger.position = new Vector3(pos.x, triggerY, pos.z)
         pathTrigger.isVisible = false
         pathTrigger.isPickable = false
 
@@ -618,4 +640,16 @@ export async function areaScene(placeDetail){
 
 
     return {scene, isSocketOn: isMultiplayer }
+}
+// Where I came into the openworld (charState x/y/z) was decided before its
+// terrain existed - a door's arrival spot is data written without the ground
+// to hand (witchTowers.js's exits), a saved spot is wherever I last stood.
+// Checked against the real ground once it's there: through a door I'm stood
+// on it; any other way in I'm only moved if that spot is under the terrain,
+// so a saved spot up on a castle wall or in its courtyard is left alone.
+function settleArrival(body, throughDoor){
+    const { x, z } = body.position
+    const feet = body.position.y - capsuleHeight / 2
+    if(!throughDoor && feet >= exactTerrainY(x, z) - 0.05) return
+    relocatePos(body, new Vector3(x, openworldSurfaceY(x, z) + capsuleHeight / 2 + 0.1, z))
 }

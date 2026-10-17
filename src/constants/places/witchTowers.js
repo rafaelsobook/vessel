@@ -1,6 +1,32 @@
 // The witches' towers - Vesper's (the Witch House, placeId 15), Ilvara's
 // (16) and Sable's (17). Their tower buildings stand in the openworld.
 
+// Where each tower stands in the openworld (placeId 888) - the one place
+// these numbers live. The tower itself (localroomdb.js's openworld
+// optionalObjects), its door and the spot you come out at when you leave
+// (each interior's roomPaths below) are all worked out from it. No y: the
+// tower is stood on the real ground as it's placed (creations/
+// groundBuilding.js), and its door and way out go on the ground with it.
+export const TOWER_SPOTS = {
+    vesper: { x: -1893, z: 563 },
+    ilvara: { x: 1200,  z: 800 },
+    sable:  { x: -600,  z: -1400 },
+}
+// tower.glb at the towers' shared rotation (-PI/2): its base is about this
+// wide, and its door is this far off its centre, facing +x
+export const TOWER_FOOTPRINT = 4.13
+export const TOWER_DOOR = { x: 4.2, z: -0.1 }
+// where the door's 2x2 trigger goes (areascene.js grounds its y)
+export function towerDoor(spot){
+    return { x: spot.x + TOWER_DOOR.x, y: 0, z: spot.z + TOWER_DOOR.z }
+}
+// a couple of steps out of the door - clear of the tower's own collider and
+// the door's trigger. The y is only a fallback: arriving through a door,
+// areascene.js stands you on the measured ground.
+function towerExit(spot){
+    return { x: spot.x + TOWER_DOOR.x + 2.3, y: 1, z: spot.z + TOWER_DOOR.z }
+}
+
 
 export const WITCH_HOUSE = {
     // Witch House interior - entered via placeId 888's own roomPaths
@@ -31,7 +57,7 @@ export const WITCH_HOUSE = {
             name: "openworld",
             areaType: "openworld",
             pos: {x: 0, y: 1, z: -5},
-            startingPos: {x: -1890, y:7.5, z: 560},
+            startingPos: towerExit(TOWER_SPOTS.vesper),
         },
     ],
     optionalObjects: [
@@ -186,7 +212,7 @@ export const WITCH_HOUSE = {
 
 export const ILVARA_TOWER = {
     // Ilvara's Tower interior - entered via placeId 888's own roomPaths
-    // entry ({x:1200,z:800} in the openworld), same round-room shape as
+    // entry (TOWER_SPOTS.ilvara in the openworld), same round-room shape as
     // Vesper's own Witch House (placeId 15) above, just a different
     // witch living in it - see npcDetails.js's "118_ilvara".
     placeId: 16,
@@ -203,7 +229,7 @@ export const ILVARA_TOWER = {
             name: "openworld",
             areaType: "openworld",
             pos: {x: 0, y: 1, z: -5},
-            startingPos: {x: 1200, y: 7.5, z: 800},
+            startingPos: towerExit(TOWER_SPOTS.ilvara),
         },
     ],
     optionalObjects: [],
@@ -222,7 +248,7 @@ export const ILVARA_TOWER = {
 
 export const SABLE_TOWER = {
     // Sable's Tower interior - entered via placeId 888's own roomPaths
-    // entry ({x:-600,z:-1400} in the openworld), same round-room shape
+    // entry (TOWER_SPOTS.sable in the openworld), same round-room shape
     // as Vesper's own Witch House (placeId 15) above, just a different
     // witch living in it - see npcDetails.js's "119_sable".
     placeId: 17,
@@ -239,7 +265,7 @@ export const SABLE_TOWER = {
             name: "openworld",
             areaType: "openworld",
             pos: {x: 0, y: 1, z: -5},
-            startingPos: {x: -600, y: 7.5, z: -1400},
+            startingPos: towerExit(TOWER_SPOTS.sable),
         },
     ],
     optionalObjects: [],

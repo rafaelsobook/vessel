@@ -51,6 +51,10 @@ export const OPENWORLD_PLACE_ID = 888
 // createOpenWorldGrass rather than repeating a literal, so the three can no
 // longer drift apart again.
 export const OPENWORLD_TERRAIN_VERTS = 17
+// infterrain's chunk size (its own W - not exported by the package). With
+// OPENWORLD_TERRAIN_VERTS it gives the terrain grid's cell, 256 / 16 = 16
+// units - see groundHeight.js's exactTerrainY
+export const TERRAIN_CHUNK_SIZE = 256
 
 // Zerech's travel fare (npcDetails.js's "120_zerech" / constants/zerechdata.js)
 // - flat, any tower. Shared here because two files need the same number:

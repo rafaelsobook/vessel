@@ -6,7 +6,7 @@ import { auraProfileChanged, auraProfileFromDet } from "./auraProfile.js"
 // THE FLEX AURA (skill "flexaura") - what a character's aura looks like, grown
 // from effects/auraProfile.js's profile:
 //
-//   power 0     - glitter: small stars popping on and off the body
+//   power 0     - glitter: small glints popping on and off the body
 //   power 0.12+ - a faint blue haze rising off it
 //   power 0.3+  - blue flame licking up the whole body (glowing, with a deep
 //                 blue body under it so it stays blue in daylight)
@@ -49,11 +49,11 @@ const ramp = (x, from, to) => Math.min(1, Math.max(0, (x - from) / (to - from)))
 const c4 = (color, alpha) => new Color4(color.r, color.g, color.b, alpha)
 
 // ── textures ─────────────────────────────────────────────────────────────────
-// The star and the dark tendril are drawn here rather than shipped as images:
+// The dark tendril and the ring are drawn here rather than shipped as images:
 // nothing in images/particles is either shape. One set per scene.
 const texturesByScene = new WeakMap()
 
-// mipmapped - the stars are small on screen, and without them their thin
+// mipmapped - these are small on screen, and without them their thin
 // points break up into a dot
 function drawTexture(scene, name, width, height, draw){
     const tex = new DynamicTexture(name, { width, height }, scene, true)
@@ -63,36 +63,6 @@ function drawTexture(scene, name, width, height, draw){
     tex.hasAlpha = true
     tex.update()
     return tex
-}
-
-// a four-point star with a soft core, and four short points between
-function drawSparkle(ctx, size){
-    const c = size / 2
-    const glow = ctx.createRadialGradient(c, c, 0, c, c, c * 0.62)
-    glow.addColorStop(0, "rgba(255,255,255,1)")
-    glow.addColorStop(0.22, "rgba(255,255,255,0.75)")
-    glow.addColorStop(0.55, "rgba(255,255,255,0.18)")
-    glow.addColorStop(1, "rgba(255,255,255,0)")
-    ctx.fillStyle = glow
-    ctx.fillRect(0, 0, size, size)
-    const point = (angle, length, halfWidth) => {
-        ctx.save()
-        ctx.translate(c, c)
-        ctx.rotate(angle)
-        const fade = ctx.createLinearGradient(0, 0, 0, -length)
-        fade.addColorStop(0, "rgba(255,255,255,1)")
-        fade.addColorStop(1, "rgba(255,255,255,0)")
-        ctx.fillStyle = fade
-        ctx.beginPath()
-        ctx.moveTo(-halfWidth, 0)
-        ctx.lineTo(0, -length)
-        ctx.lineTo(halfWidth, 0)
-        ctx.closePath()
-        ctx.fill()
-        ctx.restore()
-    }
-    for(let i = 0; i < 4; i++) point(i * Math.PI / 2, c * 0.98, size * 0.075)
-    for(let i = 0; i < 4; i++) point(Math.PI / 4 + i * Math.PI / 2, c * 0.5, size * 0.045)
 }
 
 // a long jagged spike, point at the top - barbs down both edges so it reads
@@ -144,11 +114,11 @@ function auraTextures(scene){
     noise.brightness = 0.5
     noise.octaves = 2
     tex = {
-        sparkle: drawTexture(scene, "auraSparkle", 128, 128, (ctx, w) => drawSparkle(ctx, w)),
         spike: drawTexture(scene, "auraSpike", 64, 256, drawSpike),
         ring: drawTexture(scene, "auraRing", 256, 256, (ctx, w) => drawRing(ctx, w)),
         flame: getParticleTexture(scene, particleTexturePath("flame2")),
         smoke: getParticleTexture(scene, particleTexturePath("smoke2")),
+        // thin1: the long streaks, and the small glints - glitter, embers, the ignition burst
         streak: getParticleTexture(scene, particleTexturePath("thin1")),
         noise,
     }
@@ -185,13 +155,15 @@ function release(k, ps){
 }
 
 function glitter(k){
-    const ps = particles(k, "auraGlitter", 160, k.tex.sparkle)
+    const ps = particles(k, "auraGlitter", 160, k.tex.streak)
     // on the body's surface, not inside it
     ps.createCylinderEmitter(k.radius + 0.03, k.height * 0.95, 0, 0.6)
     ps.minLifeTime = 0.3
     ps.maxLifeTime = 0.65
-    ps.minSize = lerp(0.13, 0.16, k.P)
-    ps.maxSize = lerp(0.24, 0.3, k.P)
+    // thin1 is a sliver in a big square - about 2.3x the old star's sizes
+    // for the same presence
+    ps.minSize = lerp(0.3, 0.38, k.P)
+    ps.maxSize = lerp(0.55, 0.7, k.P)
     // pop in, then out
     ps.addSizeGradient(0, 0)
     ps.addSizeGradient(0.25, 1)
@@ -455,13 +427,13 @@ function streaks(k){
 // left behind as the body moves (not isLocal), drifting up on the noise
 function embers(k){
     const t = ramp(k.P, TIER.streaks, 1)
-    const ps = particles(k, "auraEmbers", 120, k.tex.sparkle)
+    const ps = particles(k, "auraEmbers", 120, k.tex.streak)
     ps.isLocal = false
     ps.createCylinderEmitter(k.radius * 1.2, k.height * 0.9, 0.5, 0.4)
     ps.minLifeTime = 1
     ps.maxLifeTime = 1.8
-    ps.minSize = 0.03
-    ps.maxSize = 0.07
+    ps.minSize = 0.08
+    ps.maxSize = 0.16
     ps.addSizeGradient(0, 1)
     ps.addSizeGradient(1, 0)
     ps.minEmitPower = 0.1
@@ -478,17 +450,17 @@ function embers(k){
 
 // ── one-off effects ──────────────────────────────────────────────────────────
 
-// the flare as it lights (or grows): a burst of stars off the chest, and from
+// the flare as it lights (or grows): a burst of glints off the chest, and from
 // the flame stage up a ring sweeping out along the ground
 function ignite(k, ringMat){
-    const burst = particles(k, "auraIgnite", 100, k.tex.sparkle, k.chest)
+    const burst = particles(k, "auraIgnite", 100, k.tex.streak, k.chest)
     burst.isLocal = false
     burst.createSphereEmitter(0.3, 1)
     burst.manualEmitCount = Math.round(lerp(18, 70, k.P))
     burst.minLifeTime = 0.35
     burst.maxLifeTime = 0.8
-    burst.minSize = 0.08
-    burst.maxSize = lerp(0.16, 0.28, k.P)
+    burst.minSize = 0.18
+    burst.maxSize = lerp(0.36, 0.62, k.P)
     burst.addSizeGradient(0, 1)
     burst.addSizeGradient(1, 0)
     burst.minEmitPower = lerp(1, 2.5, k.P)

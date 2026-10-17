@@ -29,6 +29,7 @@ import { isNearBonfire } from "../assetcreation/createbonfire.js";
 import { triggerSkillWheel } from "./skillWheel.js";
 import { isSittingOnLog, isSleepingInBed } from "./seating.js";
 import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
+import { showWheelUnlockNotice } from "../components/wheelUnlockUI.js";
 import { showWarning } from "../components/warningUI.js";
 
 // LIFE MANA STAMINA
@@ -178,13 +179,16 @@ function expToNextLevel(lvl){
 // as the amount earned covers in one pass (a big single kill or a future
 // EXP-boosting effect shouldn't need to be re-triggered separately per
 // level). Each level-up: +1 statPoints (the pool statsSystem.js's
-// upgrade-btn UI now spends from) and a skill wheel spin (skillWheel.js -
-// kept in its own file rather than bloating this one with wheel
-// DOM/animation code); one "Level Up!" banner shows the level reached.
+// upgrade-btn UI now spends from); one "Level Up!" banner shows the level
+// reached. Only every WHEEL_EVERY_LEVELS-th level (10, 20, 30...) earns a
+// skill wheel spin (skillWheel.js), announced first by a "Conditions
+// Reached / Spinning Wheel Activated" notice (wheelUnlockUI.js).
+const WHEEL_EVERY_LEVELS = 10
 export function gainExp(amount){
     if(!characterState || !amount) return
     characterState.exp = (characterState.exp || 0) + amount
 
+    const startLvl = characterState.lvl
     let levelsGained = 0
     while(characterState.exp >= expToNextLevel(characterState.lvl)){
         characterState.exp -= expToNextLevel(characterState.lvl)
@@ -198,10 +202,16 @@ export function gainExp(amount){
     popupReceiveLevelUpUI(characterState.lvl)
     updateStatUI()
     updateMyDetailsOL(characterState, checkIfTokenSaved())
+    // milestones crossed in this pass - usually 0 or 1, more only if one big
+    // EXP grant jumps past several (lvl 9 -> 21 counts 10 and 20)
+    const spins = Math.floor(characterState.lvl / WHEEL_EVERY_LEVELS) - Math.floor(startLvl / WHEEL_EVERY_LEVELS)
+    if(spins <= 0) return
     setTimeout(() => {
-        // one spin per level gained, not per kill - skillWheel.js queues
+        // one notice, then one spin per milestone - skillWheel.js queues
         // them and shows them one after another
-        for(let i = 0; i < levelsGained; i++) triggerSkillWheel()
+        showWheelUnlockNotice(() => {
+            for(let i = 0; i < spins; i++) triggerSkillWheel()
+        })
     }, 1200)
 }
 // DEBUG CHEAT - bound to the "t" key in controllers/inputMovement.js (was

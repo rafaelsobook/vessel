@@ -401,9 +401,11 @@ export default function createEnemy(scene, det) {
         // }
     })
 
-    // --- sight (det.detectRange - genenemy.ts, the standing wolves): notices
+    // --- sight (det.detectRange - genenemy.ts, the wolves): notices
     // you from this far off, any direction, and comes for you - instead of
-    // only once you walk into its atkDetection box (or hit it). Each client
+    // only once you walk into its atkDetection box (or hit it). And the pack
+    // (det.packRange - the stray wolves): joins in on you once another of its
+    // kind within that range is already after you. Each client
     // reports only its OWN character, like the atkDetection triggers above;
     // tcp's registerTargetIfNone keeps whoever's first, and that
     // registration is what sets off its roar (startEnemyRoar) on every client.
@@ -411,7 +413,7 @@ export default function createEnemy(scene, det) {
     // a report already in flight - don't send it again while the server's
     // answer is on its way back
     const SIGHT_REPORT_COOLDOWN_MS = 1500
-    if(det.detectRange){
+    if(det.detectRange || det.packRange){
         let lastSightReport = 0
         const sightInterval = setInterval(() => {
             const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
@@ -422,11 +424,16 @@ export default function createEnemy(scene, det) {
             if(Date.now() - lastSightReport < SIGHT_REPORT_COOLDOWN_MS) return
             const enPos = thisEnemy.body.position
             const plPos = myChar.body.position
-            if(Math.hypot(enPos.x - plPos.x, enPos.z - plPos.z) > det.detectRange) return
-            // in a dungeon, not through a wall (tools/dungeonSight.js)
-            if(!hasDungeonLineOfSight(det.currentPlaceId, enPos, plPos)) return
-            lastSightReport = Date.now()
             const myCharId = myChar.body.name.split(".")[1]
+            // in sight - and in a dungeon, not through a wall (tools/dungeonSight.js)
+            const seesMe = det.detectRange
+                && Math.hypot(enPos.x - plPos.x, enPos.z - plPos.z) <= det.detectRange
+                && hasDungeonLineOfSight(det.currentPlaceId, enPos, plPos)
+            const packIsOnMe = !seesMe && det.packRange && getEnemiesOnScene().some(other =>
+                other !== thisEnemy && other.det?.name === det.name && other._targetId === myCharId && !other.isDead
+                && Math.hypot(other.body.position.x - enPos.x, other.body.position.z - enPos.z) <= det.packRange)
+            if(!seesMe && !packIsOnMe) return
+            lastSightReport = Date.now()
             emitRegisterAsEnemy(thisEnemy._id, myCharId, { x: plPos.x, y: yPos, z: plPos.z })
             emitChase(thisEnemy._id, myCharId, det.currentPlaceId, det.actionType)
         }, SIGHT_CHECK_MS)
@@ -748,7 +755,8 @@ export default function createEnemy(scene, det) {
     playRandomAnim(entries.animationGroups, "idle", true)
 
     //  sounds
-    const  { runSound, deathSound, hitSound, attackSound, roarSound } = monsterSounds(scene, det, body, entries.animationGroups)
+    const sounds = monsterSounds(scene, det, body, entries.animationGroups)
+    const { runSound, deathSound, hitSound, attackSound, roarSound } = sounds
 
     // blood splatter on hit - same createBloodSplatter (tools/particlesystem.js)
     // createcharacter.js's own player bloodps already uses, just emitting
@@ -762,7 +770,7 @@ export default function createEnemy(scene, det) {
     const bloodps = BLOODLESS_MODEL_STYLES.has(det.modelStyle) ? null : createBloodSplatter(scene)
     if(bloodps) bloodps.ps.emitter = body
 
-    return {
+    const enemy = {
         det,
         _id: det._id,
         name: det.name,
@@ -824,6 +832,13 @@ export default function createEnemy(scene, det) {
 
         intervalWillAttack
     }
+    // a monster sharing its sounds (SOUND_FOLDERS below) gets them a moment
+    // later, once it's known which folder has each file
+    sounds.ready?.then(shared => {
+        if(body.isDisposed()) return Object.values(shared).forEach(snd => snd?.dispose())
+        Object.assign(enemy, shared)
+    })
+    return enemy
 }
 // missing mp3s don't throw synchronously - Sound fetches async and fails later
 // (unhandled promise rejection), so wrap creation defensively and let callers
@@ -836,20 +851,66 @@ function createSoundSafe(name, url, scene, options){
         return null
     }
 }
+// monsters of one kind that share their sounds: each sound file comes from
+// the first folder in the list that has it, so a file added to either folder
+// serves both. The two wolves - the stray wolf's folder has run/attack, the
+// standing wolf's has roar.
+const SOUND_FOLDERS = {
+    wolf: ["standingwolf", "wolf"],
+    standingwolf: ["standingwolf", "wolf"],
+}
+const SOUND_FILES = ["run", "death", "hitbynosharp", "attack", "roar"]
+// url -> Promise<boolean>, once per file per session. Checks the content
+// type, not just the status: vite (and an SPA host) answers a missing file
+// with 200 + index.html
+const soundFileChecks = new Map()
+function hasSoundFile(url){
+    if(!soundFileChecks.has(url)){
+        soundFileChecks.set(url, fetch(url, { method: "HEAD" })
+            .then(res => res.ok && /audio|mpeg|octet-stream/i.test(res.headers.get("content-type") ?? ""))
+            .catch(() => false))
+    }
+    return soundFileChecks.get(url)
+}
 function monsterSounds(scene, det, body, anims){
-    const runSound = createSoundSafe(`${det.modelStyle}run`, `./sounds/monsters/${det.modelStyle}/run.mp3`, scene, {
+    const folders = SOUND_FOLDERS[det.modelStyle]
+    if(folders){
+        // sounds start null (every caller already treats null as "nothing to
+        // play") and arrive through ready - createEnemy assigns them
+        const ready = Promise.all(SOUND_FILES.map(async file => {
+            for(const folder of folders){
+                const url = `./sounds/monsters/${folder}/${file}.mp3`
+                if(await hasSoundFile(url)) return url
+            }
+            return null
+        })).then(([run, death, hitbynosharp, attack, roar]) => {
+            if(scene.isDisposed) return {}
+            const urls = { run, death, hitbynosharp, attack, roar }
+            return createMonsterSounds(scene, det, body, anims, file => urls[file])
+        })
+        return { ready }
+    }
+    return createMonsterSounds(scene, det, body, anims, file => `./sounds/monsters/${det.modelStyle}/${file}.mp3`)
+}
+// urlFor(file) - the mp3 to use for "run"/"death"/..., or null for none
+function createMonsterSounds(scene, det, body, anims, urlFor){
+    const sound = (file, options) => {
+        const url = urlFor(file)
+        return url ? createSoundSafe(`${det.modelStyle}${file}`, url, scene, options) : null
+    }
+    const runSound = sound("run", {
         maxDistance: 30, spatialSound: true, loop: false, autoplay: false
     })
     runSound?.setPlaybackRate(0.5)
 
-    const deathSound = createSoundSafe(`${det.modelStyle}death`, `./sounds/monsters/${det.modelStyle}/death.mp3`, scene, {
+    const deathSound = sound("death", {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
 
-    const hitSound = createSoundSafe(`${det.modelStyle}hitbynosharp`, `./sounds/monsters/${det.modelStyle}/hitbynosharp.mp3`, scene, {
+    const hitSound = sound("hitbynosharp", {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
-    const attackSound = createSoundSafe(`${det.modelStyle}attack`, `./sounds/monsters/${det.modelStyle}/attack.mp3`, scene, {
+    const attackSound = sound("attack", {
         maxDistance: 50, spatialSound: true, loop: false, autoplay: false
     })
 
@@ -857,7 +918,7 @@ function monsterSounds(scene, det, body, anims){
     // (startEnemyRoar) - only loaded for a rig that has one to play it with.
     // Carries further than the rest: it's the warning that one's coming.
     const roarSound = pickAnimVariant(anims, "roar")
-        ? createSoundSafe(`${det.modelStyle}roar`, `./sounds/monsters/${det.modelStyle}/roar.mp3`, scene, {
+        ? sound("roar", {
             maxDistance: 80, spatialSound: true, loop: false, autoplay: false
         })
         : null
@@ -1010,7 +1071,6 @@ export function enemyIsHit(data){
     enemy.det.hp = data.hp
     playRandomAnim(enemy.anims, "hit")
     enemy.hitSound?.play()
-    console.log(enemy.hitSound.name)
     enemy.bloodps?.play()
 
     // weapon-on-hit effects (npcDetails.js item data's own effectsWhenHit,

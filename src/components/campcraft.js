@@ -512,18 +512,19 @@ function buildSectionRow(title){
     return row
 }
 
-// chunks a section's crafts into rows of CARDS_PER_ROW - no Babylon GUI
-// control natively wraps children onto a new row the way CSS flex-wrap
-// does, so rows are built explicitly instead. Anything added to campcrafts
-// later just grows into more rows automatically, no layout code to touch.
-const CARDS_PER_ROW = 4
-
-function buildCardGrid(crafts, refreshers){
+// chunks a section's crafts into rows of `perRow` - no Babylon GUI control
+// natively wraps children onto a new row the way CSS flex-wrap does, so rows
+// are built explicitly instead. perRow is how many cards actually FIT the
+// panel (fitCardGrids below), not a fixed 4: with four 210px cards per row a
+// narrower screen cut the last card off the panel's edge, out of reach. Anything
+// added to campcrafts later just grows into more rows, and the sections scroll
+// (buildCampcraftPanel) once there are more rows than the panel is tall.
+function buildCardGrid(crafts, refreshers, perRow){
     const grid = new GUI.StackPanel("card_grid")
     grid.width = "100%"
 
-    for(let i = 0; i < crafts.length; i += CARDS_PER_ROW){
-        const rowCrafts = crafts.slice(i, i + CARDS_PER_ROW)
+    for(let i = 0; i < crafts.length; i += perRow){
+        const rowCrafts = crafts.slice(i, i + perRow)
         const row = new GUI.StackPanel(`card_row_${i}`)
         row.isVertical = false
         row.height = CARD_HEIGHT
@@ -544,6 +545,47 @@ function buildCardGrid(crafts, refreshers){
 let panelRoot = null
 let panelScene = null
 let cardRefreshers = []
+// { scroll, content, perRow, sections: [{ crafts, box, grid }] } - what
+// fitCardGrids re-lays-out when the panel's real width changes
+let panelLayout = null
+const SCROLLBAR_SIZE = 14   // GUI px, same as the other panels' bars
+
+// (re)builds every section's card grid with `perRow` cards to a row
+function layoutCardGrids(perRow){
+    panelLayout.perRow = perRow
+    cardRefreshers.length = 0
+    panelLayout.sections.forEach(section => {
+        if(section.grid){
+            section.box.removeControl(section.grid)
+            section.grid.dispose()
+        }
+        section.grid = buildCardGrid(section.crafts, cardRefreshers, perRow)
+        section.box.addControl(section.grid)
+    })
+}
+
+// Runs after every draw of the scroll area, but only does anything when the
+// number of cards that fit has changed (first draw, a window resize, a
+// different screen) - so it settles in one extra frame. Measured in REAL
+// pixels off the first card (a GUI "px" isn't a screen pixel once the texture
+// scales), so no assumption about the panel's size is baked in.
+function fitCardGrids(){
+    const sample = panelLayout?.sections[0]?.grid?.children[0]?.children[0]
+    if(!sample || !sample.widthInPixels) return
+    const unit = sample.widthInPixels / parseFloat(CARD_WIDTH)
+    // the card plus the gutter its padding leaves each side of it
+    const footprint = sample.widthInPixels + sample.paddingLeftInPixels + sample.paddingRightInPixels
+    const room = panelLayout.scroll.widthInPixels - SCROLLBAR_SIZE * unit
+    // The content is sized to exactly the room left beside the scrollbar (a
+    // couple of px short), not "100%": a ScrollViewer decides it needs a
+    // HORIZONTAL bar as soon as its content is a pixel wider than what the
+    // vertical bar leaves it, and 100% is - the same reason playerListUI.js
+    // sizes its columns to the width minus the bar.
+    const contentWidth = `${Math.floor(room / unit) - 2}px`
+    if(panelLayout.content.width !== contentWidth) panelLayout.content.width = contentWidth
+    const perRow = Math.max(1, Math.floor(room / footprint))
+    if(perRow !== panelLayout.perRow) layoutCardGrids(perRow)
+}
 
 function buildCampcraftPanel(scene){
     const texture = getUITexture(scene)
@@ -630,11 +672,32 @@ function buildCampcraftPanel(scene){
         sections[key].push(craft)
     })
 
+    // the sections scroll: more crafts than fit just add rows, and a scrollbar
+    // (the gold one the player list and cook list use) takes over
+    const scroll = new GUI.ScrollViewer("campcraft_scroll")
+    scroll.width = "100%"
+    scroll.height = "80%"
+    scroll.thickness = 0
+    scroll.barSize = SCROLLBAR_SIZE
+    scroll.barColor = GOLD
+    scroll.barBackground = "rgba(255,255,255,0.1)"
+    const sectionsPanel = new GUI.StackPanel("campcraft_sections")
+    sectionsPanel.width = "100%"
+    scroll.addControl(sectionsPanel)
+    inner.addControl(scroll)
+
     cardRefreshers = []
+    panelLayout = { scroll, content: sectionsPanel, perRow: 0, sections: [] }
     Object.entries(sections).forEach(([title, crafts]) => {
-        inner.addControl(buildSectionRow(title))
-        inner.addControl(buildCardGrid(crafts, cardRefreshers))
+        const box = new GUI.StackPanel(`section_box_${title}`)
+        box.width = "100%"
+        box.addControl(buildSectionRow(title))
+        sectionsPanel.addControl(box)
+        panelLayout.sections.push({ crafts, box, grid: null })
     })
+    // a guess for the first frame - fitCardGrids corrects it once it can measure
+    layoutCardGrids(4)
+    scroll.onAfterDrawObservable.add(fitCardGrids)
 
     // starts hidden - a Control defaults to isVisible:true on construction,
     // and openCloseCampcraftUI's own toggle below reads panelRoot.isVisible

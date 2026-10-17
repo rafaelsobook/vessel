@@ -54,7 +54,8 @@ export function getParticleTexture(scene, path){
 // this: nothing rendered, no console error either, since a failed Texture
 // load just shows nothing rather than throwing). Delete a name from this
 // set once its real .webp file actually exists.
-const PARTICLE_TEXTURE_STILL_PNG = new Set(["thin1"])
+// (empty now - thin1.webp exists)
+const PARTICLE_TEXTURE_STILL_PNG = new Set()
 export function particleTexturePath(name){
     const ext = PARTICLE_TEXTURE_STILL_PNG.has(name) ? "png" : "webp"
     return `./images/particles/${name}.${ext}`

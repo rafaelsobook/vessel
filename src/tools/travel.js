@@ -21,6 +21,17 @@ function destinationSpawn(placeId){
 // sequence: update charState's place + position, save it, exitScene,
 // changeScene. One shared function instead of retyping it at every call
 // site - update the sequence once here and every caller gets the fix.
+// set on the way through a door (travelToPlace), read once by the scene you
+// arrive in (areascene.js) - in the openworld, someone arriving through a
+// door is stood on the measured ground, since a door's startingPos is only
+// data written without the terrain to hand
+let arrivingThroughDoor = false
+export function takeDoorArrival(){
+    const through = arrivingThroughDoor
+    arrivingThroughDoor = false
+    return through
+}
+
 // startingPos: where to stand in the new place - left out, the place's spawn.
 export async function travelToPlace({ placeId, name, areaType, startingPos}){
     startingPos ??= destinationSpawn(placeId)
@@ -44,6 +55,7 @@ export async function travelToPlace({ placeId, name, areaType, startingPos}){
 
     const newCharData = await updateMyDetailsOL(charState, checkIfTokenSaved(), true, true)
     exitScene(charState.owner)
+    arrivingThroughDoor = true
     await changeScene("whatever")
     return newCharData
 }

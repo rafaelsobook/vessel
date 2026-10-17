@@ -180,8 +180,14 @@ export function showCreateCharacterPage(getToSaveInfoFromSetup, meshData, onStyl
             }
             // currently viewing a category that just got hidden - fall back
             // to hair (the only category female actually has) rather than
-            // leave an empty panel showing
-            if(isFemale && activeCategory !== "hair") showCategory("hair")
+            // leave an empty panel showing. onCategoryChange too, same as an
+            // icon click: without it the scene's own selectedCategory stayed
+            // on the hidden one, so the color picker kept painting her
+            // invisible pants/cloth, or stayed hidden after "skin"
+            if(isFemale && activeCategory !== "hair"){
+                onCategoryChange?.("hair")
+                showCategory("hair")
+            }
         })
     })
 

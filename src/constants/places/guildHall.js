@@ -103,6 +103,13 @@ export const STARTING_ROOM = {
                 opt: {mass: 0},
                 type: "box"
             },
+            // you can sleep in it (charactersystem/seating.js addBedSeat). The
+            // bed lies along its own z with the pillow at +z, so the sleeper
+            // does too (yawOffset 0). height: the blanket's top (0.47 at the
+            // vertices, a little more between them - lower, and they sink into
+            // it). bodyCentre negative: the body is slid 0.45 toward the pillow,
+            // so the head lies on it.
+            seat: { height: 0.6, bodyCentre: -0.25, radius: 2.2, yawOffset: 0 },
             functionBeforeMerge: null
         },
         {

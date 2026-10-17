@@ -118,6 +118,29 @@ function ensureSeatState(scene, placeId){
     return state
 }
 
+// A bed you lie in, as a seat (pose "sleeping") - for a tent's bed of leaves
+// (assetcreation/createstructure.js) or a bed standing in a room (areascene.js,
+// an optionalObjects entry's `seat`). `at` is the bed's centre; `yaw` the way
+// the sleeper lies, same convention as a seat's yaw (the clip lies along the
+// avatar's own +z); the root is set back so the BODY, not the root, is
+// centred on `at`.
+//   bed: { height - the surface they lie on, above at.y; bodyCentre - how far
+//          ahead of the root the lying body's middle is; radius - how close
+//          the body has to stand for the prompt (default 2.2) }
+// The interact button shows the rest (zZ) icon.
+export function addBedSeat(scene, placeId, seatId, at, yaw, bed){
+    addSeat(scene, placeId, {
+        seatId,
+        x: at.x - Math.sin(yaw) * bed.bodyCentre,
+        y: at.y + bed.height,
+        z: at.z - Math.cos(yaw) * bed.bodyCentre,
+        yaw,
+        pose: "sleeping",
+        radius: bed.radius ?? 2.2,
+        icon: "rest",
+    })
+}
+
 function flushPendingRosterSeats(){
     if(!pendingRosterSeats.size) return
     pendingRosterSeats.forEach((seat, ownerId) => {
