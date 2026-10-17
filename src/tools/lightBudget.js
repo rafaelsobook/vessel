@@ -24,6 +24,28 @@ const RECHECK_FRAMES = 15
 // ranked by (the player's body) - falls back to the active camera while it
 // doesn't exist yet. Lives and dies with the scene's own observable.
 export function startPointLightBudget(scene, getFocus){
+    // Babylon switches a new light on the moment it's made, but only tells
+    // onNewLightAddedObservable about it a timer later (Scene.addLight defers
+    // that with SetImmediate). The guild hall's ten torches, made in one go,
+    // were all on until the next rank - and a material compiled in that gap (a
+    // frame, a whenReadyAsync check, another load finishing) took every one of
+    // them, made worse by the glTF loader raising every material's
+    // maxSimultaneousLights to the scene's whole light count after each load.
+    // Past ~8 lights that shader fails to compile on the user's GPU, and a
+    // material whose shader failed never becomes ready again, even once the
+    // extra lights are off - so the scene never became ready and the place
+    // hung on its loading screen, now and then, depending on timing. A point
+    // light made while MAX_ACTIVE_POINT_LIGHTS are already on starts off
+    // instead; the next rank switches it on if it's one of the nearest.
+    const addLight = scene.addLight.bind(scene)
+    scene.addLight = light => {
+        if(light instanceof PointLight){
+            const on = scene.lights.filter(l => l instanceof PointLight && l.isEnabled(false)).length
+            if(on >= MAX_ACTIVE_POINT_LIGHTS) light.setEnabled(false)
+        }
+        addLight(light)
+    }
+
     let frame = 0
     const rank = () => {
         const focus = getFocus?.() ?? scene.activeCamera?.position

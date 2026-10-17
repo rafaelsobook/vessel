@@ -1208,17 +1208,70 @@ export function activateOnSocketListeners(socket){
     // a picked grain / mushroom grown back where it was (tcp/index.ts's
     // GRAIN_REGROW_MS / MUSHROOM_REGROW_MS) - same dedup-and-replay shape as
     // "bonfire-crafted" above
-    socket.on("grain-added", grain => {
+    // (one, or a list - the admin page adds many at once)
+    socket.on("grain-added", added => {
         if (!isSocketOn) return
-        if (tcpGrains.some(known => known.grainId === grain.grainId)) return
-        tcpGrains.push(grain)
+        const fresh = [].concat(added).filter(grain => grain && !tcpGrains.some(known => known.grainId === grain.grainId))
+        if (!fresh.length) return
+        tcpGrains.push(...fresh)
         reCreateMeshesInScene()
     })
-    socket.on("mushroom-added", mushroom => {
+    socket.on("mushroom-added", added => {
         if (!isSocketOn) return
-        if (tcpMushrooms.some(known => known.mushroomId === mushroom.mushroomId)) return
-        tcpMushrooms.push(mushroom)
+        const fresh = [].concat(added).filter(mushroom => mushroom && !tcpMushrooms.some(known => known.mushroomId === mushroom.mushroomId))
+        if (!fresh.length) return
+        tcpMushrooms.push(...fresh)
         reCreateMeshesInScene()
+    })
+    // a chest put down while the game is running (tcp/admin's "treasures.place") -
+    // the same dedup-and-replay shape as the two above. A chest that was
+    // already there is created by reCreateMeshesInScene from userJoined's list.
+    socket.on("treasure-added", added => {
+        if (!isSocketOn) return
+        const fresh = [].concat(added).filter(chest => chest && !tcpTreasures.some(known => known.itemId === chest.itemId))
+        if (!fresh.length) return
+        tcpTreasures.push(...fresh)
+        reCreateMeshesInScene()
+    })
+
+    // THE MASTER CONTROL (tcp/admin) - an admin moving me, telling me something,
+    // or sending me away. A player's position is their own game's to change, so
+    // the server asks and this does it.
+    socket.on("admin-teleport", async ({ placeId, x, y, z, lift } = {}) => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (!charState || getGameStatus() === "loading") return
+        const me = playersOnScene.find(pl => pl.owner === charState.owner)
+        if (!me?.body) return
+        const { relocatePos } = await import("../controllers/inputMovement.js")
+
+        // stuck inside something: straight up and out
+        if (lift) {
+            return relocatePos(me.body, me.body.position.add(new Vector3(0, lift, 0)))
+        }
+        if (typeof x !== "number" || typeof z !== "number") return
+
+        // another place: the same trip a door makes. The openworld works out the
+        // ground itself when I arrive (areascene.js's settleArrival)
+        if (placeId != null && placeId !== charState.currentPlace.placeId) {
+            const meta = findPlaceMetaData(placeId)
+            if (!meta) return openClosePopup("An admin tried to move you somewhere that doesn't exist", true, 3000)
+            const { travelToPlace } = await import("../tools/travel.js")
+            openClosePopup("An admin is moving you...", true, 2500)
+            return travelToPlace({ placeId, name: meta.name, areaType: meta.areaType, startingPos: { x, y: y ?? 1, z } })
+        }
+
+        // the same place: feet on the floor at (x, z), dropped in from just above
+        const floor = charState.currentPlace.placeId === OPENWORLD_PLACE_ID ? openworldGroundY(x, z) : (y ?? 0)
+        relocatePos(me.body, new Vector3(x, floor + capsuleHeight / 2 + 0.4, z))
+        openClosePopup("An admin moved you", true, 2000)
+    })
+    socket.on("admin-message", ({ text } = {}) => {
+        if (!isSocketOn || !text) return
+        openClosePopup(String(text).slice(0, 300), true, 6000)
+    })
+    socket.on("admin-kicked", ({ reason } = {}) => {
+        openClosePopup(`An admin disconnected you${reason ? ": " + String(reason).slice(0, 200) : ""}. Reload the page to come back.`, true, 60000)
     })
     // the item for a mushroom THIS player picked - tcp sends it only to the
     // picker, and only if nobody took that mushroom first (mushroomLibrary.ts
@@ -1652,7 +1705,11 @@ export function reCreateMeshesInScene() {
         const treasureMesh = sceneDet.scene.getMeshByName(`treasure_${treasureTcpInfo.itemId}`)
         if(treasureMesh) return
 
-        const chest = createTreasureMesh(scene, treasureTcpInfo.pos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId })
+        // tcp has no terrain - an openworld chest stands on the ground found here
+        const chestPos = treasureTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
+            ? { x: treasureTcpInfo.pos.x, y: openworldGroundY(treasureTcpInfo.pos.x, treasureTcpInfo.pos.z), z: treasureTcpInfo.pos.z }
+            : treasureTcpInfo.pos
+        const chest = createTreasureMesh(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId })
         if(chest) treasuresInScene.push({ itemId: treasureTcpInfo.itemId })
     })
     // same three-guard shape as tcpTreasures right above (place filter,
@@ -1704,10 +1761,15 @@ export function reCreateMeshesInScene() {
             : grainTcpInfo.pos.y
         createGrainMesh(scene, { x, y: groundY, z }, grainTcpInfo.grainId)
     })
-    // dungeon floors only - tcp already knows each one's floor height
+    // dungeon floors: tcp knows each one's floor height. One an admin put in the
+    // openworld has no height there, so it's grounded here like a grain
     tcpMushrooms.length && tcpMushrooms.forEach(mushroomTcpInfo => {
         if (characterState.currentPlace.placeId !== mushroomTcpInfo.currentPlaceId) return
-        createMushroomMesh(scene, mushroomTcpInfo.pos, mushroomTcpInfo.mushroomId, mushroomTcpInfo.kind)
+        const { x, z } = mushroomTcpInfo.pos
+        const mushroomPos = mushroomTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
+            ? { x, y: openworldGroundY(x, z), z }
+            : mushroomTcpInfo.pos
+        createMushroomMesh(scene, mushroomPos, mushroomTcpInfo.mushroomId, mushroomTcpInfo.kind)
     })
     if(characterState.currentPlace.placeId === 9){
 

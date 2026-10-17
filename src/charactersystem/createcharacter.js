@@ -866,6 +866,15 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     // findDeepByName grabbing an ambiguous/wrong match). Remove once resolved.
     bodytarget.parent = spineBone
 
+    // her hairstyle, if avatar.glb still has it - re-exporting it dropped
+    // female.hair2, and a saved/NPC "hair2" (Colousa, Ilvara) then matched
+    // nothing and left her bald. Falls back to the first style it does have.
+    const femaleHairStyles = mainBodyMeshes.getChildren()
+        .map(mes => mes.name.split(" ")[2]?.toLowerCase() ?? "")
+        .filter(name => name.includes("female.hair") || name.includes("femaile.hair"))
+        .map(name => name.split(".")[1])
+    const femaleHair = femaleHairStyles.includes(det.hair) ? det.hair : femaleHairStyles[0]
+
     mainBodyMeshes.getChildren().forEach(mes => {
         mes.isPickable = false
         mes.name = mes.name.split(" ")[2].toLowerCase()
@@ -930,7 +939,7 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             }
             if(mes.name.includes("female.hair")){
                 const hairStyleName = mes.name.split(".")[1]
-                if(hairStyleName !== det.hair) return showHideEquip(mes, false)
+                if(hairStyleName !== femaleHair) return showHideEquip(mes, false)
                 // hair2 gets its own strand-texture bump map, hair1 its own
                 // plain color material - both separate from the shared
                 // hairMat (male hair/scalp) so their backFaceCulling:false

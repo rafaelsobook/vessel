@@ -2,7 +2,7 @@ import { Vector3 } from "@babylonjs/core"
 import { createElement } from "../tools/GUITools.js"
 import { openCloseMiniLS, openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../tools/tools.js"
-import { getCharState, setCharStateMode, refreshHungerUI, refreshBleeding, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp, getMaxMp, getMaxSp } from "./characterstate.js"
+import { getCharState, setCharStateMode, refreshHungerUI, refreshBleeding, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp, getMaxHp, getMaxMp, getMaxSp } from "./characterstate.js"
 import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { obtain, openUpdateInventory } from "./inventory.js"
@@ -226,6 +226,20 @@ let struckItemFunc = () => {
 //     closeItemInfo()
 //     // await deleteGate(newId)
 // }
+// every food mends you a little over the moments after you eat it, on top of
+// whatever the food itself does: FOOD_MEND of your max hp, a share every
+// FOOD_MEND_MS / FOOD_MEND_TICKS over FOOD_MEND_MS. Each thing eaten mends on
+// its own, so two in a row mend twice. healHp does nothing once you're dead.
+const FOOD_MEND = 0.10
+const FOOD_MEND_MS = 3000
+const FOOD_MEND_TICKS = 6
+function mendAfterEating(){
+    const perTick = getMaxHp() * FOOD_MEND / FOOD_MEND_TICKS
+    for(let tick = 1; tick <= FOOD_MEND_TICKS; tick++){
+        setTimeout(() => healHp(perTick), tick * FOOD_MEND_MS / FOOD_MEND_TICKS)
+    }
+}
+
 let consumeItemFunc = async () => {
     if(!itemDetail) return
     if(itemDetail.itemCateg !== "consumable") return
@@ -243,6 +257,7 @@ let consumeItemFunc = async () => {
     // damageHp as non-lethal "food"
     if(plusHp > 0) healHp(plusHp)
     else if(plusHp < 0) damageHp(-plusHp, "food")
+    if(itemDetail.itemType === "food") mendAfterEating()
     charState.mp+=plusMp
     charState.sp+=plusSp
     charState.stats.strength+= plusDmg
