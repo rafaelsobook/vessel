@@ -1,4 +1,4 @@
-import { Vector3, ParticleSystem, Color4, Color3, MeshBuilder, StandardMaterial } from "@babylonjs/core"
+import { Vector3, ParticleSystem, DynamicTexture, Color4, Color3, MeshBuilder, StandardMaterial } from "@babylonjs/core"
 import { getCharState } from "./characterstate.js"
 import { getPlayersOnScene, getEnemiesOnScene, getDuelOpponentsOnScene, getIsSocketOn } from "../sockets/worldsocket.js"
 import { faceAttackTarget, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
@@ -286,7 +286,7 @@ export function onMeleeConnect({ targetBody, targetMeshes = [], targetAnims = []
 
     if(outcome !== "hit"){
         // steel glancing off: a dull spark, a little jolt, no freeze, no flash
-        sparks(scene, contact, false, true)
+        hitEffect(scene, contact, player.body.position, { weaponType, dull: true })
         if(firstOfSwing) addCameraTrauma(scene, 0.15)
         if(outcome === "immune" && !silent) playSound(getAllSounds()?.weaponblockS)
         return
@@ -297,7 +297,7 @@ export function onMeleeConnect({ targetBody, targetMeshes = [], targetAnims = []
     const scale = isSkill ? 0.75 : 1
 
     flash(targetMeshes, isCritical)
-    sparks(scene, contact, isCritical, false)
+    hitEffect(scene, contact, player.body.position, { weaponType, isCritical, isSkill })
     if(firstOfSwing){
         // the view is thrown the way the blow travels: across the screen, a touch down
         const side = Math.random() < 0.5 ? -1 : 1
@@ -309,10 +309,11 @@ export function onMeleeConnect({ targetBody, targetMeshes = [], targetAnims = []
     }
 }
 
-/** My blow killed it (createEnemy.js's enemyIsHit, hp <= 0). */
-export function onMeleeKill(){
+/** My blow killed it (createEnemy.js's enemyIsHit, hp <= 0). `at`: where it stood. */
+export function onMeleeKill(at){
     const scene = myPlayer()?.body?.getScene()
     if(!scene) return
+    if(at) killEffect(scene, at)
     addCameraTrauma(scene, 0.35, { x: 0, y: -0.6 })
     punchCameraFov(scene, 0.03)
     slowMotion(scene, 0.35, 170)
@@ -379,64 +380,287 @@ function slowMotion(scene, timeScale, ms){
     }, ms)
 }
 
-// ── impact particles ─────────────────────────────────────────────────────────
-// Two small systems per scene, reused for every hit: streaky sparks, and one
-// big quick flare at the point of contact. Emitters are plain Vector3s (never a
-// mesh) and the texture is the shared cached one, so nothing here ever
-// disposes a texture other effects use.
+// ── impact effect ────────────────────────────────────────────────────────────
+// A hit is four small layers, each with one job, all over within ~0.3 s - the
+// usual recipe for a hit that reads clearly without turning into fireworks (a
+// few simple layers beat one big effect; the loudest layers are kept for crits
+// and kills):
+//   1. STAR   - a bright four-point hit-spark at the contact point: the "it
+//               landed" flash. Peaks in the first ~0.05 s.
+//   2. SPARKS - a fan of short streaks thrown off the way the blow travelled,
+//               spread across the screen so they read from behind the avatar.
+//   3. SLASH  - a thin curved flash through the contact point, tilted one way
+//               then the other swing by swing (weapons only, not fists).
+//   4. RING   - a thin ring that opens out and fades (crits and kills only).
+// The systems and their textures are made once per scene and reused. Every size
+// is scaled by how far the camera is zoomed out, so a hit is the same size on
+// screen at any zoom, and the star is nudged towards the camera so the enemy's
+// own body doesn't cut half of it off.
+const WARM = { bright: [1, 0.95, 0.75], hot: [1, 0.68, 0.28], dead: [1, 0.35, 0.08], star: [1, 0.92, 0.66] }
+const GOLD = { bright: [1, 0.92, 0.5], hot: [1, 0.62, 0.15], dead: [1, 0.3, 0.05], star: [1, 0.85, 0.4] }
+const COOL = { bright: [0.88, 0.95, 1], hot: [0.55, 0.75, 1], dead: [0.3, 0.5, 1], star: [0.8, 0.9, 1] }
+// per weapon: how big the star is, how many sparks, how long the slash is (0 =
+// none), and its colours. Sizes are in "camera-scaled units" (see hitEffect):
+// one is about a sixth of the screen's height, so a sword's star comes out near
+// a tenth of the screen and its slash a sixth - a hit you notice, not a blast.
+const WEAPON_FX = {
+    fist:    { star: 0.45, sparks: 6,  slash: 0,    colors: WARM },
+    sword:   { star: 0.6,  sparks: 10, slash: 1.0,  colors: WARM },
+    staff:   { star: 0.55, sparks: 8,  slash: 0.85, colors: COOL },
+    spear:   { star: 0.55, sparks: 9,  slash: 1.2,  colors: WARM },
+    axe:     { star: 0.7,  sparks: 12, slash: 1.2,  colors: WARM },
+    pickaxe: { star: 0.7,  sparks: 12, slash: 1.2,  colors: WARM },
+}
+const rgba = (c, a = 1) => new Color4(c[0], c[1], c[2], a)
+
+function drawTexture(scene, name, size, draw){
+    const texture = new DynamicTexture(name, size, scene, true)
+    const ctx = texture.getContext()
+    ctx.clearRect(0, 0, size, size)
+    draw(ctx, size)
+    texture.hasAlpha = true
+    texture.update()
+    return texture
+}
+
+// a soft glow with four thin rays - long up/down/left/right, short on the diagonals
+function starTexture(scene){
+    return drawTexture(scene, "meleeStar", 128, (ctx, s) => {
+        const c = s / 2
+        const glow = ctx.createRadialGradient(c, c, 0, c, c, c * 0.55)
+        glow.addColorStop(0, "rgba(255,255,255,1)")
+        glow.addColorStop(0.35, "rgba(255,240,200,0.55)")
+        glow.addColorStop(1, "rgba(255,220,150,0)")
+        ctx.fillStyle = glow
+        ctx.fillRect(0, 0, s, s)
+        ctx.fillStyle = "rgba(255,255,255,1)"
+        const ray = (angle, length, width) => {
+            ctx.save()
+            ctx.translate(c, c)
+            ctx.rotate(angle)
+            ctx.beginPath()
+            ctx.moveTo(-length, 0); ctx.lineTo(0, -width); ctx.lineTo(length, 0); ctx.lineTo(0, width)
+            ctx.closePath()
+            ctx.fill()
+            ctx.restore()
+        }
+        ray(0, c * 0.98, 3.2)
+        ray(Math.PI / 2, c * 0.98, 3.2)
+        ray(Math.PI / 4, c * 0.55, 2.2)
+        ray(-Math.PI / 4, c * 0.55, 2.2)
+    })
+}
+
+// a curved blade of light: points at both ends, thickest in the middle
+function slashTexture(scene){
+    return drawTexture(scene, "meleeSlash", 256, (ctx, s) => {
+        const c = s / 2
+        ctx.beginPath()
+        ctx.moveTo(8, c + 22)
+        ctx.quadraticCurveTo(c, c - 46, s - 8, c + 22)
+        ctx.quadraticCurveTo(c, c - 14, 8, c + 22)
+        ctx.closePath()
+        const along = ctx.createLinearGradient(0, 0, s, 0)
+        along.addColorStop(0, "rgba(255,255,255,0)")
+        along.addColorStop(0.3, "rgba(255,255,255,1)")
+        along.addColorStop(0.7, "rgba(255,255,255,1)")
+        along.addColorStop(1, "rgba(255,255,255,0)")
+        ctx.fillStyle = along
+        ctx.shadowColor = "rgba(255,240,200,0.9)"
+        ctx.shadowBlur = 10
+        ctx.fill()
+    })
+}
+
+function ringTexture(scene){
+    return drawTexture(scene, "meleeRing", 128, (ctx, s) => {
+        ctx.strokeStyle = "rgba(255,255,255,1)"
+        ctx.lineWidth = 5
+        ctx.shadowColor = "rgba(255,255,255,0.8)"
+        ctx.shadowBlur = 6
+        ctx.beginPath()
+        ctx.arc(s / 2, s / 2, s / 2 - 12, 0, Math.PI * 2)
+        ctx.stroke()
+    })
+}
+
+// a particle system that only ever fires on request: starts exactly at its
+// emitter, lifetimes in real seconds (updateSpeed 1/60 - Babylon's default
+// 0.01 runs a lifetime of 1 at about 1.7 s)
+function oneShot(scene, name, capacity, texture){
+    const system = new ParticleSystem(name, capacity, scene)
+    system.particleTexture = texture
+    system.emitter = new Vector3()
+    system.createPointEmitter(Vector3.Zero(), Vector3.Zero())
+    system.emitRate = 0
+    system.minEmitPower = system.maxEmitPower = 0
+    system.updateSpeed = 1 / 60
+    system.blendMode = ParticleSystem.BLENDMODE_ADD
+    return system
+}
+
+const _toCam = new Vector3()
+
+// Two of each layer, so a swing that catches two enemies in the same frame
+// doesn't have the second hit take over the first one's emission (a system
+// only fires on its next update, with whatever it was last set to).
+const pair = make => [make(), make()]
+const take = systems => systems.find(system => system.manualEmitCount <= 0) ?? systems[1]
+
 let fx = null
 function impactFx(scene){
     if(fx?.scene === scene) return fx
-    const texture = getParticleTexture(scene, particleTexturePath("flare2"))
+    const sparkTexture = getParticleTexture(scene, particleTexturePath("flare2"))
+    const textures = { star: starTexture(scene), slash: slashTexture(scene), ring: ringTexture(scene) }
 
-    const spark = new ParticleSystem("meleeSparks", 160, scene)
-    spark.particleTexture = texture
-    spark.emitter = new Vector3()
-    spark.createSphereEmitter(0.08)
-    spark.minSize = 0.03; spark.maxSize = 0.11
-    spark.minLifeTime = 0.08; spark.maxLifeTime = 0.24
-    spark.minEmitPower = 3; spark.maxEmitPower = 8
-    spark.emitRate = 0
-    spark.gravity = new Vector3(0, -12, 0)
-    spark.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED
-    spark.blendMode = ParticleSystem.BLENDMODE_ADD
-    spark.color1 = new Color4(1, 0.92, 0.65, 1)
-    spark.color2 = new Color4(1, 0.62, 0.25, 1)
-    spark.colorDead = new Color4(1, 0.3, 0.05, 0)
+    const sparks = pair(() => {
+        const system = oneShot(scene, "meleeSparks", 160, sparkTexture)
+        system.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED
+        system.gravity = new Vector3(0, -9, 0)
+        system.minLifeTime = 0.12; system.maxLifeTime = 0.26
+        // where this hit's sparks are headed: mostly the way the blow
+        // travelled, fanned out across the screen and a little upward - or,
+        // for a kill, in every direction
+        const fan = system.fan = { blow: new Vector3(0, 0, 1), right: new Vector3(1, 0, 0), radial: false }
+        system.startDirectionFunction = (_matrix, direction) => {
+            if(fan.radial){
+                direction.set(Math.random() * 2 - 1, Math.random() * 0.9 + 0.1, Math.random() * 2 - 1)
+            } else {
+                const along = 0.55 + Math.random() * 0.45
+                const across = (Math.random() * 2 - 1) * 0.95
+                const lift = Math.random() * 0.9 - 0.15
+                direction.set(
+                    fan.blow.x * along + fan.right.x * across,
+                    lift,
+                    fan.blow.z * along + fan.right.z * across)
+            }
+            direction.normalize()
+        }
+        return system
+    })
 
-    const burst = new ParticleSystem("meleeFlare", 8, scene)
-    burst.particleTexture = texture
-    burst.emitter = new Vector3()
-    burst.minSize = 0.7; burst.maxSize = 1.0
-    burst.minLifeTime = 0.06; burst.maxLifeTime = 0.09
-    burst.minEmitPower = 0; burst.maxEmitPower = 0
-    burst.emitRate = 0
-    burst.blendMode = ParticleSystem.BLENDMODE_ADD
-    burst.color1 = new Color4(1, 1, 1, 0.9)
-    burst.color2 = new Color4(1, 0.95, 0.8, 0.8)
-    burst.colorDead = new Color4(1, 0.9, 0.7, 0)
+    const stars = pair(() => {
+        const system = oneShot(scene, "meleeStar", 4, textures.star)
+        system.minLifeTime = 0.1; system.maxLifeTime = 0.12
+        system.minInitialRotation = 0; system.maxInitialRotation = Math.PI / 2
+        // pops in fast, then thins out
+        system.addSizeGradient(0, 0.5).addSizeGradient(0.2, 1).addSizeGradient(1, 0.4)
+        return system
+    })
 
-    fx = { scene, spark, burst }
+    const slashes = pair(() => {
+        const system = oneShot(scene, "meleeSlash", 4, textures.slash)
+        system.minLifeTime = 0.11; system.maxLifeTime = 0.13
+        system.addSizeGradient(0, 0.6).addSizeGradient(0.25, 1).addSizeGradient(1, 0.9)
+        return system
+    })
+
+    const rings = pair(() => {
+        const system = oneShot(scene, "meleeRing", 4, textures.ring)
+        system.minLifeTime = 0.17; system.maxLifeTime = 0.2
+        system.addSizeGradient(0, 0.25).addSizeGradient(1, 1)
+        return system
+    })
+
+    fx = { scene, sparks, stars, slashes, rings, slashFlip: 1 }
     scene.onDisposeObservable.addOnce(() => {
         if(fx?.scene === scene) fx = null
-        spark.dispose(false)
-        burst.dispose(false)
+        // the sparks' texture is the shared cached one; the others are ours
+        ;[...sparks, ...stars, ...slashes, ...rings].forEach(system => system.dispose(!sparks.includes(system)))
     })
     return fx
 }
 
-function sparks(scene, at, big, dull){
-    const { spark, burst } = impactFx(scene)
+function setScale(system, scale){
+    system.minScaleX = system.maxScaleX = system.minScaleY = system.maxScaleY = scale
+}
+
+// One hit's effect at `at` (the contact point). from: where I stand, for which
+// way the blow went. opts: weaponType, isCritical, isSkill, dull (a block or a
+// ghost shrugging it off - just a few cool sparks).
+function hitEffect(scene, at, from, { weaponType = "fist", isCritical = false, isSkill = false, dull = false } = {}){
+    const layers = impactFx(scene)
+    const spark = take(layers.sparks)
+    const camera = scene.activeCamera
+    const k = camera?.radius ? Math.min(2.4, Math.max(0.8, camera.radius / 7)) : 1
+    const look = WEAPON_FX[weaponType] ?? WEAPON_FX.sword
+    const colors = dull ? COOL : isCritical ? GOLD : look.colors
+    const power = isSkill ? 0.8 : 1
+
+    // the way the blow travelled, flat; the camera's right for fanning across the screen
+    let bx = at.x - from.x, bz = at.z - from.z
+    const blen = Math.hypot(bx, bz) || 1
+    spark.fan.blow.set(bx / blen, 0, bz / blen)
+    if(camera) camera.getDirection(Vector3.Right()).normalizeToRef(spark.fan.right)
+    spark.fan.radial = false
+
+    // the sparks
     spark.emitter.copyFrom(at)
-    spark.color1 = dull ? new Color4(0.85, 0.9, 1, 1) : new Color4(1, 0.92, 0.65, 1)
-    spark.manualEmitCount = dull ? 8 : big ? 30 : 16
+    spark.color1 = rgba(colors.bright)
+    spark.color2 = rgba(colors.hot)
+    spark.colorDead = rgba(colors.dead, 0)
+    spark.minEmitPower = 3 * k; spark.maxEmitPower = 6.5 * k
+    // BILLBOARDMODE_STRETCHED: scale X is the streak's width, scale Y its length
+    spark.minScaleX = 0.06 * k; spark.maxScaleX = 0.11 * k
+    spark.minScaleY = 0.35 * k; spark.maxScaleY = 0.8 * k
+    spark.minSize = spark.maxSize = 1
+    const count = dull ? 6 : Math.round(look.sparks * (isCritical ? 1.8 : 1) * power)
+    spark.manualEmitCount = count
     spark.start()
     if(dull) return
-    burst.emitter.copyFrom(at)
-    burst.minSize = big ? 1.1 : 0.7
-    burst.maxSize = big ? 1.5 : 1.0
-    burst.manualEmitCount = 1
-    burst.start()
+
+    // the rest sit a little towards the camera
+    if(camera) camera.globalPosition.subtractToRef(at, _toCam).normalize()
+    const front = at.add(_toCam.scale(0.3 * k))
+
+    const star = take(layers.stars)
+    star.emitter.copyFrom(front)
+    star.color1 = rgba([1, 1, 1]); star.color2 = rgba(colors.star)
+    star.colorDead = rgba(colors.star, 0)
+    setScale(star, look.star * (isCritical ? 1.4 : 1) * power * k)
+    star.manualEmitCount = 1
+    star.start()
+
+    if(look.slash){
+        const slash = take(layers.slashes)
+        const s = layers.slashFlip = -layers.slashFlip
+        slash.emitter.copyFrom(front)
+        slash.color1 = rgba([1, 1, 1], 0.95); slash.color2 = rgba(colors.star, 0.9)
+        slash.colorDead = rgba(colors.star, 0)
+        slash.minInitialRotation = slash.maxInitialRotation = s * (0.5 + Math.random() * 0.3)
+        setScale(slash, look.slash * (isCritical ? 1.2 : 1) * power * k)
+        slash.manualEmitCount = 1
+        slash.start()
+    }
+
+    if(isCritical) ringAt(scene, front, k, 1.1, colors)
+}
+
+function ringAt(scene, at, k, size, colors){
+    const ring = take(impactFx(scene).rings)
+    ring.emitter.copyFrom(at)
+    ring.color1 = rgba([1, 1, 1], 0.85); ring.color2 = rgba(colors.star, 0.8)
+    ring.colorDead = rgba(colors.star, 0)
+    setScale(ring, size * k)
+    ring.manualEmitCount = 1
+    ring.start()
+}
+
+// A kill: a ring and a small burst in every direction from where it stood.
+function killEffect(scene, at){
+    const spark = take(impactFx(scene).sparks)
+    const camera = scene.activeCamera
+    const k = camera?.radius ? Math.min(2.4, Math.max(0.8, camera.radius / 7)) : 1
+    spark.fan.radial = true
+    spark.emitter.copyFrom(at)
+    spark.color1 = rgba(GOLD.bright); spark.color2 = rgba(GOLD.hot); spark.colorDead = rgba(GOLD.dead, 0)
+    spark.minEmitPower = 2.5 * k; spark.maxEmitPower = 5.5 * k
+    spark.minScaleX = 0.06 * k; spark.maxScaleX = 0.1 * k
+    spark.minScaleY = 0.35 * k; spark.maxScaleY = 0.7 * k
+    spark.minSize = spark.maxSize = 1
+    spark.manualEmitCount = 12
+    spark.start()
+    ringAt(scene, at, k, 1.5, GOLD)
 }
 
 // ── the lock-on ring ─────────────────────────────────────────────────────────

@@ -34,7 +34,7 @@ import { pickAnimVariant } from "../tools/animation.js"
 import { fireAimProbe } from "./aimProbe.js"
 import { onIntersecEnterTrig, removeIntersecTrig } from "../components/actionManager.js"
 import { emitEnemyIsHit, emitEnemyBind, emitEnemyCurse, emitRegisterPlayerAsEnemy, emitEnemyChase, emitSpawnCircle, emitEnemyTeleport, emitEnemyWillAttack } from "../sockets/emits.js"
-import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect, raiseBaseMaxHp, cureBleeding, refreshBleeding } from "../charactersystem/characterstate.js"
+import { getAdditionalsFromAbilities, getCharState, deductHp, healPlayer, updateHpMpSp_UI, updateMyDetailsOL, addTempBuff, removeTempBuff, dealDamageToEnemy, curseStatusEffect, getTotalDarkResistance, raiseBaseMaxHp, cureBleeding, refreshBleeding } from "../charactersystem/characterstate.js"
 import { poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { randNum, randBetween } from "../tools/random.js"
@@ -174,6 +174,13 @@ function getWeaknessMultiplier(skill, target){
 // check that varies enemy to enemy.
 function getElementDamageMultiplier(skill, target){
     return (ELEMENT_DAMAGE_MULTIPLIER[skill?.element] ?? 1) * getWeaknessMultiplier(skill, target)
+}
+
+// An enemy's dark skill landing on ME: dark-resistant gear (characterstate.js's
+// getTotalDarkResistance) takes that share of its damage off. Other elements pass
+// through untouched.
+function darkResisted(dmg, skill){
+    return skill?.element === "dark" ? Math.round(dmg * (1 - getTotalDarkResistance())) : dmg
 }
 
 // FIRE'S BURN, for a target that ISN'T the local player (a real wild enemy
@@ -4433,7 +4440,7 @@ function triggerEnemyGroundTrap(scene, enemy, skill, targetPlayer){
             ...(burnEffect ? [burnEffect] : []),
         ]
 
-        deductHp(totalDmg, incomingEffects) // a death reports itself (characterstate.js's die)
+        deductHp(darkResisted(totalDmg, skill), incomingEffects) // a death reports itself (characterstate.js's die)
     }, skill.castDuration * 1000)
 }
 
@@ -4528,7 +4535,7 @@ function spawnEnemyLightningStrike(scene, enemy, skill, targetPlayer){
             ...(burnEffect ? [burnEffect] : []),
         ]
 
-        deductHp(totalDmg, incomingEffects) // a death reports itself (characterstate.js's die)
+        deductHp(darkResisted(totalDmg, skill), incomingEffects) // a death reports itself (characterstate.js's die)
     }, THUNDERCLAP_STRIKE_DELAY_MS)
 }
 
@@ -4789,6 +4796,6 @@ function fireEnemySkillProjectile(scene, enemy, skill, spawnPos, forward, target
         ]
 
         // a death reports itself (characterstate.js's die)
-        await deductHp(totalDmg, incomingEffects)
+        await deductHp(darkResisted(totalDmg, skill), incomingEffects)
     })
 }

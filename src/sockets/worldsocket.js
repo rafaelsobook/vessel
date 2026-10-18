@@ -383,13 +383,13 @@ export function activateOnSocketListeners(socket){
         if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemModelName, metalColor, itemName, hairVisible)
         if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)
         if(itemType === "pauldron") theEquipingPlayer.equipPauldron(itemName, metalColor)
+        if(itemType === "belt") theEquipingPlayer.equipBelt(itemModelStyle, itemName)
 
         // if (itemType === "weapon") theEquipingPlayer.equipSword(swordRoot, itemName, theEquipingPlayer._attacking, data.isHide)
         // if (itemType === "helmet") theEquipingPlayer.equipHelmet(helmRoot, itemName)
-            
-        
+
+
         // if (itemType === "armor") theEquipingPlayer.equipArmor(armorRoot, itemName)
-        // if (itemType === "belt") theEquipingPlayer.equipBelt(itemModelStyle, itemName)
         // if (itemType === "cloak") theEquipingPlayer.equipCloak(itemModelStyle, itemName)
     })
     socket.on("unequiped-item", data => {

@@ -241,6 +241,40 @@ function createTintedArmorItem(piece, metalColor){
     }
 }
 
+// The Priest Belt - the belt.prieststyle1 mesh in avatar.glb, painted from
+// images/textures/belt/priestbelt.jpg (+ priestbeltnormal.jpg). Blessed cloth:
+// it keeps some of the cold off (tempResistance, summed into the weather system's
+// body temperature - cold:10 means safe down to -10, so on its own it takes the
+// edge off rain and fog but a snowstorm still needs a full set) and turns away
+// a fifth of dark magic (darkResistance - characterstate.js's
+// getTotalDarkResistance: that share off a dark skill's damage and off the
+// chance of it cursing you). Minted fresh per call, like the armour above.
+export function createPriestBeltItem(){
+    return {
+        itemId: randomNum(),
+        itemModelStyle: "prieststyle1", // which belt.<style> mesh to show
+        name: "priestbelt",             // the icon and the texture
+        dn: "Priest Belt",
+        itemCateg: "equipable",
+        itemType: "belt",
+        weaponType: undefined,
+        equipAbilities: { dmg: 0, def: 4, resistance: 8, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+        consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+        equiped: false,
+        soulFeed: 0,
+        isEnhanceAble: true,
+        enhancedLevel: 0,
+        slots: [],
+        durability: { current: 100, max: 100 },
+        price: { coinType: "bronze", pieces: 40 },
+        qnty: 1,
+        desc: "A blessed priest's sash. It keeps the cold at bay and turns aside dark magic.",
+        rarity: "rare",
+        tempResistance: { cold: 10, heat: 0 },
+        darkResistance: 0.2,
+    }
+}
+
 // DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Drops
 // one of every craftable material (resourceLoot.js's lootNames - ores, gems,
 // wood/leather/stone) straight into the inventory, for testing the crafting
@@ -251,6 +285,7 @@ function createTintedArmorItem(piece, metalColor){
 export function giveAllItems(){
     obtainAll([...lootNames.map(name => createLootItem(name)),
         ...GIVE_ALL_ARMOR_METALS.flatMap(metal => TINTED_ARMOR.map(piece => createTintedArmorItem(piece, metal))),
+        createPriestBeltItem(),
         // same item shapes toSell.js's sellerBram stall already trusts
         // (armor/pauldron/gauntlet art under images/items/equipable/* is
         // guaranteed to exist for these three) - added for fit-testing

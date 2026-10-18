@@ -436,6 +436,21 @@ export function getTotalTempResistance(){
     return total
 }
 
+// Summed `darkResistance` across everything equipped: the share of dark magic
+// the gear turns away (0.2 = 20%), capped so no set makes it harmless. Read by
+// two things - dark skills' damage to me (skillEffects.js's enemy-skill hits) and
+// the chance of one cursing me (curseStatusEffect below). Gear without the field
+// contributes 0, like tempResistance above.
+const DARK_RESISTANCE_CAP = 0.8
+export function getTotalDarkResistance(){
+    let total = 0
+    characterState.items.forEach(itm => {
+        if(itm.itemCateg !== 'equipable' || !itm.equiped) return
+        total += itm.darkResistance ?? 0
+    })
+    return Math.min(DARK_RESISTANCE_CAP, Math.max(0, total))
+}
+
 export function getTotalDefense(){
     // dex counts double, here only - a second `+= dex` at the end, after the
     // percent bonus, made it triple (the shipped builds have it double)
@@ -1126,7 +1141,9 @@ export function cureBleeding(){
 // hpcost/mpcost/spcost/hungercost/energycost all 0 - curse is a pure status
 // flag, no direct drain of its own the way poison/spdrain have.
 export function curseStatusEffect(chance){
-    return { effectType: "cursed", dn: "Cursed", chance: (chance ?? 1) * 100, permanent: true, hpcost: 0, mpcost: 0, spcost: 0, hungercost: 0, energycost: 0 }
+    // dark-resistant gear (getTotalDarkResistance) makes the curse that much
+    // less likely to take
+    return { effectType: "cursed", dn: "Cursed", chance: (chance ?? 1) * 100 * (1 - getTotalDarkResistance()), permanent: true, hpcost: 0, mpcost: 0, spcost: 0, hungercost: 0, energycost: 0 }
 }
 export function isPlayerCursed(){
     return characterState.status.some(status => status.effectType === "cursed")

@@ -1,4 +1,4 @@
-import { layerAvatarMaterials, layerFacePart, layerHelmet, tuckOutfit } from "./avatarLayers.js";
+import { layerAvatarMaterials, layerFacePart, layerHelmet, layerWorn, tuckOutfit } from "./avatarLayers.js";
 import { 
     Vector3, 
     Quaternion, 
@@ -20,7 +20,7 @@ import { createWeapon } from '../assetcreation/createweapon';
 import { pFloat } from '../tools/tools';
 import { createBloodParticle, createBloodSplatter } from '../tools/particlesystem';
 import { CharacterAnimations, playAnim } from '../tools/animation';
-import { createMesh, putFakeShadow } from '../creations/creationTools';
+import { createMesh, putFakeShadow, createMaterialFromDir } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
 import { attachLightning } from '../effects/lightning';
 import { createBodyAura } from '../effects/aura';
@@ -351,6 +351,31 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         })
     }
 
+    // A belt is a skinned mesh in avatar.glb (belt.<style>, e.g. belt.prieststyle1)
+    // painted from images/textures/belt/<item name>.jpg + <item name>normal.jpg -
+    // itemModelStyle picks the mesh, the item's name picks the texture. Only the
+    // male body carries these meshes (createAnimeBody), so on a female character
+    // there's nothing to show and this does nothing.
+    function equipBelt(itemModelStyle, itemName){
+        if(!itemModelStyle) return
+        belts.forEach(belt => {
+            if(belt.name !== itemModelStyle){
+                belt.mesh.isVisible = false
+                return
+            }
+            if(belt.paintedAs !== itemName){
+                const beltMat = createMaterialFromDir(scene, "./images/textures/belt", { diff: itemName, normal: `${itemName}normal` })
+                // it only has the diffuse and normal maps - the default white
+                // specular of createMaterialFromDir would make cloth look like metal
+                beltMat.specularColor = new Color3(0.12, 0.12, 0.12)
+                layerWorn(beltMat)
+                belt.mesh.material = beltMat
+                belt.paintedAs = itemName
+            }
+            belt.mesh.isVisible = true
+        })
+    }
+
     function createPauldron(pauldronName, metalColor) {
         const template = containers.pauldrons.find(msh => msh.name.split(".")[1] === pauldronName)
         if(!template) return console.warn(`createPauldron: missing pauldron "${pauldronName}"`)
@@ -445,6 +470,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             case "armor":
                 armors.forEach(arm => arm.mesh.isVisible = false)
             break
+            case "belt":
+                belts.forEach(belt => belt.mesh.isVisible = false)
+            break
             case "helmet":
                 helmetMeshes.forEach(hlm => showHideEquip(hlm.mesh, false))
                 if(characterHairs) characterHairs.forEach(hairOrScalp => hairOrScalp.isVisible = true)
@@ -466,6 +494,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                     equipBoots(itm.name)
                 }
                 if(itm.itemType === "armor" && itm.equiped) equipArmor(itm.name, itm.metalColor)
+                if(itm.itemType === "belt" && itm.equiped) equipBelt(itm.itemModelStyle, itm.name)
                 if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.modelName, itm.metalColor, itm.name, itm.hairVisible)
                 if(itm.itemType === "gauntlet" && itm.equiped) equipGauntlet(itm.name, itm.metalColor)
                 if(itm.itemType === "pauldron" && itm.equiped) equipPauldron(itm.name, itm.metalColor)
@@ -585,6 +614,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         equipSword,
         equipBoots,
         equipArmor,
+        equipBelt,
         equipHelmet,
         equipGauntlet,
         equipPauldron,
@@ -1047,6 +1077,15 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             // mes.material = cloakMat
             mes.isVisible = false
             armors.push({name: armorName, mesh:mes, isUsed: false})
+        }
+        // belt.<style> (belt.prieststyle1...) - hidden until a belt of that
+        // style is worn (equipBelt). Without this it would show on every male
+        // avatar as a bare white belt: the glb gives it no material.
+        if(mes.name.startsWith("belt.")){
+            const beltStyle = mes.name.split(".")[1]
+            if(!beltStyle) return
+            mes.isVisible = false
+            belts.push({name: beltStyle, mesh: mes})
         }
     })
     // what his own shirt and pants cover of his skin isn't drawn, nor the top

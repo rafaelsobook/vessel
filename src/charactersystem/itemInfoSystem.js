@@ -49,6 +49,13 @@ const itemDmgValue = document.querySelector(".itemDmgValue")
 const itemMagicDmgValue = document.querySelector(".itemMagicDmgValue")
 const itemMagicResistanceValue = document.querySelector(".itemMagicResistanceValue")
 const itemDurabilityBar = document.querySelector(".itemDurabilityBar")
+// weather and dark-magic protection (tempResistance / darkResistance on the
+// item) - each row only shows on gear that has it
+const RESISTANCE_ROWS = [
+    { row: document.querySelector(".cold-resistance-row"), value: document.querySelector(".itemColdResistanceValue"), read: item => item.tempResistance?.cold },
+    { row: document.querySelector(".heat-resistance-row"), value: document.querySelector(".itemHeatResistanceValue"), read: item => item.tempResistance?.heat },
+    { row: document.querySelector(".dark-resistance-row"), value: document.querySelector(".itemDarkResistanceValue"), read: item => item.darkResistance ? `${Math.round(item.darkResistance * 100)}%` : 0 },
+]
 
 // weapon parts material breakdown (blade/guard/handle/pommel) - only
 // meaningful for weapons built from part meshes, see createweapon.js/parts
@@ -62,7 +69,8 @@ const capitalize = str => str.charAt(0).toUpperCase() + str.slice(1)
 
 const DURABILITY_LOW_THRESHOLD = 0.3
 
-const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots"]
+const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots", "belt"]
+
 
 const claimContainer = document.querySelector(".claim-container")
 
@@ -104,6 +112,7 @@ let equipItemFunc = () => {
         if(itemType === "gauntlet") myChar.equipGauntlet(name, itemDetail.metalColor)
         if(itemType === "pauldron") myChar.equipPauldron(name, itemDetail.metalColor)
         if(itemType === "armor") myChar.equipArmor(name, itemDetail.metalColor)
+        if(itemType === "belt") myChar.equipBelt(itemDetail.itemModelStyle, name)
 
     }
     
@@ -461,6 +470,11 @@ export function showItemInfo(_itemDet){
     itemDesc.style.display = isEquipable ? "none" : "block"
     itemStatsCont.style.display = isEquipable ? "flex" : "none"
     itemDesc.innerHTML = desc || ''
+    RESISTANCE_ROWS.forEach(({ row, value, read }) => {
+        const amount = isEquipable ? read(_itemDet) : 0
+        if(row) row.style.display = amount ? "flex" : "none"
+        if(amount && value) value.innerHTML = amount
+    })
 
     if(isEquipable){
         const isArmorType = ARMOR_TYPES.includes(itemType)

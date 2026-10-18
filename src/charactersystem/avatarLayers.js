@@ -69,6 +69,14 @@ export function layerHelmet(material){
     pushDepth(material, HELMET_PULL)
 }
 
+// a belt (or anything else worn flat over his shirt and pants) - drawn over
+// them where they lie close, never sunk into them
+const WORN_PULL = -0.03
+export function layerWorn(material){
+    if(!material || material.pluginManager?.getPlugin("DepthPush")) return
+    pushDepth(material, WORN_PULL)
+}
+
 // a face part straight off avatar.glb (eyes, eyeback, eyebrows, headlines) -
 // its material is the glb's own, shared by every character made from it, so
 // it's only ever given its push the once

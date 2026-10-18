@@ -1148,7 +1148,7 @@ export function enemyIsHit(data){
 
     if (data.hp <= 0) {
         // my own blow finished it - a heavier jolt and a beat of slow motion
-        if (playerId === charState.owner && data.isPhysical) onMeleeKill()
+        if (playerId === charState.owner && data.isPhysical) onMeleeKill(enemPos)
         // this enemy's own body is about to get disposed below (enemyDispose) -
         // if it was the one positionAtkCollider's dash was biasing toward,
         // clear it now so the next attack falls back to local forward
