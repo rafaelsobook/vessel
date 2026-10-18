@@ -5,6 +5,8 @@ import { getSceneDet } from "../main/main.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { findMyCurrentPlace } from "../states/placestates.js"
 import { getAllSounds } from "./soundSystem.js"
+import { getPlayersOnScene } from "../sockets/worldsocket.js"
+import { isInsideCastle } from "../creations/createcastle.js"
 
 // Bridges tcp's world weather to (a) what this client draws and (b) what
 // temperature its player is standing in.
@@ -38,14 +40,42 @@ export function getWorldWeather(){
     return worldWeather
 }
 
+// Whether the weather reaches THIS player where they stand right now: only
+// in an outdoor place (WEATHERED_AREA_TYPES), and in the openworld not inside
+// a castle's walls - a castle shelters you like a room does, so no rain, snow,
+// sand or fog there and no cold or heat either.
+function isExposedToWeather(){
+    const areaType = getCharState()?.currentPlace?.areaType ?? findMyCurrentPlace()?.areaType
+    if(!WEATHERED_AREA_TYPES.includes(areaType)) return false
+    if(areaType !== "openworld") return true
+    const me = getPlayersOnScene()?.find(pl => pl.owner === getCharState()?.owner)?.body
+    if(!me || me.isDisposed()) return true
+    return !isInsideCastle(me.position.x, me.position.z)
+}
+
 // The temperature THIS player is actually exposed to right now. Indoors is
 // always comfortable - weather is an outdoor concern, and a dungeon being
 // -30 because it happens to be snowing above ground would be nonsense.
 export function getAmbientTemperature(){
-    const areaType = getCharState()?.currentPlace?.areaType ?? findMyCurrentPlace()?.areaType
-    if(!WEATHERED_AREA_TYPES.includes(areaType)) return INDOOR_AMBIENT_TEMP
+    if(!isExposedToWeather()) return INDOOR_AMBIENT_TEMP
     return WEATHER_AMBIENT_TEMP[worldWeather] ?? INDOOR_AMBIENT_TEMP
 }
+
+// Walking through a castle gate doesn't change places, so nothing else would
+// re-evaluate the weather - this checks twice a second and switches the
+// storm, its fog and its sound off (or back on) the moment that changes.
+let lastExposed = null
+setInterval(() => {
+    const { scene } = getSceneDet() ?? {}
+    if(!scene || scene.isDisposed) return
+    const exposed = isExposedToWeather()
+    if(exposed === lastExposed) return
+    const firstCheck = lastExposed === null
+    lastExposed = exposed
+    if(firstCheck) return
+    refreshWeatherVisuals()
+    updateWeatherSounds()
+}, 500)
 
 // Called both from the "weather-changed" broadcast and from the weather field
 // riding on every "userJoined" snapshot, so a client that joins or walks
@@ -65,8 +95,7 @@ export function setWorldWeather(weather){
 function updateWeatherSounds(){
     const { rainy, windy } = getAllSounds() ?? {}
     if(!rainy || !windy) return
-    const areaType = getCharState()?.currentPlace?.areaType ?? findMyCurrentPlace()?.areaType
-    const weather = WEATHERED_AREA_TYPES.includes(areaType) ? worldWeather : "clear"
+    const weather = isExposedToWeather() ? worldWeather : "clear"
     switch(weather){
         case "rain":
             rainy.play()
@@ -89,8 +118,8 @@ export function refreshWeatherVisuals(){
     const { scene } = getSceneDet() ?? {}
     if(!scene || scene.isDisposed) return
 
-    const areaType = getCharState()?.currentPlace?.areaType ?? findMyCurrentPlace()?.areaType
-    const visible = WEATHERED_AREA_TYPES.includes(areaType)
+    const visible = isExposedToWeather()
+    lastExposed = visible
 
     // "clear" rather than stopWeather() - applyWeather's own clear branch
     // restores the place's captured base fog, where a bare teardown would

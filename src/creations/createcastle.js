@@ -884,7 +884,7 @@ export function createCastle(scene, spot, hasPhysics = true){
 
     keepVegetationOut(scene, { origin: { x: spot.x, z: spot.z }, yaw, x0: -EX - 6, x1: EX + 6, z0: -EZ - rampRun - 6, z1: EZ + 6 })
     registerCastle(scene, { origin: { x: spot.x, z: spot.z }, cos: Math.cos(yaw), sin: Math.sin(yaw),
-        reach: Math.hypot(EX, EZ + rampRun) + 2, surfaces: ctx.surfaces })
+        reach: Math.hypot(EX, EZ + rampRun) + 2, surfaces: ctx.surfaces, outerX, outerZ })
     furnish(scene, { name, origin: { x: spot.x, z: spot.z }, yaw, throne: palace.throne, torches: palace.torches })
 
     // one mesh, one draw call per material; the sources go
@@ -931,6 +931,16 @@ export function castleSurfaceY(x, z){
         })
     })
     return best
+}
+
+// whether world (x, z) is inside any castle's curtain walls (courtyard,
+// palace, keep, the walls themselves) - weatherSystem.js keeps the weather
+// out there, the same as in a room
+export function isInsideCastle(x, z){
+    return !!castleRegistry?.castles.some(castle => {
+        const at = castleLocal(castle, x, z)
+        return !!at && Math.abs(at.lx) <= castle.outerX && Math.abs(at.lz) <= castle.outerZ
+    })
 }
 
 // whether world (x, z) is within `margin` of the circle around any castle's

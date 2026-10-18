@@ -29,7 +29,7 @@ import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSy
 import { createAggregate } from '../tools/physics.js';
 import { attachCam } from '../tools/camera.js';
 
-let ISINDEVEMODE = false
+let ISINDEVEMODE = true
 // the most recent enemy MY OWN melee attack actually landed on (see
 // createEnemy.js's atkCollider hit handler, right alongside its own
 // faceForward call) - createMyCharacter.js's positionAtkCollider reads this
@@ -325,7 +325,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = ISINDEVEMODE ? 300 : 3.5;
+    let sprintSpeed = ISINDEVEMODE ? 50 : 3.7;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)

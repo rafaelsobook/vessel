@@ -1,4 +1,4 @@
-import { layerAvatarMaterials, layerFacePart, tuckOutfit } from "./avatarLayers.js";
+import { layerAvatarMaterials, layerFacePart, layerHelmet, tuckOutfit } from "./avatarLayers.js";
 import { 
     Vector3, 
     Quaternion, 
@@ -188,7 +188,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         shoulderL, shoulderR, characterHairs, mainBodyLegs} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
-    nameMesh.isVisible = false
+    // nameMesh.isVisible = false
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
     {x:0.8, y:2, z: 1}, 1, false, true, {x: -Math.PI/2 + (Math.PI/10), y:Math.PI/2, z:0.2 })
 
@@ -233,6 +233,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         const helmetMat = itemName?.includes("hat")
             ? createMatV2(scene, `./images/modeltex/helmets/${itemName}.jpg`)
             : createMetalMat(scene, metalColor)
+        // drawn over his hair, never under it - avatarLayers.js
+        layerHelmet(helmetMat)
         helmet.material = helmetMat
         helmet.getChildMeshes().forEach(mesh => mesh.material = helmetMat)
         showHideEquip(helmet, true)
@@ -1011,9 +1013,11 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(mes.name.includes("scalp")){
             if(isFemale) return mes.dispose()
             mes.material = hairMat
-        }
-        if(mes.name === "scalphairinside" && !isFemale){
-            characterHairs.push(mes)
+            // scalphairinside and scalphairtip go with his hairstyle into
+            // characterHairs, so a helmet hides them (equipHelmet) and taking
+            // it off brings them back. scalphair itself stays on under a
+            // helmet - it's the hairline the helmet sits over.
+            if(mes.name === "scalphairinside") characterHairs.push(mes)
         }
         if(mes.name.includes("cloak.")){
             const cloakName = mes.name.split(".")[1]

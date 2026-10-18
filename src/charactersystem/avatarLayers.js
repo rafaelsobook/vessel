@@ -38,6 +38,10 @@ const EDGE_PUSH = 0.05
 // swings back out through the back of one by 10cm and more, far past any push
 const SHIN_REACH = 0.12
 const HAIR_PULL = -0.02
+// a helmet sits over the hair, so it's pulled further forward than the hair
+// is - with only HAIR_PULL on the hair, his scalphair (still worn under a
+// helmet) won through the helmet wherever the two lay close
+const HELMET_PULL = -0.05
 const EYE_PUSH = 0.04
 const EYE_WHITE_PUSH = 0.05
 const LINES_PULL = -0.01
@@ -56,6 +60,13 @@ export function layerAvatarMaterials({ skinMat, clothMat, pantsMat, hairMat }){
         clipTucked(pantsMat)
     }
     if(hairMat) pushDepth(hairMat, HAIR_PULL)
+}
+
+// a worn helmet's own material (made per helmet in createcharacter.js's
+// createHelmet) - always drawn over the hair under it
+export function layerHelmet(material){
+    if(!material || material.pluginManager?.getPlugin("DepthPush")) return
+    pushDepth(material, HELMET_PULL)
 }
 
 // a face part straight off avatar.glb (eyes, eyeback, eyebrows, headlines) -
