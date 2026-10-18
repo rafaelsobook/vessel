@@ -64,7 +64,8 @@ export async function setupCharacterScene(engine){
     // variable per name kept only whichever matched last, leaving the others
     // showing on the female body.
     let maleBodyMeshes = []
-    let femaleBodyMesh
+    // femalebody + femalebody.boobs
+    let femaleBodyMeshes = []
     // the male scalp hair - avatar.glb has several of these (scalphair,
     // scalphair.001, scalpHairInside, scalphairtip), all hidden for female;
     // one variable kept only the last one, leaving the rest on her head
@@ -187,7 +188,7 @@ export async function setupCharacterScene(engine){
                 // skin color is a male-only option for now (createcharacter.js's
                 // own createAnimeBody has the matching change) - femalebody
                 // keeps whatever material it already ships with, untouched
-                femaleBodyMesh = mesh
+                femaleBodyMeshes.push(mesh)
                 setTreeVisible(mesh, toSave.gender === "female")
                 return
             }
@@ -327,7 +328,7 @@ export async function setupCharacterScene(engine){
         clothes.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.cloth)
         pants.forEach(mesh => mesh.isVisible = !isFemale && mesh.name.split(".")[1] === toSave.pants)
 
-        if(femaleBodyMesh) setTreeVisible(femaleBodyMesh, isFemale)
+        femaleBodyMeshes.forEach(mesh => setTreeVisible(mesh, isFemale))
         femaleAccessories.forEach(mesh => mesh.isVisible = isFemale)
         maleFace.forEach(mesh => setTreeVisible(mesh, !isFemale))
         femaleFace.forEach(mesh => setTreeVisible(mesh, isFemale))

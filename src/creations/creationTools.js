@@ -131,9 +131,9 @@ export function createCompleteMat(scene, textureName, uvScale){
     return mat
 }
 export function createMaterialFromDir(scene, _directory,textureDetail){
-    const {diff,normal} = textureDetail
-    const tex1 = new Texture(`${_directory}/${diff}.jpg`, scene, false, false)
-    const tex1normal = new Texture(`${_directory}/${normal}.jpg`, scene, false, false)
+    const {diff,normal,ext = "jpg"} = textureDetail
+    const tex1 = new Texture(`${_directory}/${diff}.${ext}`, scene, false, false)
+    const tex1normal = new Texture(`${_directory}/${normal}.${ext}`, scene, false, false)
    
     const mat = new StandardMaterial(`${diff}Mat`, scene)
     mat.diffuseTexture = tex1

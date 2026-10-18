@@ -29,7 +29,7 @@ import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSy
 import { createAggregate } from '../tools/physics.js';
 import { attachCam } from '../tools/camera.js';
 
-let ISINDEVEMODE = true
+let ISINDEVEMODE = false
 // the most recent enemy MY OWN melee attack actually landed on (see
 // createEnemy.js's atkCollider hit handler, right alongside its own
 // faceForward call) - createMyCharacter.js's positionAtkCollider reads this

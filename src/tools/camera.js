@@ -18,7 +18,7 @@ export function createArcCam(scene, placeDetail, head){
         scene
     );
     camera.attachControl();
-    camera.lowerRadiusLimit = 1.7;
+    camera.lowerRadiusLimit = 4.7;
     camera.upperRadiusLimit = 20//10;
     camera.lowerBetaLimit = Tools.ToRadians(20);
     camera.upperBetaLimit = Tools.ToRadians(85);
@@ -44,13 +44,15 @@ export function createArcCam(scene, placeDetail, head){
     // 1000 - see enemyDetails.ts) - larger world coordinates compound
     // floating-point rounding error through the same already-thin depth
     // precision budget, on top of whatever the ratio alone already cost.
-    // 0.5, not 0.01 - the whole comment block above describes this fix, but
-    // the value underneath it was still the broken one it says it "was", so
-    // the analysis landed and the one-line change never did. Symptom is
-    // exactly what that block predicts: mottled patches where a cloth mesh
-    // sits a millimetre off the skin mesh beneath it, worse the further the
-    // character is from world origin.
-    camera.minZ = 0.01
+    // 0.2, between the two values this has flipped between:
+    //  - 0.01 made the shirt fight through armour far from the origin.
+    //    Measured (armour over a red shirt, camera at radius 16, 1500 units
+    //    out): 78% of the chest showed shirt at 0.01, ~20% at 0.2 - the same
+    //    as at the origin, i.e. only the shirt that really is uncovered.
+    //  - 0.5 is too deep for CAMERA COLLISION below, which parks the camera
+    //    CAM_COLLISION_MARGIN (0.3) short of a wall - a 0.5 near plane would
+    //    cut into that wall. 0.2 stays inside the margin.
+    camera.minZ = 0.5
     // camera.checkCollisions = true;
     // camera.collisionRadius = new Vector3(0.3, 0.3, 0.3);
 
@@ -108,7 +110,7 @@ export function attachCam(body){
 // camera.update() (the zoom input) and before the view matrix is built, so
 // the radius set here is the one rendered this frame.
 const CAM_COLLISION_MARGIN     = 0.3   // stops this far short of whatever it hit
-const CAM_COLLISION_MIN_RADIUS = 0.75  // never closer than this - minZ is 0.5
+const CAM_COLLISION_MIN_RADIUS = 0.75  // never closer than this - minZ is 0.2
 const CAM_RETURN_SPEED         = 5     // easing back out, per second
 // Havok hands back only the NEAREST hit (the plugin's multi-hit collector is
 // never enabled), so a moving body in the way (an enemy, another player) is

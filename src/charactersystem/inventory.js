@@ -275,6 +275,23 @@ export function createPriestBeltItem(){
     }
 }
 
+// The Royal Priest Belt - the same belt.prieststyle1 mesh as the Priest Belt,
+// painted from images/textures/belt/royalpriest.webp (+ royalpriestnormal.webp)
+// instead. A high priest's vestment: a step up on every count.
+export function createRoyalPriestBeltItem(){
+    return {
+        ...createPriestBeltItem(),
+        name: "royalpriest",
+        dn: "Royal Priest Belt",
+        equipAbilities: { dmg: 0, def: 7, resistance: 14, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+        price: { coinType: "bronze", pieces: 95 },
+        desc: "A high priest's gilded vestment, stitched with old prayers. It wards off the cold and dark magic far better than a common sash.",
+        rarity: "epic",
+        tempResistance: { cold: 15, heat: 0 },
+        darkResistance: 0.35,
+    }
+}
+
 // DEBUG CHEAT - bound to the "i" key in controllers/inputMovement.js. Drops
 // one of every craftable material (resourceLoot.js's lootNames - ores, gems,
 // wood/leather/stone) straight into the inventory, for testing the crafting
@@ -286,6 +303,7 @@ export function giveAllItems(){
     obtainAll([...lootNames.map(name => createLootItem(name)),
         ...GIVE_ALL_ARMOR_METALS.flatMap(metal => TINTED_ARMOR.map(piece => createTintedArmorItem(piece, metal))),
         createPriestBeltItem(),
+        createRoyalPriestBeltItem(),
         // same item shapes toSell.js's sellerBram stall already trusts
         // (armor/pauldron/gauntlet art under images/items/equipable/* is
         // guaranteed to exist for these three) - added for fit-testing

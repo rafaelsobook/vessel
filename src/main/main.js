@@ -177,6 +177,7 @@ async function initEngine(){
         powerPreference: "high-performance",
         failIfMajorPerformanceCaveat: false,
         preserveDrawingBuffer: false,
+        // useLargeWorldRendering: true,
     });
 
     return engine

@@ -186,7 +186,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     const {root, animationGroups, rHand, belts, cloaks, 
         armors, boots, spineBone, headBone, lowerArmL, lowerArmR, 
-        shoulderL, shoulderR, characterHairs, mainBodyLegs} = createAnimeBody(containers, body, bodytarget, det, scene)
+        shoulderL, shoulderR, characterHairs, mainBodyLegs,
+        underArmor, underBelt} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
     // nameMesh.isVisible = false
@@ -217,7 +218,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         boots.forEach(boot => {
             if(boot.name === itemName){
                 boot.mesh.isVisible = true
-                mainBodyLegs.isVisible = false
+                if(mainBodyLegs) mainBodyLegs.isVisible = false
             } else boot.mesh.isVisible = false
         })
     }
@@ -335,6 +336,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     function equipArmor(itemName, metalColor){
         // see equipHelmet's own comment
         if(!itemName) return
+        // her chest (femalebody.boobs) pokes through the armor - off while she wears one
+        const wearsArmor = armors.some(arm => arm.name === itemName)
+        underArmor.forEach(mesh => showHideEquip(mesh, !wearsArmor))
         armors.forEach(arm => {
             if(arm.name === itemName){
                 arm.mesh.isVisible = true
@@ -353,18 +357,20 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
 
     // A belt is a skinned mesh in avatar.glb (belt.<style>, e.g. belt.prieststyle1)
     // painted from images/textures/belt/<item name>.jpg + <item name>normal.jpg -
-    // itemModelStyle picks the mesh, the item's name picks the texture. Only the
-    // male body carries these meshes (createAnimeBody), so on a female character
-    // there's nothing to show and this does nothing.
+    // itemModelStyle picks the mesh, the item's name picks the texture. Both
+    // bodies wear them; on her, her own default belt and skirt
+    // (belt.style1.female, skirt.style1) come off while one is worn.
     function equipBelt(itemModelStyle, itemName){
         if(!itemModelStyle) return
+        const wearsBelt = belts.some(belt => belt.name === itemModelStyle)
+        underBelt.forEach(mesh => showHideEquip(mesh, !wearsBelt))
         belts.forEach(belt => {
             if(belt.name !== itemModelStyle){
                 belt.mesh.isVisible = false
                 return
             }
             if(belt.paintedAs !== itemName){
-                const beltMat = createMaterialFromDir(scene, "./images/textures/belt", { diff: itemName, normal: `${itemName}normal` })
+                const beltMat = createMaterialFromDir(scene, "./images/textures/belt", { diff: itemName, normal: `${itemName}normal`, ext: BELT_TEXTURE_EXT[itemName] })
                 // it only has the diffuse and normal maps - the default white
                 // specular of createMaterialFromDir would make cloth look like metal
                 beltMat.specularColor = new Color3(0.12, 0.12, 0.12)
@@ -465,13 +471,15 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             break
             case "boots":
                 boots.forEach(boot => boot.mesh.isVisible = false)
-                mainBodyLegs.isVisible = true
+                if(mainBodyLegs) mainBodyLegs.isVisible = true
             break
             case "armor":
                 armors.forEach(arm => arm.mesh.isVisible = false)
+                underArmor.forEach(mesh => showHideEquip(mesh, true))
             break
             case "belt":
                 belts.forEach(belt => belt.mesh.isVisible = false)
+                underBelt.forEach(mesh => showHideEquip(mesh, true))
             break
             case "helmet":
                 helmetMeshes.forEach(hlm => showHideEquip(hlm.mesh, false))
@@ -691,6 +699,9 @@ function createMainBodyTargetToClone(scene){
 // exported - setupcharacterscene.js's character-creation preview loads the
 // exact same avatar.glb and needs the identical gender split, not a
 // hand-copied second list that could drift out of sync with this one
+// belt textures (images/textures/belt) that aren't .jpg, by item name
+const BELT_TEXTURE_EXT = { royalpriest: "webp" }
+
 export const FEMALE_ONLY_NAMES = [
     "femalebody",
     "female.hair",
@@ -815,6 +826,10 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     let armors = []
     let boots = []
     let characterHairs = []
+    // her parts an equipped piece covers: femalebody.boobs under armor, her
+    // default belt.style1.female + skirt.style1 under a belt (equipArmor/equipBelt)
+    let underArmor = []
+    let underBelt = []
     let mainBodyLegs = undefined
     const {hairMat,femaleHair1Mat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
    
@@ -943,7 +958,10 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(mes.name.includes("tripo_node")) return disposeMeshTree(mes)
         // log(mes.name)
 
-        if(mes.name === "mainbodylegs"){
+        // his bare legs, swapped out for boots (equipBoots/unEquip). Hers are
+        // part of femalebody - on a female character this is the male legs
+        // mesh, and unequipping boots used to turn it back on beside hers.
+        if(mes.name === "mainbodylegs" && !isFemale){
             mainBodyLegs = mes;
         }
         // the face - this character's own gender's eyes/eyeback/eyebrows
@@ -969,9 +987,24 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         // mes.isVisible = false, since a child submesh (this rig has already
         // surprised us with nested submeshes more than once) wouldn't
         // inherit the parent's hidden state on its own
-        if(isFemaleNode !== isFemale) return showHideEquip(mes, false)
+        // armor.* and the equipable belt.* meshes are worn by both bodies, so
+        // she keeps them too (hidden below until equipped)
+        const isSharedGear = mes.name.startsWith("armor.") || mes.name.startsWith("belt.")
+        if(isFemaleNode !== isFemale && !(isFemale && isSharedGear)) return showHideEquip(mes, false)
 
         if(isFemale){
+            if(mes.name === "femalebody.boobs"){
+                underArmor.push(mes)
+                return
+            }
+            // her default belt + skirt - on until a belt is equipped. Returned
+            // here so the equipable belt.* collection below never takes her
+            // belt.style1.female for a "style1" belt item and hides it.
+            if(mes.name.startsWith("belt.style1") || mes.name.includes("skirt.style")){
+                showHideEquip(mes, true)
+                underBelt.push(mes)
+                return
+            }
             if(mes.name.includes("femalebody")){
                 // mes.material = skinMat
                 // // see setupcharacterscene.js's own comment on this exact
@@ -1006,9 +1039,9 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
             }
             // her mask - left off (isHiddenFemalePart)
             if(isHiddenFemalePart(mes.name)) return showHideEquip(mes, false)
-            // belt.style1/blindfold/skirt.style1/bag/silverine - her one
-            // fixed default look (no style/equip system behind any of these
-            // yet, see this function's own isFemale comment above) - always on
+            // the rest of her fixed default look (no style/equip system
+            // behind any of it yet, see this function's own isFemale
+            // comment above) - always on
             mes.isVisible = true
         }
 
@@ -1130,7 +1163,9 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         shoulderL,
         shoulderR,
         characterHairs,
-        mainBodyLegs
+        mainBodyLegs,
+        underArmor,
+        underBelt
     }
 }
 function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
