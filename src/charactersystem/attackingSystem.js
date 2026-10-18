@@ -11,6 +11,8 @@ import { updateSkillListUI } from "../components/skillsui.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { getClassDmgBonus } from "./characterclass.js"
+import { playRemoteLunge } from "./meleeCombat.js"
+import { Vector3 } from "@babylonjs/core"
 
 // CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
 // stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
@@ -52,6 +54,13 @@ export function attack(_attackInfo, attackAnimName){
     if (!playerAttacked) return
     playerAttacked.body.position.x = pos.x
     playerAttacked.body.position.z = pos.z
+    // someone else's swing on my screen: turned toward what they're hitting,
+    // and lunging in if they lunged (meleeCombat.js's prepareMeleeSwing put
+    // both on the relay). My own body is turned and moved by meleeCombat.js.
+    if (owner !== getCharState()?.owner) {
+        if (dirTarg) playerAttacked.body.lookAt(new Vector3(dirTarg.x, playerAttacked.body.position.y, dirTarg.z), 0, 0, 0)
+        if (_attackInfo.lunge) playRemoteLunge(playerAttacked.body, _attackInfo.lunge)
+    }
     playerAttacked._attacking = true
     if(hasWeapon) playerAttacked.equipSword(hasWeapon, true)
     const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)

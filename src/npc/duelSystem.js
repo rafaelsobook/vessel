@@ -19,6 +19,7 @@ import { capsuleHeight } from "../charactersystem/createcharacter.js"
 import { getCharState, updateMyDetailsOL, deductHp, isPlayerCursed, curseStatusEffect } from "../charactersystem/characterstate.js"
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { calcDmg, registerToAtkCollider } from "../charactersystem/attackingSystem.js"
+import { onMeleeConnect } from "../charactersystem/meleeCombat.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { ANIM_STATE, findAnimVariants } from "../tools/animation.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
@@ -1574,6 +1575,20 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         const equippedWeaponItem = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
         const weaponType = equippedWeaponItem?.weaponType
         const hitSound = WEAPON_HIT_SOUNDS[weaponType] ?? DEFAULT_HIT_SOUND
+        // the blow's impact (meleeCombat.js) - a raised guard turns it into a
+        // glance: sparks and a jolt, no freeze or flash. applyDamageToOpponent
+        // plays the duel's own hit/block sound, so this one stays quiet.
+        const blocked = !!opponent.weaponBlocking
+        onMeleeConnect({
+            targetBody: opponent.body,
+            targetMeshes: opponent.root?.getChildMeshes?.() ?? [],
+            targetAnims: opponent.anims ?? [],
+            isCritical: dmgDetails.isCritical,
+            weaponType: weaponType ?? "fist",
+            outcome: blocked ? "blocked" : "hit",
+            isSkill: !!scene.getMeshByName("atkCollider")?.isSkillHijacked,
+            silent: true,
+        })
         applyDamageToOpponent(dmgToApply, { weaponType, hitSound, isPhysical: true })
     })
 

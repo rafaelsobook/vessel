@@ -25,7 +25,7 @@
  */
 import { setSoundListener } from "../components/soundSystem.js"
 import { sceneCleanupReady } from "../components/cleanup.js"
-import { attachControllerToThisCharacter, activateMouseControls, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
+import { attachControllerToThisCharacter, activateMouseControls } from "../controllers/inputMovement.js"
 import { getSceneDet } from "../main/main.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { attachCam } from "../tools/camera.js"
@@ -128,17 +128,10 @@ function createAttackColliderForEnemy(scene, body){
 // has to be somewhere no enemy's hitbox could ever reach
 export const ATK_COLLIDER_PARKED_Y = -1000
 // how long the box stays at the caster's own body height (where it was
-// positioned in front of them) before getting parked back out of reach -
-// long enough for a real swing to land (the exit-intersection trigger only
-// needs a single "was overlapping, now isn't" transition, whether that's
-// from the enemy walking out of it or from the box itself moving away), but
-// not so long it lingers as a stale hit zone well after the swing animation
-// finished
+// positioned in front of them) before getting parked back out of reach, when
+// the caller doesn't say - meleeCombat.js's swings pass their own hit window
+// (the few frames around the blow's impact)
 const ATK_COLLIDER_ACTIVE_MS = 500
-// player mass is 10 (see createcharacter.js's createAggregate call) - impulse
-// = mass * deltaV, so this gives an instant forward deltaV of 2 m/s. Bump
-// this up (not the deltaV math) if the dash should feel punchier.
-const DASH_IMPULSE = 25
 // how much bigger atkCollider's own Z depth gets for a running attack (see
 // positionAtkCollider's own pos.isRunningAttack branch) - tune this number
 // directly if it still whiffs too often, or overshoots too far
@@ -148,13 +141,19 @@ const RUNNING_ATK_COLLIDER_Z_MULT = 2.5
 // leave two competing timeouts racing, the earlier one yanking the box away
 // mid-way through the SECOND swing's own intersection window
 let parkTimeoutId
-export function positionAtkCollider(pos, dirTarg){
+// pos: { reach, isRunningAttack, activeMs } - puts the box in front of me
+// now and parks it again after activeMs. No movement of its own any more:
+// meleeCombat.js lunges at a target (or doesn't move at all without one)
+// instead of the blind forward shove every swing used to get here.
+export function positionAtkCollider(pos){
     const charState = getCharState()
     if(!charState) return
     const player = getPlayersOnScene().find(pl => pl.owner === charState.owner)
     if(!player) return
-    const atkCollider = getSceneDet().scene.getMeshByName(`atkCollider`)
+    const atkCollider = getSceneDet().scene?.getMeshByName(`atkCollider`)
     if(!atkCollider) return
+    // a skill (dashstrike) has it on its hand right now - leave it be
+    if(atkCollider.isSkillHijacked) return
 
     // atkCollider is parented to player.body (createAttackColliderForEnemy)
     // now instead of being repositioned in world space every swing - so
@@ -169,16 +168,6 @@ export function positionAtkCollider(pos, dirTarg){
     // far in front) changes per attack
     atkCollider.position.set(0, 0, reach)
     atkCollider.rotationQuaternion = Quaternion.Identity()
-
-    // Get forward direction from player's world matrix - still needed below
-    // for the dash impulse direction (world-space), unrelated to the box's
-    // own now-local positioning above
-    const forward = new Vector3(0, 0, 1)
-    const worldForward = Vector3.TransformNormal(
-        forward,
-        player.body.getWorldMatrix()
-    )
-    worldForward.normalize()
 
     // running attacks (uimanagement.js's own "running_<weaponType>1" clip,
     // pos.isRunningAttack) cover more ground mid-swing than a stationary
@@ -201,48 +190,14 @@ export function positionAtkCollider(pos, dirTarg){
     // just re-applying the same boost.
     if(pos?.isRunningAttack) atkCollider.scaling.z = RUNNING_ATK_COLLIDER_Z_MULT
 
-    // Attack dash - shove the player forward in the swing direction.
-    // applyImpulse lives on aggregate.BODY, not the aggregate itself.
-    // mass:10 (set at aggregate creation, see createcharacter.js) means
-    // an impulse of DASH_IMPULSE gives an instant deltaV of
-    // DASH_IMPULSE/10 m/s forward (impulse = mass * deltaV) - tune the
-    // constant, not the math. Applied at the body's own position (its
-    // center) so this stays pure translation - the aggregate's inertia
-    // was already zeroed out at creation (locked rotation, capsule
-    // shouldn't tip over), so an off-center location wouldn't spin it
-    // anyway, but there's no reason to rely on that here.
-    if(player.aggregate){
-        setTimeout(() => {
-            // lastHitEnemy (inputMovement.js) - dash toward whatever I most
-            // recently landed a melee hit on instead of always my own local
-            // forward direction, if there IS a live one. Read fresh here
-            // (not captured back when positionAtkCollider itself was
-            // called) since this runs 300ms later - the tracked enemy could
-            // have died in that window (createEnemy.js's own melee hit
-            // handler clears it back to null the instant that happens, see
-            // setLastHitEnemy there) or gotten disposed some other way,
-            // hence the isDisposed() check on top of the null check.
-            let dashDirection = worldForward
-            // if(lastHitEnemy?.body && !lastHitEnemy.body.isDisposed()){
-            //     const toEnemy = lastHitEnemy.body.absolutePosition.subtract(player.body.absolutePosition)
-            //     toEnemy.y = 0 // keep the dash horizontal, same plane worldForward already stays in
-            //     if(toEnemy.lengthSquared() > 0.0001) dashDirection = toEnemy.normalize()
-            // }
-            player.aggregate.body.applyImpulse(dashDirection.scale(DASH_IMPULSE), player.body.absolutePosition)
-            // without this, inputMovement.js's own movement loop hard-overwrites
-            // linear velocity every physics tick while a movement key/joystick is
-            // held - which stomps this impulse before it ever renders a frame
-            markDashActive()
-        }, 300)
-
-    }
-
     clearTimeout(parkTimeoutId)
     parkTimeoutId = setTimeout(() => {
+        // a skill took it over meanwhile - it parks it itself when it's done
+        if(atkCollider.isDisposed() || atkCollider.isSkillHijacked) return
         atkCollider.position.y = ATK_COLLIDER_PARKED_Y
         // only undo what THIS call actually set - see this function's own
         // isRunningAttack comment above for why a blind reset here would
         // be wrong
         if(pos?.isRunningAttack) atkCollider.scaling.z = 1
-    }, ATK_COLLIDER_ACTIVE_MS)
+    }, pos?.activeMs ?? ATK_COLLIDER_ACTIVE_MS)
 }

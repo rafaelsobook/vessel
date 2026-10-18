@@ -532,6 +532,9 @@ export function activateOnSocketListeners(socket){
     })
     socket.on("player-attacked", data => {
         if (!isSocketOn) return
+        // my own swing - uimanagement.js already played it the moment I
+        // pressed attack; tcp's io.emit echoes it back to me as well
+        if (data.owner === getCharState()?.owner) return
         // const {
         //     owner,
         //     pos,
@@ -662,7 +665,8 @@ export function activateOnSocketListeners(socket){
             // weaponBlocking right above - this is armor/toughness reading as
             // "shrugged off", not something only the victim's own client knows.
             // (the whole attack's damage - a combo's swings bleed as much as the one swing did)
-            if(victimPlayer.weaponBlocking || data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD){
+            // if(victimPlayer.weaponBlocking || data.dmg < LOW_DAMAGE_NO_BLOOD_THRESHOLD){
+            if(victimPlayer.weaponBlocking){
                 getAllSounds().weaponblockS?.play()
             } else {
                 // bloodps (createcharacter.js's createBloodSplatter, emitter

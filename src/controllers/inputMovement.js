@@ -54,6 +54,9 @@ let saveLocTimeout
 // client sees the stop too, schedules the position save) - same function
 // every existing "stop moving" path (joystick release/deadzone) already calls
 let forceStopMovementFn = null
+// setupControls()'s own updateRotation for the input held right now - see
+// faceAttackTarget
+let reaimMovementFn = null
 // promoted to module level (was a plain local `let` inside setupControls())
 // so getIsMoving() below can expose it - reset fresh to false inside
 // setupControls() itself (not just declared once here) on every new
@@ -79,6 +82,39 @@ let dashLockUntil = 0
 // branch below for the other half of this
 export function markDashActive(ms = 300){
     dashLockUntil = performance.now() + ms
+}
+
+// A melee swing turning to face its target (charactersystem/meleeCombat.js):
+// rotationHelper - what the body's facing is copied from every physics tick -
+// swings round to the target in a few frames, and until lockMs is up a held
+// movement key (keydown repeats, joystick drags) doesn't turn it back, so the
+// blow lands the way it was aimed. rotationHelper rather than the body itself,
+// so the player keeps facing that way after the swing instead of snapping
+// back to wherever they faced before it.
+const ATTACK_TURN_RATE = 30   // per second - ~90% of the way round in a tenth of a second
+let attackFacingLockUntil = 0
+let attackTurnObserver = null
+export function faceAttackTarget(targetPos, lockMs){
+    if(!rotationHelper || !aggregate) return
+    const scene = aggregate.transformNode.getScene()
+    const from = aggregate.transformNode.position
+    const goal = Quaternion.RotationAxis(Vector3.Up(), Math.atan2(targetPos.x - from.x, targetPos.z - from.z))
+    attackFacingLockUntil = performance.now() + lockMs
+    // a key or joystick still held when the lock ends turns them back to it
+    // then - a joystick held still sends no event that would do it otherwise
+    setTimeout(() => { if(performance.now() >= attackFacingLockUntil) reaimMovementFn?.() }, lockMs + 5)
+    if(attackTurnObserver) scene.onBeforeRenderObservable.remove(attackTurnObserver)
+    const helper = rotationHelper
+    const observer = attackTurnObserver = scene.onBeforeRenderObservable.add(() => {
+        if(helper.isDisposed()) return scene.onBeforeRenderObservable.remove(observer)
+        const dt = scene.getEngine().getDeltaTime() / 1000
+        Quaternion.SlerpToRef(helper.rotationQuaternion, goal, 1 - Math.exp(-ATTACK_TURN_RATE * dt), helper.rotationQuaternion)
+        if(Math.abs(Quaternion.Dot(helper.rotationQuaternion, goal)) > 0.9995){
+            helper.rotationQuaternion.copyFrom(goal)
+            scene.onBeforeRenderObservable.remove(observer)
+            if(attackTurnObserver === observer) attackTurnObserver = null
+        }
+    })
 }
 
 // >0 while at least one faceForward call is actively slerping the LOCAL
@@ -325,7 +361,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = ISINDEVEMODE ? 50 : 3.7;
+    let sprintSpeed = ISINDEVEMODE ? 20 : 3.7;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
@@ -359,6 +395,8 @@ function setupControls(scene, allsounds) {
     function updateRotation(camDir) {
         const { forward, right } = input;
         if (forward === 0 && right === 0) return;
+        // a swing is still turned toward its target - see faceAttackTarget
+        if (performance.now() < attackFacingLockUntil) return;
         rotationHelper.lookAt(camDir, Math.atan2(right, forward), 0, 0);
     }
 
@@ -1147,6 +1185,7 @@ function setupControls(scene, allsounds) {
         input.right = 0
         if(isMoving) stopMovementAndSave()
     }
+    reaimMovementFn = () => updateRotation(getCamDir())
 
     return {
         dispose: () => {

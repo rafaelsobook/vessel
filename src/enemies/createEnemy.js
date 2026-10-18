@@ -29,6 +29,7 @@ import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
 import { hasDungeonLineOfSight } from "../tools/dungeonSight.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
+import { onMeleeConnect, onMeleeKill } from "../charactersystem/meleeCombat.js"
 
 // modelStyles that don't bleed at all (see this file's own bloodps setup
 // below) - slime is gooey, not fleshy; ghost is an incorporeal spirit, same
@@ -721,13 +722,26 @@ export default function createEnemy(scene, det) {
             // atkCollider.isPhysicalDmg the moment it hijacks the collider,
             // same isSkillHijacked side-channel this already reads).
             const isPhysicalDmg = atkCollider.isSkillHijacked ? !!atkCollider.isPhysicalDmg : true
+            const dmgDetails = { ...calcDmg(charState), isPhysicalDmg }
             dealDamageToEnemy({
                 playerId: charState.owner,
-                dmgDetails: { ...calcDmg(charState), isPhysicalDmg },
+                dmgDetails,
                 targetId: det._id,
                 currentPlaceId: det.currentPlaceId,
                 isPhysical: true,
                 effectsWhenHit: equippedWeapon?.effectsWhenHit,
+            })
+            // the blow's impact - shake, hit-stop, flash, sparks and the hit
+            // sound, right now rather than when tcp's "enemy-is-hit" comes
+            // back (meleeCombat.js). A ghost (physicalImmune) only glances.
+            onMeleeConnect({
+                targetBody: body,
+                targetMeshes: enemy.meshes,
+                targetAnims: enemy.anims,
+                isCritical: dmgDetails.isCritical,
+                weaponType: equippedWeapon?.weaponType ?? "fist",
+                outcome: isPhysicalDmg && det.physicalImmune ? "immune" : "hit",
+                isSkill: !!atkCollider.isSkillHijacked,
             })
             // no notPlayerBody arg - faceForward targets the LOCAL PLAYER's
             // own body (see its own comment on why it can't just reuse the
@@ -1058,7 +1072,9 @@ export function enemyIsHit(data){
         return
     }
 
-    poppingTextMesh(`-${Math.floor(dmgToApply)}`, "red", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
+    // a critical hit pops bigger, in gold, with a "!"
+    const isCrit = !!dmgDetails?.isCritical
+    poppingTextMesh(`-${Math.floor(dmgToApply)}${isCrit ? "!" : ""}`, isCrit ? "#ffc23a" : "red", (isCrit ? 70 : 40) + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
 
     enemy.hpbar.width = `${data.hp / data.maxHp * 100 * 3}px`
     // keep the underlying data live-synced too, not just the visual bar -
@@ -1127,25 +1143,12 @@ export function enemyIsHit(data){
     // tick (startTargetBurn) has no sound of its own at all - both were
     // getting this exact swordS1/punchedS on top, which is what made every
     // burn tick sound like a fresh sword swing landing once a second.
-    if (playerId === getCharState().owner && data.isPhysical){
-        const { hasWeapon, weaponType } = getAttackInfo()
-        if(hasWeapon) {
-            console.log(weaponType)
-            switch(weaponType){
-                case "staff":
-                    playSound(getAllSounds().staffS1)
-                break
-                case "spear":
-                    playSound(getAllSounds().spearS1)
-                break
-                default:
-                    playSound(getAllSounds().swordS1)
-                break
-            }            
-        }else playSound(getAllSounds().punchedS)
-    }
+    // (my own melee hit's sound plays the moment the blow lands now -
+    // meleeCombat.js's onMeleeConnect - not a round trip later here)
 
     if (data.hp <= 0) {
+        // my own blow finished it - a heavier jolt and a beat of slow motion
+        if (playerId === charState.owner && data.isPhysical) onMeleeKill()
         // this enemy's own body is about to get disposed below (enemyDispose) -
         // if it was the one positionAtkCollider's dash was biasing toward,
         // clear it now so the next attack falls back to local forward

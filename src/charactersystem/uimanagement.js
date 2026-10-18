@@ -11,7 +11,7 @@ import { emitAttack, emitMode, emitMyLoc, emitThrowSpear } from "../sockets/emit
 import { getSocket } from "../sockets/joinsocket.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
-import { positionAtkCollider } from "./createMyCharacter.js"
+import { prepareMeleeSwing, startMeleeSwing } from "./meleeCombat.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js"
 import { getGameStatus } from "../main/main.js"
@@ -509,14 +509,27 @@ export function activateBtnOnce(){
 
                     swordAnimNum = swordAnimNum === 1 ? 2 : 1
 
-                    if(attackInfo.weaponType) playSound(getAllSounds().swordWhooshS)
-                    
-                    if(isSocketOn){
-                        emitAttack(attackInfo, animName)
-                    }else{
-                        attack(attackInfo, animName)
-                    } 
-                    positionAtkCollider({ reach: 1, isRunningAttack })
+                    // meleeCombat.js: find the enemy in front, turn to it,
+                    // lunge in if it's a step or two away, and land the blow on
+                    // the swing's impact frame (whoosh included, timed to it).
+                    // The turn and the lunge ride the attack relay so everyone
+                    // else sees them too.
+                    const swing = prepareMeleeSwing({
+                        animName,
+                        speedRatio: 0.8 + (attackInfo.atkSpd ?? 0),
+                        hasWeapon: !!equippedWeaponType,
+                        airborne: !getIsGrounded(),
+                    })
+                    if(swing.dirTarg) attackInfo.dirTarg = swing.dirTarg
+                    if(swing.lunge) attackInfo.lunge = { to: swing.lunge.to, ms: swing.lunge.ms }
+
+                    // my own swing plays right now - it used to wait for the
+                    // server to echo it back, so in multiplayer the animation
+                    // trailed the button (and the hit) by a whole round trip.
+                    // worldsocket.js's "player-attacked" skips that echo now.
+                    attack(attackInfo, animName)
+                    if(isSocketOn) emitAttack(attackInfo, animName)
+                    startMeleeSwing(swing, { isRunningAttack, weaponType: attackInfo.weaponType ?? "fist" })
 
                 break
                 case "cast":
@@ -594,11 +607,10 @@ export function activateBtnOnce(){
                     // yet) - other clients watching this throw won't see
                     // the actual projectile fly until that gets wired up
                     // separately.
-                    if(isSocketOn){
-                        emitAttack(attackInfo, "spearthrow")
-                    }else{
-                        attack(attackInfo, "spearthrow")
-                    }
+                    // played here right away, same as a swing - the relay's
+                    // echo of my own throw is skipped (worldsocket.js)
+                    attack(attackInfo, "spearthrow")
+                    if(isSocketOn) emitAttack(attackInfo, "spearthrow")
                 break
             }
 

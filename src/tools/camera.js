@@ -1,4 +1,5 @@
 import { ArcRotateCamera, PhysicsMotionType, PhysicsRaycastResult, Ray, Vector3, Tools } from "@babylonjs/core";
+import { addCameraTrauma } from "./cameraShake.js";
 
 let camera
 
@@ -421,27 +422,11 @@ export function disableRoomCameraOcclusion(){
     ghostCache.clear()
 }
 
+// Getting hit (and the skills that call this) - now the same trauma shake a
+// landed melee blow uses (tools/cameraShake.js). The old version wrote alpha/
+// beta outright and put them back afterwards, which undid any camera turning
+// the player did mid-shake and fought the impact shake when both ran at once.
+// Every caller passes intensity .01, which comes out as a solid jolt.
 export function camShake(scene, cam, intensity, isSlight){
-    const shakeDuration = 0.1
-    const shakeIntensity = intensity
-    // cam.setTarget(null)
-    let origAlpha = cam.alpha
-    let origBeta = cam.beta
-
-    let elapsed = 0;
-
-    let shakeAnim = scene.onBeforeRenderObservable.add(() => {
-        elapsed += scene.getEngine().getDeltaTime()/1000;
-
-        if(elapsed < shakeDuration){
-            let alphaOffset = Math.sin(elapsed * 50) * shakeIntensity;
-            let betaOffset = Math.sin(elapsed * 50) * shakeIntensity;
-            cam.alpha = origAlpha + alphaOffset
-            if(!isSlight) cam.beta = origBeta + betaOffset
-        }else{
-            cam.alpha = origAlpha
-            if(!isSlight) cam.beta = origBeta
-            scene.onBeforeRenderObservable.remove(shakeAnim)
-        }
-    })
+    addCameraTrauma(scene, Math.min(1, intensity * (isSlight ? 32 : 45)), { x: 0, y: isSlight ? 0 : -0.5 })
 }

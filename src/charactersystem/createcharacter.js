@@ -28,6 +28,7 @@ import { onIntersecExitTrig } from '../components/actionManager';
 import { getCharState } from './characterstate';
 import { calcDmg } from './attackingSystem';
 import { emitPlayerIsHit } from '../sockets/emits';
+import { onMeleeConnect } from './meleeCombat.js';
 import { registerBotInteraction } from '../npc/botInteraction';
 
 export let capsuleHeight = 1.5;
@@ -532,13 +533,23 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                 // just relayed through tcp's new "playerIsHit" handler
                 // instead of "enemyIsHit" (a player/bot isn't in tcpEnemies)
                 const equippedWeapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                const dmgDetails = calcDmg(charState)
                 emitPlayerIsHit({
                     playerId: charState.owner,
-                    dmgDetails: calcDmg(charState),
+                    dmgDetails,
                     targetId: det.owner,
                     currentPlaceId: det.currentPlace.placeId,
                     isPhysical: true,
                     effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                })
+                // the blow's impact on my screen - meleeCombat.js
+                onMeleeConnect({
+                    targetBody: body,
+                    targetMeshes: root?.getChildMeshes?.() ?? [],
+                    targetAnims: animationGroups ?? [],
+                    isCritical: dmgDetails.isCritical,
+                    weaponType: equippedWeapon?.weaponType ?? "fist",
+                    isSkill: !!atkCollider.isSkillHijacked,
                 })
             })
         }
