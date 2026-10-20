@@ -21,6 +21,7 @@ import { OPENWORLD_PLACE_ID, ZERECH_FARE } from "../constants/constants.js"
 import { makeSkillBooks } from "./skillBooks.js"
 import { jerkyItem } from "./foodItems.js"
 import { obtain } from "../charactersystem/inventory.js"
+import { earnFromPrice } from "../charactersystem/currencySystem.js"
 
 const npcEnemySpd = 4
 const npcPatrolSpd = 1
@@ -343,7 +344,8 @@ export default [
                     {name:"", message: "So yes — it is an F rank request. But urgent is urgent, and the villagers need someone there soon."},
                     {name:"", message: "Standard reward plus guild points. Nothing flashy, but it is honest work and a good way to get your first commission on the record."},
                     {name:"", message: "I apologize for throwing this at you on your first day. "},
-                    {name:"", message: "Here - take these. Three strips of jerky from the guild stores; every new member gets them. Eat one when you're hurt, it'll patch you up a little."},
+                    {name:"", message: "Here - your signing bonus for joining the guild. Three strips of jerky from the guild stores and 10 bronze to get you started; every new member gets the same."},
+                    {name:"", message: "Eat a strip when you're hurt, it'll patch you up a little. And the coins will cover your first contract from the guild board, if you want more work once this one is done."},
                     {name:"", message: "Good luck !!!"},                   
                 ],
                 notCompletedSpeech: [
@@ -359,8 +361,11 @@ export default [
                 ],
                 cbAfterNewQuestReceived: () => {
                     evaluateRank(0, { rankNumber: 0, rankLabel: "f"})
-                    // the new member's ration (foodItems.js)
+                    // the new member's signing bonus: a ration (foodItems.js)
+                    // and 10 bronze - both land in charState right away,
+                    // before the save createAllNpcInArea.js makes after this
                     obtain(jerkyItem(3))
+                    earnFromPrice({ coinType: "bronze", pieces: 10 })
                     updateStoryQuestUI({ 
                         qName: "slayFirstSlime", 
                         qTtle: "Hunt Down Slimes", 

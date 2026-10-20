@@ -28,8 +28,9 @@ import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
 import { createAggregate } from '../tools/physics.js';
 import { attachCam } from '../tools/camera.js';
+import { showShortNotice } from '../components/shortNotice.js';
 
-let ISINDEVEMODE = false
+let ISINDEVEMODE = true
 // the most recent enemy MY OWN melee attack actually landed on (see
 // createEnemy.js's atkCollider hit handler, right alongside its own
 // faceForward call) - createMyCharacter.js's positionAtkCollider reads this
@@ -361,7 +362,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = ISINDEVEMODE ? 20 : 3.7;
+    let sprintSpeed = ISINDEVEMODE ? 100 : 3.7;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
@@ -892,13 +893,21 @@ function setupControls(scene, allsounds) {
             break
             case "m":
                 if(!ISINDEVEMODE) return
-                // DEBUG CHEAT - quick trial of tools/speechgui.js's new
-                // Babylon GUI dialogue box, same call shape as
-                // conversations.js's own startConv([{speech}], cb)
-                // displaySpeech([{ speech: "hello" }], false, 100, true)
+                {
+                    // hide/show the whole HUD for clean screenshots - w/a/s/d
+                    // still move (hideShowAllScreenUI only touches the DOM,
+                    // not getCanPress). Skipped while typing in the chat box.
+                    const target = document.activeElement
+                    const isTypingInField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+                    if(isTypingInField) break
+                    hideShowAllScreenUI(hideUIToggle)
+                    hideUIToggle = !hideUIToggle
+                }
             break
             case "f":
                 if(!ISINDEVEMODE) return
+                
+                showShortNotice("conditions reached")
                 restoreAll()
             break
             case "1":

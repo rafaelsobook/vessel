@@ -10,7 +10,7 @@ import { getSpawnPos } from "../tools/position"
 import { Vector3, Mesh, MeshBuilder, ActionManager, ExecuteCodeAction, Quaternion, Sound } from "@babylonjs/core"
 import { createTransparentMat } from "../tools/materials"
 import { createTextMesh } from "../gui/textmesh"
-import { showGuildQuest, questToItem } from "../charactersystem/guildQuest"
+import { showGuildQuest, payForContract } from "../charactersystem/guildQuest"
 import { playAnim, ANIM_STATE, playBlockingLoop } from "../tools/animation"
 import { getAllSounds } from "../components/soundSystem"
 import { removeRenderObservable, addRenderObservable } from "./renderer"
@@ -422,7 +422,9 @@ export function activateOnSocketListeners(socket){
 
         if (ownerId !== charState.owner) return
         if (success) {
-            obtain(questToItem(quest))
+            payForContract(quest)
+        } else if (data.reason === "hasContract") {
+            popStatusEffect("You already have a contract", "red")
         } else {
             popStatusEffect("Quest already taken", "red")
         }
@@ -1597,15 +1599,19 @@ export function activateOnSocketListeners(socket){
 function createQuestPlaneMesh(quest, _scene) {
     const isAlreadyHere = questsOnScene.find(q => q.questId === quest.questId)
     if (isAlreadyHere) return
+    // someone holds it - tcp still lists it (it's theirs until they turn it
+    // in or cancel), but it's off the board
+    if (quest.claimed) return
 
-    const guildboard = _scene.getMeshByName("guildboard")
+    // guildboard1 (ranks F-D) or guildboard2 (C-S) - tcp's quests.ts
+    const guildboard = _scene.getMeshByName(quest.board ?? "guildboard1")
     if (!guildboard) return
 
     const questPlane = MeshBuilder.CreatePlane(`quest.${quest.questId}`, { height: 0.6, width: 0.4 }, _scene)
     questPlane.material = createTransparentMat(_scene, `./images/modeltex/quest/${quest.questRequirements.modelStyle}.webp`)
     questPlane.isPickable = true
     questPlane.parent = guildboard;
-    questPlane.position = new Vector3(-0.01, quest.pos.y, quest.pos.z)
+    questPlane.position = new Vector3(quest.pos.x ?? -0.01, quest.pos.y, quest.pos.z)
     questPlane.addRotation(0, Math.PI/2,0)
 
     questPlane.actionManager = new ActionManager(_scene)
@@ -1619,7 +1625,7 @@ function createQuestPlaneMesh(quest, _scene) {
     // forces billboardMode ON (for nametags following the camera), but
     // this label should stay flush with the board like questPlane does,
     // so it's reset to NONE right after.
-    const rankLabel = createTextMesh(_scene, questPlane, quest.requiredRank.rankLabel, "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
+    const rankLabel = createTextMesh(_scene, questPlane, quest.requiredRank.rankLabel.toUpperCase(), "black", { x: -0.13, y: 0.2, z: -0.0125 }, 27)
     rankLabel.billboardMode = Mesh.BILLBOARDMODE_NONE
 
     questsOnScene.push({ questId: quest.questId, mesh: questPlane })

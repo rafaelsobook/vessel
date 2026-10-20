@@ -15,6 +15,7 @@ import { createMagicCircle } from '../../creations/magiccircles.js';
 import { getAllSounds } from '../../components/soundSystem.js';
 import { getSocket } from '../../sockets/joinsocket.js';
 import { emitSpawnCircle } from '../../sockets/emits.js';
+import { mergeOnlyNode } from '../../tools/loadmodel.js';
 
 export const STARTING_ROOM = {
     // the starting room - your own room up the guild hall's stairs. A
@@ -358,19 +359,39 @@ export const GUILD_HALL = {
             },
             functionBeforeMerge: null
         },
+        // the two guild boards - both in guildboard.glb, each pulled out on its
+        // own (mergeOnlyNode). The contracts hang on them by name (tcp's
+        // quests.ts): guildboard1 the F, E and D ranks, guildboard2 the C, B,
+        // A and S. They flank the reception desk, each turned a little toward
+        // the room - guildboard2 is right of the desk, not right up against
+        // guildboard1: the 9 units from the west wall to the desk can't take
+        // both (10.4 wide together) without walling off the Guildmaster's
+        // Office door (x -4, under the gallery).
         {
             itemId: randNum(0,9999).toString(),
-            name: "guildboard",
+            name: "guildboard1",
             position: {x: -5, y: 0, z: 4.9},
             scale: null,
             rotation: -Math.PI/2 - 0.3,
             glbPath: "./models/indors/guildboard.glb",
-            // diffuseTexPath: "./images/modeltex/wood2.jpg",
             physics: {
                 opt: {mass: 0},
                 type: "box"
             },
-            functionBeforeMerge: null
+            functionBeforeMerge: mergeOnlyNode("guildboard1")
+        },
+        {
+            itemId: randNum(0,9999).toString(),
+            name: "guildboard2",
+            position: {x: 5.6, y: 0, z: 4.7},
+            scale: null,
+            rotation: -Math.PI/2 + 0.3,
+            glbPath: "./models/indors/guildboard.glb",
+            physics: {
+                opt: {mass: 0},
+                type: "box"
+            },
+            functionBeforeMerge: mergeOnlyNode("guildboard2")
         },
         // { // I commented this out because the physics is complaining of how many the geometry is
         //     itemId: randNum(0,9999).toString(),

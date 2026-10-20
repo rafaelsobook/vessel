@@ -2,7 +2,7 @@ import { createElement, checkIfTokenSaved } from "../tools/tools.js"
 import { getCharState, updateMyDetailsOL } from "./characterstate.js"
 import { emitClaimQuest, emitCancelQuest, emitCompleteQuest } from "../sockets/emits.js"
 import { obtain } from "./inventory.js"
-import { earnFromPrice } from "./currencySystem.js"
+import { earnFromPrice, canAfford, priceToBronze, spendOnPrice } from "./currencySystem.js"
 import { openClosePopup } from "../tools/popupUI.js"
 
 const questContainer = document.querySelector(".quest-container")
@@ -77,6 +77,20 @@ export async function reportQuest(){
     emitCompleteQuest(questDetail.questId)
 }
 
+// worldsocket.js's "quest-claim-result", once the server says this claim is
+// mine: takes the fee, then hands over the contract. If the coins went
+// elsewhere since Take Contract was pressed, the claim is handed straight back.
+export async function payForContract(quest) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!spendOnPrice(charState, quest.price)) {
+        emitCancelQuest(quest.questId)
+        return openClosePopup(`Not enough coins - a contract costs ${priceToBronze(quest.price)} bronze`, true, 2500)
+    }
+    // obtain() saves charState, coins included
+    await obtain(questToItem(quest))
+}
+
 function removeQuestItem(questItem) {
     const charState = getCharState()
     if (!charState) return
@@ -122,7 +136,8 @@ export function showGuildQuest(questDetail, isOwned = false, questItem = null) {
 
     currentQuest = questDetail
     currentQuestItem = isOwned ? questItem : null
-    questTrackBtn.textContent = isOwned ? "Cancel Quest" : "Take Contract"
+    const cost = priceToBronze(questDetail.price)
+    questTrackBtn.textContent = isOwned ? "Cancel Quest" : cost ? `Take Contract (${cost} bronze)` : "Take Contract"
 
     // .quest-container is a full-screen centered popup, same as
     // .inventory-container — opening on top of it would just overlap, so
@@ -135,7 +150,7 @@ export function showGuildQuest(questDetail, isOwned = false, questItem = null) {
     questDescElem.textContent = desc
 
     questObjectiveImgElem.src = `./images/modeltex/quest/${questRequirements.modelStyle}.webp`
-    questObjectiveNameElem.textContent = `Defeat ${questRequirements.modelStyle}`
+    questObjectiveNameElem.textContent = `Defeat ${questRequirements.targetDn ?? questRequirements.modelStyle}`
     questObjectiveProgressElem.textContent = `${questRequirements.current} / ${questRequirements.requiredNum}`
 
     questRewardsListElem.innerHTML = ""
@@ -147,8 +162,11 @@ export function showGuildQuest(questDetail, isOwned = false, questItem = null) {
     //     }))
     // }
     reward.rewardItems.forEach(item => {
+        // food or gear (tcp's quests.ts) - same icon rule as the inventory:
+        // images/items/<categ>/<name>.webp, a helmet by its modelName
+        const iconName = item.itemType === "helmet" ? item.modelName : item.name
         questRewardsListElem.appendChild(createRewardSlot({
-            img: `./images/items/consumable/${item.name}.webp`,
+            img: `./images/items/${item.itemCateg}/${iconName}.webp`,
             label: item.dn,
             qnty: item.qnty,
             hasBadge: true
@@ -178,7 +196,17 @@ questTrackBtn.addEventListener("click", () => {
     // claiming the same quest at the same instant, so the server has to be
     // the one to decide who actually gets it. worldsocket.js's
     // "quest-claim-result" handler is what calls obtain() once (and only
-    // once) the server confirms this claim actually went through.
+    // once) the server confirms this claim actually went through - and pays
+    // for it there too (payForContract), so a lost race costs nothing.
+    // One contract at a time, and you need the fee up front.
+    const charState = getCharState()
+    if (!charState) return
+    if (charState.items.some(itm => itm.itemCateg === "quest")) {
+        return openClosePopup("You already have a contract. Finish or cancel it first.", true, 2500)
+    }
+    if (!canAfford(charState, currentQuest.price)) {
+        return openClosePopup(`Not enough coins - a contract costs ${priceToBronze(currentQuest.price)} bronze`, true, 2500)
+    }
     emitClaimQuest(currentQuest.questId)
     questContainer.style.display = "none"
     currentQuest = null

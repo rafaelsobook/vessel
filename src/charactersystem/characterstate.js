@@ -29,7 +29,7 @@ import { isNearBonfire } from "../assetcreation/createbonfire.js";
 import { triggerSkillWheel } from "./skillWheel.js";
 import { isSittingOnLog, isSleepingInBed } from "./seating.js";
 import { popupReceiveLevelUpUI } from "../components/levelUpUI.js";
-import { showWheelUnlockNotice } from "../components/wheelUnlockUI.js";
+import { showShortNotice } from "../components/shortNotice.js";
 import { showWarning } from "../components/warningUI.js";
 
 // LIFE MANA STAMINA
@@ -182,7 +182,7 @@ function expToNextLevel(lvl){
 // upgrade-btn UI now spends from); one "Level Up!" banner shows the level
 // reached. Only every WHEEL_EVERY_LEVELS-th level (10, 20, 30...) earns a
 // skill wheel spin (skillWheel.js), announced first by a "Conditions
-// Reached / Spinning Wheel Activated" notice (wheelUnlockUI.js).
+// Reached" notice (shortNotice.js).
 const WHEEL_EVERY_LEVELS = 10
 export function gainExp(amount){
     if(!characterState || !amount) return
@@ -209,7 +209,7 @@ export function gainExp(amount){
     setTimeout(() => {
         // one notice, then one spin per milestone - skillWheel.js queues
         // them and shows them one after another
-        showWheelUnlockNotice(() => {
+        showShortNotice("conditions reached", () => {
             for(let i = 0; i < spins; i++) triggerSkillWheel()
         })
     }, 1200)

@@ -233,7 +233,10 @@ export function checkStoryQuestIfCompleted(_reqType, itemOrEnemyName){
     charState.items.forEach(itm => {
         if(itm.itemCateg !== "quest") return
         const req = itm.questDetail.questRequirements
-        if(req.reqType !== contractReqType || req.name !== itemOrEnemyName || req.completed) return
+        // names: every enemy the contract takes (any of the six deer, any
+        // standing wolf - tcp's quests.ts); older contracts carry just name
+        const counts = req.names ? req.names.includes(itemOrEnemyName) : req.name === itemOrEnemyName
+        if(req.reqType !== contractReqType || !counts || req.completed) return
 
         req.current++
         if(req.current >= req.requiredNum){

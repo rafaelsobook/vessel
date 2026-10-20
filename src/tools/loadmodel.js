@@ -46,6 +46,21 @@ export async function loadModelByIndx(path, meshIndx, scene) {
     return container.meshes[meshIndx];
 }
 
+// A functionBeforeMerge for mergeAndLoadModel: of a glb holding several
+// objects side by side (guildboard.glb's guildboard1 and guildboard2), keeps
+// just the node named nodeName, merged the way mergeAndLoadModel merges a whole
+// file, and throws the rest away - materials and textures too.
+export function mergeOnlyNode(nodeName){
+    return container => {
+        const root = container.meshes[0]
+        const node = root.getChildren(n => n.name === nodeName, false)[0]
+        if(!node) throw new Error(`[mergeOnlyNode] no "${nodeName}" in the glb`)
+        const keep = [node, ...node.getChildMeshes()].filter(m => m.getTotalVertices?.() > 0)
+        root.getChildMeshes().forEach(m => { if(!keep.includes(m) && m !== node) m.dispose(false, true) })
+        return Mesh.MergeMeshes(keep, true, true, undefined, false, true)
+    }
+}
+
 export async function mergeAndLoadModel(path, scene, functionBeforeMerge){
     const container = await SceneLoader.LoadAssetContainerAsync("", path, scene);
     container.addAllToScene();
