@@ -1,4 +1,4 @@
-import { ArcRotateCamera, SceneLoader, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4 } from "@babylonjs/core"
+import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4 } from "@babylonjs/core"
 import { createMatV2 } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam, enableRoomCameraOcclusion } from "../tools/camera.js";
@@ -25,6 +25,7 @@ import { travelToPlace, takeDoorArrival } from "../tools/travel.js";
 import { settleOnGround } from "../creations/groundBuilding.js";
 import { exactTerrainY, openworldSurfaceY } from "../tools/groundHeight.js";
 import { getCharState, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
+import { refreshBlessingVisuals } from "../charactersystem/blessingEffects.js";
 import { createMyCharacter } from "../charactersystem/createMyCharacter.js";
 import { sitHere, addBedSeat } from "../charactersystem/seating.js";
 import { pushPlayer, playSocketScene, getEnemiesOnScene } from "../sockets/worldsocket.js";
@@ -78,7 +79,6 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    const wingsglb = await SceneLoader.ImportMeshAsync("", "", "./models/wings/wings.glb", scene);
     // bigwolf.meshes[0].position = new Vector3(0, 0, 84)
     // // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
     // const wolfLowerSpine = bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren()[0]
@@ -107,8 +107,8 @@ export async function areaScene(placeDetail){
     const charState = getCharState()
     const myCharacter = createMyCharacter(charState, scene, allsounds)
     pushPlayer(myCharacter)
-    const mywing = wingsglb.meshes[0]
-    mywing.parent = myCharacter.bodytarget
+    // the Four Heavens' Ward's orbs, if I hold it (blessingEffects.js)
+    refreshBlessingVisuals()
     // only the 5 point lights nearest this player are ever on - see lightBudget.js
     startPointLightBudget(scene, () => myCharacter.body?.position)
     // short on sleep, the eyes start to fail - see sleepDeprivation.js

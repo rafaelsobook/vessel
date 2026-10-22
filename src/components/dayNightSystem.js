@@ -50,6 +50,13 @@ export function getTimeOfDay(){
     return (clock.timeOfDay + (performance.now() - clock.receivedAt) / clock.dayLengthMs) % 1
 }
 
+// whether it's night in the world right now - the sun well down (a quarter of
+// full daylight or less), whatever place you're in; callers that care whether
+// you can SEE the sky check the place's areaType against DAYNIGHT_AREA_TYPES
+export function isNightNow(){
+    return sunState(getTimeOfDay()).daylight < 0.25
+}
+
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const lerp = (a, b, t) => a + (b - a) * t
 const smoothstep = (lo, hi, v) => { const t = clamp01((v - lo) / (hi - lo)); return t * t * (3 - 2 * t) }

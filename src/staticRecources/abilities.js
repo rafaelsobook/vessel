@@ -197,4 +197,245 @@ export default [
             requireType: "kill", //none(will level up the same as you do) // kill(if higher than (number) from you) // percent (number)a percent of that if reached below. example your mana or life reached .1 below then this will level up
         }
     },
+    {
+        name: 'blueflame',
+        dn: "Azure Pyre",
+        desc: "A cold blue fire that burns hotter than any forge. It answers to rage, not to fuel.",
+        lvl: 1,
+        isActive: true,
+        trigger: false,
+        // how often the random rolls (skill wheel, level 10) land on it, against
+        // 1 for the rest - abilitySystem.js's receiveAbilities
+        rarity: 1,
+        percents: {
+            hp: 0,
+            mp: 0,
+            sp: 0,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 0, percent: 0},
+            magicDmg:{ toAdd: 0, percent: 0.15},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false
+        },
+        regens: {
+            hp: 0,
+            mp: 0.1,
+            sp: 0,
+        },
+        resistance: [],
+        tempResistance: { cold: 8, heat: 0 },
+        signature: [
+            "your melee hits set enemies alight with blue fire",
+            "the fire keeps the cold off you"
+        ],
+        requireForLeveling: {
+            requireType: "kill",
+        }
+    },
+    {
+        name: 'divineblade',
+        dn: "Divine Edge",
+        desc: "Two blades crossed beneath the light. The heavens favour those who never sheathe them.",
+        lvl: 1,
+        isActive: true,
+        trigger: false,
+        // how often the random rolls (skill wheel, level 10) land on it, against
+        // 1 for the rest - abilitySystem.js's receiveAbilities
+        rarity: 1,
+        percents: {
+            hp: 0,
+            mp: 0,
+            sp: 0,
+            spd: 0,
+            atkSpd: 0.05,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 20, percent: 0},
+            magicDmg:{ toAdd: 0, percent: 0},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false
+        },
+        regens: {
+            hp: 0,
+            mp: 0,
+            sp: 0,
+        },
+        resistance: [],
+        signature: [
+            "with a sword or spear, every 4th hit lands a radiant slash for double damage"
+        ],
+        requireForLeveling: {
+            requireType: "kill",
+        }
+    },
+    {
+        name: 'divinefour',
+        dn: "Four Heavens' Ward",
+        desc: "North, south, east and west: the four heavens stand guard over the chosen.",
+        lvl: 1,
+        isActive: true,
+        trigger: false,
+        // how often the random rolls (skill wheel, level 10) land on it, against
+        // 1 for the rest - abilitySystem.js's receiveAbilities
+        rarity: 0.5,
+        percents: {
+            hp: 0.05,
+            mp: 0.05,
+            sp: 0.05,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 0, percent: 0},
+            magicDmg:{ toAdd: 0, percent: 0},
+            defense: { toAdd: 0, percent: 0.1},
+
+            trigger: false
+        },
+        regens: {
+            hp: 0,
+            mp: 0,
+            sp: 0,
+        },
+        resistance: [],
+        signature: [
+            "a golden ward circles you and absorbs one hit completely",
+            "it returns 20 seconds after it breaks"
+        ],
+        requireForLeveling: {
+            requireType: "kill",
+        }
+    },
+    {
+        name: 'fistdomain',
+        dn: "Domain of the Fist",
+        desc: "Steel is a crutch. The body is the weapon.",
+        lvl: 1,
+        isActive: true,
+        trigger: false,
+        // how often the random rolls (skill wheel, level 10) land on it, against
+        // 1 for the rest - abilitySystem.js's receiveAbilities
+        rarity: 1,
+        percents: {
+            hp: 0,
+            mp: 0,
+            sp: 0.1,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 0, percent: 0},
+            magicDmg:{ toAdd: 0, percent: 0},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false
+        },
+        regens: {
+            hp: 0.1,
+            mp: 0,
+            sp: 0,
+        },
+        resistance: [],
+        signature: [
+            "barehanded: +40 melee damage and +20% attack speed",
+            "each hit within 1.5 s of the last adds 5% damage, up to 5 times"
+        ],
+        requireForLeveling: {
+            requireType: "kill",
+        }
+    },
+    {
+        name: 'moonpiece',
+        dn: "Shard of the Moon",
+        desc: "A piece of the moon fell to earth. It still remembers the night.",
+        lvl: 1,
+        isActive: true,
+        trigger: false,
+        // how often the random rolls (skill wheel, level 10) land on it, against
+        // 1 for the rest - abilitySystem.js's receiveAbilities
+        rarity: 1,
+        percents: {
+            hp: 0,
+            mp: 0.1,
+            sp: 0,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 0, percent: 0},
+            magicDmg:{ toAdd: 10, percent: 0},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false
+        },
+        regens: {
+            hp: 0,
+            mp: 0,
+            sp: 0,
+        },
+        resistance: [],
+        darkResistance: 0.15,
+        signature: [
+            "turns aside 15% of dark magic",
+            "at night, outdoors: +25% magic damage, faster mana regen and +10% speed"
+        ],
+        requireForLeveling: {
+            requireType: "kill",
+        }
+    },
+    {
+        name: 'redemption',
+        dn: "Blood Redemption",
+        desc: "The pact was simple: one death, refused.",
+        lvl: 1,
+        isActive: true,
+        trigger: false,
+        // how often the random rolls (skill wheel, level 10) land on it, against
+        // 1 for the rest - abilitySystem.js's receiveAbilities
+        rarity: 0.4,
+        percents: {
+            hp: 0.1,
+            mp: 0,
+            sp: 0,
+            spd: 0,
+            atkSpd: 0,
+
+            accuracy: 0,
+            critical: 0,
+
+            meeleeDmg:{ toAdd: 0, percent: 0},
+            magicDmg:{ toAdd: 0, percent: 0},
+            defense: { toAdd: 0, percent: 0},
+
+            trigger: false
+        },
+        regens: {
+            hp: 0.1,
+            mp: 0,
+            sp: 0,
+        },
+        resistance: [],
+        signature: [
+            "a killing blow leaves you at 1 hp instead, and untouchable for 2 seconds (once every 5 minutes)",
+            "under 25% hp, your hits heal you for 10% of the damage dealt"
+        ],
+        requireForLeveling: {
+            requireType: "kill",
+        }
+    },
 ]

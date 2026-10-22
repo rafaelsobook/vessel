@@ -136,7 +136,8 @@ export function createFireFlame(position, scene) {
 // bodyRadius, spawning particles anywhere from feet to head instead of one
 // fixed point - and emitter is the MESH itself (not a static position), so
 // it tracks automatically frame to frame like createParticlesForMesh does.
-export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadius = 0.6) {
+// color: "orange" (the default) or "blue" - Azure Pyre's fire (blessingEffects.js)
+export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadius = 0.6, color = "orange") {
     const particles = new ParticleSystem("body_fire", 300, scene)
     particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.webp")
     particles.blendMode = ParticleSystem.BLENDMODE_ADD
@@ -153,9 +154,18 @@ export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadiu
     particles.minEmitBox = new Vector3(-bodyRadius * 0.5, -bodyHeight * 0.5, -bodyRadius * 0.5)
     particles.maxEmitBox = new Vector3( bodyRadius * 0.5,  bodyHeight * 0.5,  bodyRadius * 0.5)
 
-    particles.color1    = new Color4(1.0, 0.7, 0.1, 1.0)
-    particles.color2    = new Color4(1.0, 0.2, 0.0, 1.0)
-    particles.colorDead = new Color4(0.15, 0.0, 0.0, 0.0)
+    if(color === "blue"){
+        // fireTex is yellow - tinted blue it goes green. flame2 is grey, so it
+        // takes the colour cleanly (effects/aura.js's blue flame uses it too)
+        particles.particleTexture = getParticleTexture(scene, particleTexturePath("flame2"))
+        particles.color1    = new Color4(0.45, 0.8, 1.0, 1.0)
+        particles.color2    = new Color4(0.1, 0.3, 1.0, 1.0)
+        particles.colorDead = new Color4(0.0, 0.0, 0.2, 0.0)
+    } else {
+        particles.color1    = new Color4(1.0, 0.7, 0.1, 1.0)
+        particles.color2    = new Color4(1.0, 0.2, 0.0, 1.0)
+        particles.colorDead = new Color4(0.15, 0.0, 0.0, 0.0)
+    }
 
     particles.minSize = 0.14
     particles.maxSize = 0.4

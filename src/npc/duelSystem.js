@@ -20,6 +20,7 @@ import { getCharState, updateMyDetailsOL, deductHp, isPlayerCursed, curseStatusE
 import { checkStoryQuestIfCompleted } from "../charactersystem/storyQuestSystem.js"
 import { calcDmg, registerToAtkCollider } from "../charactersystem/attackingSystem.js"
 import { onMeleeConnect } from "../charactersystem/meleeCombat.js"
+import { applyBlessingsToMeleeHit } from "../charactersystem/blessingEffects.js"
 import { createHpBar, poppingTextMesh } from "../tools/GUITools.js"
 import { ANIM_STATE, findAnimVariants } from "../tools/animation.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
@@ -1562,7 +1563,13 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     registerToAtkCollider(scene, opponent.body.name.toLowerCase(), () => {
         if(opponentDefeated || duelState.playerDefeated) return
 
-        const dmgDetails = calcDmg(charState)
+        // my blessings' say in the blow (blessingEffects.js) - the damage after them
+        const dmgDetails = applyBlessingsToMeleeHit({
+            dmgDetails: calcDmg(charState),
+            charState,
+            isSkill: !!scene.getMeshByName("atkCollider")?.isSkillHijacked,
+            targetBody: opponent.body,
+        }).dmgDetails
         // same weaponDmg-else-physicalDmg rule tcp/index.ts's own enemyIsHit
         // handler uses server-side, replicated here since there's no server
         // round-trip to do it for us in this scene

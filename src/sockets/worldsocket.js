@@ -20,6 +20,8 @@ import { attack, activateSkill } from "../charactersystem/attackingSystem"
 import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating, startEnemyRoar } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitEnemyIsHit } from "./emits"
+import { evolveInto, devolve } from "../charactersystem/evolution.js"
+import { bashLanded } from "../charactersystem/knockback.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { obtain } from "../charactersystem/inventory"
@@ -145,6 +147,7 @@ let containers = {
     helmets: null,
     gauntlets: null,
     pauldrons: null,
+    kneeArmors: null,
     armors: null,
     belts: null,
     cloaks: null,
@@ -199,6 +202,7 @@ export function resetArray(){
         helmets: null,
         gauntlets: null,
         pauldrons: null,
+        kneeArmors: null,
         armors: null,
         belts: null,
         cloaks: null,
@@ -383,6 +387,7 @@ export function activateOnSocketListeners(socket){
         if(itemType === "helmet") theEquipingPlayer.equipHelmet(itemModelName, metalColor, itemName, hairVisible)
         if(itemType === "gauntlet") theEquipingPlayer.equipGauntlet(itemName, metalColor)
         if(itemType === "pauldron") theEquipingPlayer.equipPauldron(itemName, metalColor)
+        if(itemType === "kneearmor") theEquipingPlayer.equipKneeArmor(itemName, metalColor)
         if(itemType === "belt") theEquipingPlayer.equipBelt(itemModelStyle, itemName)
 
         // if (itemType === "weapon") theEquipingPlayer.equipSword(swordRoot, itemName, theEquipingPlayer._attacking, data.isHide)
@@ -607,7 +612,10 @@ export function activateOnSocketListeners(socket){
         // after defense - see landEnemyHit - not by halving the raw number,
         // which would have taken defense off twice.)
         const enemy = theEnemyToAttack
-        const swings = enemy.det?.attackCombo?.length ? enemy.det.attackCombo : [data.attackAnimName]
+        // a slam (createEnemy.js's emitAttack, det.bashAttack): one swing, its
+        // own clip, landing at its impact frame and knocking the victim back
+        const bash = data.bash ? enemy.det?.bashAttack : null
+        const swings = !bash && enemy.det?.attackCombo?.length ? enemy.det.attackCombo : [data.attackAnimName]
         const clips = swings.map(name => enemy.anims.find(a => a.name.toLowerCase() === name.toLowerCase()))
         const clipMs = clip => clip
             ? (clip.to - clip.from) / (clip.targetedAnimations[0]?.animation.framePerSecond || 60) * 1000
@@ -638,8 +646,26 @@ export function activateOnSocketListeners(socket){
             if(clips[i]) clips[i].speedRatio = speed
             playAnim(enemy.anims, swings[i])
             enemy.attackSound?.play()
-            if(lands) landEnemyHit(enemy, swings.length, i === 0 ? data.effects : [], swings[i])
+            if(lands && bash) setTimeout(() => landBash(enemy), clipMs(clips[i]) * (bash.impactAt ?? 0.65))
+            else if(lands) landEnemyHit(enemy, swings.length, i === 0 ? data.effects : [], swings[i])
             if(i + 1 < swings.length) setTimeout(() => swing(i + 1), clipMs(clips[i]) / speed)
+        }
+
+        // the slam coming down: it hurts like any swing, and throws the victim
+        // back (charactersystem/knockback.js) - unless the slime's gone or
+        // already onto its next attack by then
+        const landBash = enemy => {
+            if(enemy._comboId !== comboId || !enemiez.includes(enemy) || enemy.body.isDisposed()) return
+            const victimPlayer = playersOnScene.find(victim => victim.owner === targetId)
+            if(!victimPlayer) return
+            landEnemyHit(enemy, 1, data.effects, swings[0])
+            bashLanded({
+                victim: victimPlayer,
+                from: enemy.body.position,
+                distance: bash.distance,
+                isMine: victimPlayer.owner === charState.owner,
+                blocked: !!victimPlayer.weaponBlocking,
+            })
         }
 
         // one swing connecting with the victim - everyone watching sees it,
@@ -1530,6 +1556,23 @@ export function activateOnSocketListeners(socket){
         if (ownerId === charState.owner) return
         const player = playersOnScene.find(pl => pl.owner === ownerId)
         player?.auraz?.update(aura)
+    })
+    // another player is evolving (emits.js's emitEvolve) - the change plays out
+    // on them here too. Skips this client's own echo: evolveInto already ran
+    // for me.
+    socket.on("emitted-evolve", data => {
+        const { ownerId, evolution, currentPlaceId } = data
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (!charState) return
+        if (getGameStatus() === "loading") return
+        if (currentPlaceId !== charState.currentPlace.placeId) return
+        if (ownerId === charState.owner) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if(!player) return
+        // no name: they turned back into a human
+        if(evolution?.evolutionName == null) devolve(player)
+        else evolveInto(evolution, player)
     })
     socket.on("emitted-loc", data => {
         const { ownerId, pos, dirTarg, mode, weaponName} = data

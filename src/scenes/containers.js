@@ -211,6 +211,9 @@ export async function setStartingContainers(scene){
         gauntlets.meshes.forEach(m => m.isVisible = false)
         const pauldrons = await importMeshSafe("./models/pauldrons/", "pauldrons.glb", scene)
         pauldrons.meshes.forEach(m => m.isVisible = false)
+        // knee armour - kneearmor.<name>, one mesh cloned onto both lower legs
+        const kneeArmors = await importMeshSafe("./models/kneearmor/", "kneearmors.glb", scene)
+        kneeArmors.meshes.forEach(m => m.isVisible = false)
         // single-mesh, non-sword weapons (spear etc) - see createweapon.js's
         // createSingleMeshWeapon. Doesn't exist yet; importMeshSafe just
         // falls back to an empty list until this glb is actually added
@@ -255,6 +258,7 @@ export async function setStartingContainers(scene){
             helmets: helmets.meshes,
             gauntlets: gauntlets.meshes,
             pauldrons: pauldrons.meshes,
+            kneeArmors: kneeArmors.meshes,
             armors: null,
             belts: null,
             cloaks: null,

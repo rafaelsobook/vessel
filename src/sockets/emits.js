@@ -394,6 +394,22 @@ export function emitAura(aura) {
     })
 }
 
+// I'm evolving (charactersystem/evolution.js's evolveInto) - relayed, so every
+// other client's worldsocket.js "emitted-evolve" handler plays the change on me
+// too, and tcp remembers what I became for whoever joins later
+export function emitEvolve(evolution) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("emitEvolve", {
+        ownerId: charState.owner,
+        evolution,
+        currentPlaceId: charState.currentPlace.placeId,
+    })
+}
+
 export function emitEquipItem(itemDet, isHiding) {
 
     const charState = getCharState()

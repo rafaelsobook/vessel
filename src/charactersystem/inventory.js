@@ -182,8 +182,9 @@ export async function obtainAll(itemsArray){
 // The metal-tinted armour the game has meshes for (avatar.glb's armor.*,
 // helmets.glb, pauldrons.glb, gauntlets.glb), at the base stats its plain iron
 // version already carries (the entries in giveAllItems, constants/questions.js,
-// npcDetails.js). A pauldron and a gauntlet are one mesh cloned onto both
-// shoulders/hands (createcharacter.js), so each is already a matched pair.
+// npcDetails.js). A pauldron, a gauntlet and a kneeguard are one mesh cloned
+// onto both shoulders/hands/knees (createcharacter.js), so each is already a
+// matched pair.
 // Hats and boots are left out: they are painted from a texture, not tinted, so
 // a metal colour would change nothing about them.
 const TINTED_ARMOR = [
@@ -191,6 +192,7 @@ const TINTED_ARMOR = [
     { name: "lightarmor", dn: "Light Armor", itemType: "armor", def: 10, resistance: 5, price: 30 },
     { name: "ironpaul", dn: "Pauldron", itemType: "pauldron", def: 20, resistance: 0, price: 30 },
     { name: "gauntler", dn: "Gauntlet", itemType: "gauntlet", def: 20, resistance: 10, price: 22 },
+    { name: "braveknee", dn: "Brave Kneeguard", itemType: "kneearmor", def: 12, resistance: 6, price: 26 },
     { name: "ironjaw", modelName: "ironjaw", dn: "Knight's Helm III", itemType: "helmet", def: 20, resistance: 10, price: 35 },
     { name: "orionhelm", modelName: "orionhelm", dn: "Orion Helm", itemType: "helmet", def: 20, resistance: 10, price: 32 },
     { name: "ironmask", modelName: "ironmask", dn: "Mask", itemType: "helmet", def: 12, resistance: 5, price: 25, hairVisible: true },
@@ -368,6 +370,27 @@ export function giveAllItems(){
             price: { coinType: "bronze", pieces: 30 },
             qnty: 1,
             desc: "A well-fitted gauntlet, straight from the forge.",
+            rarity: "rare",
+            metalColor: METAL_COLOR.IRON
+        },
+        {
+            itemId: randomNum(),
+            name: "braveknee",
+            dn: "Iron Brave Kneeguard",
+            itemCateg: "equipable",
+            itemType: "kneearmor",
+            weaponType: undefined,
+            equipAbilities: { dmg: 0, def: 12, resistance: 6, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 26 },
+            qnty: 1,
+            desc: "A pair of iron knee cops riveted to short shin plates - they take the kicks and the falls.",
             rarity: "rare",
             metalColor: METAL_COLOR.IRON
         },
@@ -621,6 +644,7 @@ export function reduceDurability(item){
         case "gauntlet":
         case "boots":
         case "pauldron":
+        case "kneearmor":
             item.durability.current -= 1
         break
         default:

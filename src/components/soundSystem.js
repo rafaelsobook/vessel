@@ -105,6 +105,28 @@ export function initSounds(scene){
     const rockSmashS = createSoundSafe("rockSmashS", "./sounds/effects/rockSmashS.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
+    // the evolution (charactersystem/evolution.js): hitting the ground as it
+    // starts, the fire catching, the change breaking through, the wings opening
+    const landedOnGroundS = createSoundSafe("landedOnGroundS", "./sounds/effects/landedonground.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    const igniteFireS = createSoundSafe("igniteFireS", "./sounds/effects/ignitefire.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    const horrorExplosionS = createSoundSafe("horrorExplosionS", "./sounds/effects/horrorexplosion.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    const wingsFlappedS = createSoundSafe("wingsFlappedS", "./sounds/effects/wingsflapped.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    // the air rushing past while flying - a loop, faded in and out by inputMovement.js
+    const windBlowS = createSoundSafe("windBlowS", "./sounds/effects/windblow.mp3", scene,
+    {volume: 0.6, autoplay: false, loop: true})
+
+    // coming down hard from a height (inputMovement.js's landing)
+    const heavyLandedS = createSoundSafe("heavyLandedS", "./sounds/effects/heavylanded.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
     const bulletS = createSoundSafe("bulletS", "./sounds/effects/bullet.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
@@ -175,6 +197,7 @@ export function initSounds(scene){
         giantencounterS,
         struckS,
         rockSmashS,
+        landedOnGroundS, igniteFireS, horrorExplosionS, wingsFlappedS, heavyLandedS, windBlowS,
         minningS,
         // cinema1,cinema2,
         woodCreakS,

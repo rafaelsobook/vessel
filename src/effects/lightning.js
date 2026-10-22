@@ -43,7 +43,7 @@ export function createLightningGlowMaterial(scene, color = "yellow") {
 // Local-space bounding box, computed via the world-matrix inverse so it works
 // for a single mesh (blade) AND a multi-child root (createWeapon's TransformNode)
 // without caring how the hierarchy is scaled/rotated underneath.
-function getLocalBoundingBox(mesh) {
+export function getLocalBoundingBox(mesh) {
     let min = Vector3.Zero()
     let max = Vector3.Zero()
     try {
@@ -88,7 +88,7 @@ function pickSurfacePoint(min, max, size) {
     return p
 }
 
-function pickArcEndpoints(min, max, size) {
+export function pickArcEndpoints(min, max, size) {
     const minDist = Math.max(size.length() * 0.2, 0.05)
     let a, b, tries = 0
     do {
@@ -101,7 +101,7 @@ function pickArcEndpoints(min, max, size) {
 
 // Classic anchored-bolt jitter: interior points get pushed sideways with a
 // sin() envelope so the ends stay pinned to the surface and the middle whips.
-function buildBoltPath(start, end, segments, jitterAmount) {
+export function buildBoltPath(start, end, segments, jitterAmount) {
     const path = []
     for (let i = 0; i <= segments; i++) {
         const t = i / segments
@@ -120,7 +120,7 @@ function buildBoltPath(start, end, segments, jitterAmount) {
 // Tube radius per path point: pinched to a near-zero point at the two tips
 // (so the ends read as pointed, not a flat/boxy cut) and bulging out to
 // maxWidth in the middle via the same sin() envelope as the jitter.
-function makeRadiusFunction(segments, width, maxWidth) {
+export function makeRadiusFunction(segments, width, maxWidth) {
     const tipRadius = width * 0.15
     return (i) => {
         if (i === 0 || i === segments) return tipRadius

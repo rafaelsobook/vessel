@@ -26,9 +26,11 @@ export function addGlow(scene, mesh, intensity = 2){
         // Runs at render time, not call time, so it doesn't matter whether a
         // mesh's material.emissiveColor gets set before or after addGlow()
         // is called on it.
+        // mesh._glowColor, when set, glows in place of the emissive colour -
+        // a mesh drawn black can still glow red round it (effects/dark.js's arcs)
         gl.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
             const brightness = mesh._glowBrightness ?? 1
-            const emissive = material.emissiveColor
+            const emissive = mesh._glowColor ?? material.emissiveColor
             if (emissive) {
                 result.set(emissive.r * brightness, emissive.g * brightness, emissive.b * brightness, material.alpha ?? 1)
             } else {

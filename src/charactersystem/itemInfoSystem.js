@@ -69,7 +69,7 @@ const capitalize = str => str.charAt(0).toUpperCase() + str.slice(1)
 
 const DURABILITY_LOW_THRESHOLD = 0.3
 
-const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots", "belt"]
+const ARMOR_TYPES = ["armor", "gauntlet", "helmet", "boots", "belt", "pauldron", "kneearmor"]
 
 
 const claimContainer = document.querySelector(".claim-container")
@@ -111,6 +111,7 @@ let equipItemFunc = () => {
         if(itemType === "helmet") myChar.equipHelmet(itemDetail.modelName, itemDetail.metalColor, name, itemDetail.hairVisible)
         if(itemType === "gauntlet") myChar.equipGauntlet(name, itemDetail.metalColor)
         if(itemType === "pauldron") myChar.equipPauldron(name, itemDetail.metalColor)
+        if(itemType === "kneearmor") myChar.equipKneeArmor(name, itemDetail.metalColor)
         if(itemType === "armor") myChar.equipArmor(name, itemDetail.metalColor)
         if(itemType === "belt") myChar.equipBelt(itemDetail.itemModelStyle, name)
 
@@ -493,8 +494,9 @@ export function showItemInfo(_itemDet){
         magicResistanceRow.style.display = hasMagicResistance ? "flex" : "none"
 
         if(isArmorType){
-            itemDefValue.innerHTML = _itemDet.equipAbilities.def
-            itemResistanceValue.innerHTML = _itemDet.equipAbilities.resistance
+            // ?? 0 - some armour leaves a stat off (the iron pauldron has no resistance)
+            itemDefValue.innerHTML = _itemDet.equipAbilities.def ?? 0
+            itemResistanceValue.innerHTML = _itemDet.equipAbilities.resistance ?? 0
         }
         if(itemType === "weapon"){
             itemDmgValue.innerHTML = _itemDet.equipAbilities.dmg

@@ -9,6 +9,7 @@ import { getHeroDetail } from "../serverApiFun/getHeroDetail.js";
 import { updateStatUI } from "./statsSystem.js";
 import { closeInventory, obtain } from "./inventory.js";
 import { getMyAbilitiesInfo, receiveAbilities } from "./abilitySystem.js";
+import { getLiveBlessingBonuses, tryWard, tryRedemption, isInvulnerable } from "./blessingEffects.js";
 import { getPlayersOnScene, setPlayerMode, getIsSocketOn } from "../sockets/worldsocket.js";
 import { emitMode, emitWeaponBlock, emitEnemyIsHit, emitTired, emitBleeding, emitAura, emitDied } from "../sockets/emits.js";
 import { computeAuraProfile } from "../effects/auraProfile.js";
@@ -116,7 +117,10 @@ function getDefaultAddStats(){
 
         additionalAccuracy:0,
         additionalCrit: 0,
-        resistances: []
+        resistances: [],
+        // walking/running speed as a share (0.1 = 10% faster) - the Shard of the
+        // Moon at night; inputMovement.js multiplies the pace by it
+        moveSpeedBonus: 0,
     }
 }
 let addStats = getDefaultAddStats()
@@ -325,10 +329,20 @@ export function getTotalHp(){
 // where death is allowed (setAllowDeath - a duel stops you at 1 hp instead).
 export function damageHp(amount, source = "combat"){
     if(!characterState || isLifeOver || !(amount > 0)) return false
+    // a refused death (Blood Redemption) leaves me untouchable for a moment
+    if(isInvulnerable()) return false
     const lethal = (LETHAL_DAMAGE[source] ?? true) && allowDeath
     const floor = lethal ? 0 : NON_LETHAL_FLOOR
     // already at (or under) its floor - a non-lethal source has nothing to take
     if(characterState.hp <= floor) return false
+    // a killing blow - Blood Redemption may refuse it: 1 hp, and it's over. Its
+    // ready-again time lives on the blessing, so this save is what keeps it.
+    if(lethal && characterState.hp - amount <= 0 && tryRedemption()){
+        characterState.hp = 1
+        hpChanged()
+        updateMyDetailsOL(characterState, checkIfTokenSaved())
+        return false
+    }
     characterState.hp = Math.max(floor, characterState.hp - amount)
     hpChanged()
     if(characterState.hp > 0) return false
@@ -433,6 +447,11 @@ export function getTotalTempResistance(){
         total.cold += res.cold ?? 0
         total.heat += res.heat ?? 0
     })
+    // blessings carry it too (Azure Pyre's fire keeps the cold off)
+    characterState.blessings?.forEach(blessing => {
+        total.cold += blessing.tempResistance?.cold ?? 0
+        total.heat += blessing.tempResistance?.heat ?? 0
+    })
     return total
 }
 
@@ -447,6 +466,10 @@ export function getTotalDarkResistance(){
     characterState.items.forEach(itm => {
         if(itm.itemCateg !== 'equipable' || !itm.equiped) return
         total += itm.darkResistance ?? 0
+    })
+    // and blessings (the Shard of the Moon)
+    characterState.blessings?.forEach(blessing => {
+        total += blessing.darkResistance ?? 0
     })
     return Math.min(DARK_RESISTANCE_CAP, Math.max(0, total))
 }
@@ -530,6 +553,9 @@ export function getCharSocket(){
         // how strong my flex aura looks (effects/aura.js) - so anyone meeting
         // me with it already up sees it at my strength
         aura: getMyAuraProfile(),
+        // what I've evolved into (evolution.js) - so anyone meeting me sees
+        // the wings it gave me
+        evolution: characterState.evolution,
     }
 }
 
@@ -801,6 +827,20 @@ function summarizeStatsUnsafe(){
     addStats.totalHpRegen = totalRegens.hp
     addStats.totalMpRegen = totalRegens.mp
     addStats.totalSpRegen = totalRegens.sp
+
+    // what the blessings give right now - barehanded, at night - on top of the
+    // fixed perks above (blessingEffects.js). Added AFTER those are assigned, so
+    // it never piles up from one run to the next.
+    const live = getLiveBlessingBonuses(characterState)
+    addStats.additionalMeeleeDmg.toAdd += live.meleeToAdd
+    addStats.additionalMagicDmg.percent += live.magicPercent
+    addStats.additionalAtkSpd += stats.atkSpd * live.atkSpdPercent
+    addStats.totalMpRegen += live.mpRegen
+    addStats.moveSpeedBonus = live.moveSpeed
+}
+// walking/running speed as a share on top of normal, from blessings right now
+export function getMoveSpeedBonus(){
+    return addStats.moveSpeedBonus || 0
 }
 export async function initiateCharacter(_accountDet){
     const loaded = await getHeroDetail(_accountDet)
@@ -910,6 +950,10 @@ function tickHunger(){
 // (telling tcp, gameOver) has finished - callers don't report the death
 // themselves anymore, damageHp's die() already did.
 export async function deductHp(dmg, effects = [], enemyStats){
+
+    // Four Heavens' Ward: the whole blow, its effects too, goes into the ward
+    // (it breaks, and returns later - blessingEffects.js)
+    if(dmg > 0 && !isLifeOver && tryWard()) return false
 
     let totalDmg = dmg
     totalDmg -= getTotalDefense()

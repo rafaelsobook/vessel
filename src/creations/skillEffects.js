@@ -208,7 +208,8 @@ export function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyW
     const totalTicks = Math.max(1, Math.round(burnEffect.duration / 1000))
     let ticksDone = 0
 
-    const burnParticles = existingParticles ?? createBodyFireParticles(targetBody, scene, bodyHeight, bodyWidenes)
+    // burnEffect.fireColor ("blue" - Azure Pyre) picks the flame's colour
+    const burnParticles = existingParticles ?? createBodyFireParticles(targetBody, scene, bodyHeight, bodyWidenes, burnEffect.fireColor)
     const burnInterval = setInterval(() => {
         ticksDone++
         dealTick(burnEffect.dmgPm)

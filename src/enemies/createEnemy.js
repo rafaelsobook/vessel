@@ -30,6 +30,7 @@ import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
 import { hasDungeonLineOfSight } from "../tools/dungeonSight.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 import { onMeleeConnect, onMeleeKill } from "../charactersystem/meleeCombat.js"
+import { applyBlessingsToMeleeHit } from "../charactersystem/blessingEffects.js"
 
 // modelStyles that don't bleed at all (see this file's own bloodps setup
 // below) - slime is gooey, not fleshy; ghost is an incorporeal spirit, same
@@ -722,14 +723,28 @@ export default function createEnemy(scene, det) {
             // atkCollider.isPhysicalDmg the moment it hijacks the collider,
             // same isSkillHijacked side-channel this already reads).
             const isPhysicalDmg = atkCollider.isSkillHijacked ? !!atkCollider.isPhysicalDmg : true
-            const dmgDetails = { ...calcDmg(charState), isPhysicalDmg }
+            // my blessings' say in this blow (blessingEffects.js): the damage
+            // after them, and their on-hit effects (Azure Pyre's blue fire) added
+            // to the weapon's own. A ghost shrugging off steel gets none of it.
+            const isGlance = isPhysicalDmg && det.physicalImmune
+            const swing = isGlance
+                ? { dmgDetails: { ...calcDmg(charState), isPhysicalDmg }, effectsWhenHit: equippedWeapon?.effectsWhenHit }
+                : applyBlessingsToMeleeHit({
+                    dmgDetails: { ...calcDmg(charState), isPhysicalDmg },
+                    charState,
+                    effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                    isSkill: !!atkCollider.isSkillHijacked,
+                    targetId: det._id,
+                    targetBody: body,
+                })
+            const dmgDetails = swing.dmgDetails
             dealDamageToEnemy({
                 playerId: charState.owner,
                 dmgDetails,
                 targetId: det._id,
                 currentPlaceId: det.currentPlaceId,
                 isPhysical: true,
-                effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                effectsWhenHit: swing.effectsWhenHit,
             })
             // the blow's impact - shake, hit-stop, flash, sparks and the hit
             // sound, right now rather than when tcp's "enemy-is-hit" comes
@@ -970,7 +985,14 @@ function getBodyTargetInstance(scene, modelStyle, options, enemyId){
 // tools
 function emitAttack(detail, enemId, targetId, placeId, pos, anims) {
     // log(`enemy will attack ${detail.name}`)
-    const attackAnim = pickAnimVariant(anims, "attack")
+    // now and then a slam instead (det.bashAttack - the fire slimes'), if
+    // this rig has the clip for it: bash rides along so every client plays
+    // the knockback (worldsocket.js's "enemy-attacked")
+    const bash = detail.bashAttack
+    const bashAnim = bash && Math.random() < bash.chance
+        ? anims.find(a => a.name.toLowerCase() === bash.animationName.toLowerCase())
+        : null
+    const attackAnim = bashAnim ?? pickAnimVariant(anims, "attack")
     getSocket().emit("enemyWillAttack", {
         currentPlaceId: placeId,
         _id: enemId,
@@ -979,7 +1001,8 @@ function emitAttack(detail, enemId, targetId, placeId, pos, anims) {
         dmg: detail.stats.dmg,
         atkSpd: detail.stats.atkSpd,
         attackAnimName: attackAnim ? attackAnim.name : "attack1",
-        effects: detail.effects
+        effects: detail.effects,
+        bash: !!bashAnim,
     })
 }
 function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, rangeAtkDetails, anims){

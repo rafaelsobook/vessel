@@ -2,13 +2,13 @@ import { Quaternion, MeshBuilder, Vector3, FreeCamera, PointerEventTypes, Space 
 import { createCamTricks } from 'babyloncamtricks';
 import * as GUI from "@babylonjs/gui";
 import { getSceneDet } from "../main/main";
-import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp } from '../charactersystem/characterstate';
+import { setCanPress, getCanPress, getCharState, setCharStateMode, updateMyDetailsOL, evaluateRank, restoreAll, debugLevelUp, getMoveSpeedBonus, isDead } from '../charactersystem/characterstate';
 import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn, getSocketContainers } from '../sockets/worldsocket';
 import { checkIfTokenSaved, stopAnim, randomNum } from '../tools/tools';
 import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
 import { emitMove, emitStop, emitMode, emitWeaponBlock, emitToggleSpawnBots, emitSpawnBotNearMe } from '../sockets/emits';
 import { findMyCurrentPlace } from '../states/placestates';
-import { runSound, playHalfSound } from '../components/soundSystem';
+import { runSound, playHalfSound, getAllSounds } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
 import { openClosePopup } from '../tools/popupUI';
 import { getSpawnPos } from '../tools/position';
@@ -24,11 +24,13 @@ import { singlecastSkill } from '../staticRecources/skillsData';
 import { hideShowAllScreenUI, stopResting } from '../charactersystem/uimanagement';
 import { standUp } from '../charactersystem/seating';
 import { attachLightning } from '../effects/lightning';
+import { attachDark } from '../effects/dark.js';
 import { checkDistance, createMesh } from '../creations/creationTools';
 import { changeStory, updateStoryQuestUI } from '../charactersystem/storyQuestSystem';
 import { createAggregate } from '../tools/physics.js';
 import { attachCam } from '../tools/camera.js';
 import { showShortNotice } from '../components/shortNotice.js';
+import { evolveInto, devolve } from '../charactersystem/evolution.js';
 
 let ISINDEVEMODE = true
 // the most recent enemy MY OWN melee attack actually landed on (see
@@ -368,6 +370,23 @@ function setupControls(scene, allsounds) {
     // see its own declaration up top for why)
     isMoving = false;
     const BASE_JUMP_SPEED = 5;
+    // places with no jumping - and no flying
+    const NO_JUMP_PLACES = [9, 10, 101];
+    // FLIGHT (wings from an evolution - evolution.js): hold Space this long and
+    // the wings' "jumped" take-off plays as you lift off, up to FLY_MAX_HEIGHT
+    // above the ground below you, where you hover for as long as Space is held.
+    // Let go and you fall (the wings flap on, wings.js's "falling" clip).
+    const FLY_HOLD_MS = 2000;
+    const FLY_MAX_HEIGHT = 7;
+    const FLY_RISE_SPEED = 3;       // m/s, up to the last stretch...
+    const FLY_EASE = 3;             // ...where it slows to this per metre left to climb
+    const FLY_TAKEOFF_SECONDS = 0.6; // the climb builds up over the take-off
+    let spaceDownAt = null;          // when this Space press began, null once it's been used up or let go
+    let flying = false;
+    let flightStartedAt = 0;
+    let flightGroundY = 0;           // ground under you at take-off, for when there's none below
+    let broadcastFlight = false;     // others are told where you are from take-off until you've landed
+    const WIND_VOLUME = 0.6;         // windBlowS loops from take-off until you've landed
     // statsSystem.js's own dex upgrade - same "read the live stat fresh at
     // the moment it matters" approach getTotalDefense()/getTotalAtkSpd()
     // already use for dex/atkSpd, rather than caching a jump speed once at
@@ -647,7 +666,10 @@ function setupControls(scene, allsounds) {
                 const target = document.activeElement
                 const isTypingInField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
                 if(!isTypingInField) e.preventDefault()
-                if (!e.repeat) performJump()
+                if (!e.repeat){
+                    performJump()
+                    if(!isTypingInField) spaceDownAt = performance.now()
+                }
             } break;
             // hold-to-show player list (components/playerListUI.js) - same
             // "skip while typing" guard Space uses above, since Tab's
@@ -680,6 +702,11 @@ function setupControls(scene, allsounds) {
         // way to close it, since Tab's own keydown case never fires again
         // for an already-held key.
         if(e.key.toLowerCase() === "tab") openClosePlayerListUI(false)
+        // same for Space: letting go ends a flight even if canPress went false meanwhile
+        if(e.key === " ") {
+            spaceDownAt = null
+            flying = false
+        }
         if(!getCanPress()) return
         const key = e.key.toLowerCase();
 
@@ -709,7 +736,8 @@ function setupControls(scene, allsounds) {
                     // showHideSword only toggles isVisible on the currently-equipped
                     // one's child meshes, so that's the reliable way to pick it out
                     const equippedSword = myPlayer?.swordMeshes?.find(swrd => swrd.mesh.getChildMeshes().some(m => m.isVisible))
-                    if(equippedSword) weaponLightning = attachLightning(scene, equippedSword.mesh, "blue", true)
+                    // if(equippedSword) weaponLightning = attachLightning(scene, equippedSword.mesh, "blue", true)
+                    if(equippedSword) weaponLightning = attachDark(scene, equippedSword.mesh, "demon", true)
                 }
             break
             case " ":
@@ -856,8 +884,8 @@ function setupControls(scene, allsounds) {
             break
             case "k":
                 if(!ISINDEVEMODE) return
-                
-
+                // was on "n"
+                giveSkill(singlecastSkill)
             break;
             case "i":
                 if(!ISINDEVEMODE) return
@@ -869,7 +897,8 @@ function setupControls(scene, allsounds) {
             break
             case "n":
                 if(!ISINDEVEMODE) return
-                giveSkill(singlecastSkill)                
+                // back to being human (evolution.js)
+                devolve()
             break
             case "l":
                 if(!ISINDEVEMODE) return
@@ -907,7 +936,14 @@ function setupControls(scene, allsounds) {
             case "f":
                 if(!ISINDEVEMODE) return
                 
-                showShortNotice("conditions reached")
+                showShortNotice("conditions reached", () => {
+                    showShortNotice("Activating Evolution", () => {
+                        evolveInto({
+                            evolutionName: "demon",
+                            wingdetail: { wingmodel: "wing1", wingtexture: "royaldemon"}
+                        })
+                    })
+                })
                 restoreAll()
             break
             case "1":
@@ -1046,7 +1082,7 @@ function setupControls(scene, allsounds) {
         if(myPlayer.body) ;
 
         const charState = getCharState()
-        if(charState.currentPlace.placeId === 9 || charState.currentPlace.placeId === 10 || charState.currentPlace.placeId === 101) return openClosePopup("cannot jump here", true, 1000)
+        if(NO_JUMP_PLACES.includes(charState.currentPlace.placeId)) return openClosePopup("cannot jump here", true, 1000)
         const vel = aggregate.body.getLinearVelocity();
         const jumpSpeed = BASE_JUMP_SPEED + (charState.stats.dex || 0) * DEX_JUMP_BONUS_PER_POINT
         aggregate.body.setLinearVelocity(new Vector3(vel.x, jumpSpeed, vel.z));
@@ -1075,6 +1111,83 @@ function setupControls(scene, allsounds) {
     }
 
     let lastEmit = 0;
+
+    // the height of the ground below you, null with none within reach
+    function groundYBelow() {
+        const physicsEngine = scene.getPhysicsEngine();
+        if (!physicsEngine) return null
+        const origin = aggregate.body.getObjectCenterWorld();
+        _groundCheckOffset.set(0, -(capsuleHeight / 2 + FLY_MAX_HEIGHT + 5), 0)
+        origin.addToRef(_groundCheckOffset, _groundCheckEnd)
+        const result = physicsEngine.raycast(origin, _groundCheckEnd);
+        return result?.hasHit && result.body !== aggregate.body ? result.hitPointWorld.y : null
+    }
+
+    // how far the soles of your feet are above that ground; with none below,
+    // above the ground you took off from
+    function heightAboveGround() {
+        const feetY = aggregate.body.getObjectCenterWorld().y - capsuleHeight / 2
+        return feetY - (groundYBelow() ?? flightGroundY)
+    }
+
+    function startWind() {
+        const wind = getAllSounds()?.windBlowS
+        if (!wind) return
+        wind.setVolume(0)
+        if (!wind.isPlaying) wind.play()
+        wind.setVolume(WIND_VOLUME, 1)
+    }
+
+    // fades out; takes off again before it's done and it carries on
+    function stopWind() {
+        const wind = getAllSounds()?.windBlowS
+        if (!wind?.isPlaying) return
+        wind.setVolume(0, 0.6)
+        setTimeout(() => { if (!broadcastFlight) wind.stop() }, 650)
+    }
+
+    function startFlight() {
+        spaceDownAt = null
+        const charState = getCharState()
+        if (NO_JUMP_PLACES.includes(charState.currentPlace.placeId)) return openClosePopup("cannot fly here", true, 1000)
+        flying = true
+        broadcastFlight = true
+        flightStartedAt = performance.now()
+        flightGroundY = groundYBelow() ?? aggregate.body.getObjectCenterWorld().y - capsuleHeight / 2
+        myPlayer.wings.play("jumped")
+        getAllSounds()?.wingsFlappedS?.play()
+        startWind()
+    }
+
+    // each physics tick, before the movement below (which keeps whatever
+    // vertical speed this sets): start a flight once Space has been held long
+    // enough, climb to (and hold) FLY_MAX_HEIGHT, and keep everyone else
+    // posted from take-off until you've landed again
+    function updateFlight() {
+        const now = performance.now()
+        if (!flying && spaceDownAt !== null && now - spaceDownAt >= FLY_HOLD_MS && myPlayer?.wings && getCanPress() && !isDead()) startFlight()
+        // wings gone (devolve), a menu or a cutscene took over, or dead: down you come
+        if (flying && (!myPlayer?.wings || !getCanPress() || isDead())) flying = false
+        if (flying) {
+            const toClimb = FLY_MAX_HEIGHT - heightAboveGround()
+            const buildUp = Math.min(1, (now - flightStartedAt) / 1000 / FLY_TAKEOFF_SECONDS)
+            const vy = Math.max(-FLY_RISE_SPEED, Math.min(FLY_RISE_SPEED * buildUp, toClimb * FLY_EASE))
+            const vel = aggregate.body.getLinearVelocity()
+            _velocityVec.set(vel.x, vy, vel.z)
+            aggregate.body.setLinearVelocity(_velocityVec)
+        }
+        if (!broadcastFlight) return
+        if (!flying && isGroundedFlag) {
+            // landed - a standing still body hasn't been telling anyone it moves
+            broadcastFlight = false
+            stopWind()
+            if (!isMoving) emitStop()
+        } else if (now - lastEmit > 50) {
+            emitMove()
+            lastEmit = now
+        }
+    }
+
     function updateMovement() {
 
         if (!aggregate) return;
@@ -1083,7 +1196,10 @@ function setupControls(scene, allsounds) {
         // player.mode drives renderer.js's animation switch directly now -
         // flip it to "inAir" the moment we leave the ground, and restore
         // whatever it was before (idle/fighting/etc) the moment we land.
-        if (myPlayer) {
+        // Not once dead (worldsocket.js's playerDied): the death clip is the
+        // last thing the body plays - killed in the air, it isn't turned back
+        // into "inAir", and hitting the ground plays no fallimpact over it.
+        if (myPlayer && myPlayer.mode !== "death" && !isDead()) {
             if (!isGroundedFlag && myPlayer.mode !== "inAir") {
                 modeBeforeAir = myPlayer.mode
                 myPlayer.mode = "inAir"
@@ -1114,6 +1230,8 @@ function setupControls(scene, allsounds) {
                 // hop/step off a curb
                 const FALL_IMPACT_THRESHOLD = 3
                 const fallDistance = fallPeakY !== null ? fallPeakY - aggregate.transformNode.position.y : 0
+                // the thud is for any hard landing, moving or not
+                if (fallDistance >= FALL_IMPACT_THRESHOLD) getAllSounds()?.heavyLandedS?.play()
                 if (fallDistance >= FALL_IMPACT_THRESHOLD && !isMoving) {
                     // without an explicit nextState, playAction() falls back to
                     // whatever state was active *before* fallimpact started - which
@@ -1129,6 +1247,7 @@ function setupControls(scene, allsounds) {
             }
         }
 
+        updateFlight()
         if(!getCanPress()) return
         // facingOverrideCount>0 - faceForward is actively turning the player
         // to face something it just hit (see its own comment on why this
@@ -1167,7 +1286,8 @@ function setupControls(scene, allsounds) {
             // not once per render frame - not a 1:1 deltaTime to begin with).
             // worn out (characterstate.js's isCharacterTired) - walking pace
             // only, fighting mode and shift included
-            const speed = myPlayer?.isTired ? walkSpeed : currentSpeed
+            // a blessing's speed (the Shard of the Moon at night) on top
+            const speed = (myPlayer?.isTired ? walkSpeed : currentSpeed) * (1 + getMoveSpeedBonus())
             _velocityVec.set(fwd.x * speed, vel.y, fwd.z * speed)
             aggregate.body.setLinearVelocity(_velocityVec);
             const now = performance.now();
@@ -1205,6 +1325,7 @@ function setupControls(scene, allsounds) {
             window.removeEventListener("pointerup", handleJoystickPointerUp);
             window.removeEventListener("pointercancel", handleJoystickPointerUp);
             joystickTexture.dispose();
+            getAllSounds()?.windBlowS?.stop()
             scene.onBeforePhysicsObservable.remove(physicsObserver);
             clearInterval(checkFallInVoidTimeout);
             camTrick.stop();

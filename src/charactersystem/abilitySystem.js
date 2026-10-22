@@ -2,6 +2,7 @@ import abilities from "../staticRecources/abilities.js";
 import { setPointerClickable, checkIfTokenSaved } from "../tools/tools.js";
 import { openClosePopup} from "../tools/popupUI.js";
 import { getCharState, updateMyDetailsOL, activateLifeSystem, getAdditionalsFromAbilities } from "./characterstate.js";
+import { refreshBlessingVisuals } from "./blessingEffects.js";
 import { createElement} from "../tools/GUITools.js"
 const uniqueDescBx = document.querySelector('.uniques-desc-bx')
 const abilityImg = document.querySelector('.ability-img')
@@ -24,6 +25,8 @@ notifAcceptBtn.addEventListener('click', async () => {
     // getAllSounds().notif1S.play()
     activateLifeSystem()
     const updatedAbilites = getAdditionalsFromAbilities()
+    // the Four Heavens' Ward appears the moment it's gained
+    refreshBlessingVisuals()
 })
 
 
@@ -43,7 +46,8 @@ export async function receiveAbilities(_numberNotGreaterThanTen, limit, specific
         const isSpecific = specificAbility && ability.name === specificAbility.name
         
         // Skip random check only for the specific ability
-        if (!isSpecific && Math.random() * 10 > _numberNotGreaterThanTen) return
+        // ability.rarity (abilities.js): the powerful ones roll less often
+        if (!isSpecific && Math.random() * 10 > _numberNotGreaterThanTen * (ability.rarity ?? 1)) return
 
         if (limit && abilitiesReceived.length >= limit) return
 
@@ -79,8 +83,12 @@ export async function receiveAbilities(_numberNotGreaterThanTen, limit, specific
             return
         }
 
-        state.blessings.push(ability)
-        abilitiesReceived.push(ability)
+        // this character's own copy - the blessing grows with them (upgrades,
+        // and Blood Redemption's ready-again time are written onto it), which
+        // must never reach abilities.js's definition or the next character
+        const owned = JSON.parse(JSON.stringify(ability))
+        state.blessings.push(owned)
+        abilitiesReceived.push(owned)
     })
 
     if(abilitiesReceived.length){
@@ -250,11 +258,16 @@ export function showAbilityDesc(e){
 
     if(abilityDetail.resistance.length) {
  
-        abilityDetail.resistance.forEach(res => {   
+        abilityDetail.resistance.forEach(res => {
            if(res.name)addToListOfInfo(`${res?.name} ${res.percent*100}% ressistance`)
         })
-        
+
     }
+    // what a blessing does beyond its stats (abilities.js's signature, made in
+    // blessingEffects.js), and the resistances it counts in with the gear's
+    if(abilityDetail.darkResistance) addToListOfInfo(`dark magic ${Math.round(abilityDetail.darkResistance * 100)}% resistance`)
+    if(abilityDetail.tempResistance?.cold) addToListOfInfo(`cold resistance ${abilityDetail.tempResistance.cold}`)
+    abilityDetail.signature?.forEach(line => addToListOfInfo(line))
 }
 export function hideAbilityDesc(e){
     uniqueDescBx.style.display = "none"

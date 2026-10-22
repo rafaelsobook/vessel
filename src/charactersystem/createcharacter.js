@@ -22,6 +22,9 @@ import { createBloodParticle, createBloodSplatter } from '../tools/particlesyste
 import { CharacterAnimations, playAnim } from '../tools/animation';
 import { createMesh, putFakeShadow, createMaterialFromDir } from '../creations/creationTools';
 import { createMetalMat } from '../tools/metalmat';
+import { giveArmorDetail } from '../tools/armorDetail';
+import { attachWings } from './wings.js';
+import { evolutionLook } from './evolutionLooks.js';
 import { attachLightning } from '../effects/lightning';
 import { createBodyAura } from '../effects/aura';
 import { onIntersecExitTrig } from '../components/actionManager';
@@ -29,6 +32,7 @@ import { getCharState } from './characterstate';
 import { calcDmg } from './attackingSystem';
 import { emitPlayerIsHit } from '../sockets/emits';
 import { onMeleeConnect } from './meleeCombat.js';
+import { applyBlessingsToMeleeHit } from './blessingEffects.js';
 import { registerBotInteraction } from '../npc/botInteraction';
 
 export let capsuleHeight = 1.5;
@@ -150,6 +154,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     let helmetMeshes = []
     let gauntletMeshes = []
     let pauldronMeshes = []
+    let kneeArmorMeshes = []
     let hasWeapon = false
 
     const { mode, _moving, _minning } = det
@@ -187,10 +192,10 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const {root, animationGroups, rHand, belts, cloaks, 
         armors, boots, spineBone, headBone, lowerArmL, lowerArmR, 
         shoulderL, shoulderR, characterHairs, mainBodyLegs,
-        underArmor, underBelt} = createAnimeBody(containers, body, bodytarget, det, scene)
+        underArmor, underBelt, lowerLegL, lowerLegR, faceParts} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
-    // nameMesh.isVisible = false
+    nameMesh.isVisible = false
     const weaponSocket = createMesh(scene, `weaponsocket.${det.owner}`, {size: 0.5},
     {x:0.8, y:2, z: 1}, 1, false, true, {x: -Math.PI/2 + (Math.PI/10), y:Math.PI/2, z:0.2 })
 
@@ -234,7 +239,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         // metal tint - metalColor only makes sense for actual armor helmets
         const helmetMat = itemName?.includes("hat")
             ? createMatV2(scene, `./images/modeltex/helmets/${itemName}.jpg`)
-            : createMetalMat(scene, metalColor)
+            : giveArmorDetail(createMetalMat(scene, metalColor), metalColor, helmet)
         // drawn over his hair, never under it - avatarLayers.js
         layerHelmet(helmetMat)
         helmet.material = helmetMat
@@ -287,7 +292,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         if(!template) return console.warn(`createGauntlet: missing gauntlet "${gauntletName}"`)
         if(!lowerArmL || !lowerArmR) return console.warn(`createGauntlet: missing lowerArm bone(s), cannot equip "${gauntletName}"`)
 
-        const gauntletMat = createMetalMat(scene, metalColor)
+        const gauntletMat = giveArmorDetail(createMetalMat(scene, metalColor), metalColor, template)
 
         const rightGauntlet = template.clone(`gauntlet.${gauntletName}.R.${det._id}`)
         rightGauntlet.parent = lowerArmR
@@ -342,7 +347,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         armors.forEach(arm => {
             if(arm.name === itemName){
                 arm.mesh.isVisible = true
-                const armorMat = createMetalMat(scene, metalColor)
+                const armorMat = giveArmorDetail(createMetalMat(scene, metalColor), metalColor, arm.mesh)
                 // armor sits worn OVER the shirt at the torso, same
                 // coincident-geometry z-fight clothMat.zOffset already fixes
                 // for cloth vs pants (createAnimeBodyMaterials' own comment)
@@ -387,7 +392,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         if(!template) return console.warn(`createPauldron: missing pauldron "${pauldronName}"`)
         if(!shoulderL || !shoulderR) return console.warn(`createPauldron: missing shoulder bone(s), cannot equip "${pauldronName}"`)
 
-        const pauldronMat = createMetalMat(scene, metalColor)
+        const pauldronMat = giveArmorDetail(createMetalMat(scene, metalColor), metalColor, template)
         // same reasoning as equipArmor's own armorMat.zOffset just above -
         // a shoulder pauldron sits worn over the shirt too
         pauldronMat.zOffset = -4
@@ -433,6 +438,64 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         if(!toEquip) {
             toEquip = createPauldron(pauldronToEquipName, metalColor)
         }
+        if(!toEquip) return
+        toEquip.meshes.forEach(mesh => showHideEquip(mesh, true))
+    }
+
+    // Knee armour (kneearmors.glb's kneearmor.<name>, e.g. braveknee) - like a
+    // pauldron, one mesh cloned onto both sides, here the lowerLeg.L/.R bones.
+    // Unlike the pauldron it wasn't modelled in the bone's own space, so it's
+    // placed here (KNEE_ARMOR_FIT/KNEE_ARMOR_TILT). Both legs' bones face the
+    // same way, so both clones take the same transform - except the right
+    // one is mirrored, so the pair is symmetric.
+    function createKneeArmor(kneeArmorName, metalColor) {
+        const template = containers.kneeArmors?.find(msh => msh.name.split(".")[1] === kneeArmorName)
+        if(!template) return console.warn(`createKneeArmor: missing knee armor "${kneeArmorName}"`)
+        if(!lowerLegL || !lowerLegR) return console.warn(`createKneeArmor: missing lowerLeg bone(s), cannot equip "${kneeArmorName}"`)
+
+        const kneeMat = giveArmorDetail(createMetalMat(scene, metalColor), metalColor, template)
+        // same reasoning as the pauldron's - worn over the pants
+        kneeMat.zOffset = -4
+        // the exported mesh has its plates wound both ways (about half its
+        // faces point inward), so it's drawn from both sides - each face's
+        // normal matches its winding, so two-sided lighting lights whichever
+        // side you see correctly
+        kneeMat.backFaceCulling = false
+        kneeMat.twoSidedLighting = true
+
+        const fit = KNEE_ARMOR_FIT[det.gender] ?? KNEE_ARMOR_FIT.male
+        const meshes = [["L", lowerLegL], ["R", lowerLegR]].map(([side, bone]) => {
+            const knee = template.clone(`kneearmor.${kneeArmorName}.${side}.${det._id}`)
+            knee.parent = bone
+            knee.rotationQuaternion = Quaternion.RotationAxis(Vector3.Right(), Math.PI + KNEE_ARMOR_TILT)
+            // the right leg's copy is the mirror image of the left's (its x
+            // flipped - the turn above is about x, so that's the bone's x,
+            // across the leg): one-sided detail like a dent then sits on
+            // the inside of both knees, facing each other, instead of the
+            // same side of each
+            knee.scaling.set(side === "R" ? -fit.scale : fit.scale, fit.scale, fit.scale)
+            // both bones' +x point to the character's right - toward the
+            // middle on the left leg, away from it on the right
+            knee.position = new Vector3(side === "L" ? fit.inward : -fit.inward, fit.down, fit.forward)
+            knee.material = kneeMat
+            knee.getChildMeshes().forEach(mesh => mesh.material = kneeMat)
+            showHideEquip(knee, true)
+            return knee
+        })
+        const toPush = {name: kneeArmorName, metalColor, meshes}
+        kneeArmorMeshes.push(toPush)
+        return toPush
+    }
+
+    function equipKneeArmor(kneeArmorToEquipName, metalColor) {
+        // same per-name-and-tint cache as equipPauldron
+        if(!kneeArmorToEquipName) return
+        let toEquip = false
+        kneeArmorMeshes.forEach(knee => {
+            knee.meshes.forEach(mesh => showHideEquip(mesh, false))
+            if(knee.name === kneeArmorToEquipName && knee.metalColor === metalColor) toEquip = knee
+        })
+        if(!toEquip) toEquip = createKneeArmor(kneeArmorToEquipName, metalColor)
         if(!toEquip) return
         toEquip.meshes.forEach(mesh => showHideEquip(mesh, true))
     }
@@ -491,6 +554,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
             case "pauldron":
                 pauldronMeshes.forEach(pld => pld.meshes.forEach(mesh => showHideEquip(mesh, false)))
             break
+            case "kneearmor":
+                kneeArmorMeshes.forEach(knee => knee.meshes.forEach(mesh => showHideEquip(mesh, false)))
+            break
         }
     }
     if(det.items.length){
@@ -506,6 +572,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                 if(itm.itemType === "helmet" && itm.equiped) equipHelmet(itm.modelName, itm.metalColor, itm.name, itm.hairVisible)
                 if(itm.itemType === "gauntlet" && itm.equiped) equipGauntlet(itm.name, itm.metalColor)
                 if(itm.itemType === "pauldron" && itm.equiped) equipPauldron(itm.name, itm.metalColor)
+                if(itm.itemType === "kneearmor" && itm.equiped) equipKneeArmor(itm.name, itm.metalColor)
                 if(itm.itemType === "weapon" && itm.equiped) {
                     let swordParent = rHand
                     if(mode === "idle") swordParent = weaponSocket;
@@ -570,7 +637,16 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                 // just relayed through tcp's new "playerIsHit" handler
                 // instead of "enemyIsHit" (a player/bot isn't in tcpEnemies)
                 const equippedWeapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
-                const dmgDetails = calcDmg(charState)
+                // my blessings' say in the blow (blessingEffects.js) - the damage
+                // after them. Its on-hit effects aren't used here: nothing on
+                // the player side reads effectsWhenHit yet (worldsocket.js).
+                const dmgDetails = applyBlessingsToMeleeHit({
+                    dmgDetails: calcDmg(charState),
+                    charState,
+                    effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                    isSkill: !!atkCollider.isSkillHijacked,
+                    targetBody: body,
+                }).dmgDetails
                 emitPlayerIsHit({
                     playerId: charState.owner,
                     dmgDetails,
@@ -602,7 +678,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         }
     }
 
-    return {
+    const character = {
         det,
         owner: det.owner,
         name: det.name,
@@ -613,6 +689,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         aggregate,
         nameMesh,
         anims: animationGroups,
+        // the wings an evolution gave them, and their clips (wings.js) - none until then
+        wings: null,
+        winganims: [],
         characterAnimations,
         rHand,
         root,
@@ -626,11 +705,13 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         equipHelmet,
         equipGauntlet,
         equipPauldron,
+        equipKneeArmor,
         unEquip,
         swordMeshes,
         helmetMeshes,
         gauntletMeshes,
         pauldronMeshes,
+        kneeArmorMeshes,
         weaponSocket,
         get hasWeapon() { return hasWeapon },
 
@@ -658,7 +739,18 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         // bleeding (characterstate.js's refreshBleeding) - bloodps runs
         // non-stop while it's true. Seeded from det like isTired above.
         isBleeding: !!det.isBleeding,
+        // what they wear on their back (wings.js) - set once loaded
+        wings: null,
+        // an evolution's face (evolutionLooks.js) - evolution.js puts it on
+        // the moment the change breaks through
+        applyLook: evolution => applyEvolutionLook(faceParts, evolution, scene),
+        resetLook: () => resetEvolutionLook(faceParts, det, scene),
     }
+    // evolved (evolution.js) - the wings and face it gave them, back on: mine
+    // in every place I go, anyone else's from their join payload (getCharSocket)
+    if(det.evolution?.wingdetail) attachWings(character, det.evolution.wingdetail)
+    if(det.evolution) applyEvolutionLook(faceParts, det.evolution, scene)
+    return character
 }
 
 
@@ -699,6 +791,24 @@ function createMainBodyTargetToClone(scene){
 // exported - setupcharacterscene.js's character-creation preview loads the
 // exact same avatar.glb and needs the identical gender split, not a
 // hand-copied second list that could drift out of sync with this one
+// Where knee armour (createKneeArmor) sits on a lowerLeg bone, in the bone's
+// own units (avatar.glb's Root scales the rig by 0.128, so 1 unit is about
+// 13 cm). The bone's +y runs down the shin and its +z points forward; the
+// knee mesh (kneearmors.glb) stands with its +y up and its knee cop facing
+// -z, so it's turned over about x - and KNEE_ARMOR_TILT more, so the shin
+// plate follows the shin instead of standing off it. down: how far down the
+// bone its middle sits, so the knee cop lands on the knee. forward: how far
+// in front - his pants stand about 0.72 out at the knee, her bare leg 0.35,
+// so one setting would sink into his or float off hers. inward: sideways, to
+// the middle of the leg - both bodies share one skeleton, and her legs sit
+// closer together than its knees (the bone is at the outside edge of her
+// leg), his baggy pants a little wider than it.
+const KNEE_ARMOR_TILT = 0.35
+const KNEE_ARMOR_FIT = {
+    male:   { scale: 2.6, down: 0.6,  forward: 0.52, inward: -0.08 },
+    female: { scale: 2.1, down: 0.48, forward: 0.28, inward: 0.22 },
+}
+
 // belt textures (images/textures/belt) that aren't .jpg, by item name
 const BELT_TEXTURE_EXT = { royalpriest: "webp" }
 
@@ -801,6 +911,63 @@ function disposeMeshTree(mesh){
 // "undefinedeye.jpg" - det.race can be missing for synced players
 // (getCharSocket()'s payload didn't use to include it) or any NPC entry that
 // forgot to set one.
+// An evolution's face (evolutionLooks.js): its eyes' texture in place of the
+// race's, the eyeback (whites) in its colour. faceParts: createAnimeBody's -
+// both materials are this character's own (giveRaceEyes, the eyeback's
+// clone), so this changes no one else.
+function applyEvolutionLook(faceParts, evolution, scene){
+    const look = evolutionLook(evolution)
+    if(!look || !faceParts) return
+    const { eyes, eyeback } = faceParts
+    if(look.eyes && eyes?.material){
+        eyes.material.emissiveTexture?.dispose()
+        eyes.material.emissiveTexture = new Texture(`./images/modeltex/eyes/${look.eyes}eye.jpg`, scene, false, false)
+    }
+    const mat = eyeback?.material
+    if(look.eyeback && mat){
+        // what it was, once - resetEvolutionLook puts it back
+        faceParts.originalEyeback ??= {
+            color: ("albedoColor" in mat ? mat.albedoColor : mat.diffuseColor)?.clone(),
+            texture: "albedoColor" in mat ? mat.albedoTexture : mat.diffuseTexture,
+            emissiveColor: mat.emissiveColor?.clone(),
+            emissiveTexture: mat.emissiveTexture,
+        }
+        // PBR or standard, whichever the glb gave it
+        if("albedoColor" in mat){
+            mat.albedoColor = look.eyeback.clone()
+            mat.albedoTexture = null
+        } else {
+            mat.diffuseColor = look.eyeback.clone()
+            mat.diffuseTexture = null
+        }
+        mat.emissiveColor = look.eyeback.clone()
+        mat.emissiveTexture = null
+    }
+}
+
+// Back to the face they were born with: their race's eyes, the eyeback as the
+// glb had it.
+function resetEvolutionLook(faceParts, det, scene){
+    if(!faceParts) return
+    const { eyes, eyeback, originalEyeback } = faceParts
+    if(eyes?.material){
+        eyes.material.emissiveTexture?.dispose()
+        eyes.material.emissiveTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
+    }
+    const mat = eyeback?.material
+    if(mat && originalEyeback){
+        if("albedoColor" in mat){
+            if(originalEyeback.color) mat.albedoColor = originalEyeback.color.clone()
+            mat.albedoTexture = originalEyeback.texture
+        } else {
+            if(originalEyeback.color) mat.diffuseColor = originalEyeback.color.clone()
+            mat.diffuseTexture = originalEyeback.texture
+        }
+        if(originalEyeback.emissiveColor) mat.emissiveColor = originalEyeback.emissiveColor.clone()
+        mat.emissiveTexture = originalEyeback.emissiveTexture
+    }
+}
+
 function giveRaceEyes(eyes, det, scene){
     const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
     const eyeMat = eyes.material.clone(`eye_mat_${det._id}`)
@@ -810,7 +977,7 @@ function giveRaceEyes(eyes, det, scene){
 
 function createAnimeBody(containers, body, bodytarget, det, scene){
     const { animeBody, hairs } = containers
-    let headBone, spineBone, rHand, lowerArmL, lowerArmR, shoulderL, shoulderR
+    let headBone, spineBone, rHand, lowerArmL, lowerArmR, shoulderL, shoulderR, lowerLegL, lowerLegR
 
     // female has no pants/cloth/skinColor style choices yet (only a body +
     // her own face + 2 hairstyles + one fixed default outfit: belt.style1/
@@ -826,6 +993,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     let armors = []
     let boots = []
     let characterHairs = []
+    // this character's eyes and eyeback meshes (applyEvolutionLook)
+    const faceParts = { eyes: null, eyeback: null }
     // her parts an equipped piece covers: femalebody.boobs under armor, her
     // default belt.style1.female + skirt.style1 under a belt (equipArmor/equipBelt)
     let underArmor = []
@@ -868,6 +1037,9 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
 
         shoulderL = spineBone?.getChildren()[1]
         shoulderR = spineBone?.getChildren()[2]
+        // the knees (knee armour) - by name, under pelvis -> upperLeg
+        lowerLegL = findDeepByName(pelvisBone, bne => bne.name.endsWith("lowerLeg.L"))
+        lowerLegR = findDeepByName(pelvisBone, bne => bne.name.endsWith("lowerLeg.R"))
         lowerArmL = shoulderL?.getChildren()[0]?.getChildren()[0]
         lowerArmR = shoulderR?.getChildren()[0]?.getChildren()[0]
 
@@ -971,7 +1143,16 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         if(face){
             if(face.female !== isFemale) return disposeMeshTree(mes)
             showHideEquip(mes, true)
-            if(face.part === "eyes") giveRaceEyes(mes, det, scene)
+            if(face.part === "eyes"){
+                giveRaceEyes(mes, det, scene)
+                faceParts.eyes = mes
+            }
+            // its own too, like the eyes' - an evolution colours it
+            // (applyEvolutionLook), and the glb's is everyone's
+            if(face.part === "eyeback"){
+                mes.material = mes.material.clone(`eyeback_mat_${det._id}`)
+                faceParts.eyeback = mes
+            }
             // eyes behind his eyelids, eyebrows on his skin - avatarLayers.js
             if(!isFemale) layerFacePart(mes)
             return
@@ -1165,7 +1346,10 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         characterHairs,
         mainBodyLegs,
         underArmor,
-        underBelt
+        underBelt,
+        lowerLegL,
+        lowerLegR,
+        faceParts
     }
 }
 function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {
