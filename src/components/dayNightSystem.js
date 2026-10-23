@@ -1,6 +1,7 @@
 import { Color3, DirectionalLight, HemisphericLight, PointLight } from "@babylonjs/core"
 import { getSocket } from "../sockets/joinsocket.js"
 import { startDayNightIndicator } from "./dayNightIndicator.js"
+import { NIGHT_FOG_COLOR } from "../effects/nightAtmosphere.js"
 
 // Bridges tcp's world clock (tcp/recources/dayNight.ts) to how outdoor places
 // are lit. tcp owns the time - ONE time of day for the whole world - and sends
@@ -10,10 +11,16 @@ import { startDayNightIndicator } from "./dayNightIndicator.js"
 // Only DAYNIGHT_AREA_TYPES are affected. Rooms and dungeons light themselves
 // (createroom.js / createdungeon.js) and never see the sky.
 //
-// Every value this touches is SCALED from the place's own level rather than
-// overwritten, and a value something else changed since this last wrote it
-// becomes the new base - so weather.js can keep swapping the fog colour and
-// night just darkens whatever fog is current, with neither side owning it.
+// Every value this touches is worked out from the place's own level rather
+// than overwritten, and a value something else changed since this last wrote
+// it becomes the new base - so weather.js can keep swapping the fog and night
+// just turns whatever fog is current into the night's, with neither side
+// owning it.
+//
+// The night itself is the character setup forest's (setupbackdrop.js): the
+// fog goes to its blue-teal and thickens, so the sky (createSky's SkyMaterial
+// takes the fog) and the trees fade into it, and the light turns moon-blue.
+// nightAmbience.js adds that forest's fireflies, ground mist and moon.
 
 export const DAYNIGHT_AREA_TYPES = ["openworld", "village"]
 
@@ -25,10 +32,14 @@ let clock = { timeOfDay: 0.3, dayLengthMs: 24 * 60 * 1000, receivedAt: performan
 const UPDATE_EVERY_FRAMES = 30
 
 // how much of each light/feature is left at the darkest point of the night
-const NIGHT_SUN_INTENSITY = 0.12      // directional light - moonlight
-const NIGHT_AMBIENT_INTENSITY = 0.3   // hemispheric fill
-const NIGHT_FOG_BRIGHTNESS = 0.15     // fog fades to near-black instead of glowing
+const NIGHT_SUN_INTENSITY = 0.5       // directional light - moonlight
+const NIGHT_AMBIENT_INTENSITY = 0.7   // hemispheric fill
 const NIGHT_ENVIRONMENT = 0.25        // PBR image-based lighting
+// the fog at the darkest point: this much of the way to NIGHT_FOG_COLOR (a
+// little of the place's own colour left in it), and at least this thick -
+// a clear night's mist, while a foggier weather keeps its own
+const NIGHT_FOG_BLEND = 0.9
+const NIGHT_FOG_DENSITY = 0.016
 const NIGHT_SKY_LUMINANCE = 0.05
 const MOON_TINT = new Color3(0.55, 0.65, 1.0)
 const DUSK_TINT = new Color3(1.0, 0.6, 0.35)
@@ -57,6 +68,11 @@ export function isNightNow(){
     return sunState(getTimeOfDay()).daylight < 0.25
 }
 
+// the sun right now: { angle, daylight (0 night .. 1 day), dusk } - see sunState
+export function getSunState(){
+    return sunState(getTimeOfDay())
+}
+
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const lerp = (a, b, t) => a + (b - a) * t
 const smoothstep = (lo, hi, v) => { const t = clamp01((v - lo) / (hi - lo)); return t * t * (3 - 2 * t) }
@@ -82,23 +98,26 @@ export function startDayNight(scene, areaType){
     // key -> { base, written }: the value's own level, and what was last
     // written - anything else seen there means someone changed it (see header)
     const tracked = new Map()
-    const scaleNumber = (key, current, factor) => {
+    const trackNumber = (key, current, fromBase) => {
         let t = tracked.get(key)
         if(!t || current !== t.written) t = { base: current }
-        t.written = t.base * factor
+        t.written = fromBase(t.base)
         tracked.set(key, t)
         return t.written
     }
-    const scaleColor = (key, current, tint) => {
+    const trackColor = (key, current, fromBase) => {
         let t = tracked.get(key)
         if(!t || !current.equals(t.written)) t = { base: current.clone() }
-        t.written = t.base.multiply(tint)
+        t.written = fromBase(t.base)
         tracked.set(key, t)
         return t.written.clone()
     }
+    const scaleNumber = (key, current, factor) => trackNumber(key, current, base => base * factor)
+    const scaleColor = (key, current, tint) => trackColor(key, current, base => base.multiply(tint))
 
     const apply = () => {
         const { angle, daylight, dusk } = sunState(getTimeOfDay())
+        const night = 1 - daylight
         const sunTint = Color3.Lerp(MOON_TINT, Color3.White(), daylight)
         const warmTint = Color3.Lerp(sunTint, DUSK_TINT, dusk * 0.6)
 
@@ -108,13 +127,16 @@ export function startDayNight(scene, areaType){
                 light.diffuse = scaleColor(`${light.uniqueId}:c`, light.diffuse, warmTint)
             } else if(light instanceof HemisphericLight){
                 light.intensity = scaleNumber(`${light.uniqueId}:i`, light.intensity, lerp(NIGHT_AMBIENT_INTENSITY, 1, daylight))
+                // the sky's light goes moon-blue with the sun
+                light.diffuse = scaleColor(`${light.uniqueId}:c`, light.diffuse, sunTint)
             } else if(light instanceof PointLight && light.name.includes(LAMP_LIGHT_NAME)){
                 light.intensity = scaleNumber(`${light.uniqueId}:i`, light.intensity, 1 - daylight)
             }
         })
 
-        const fogBrightness = lerp(NIGHT_FOG_BRIGHTNESS, 1, daylight)
-        scene.fogColor = scaleColor("fog", scene.fogColor, new Color3(fogBrightness, fogBrightness, fogBrightness))
+        scene.fogColor = trackColor("fog", scene.fogColor, base => Color3.Lerp(base, NIGHT_FOG_COLOR, night * NIGHT_FOG_BLEND))
+        scene.fogDensity = trackNumber("fogDensity", scene.fogDensity, base => lerp(base, Math.max(base, NIGHT_FOG_DENSITY), night))
+        fogWritten = { density: scene.fogDensity, color: scene.fogColor.clone() }
         scene.environmentIntensity = scaleNumber("env", scene.environmentIntensity, lerp(NIGHT_ENVIRONMENT, 1, daylight))
 
         // createSky's SkyMaterial - the sun placed directly (it ignores
@@ -128,6 +150,12 @@ export function startDayNight(scene, areaType){
         }
     }
 
+    // the fog as this last left it - weather.js swapping it (a storm coming
+    // or clearing) is answered the same frame, not up to UPDATE_EVERY_FRAMES
+    // later with a flash of day-coloured fog in between
+    let fogWritten = null
+    const fogChanged = () => fogWritten && (scene.fogDensity !== fogWritten.density || !scene.fogColor.equals(fogWritten.color))
+
     apply()
     // the clock on screen (dayNightIndicator.js) - outdoors only, like the rest
     startDayNightIndicator(scene, {
@@ -136,7 +164,7 @@ export function startDayNight(scene, areaType){
     })
     let frame = 0
     return scene.onBeforeRenderObservable.add(() => {
-        if(++frame % UPDATE_EVERY_FRAMES === 0) apply()
+        if(++frame % UPDATE_EVERY_FRAMES === 0 || fogChanged()) apply()
     })
 }
 

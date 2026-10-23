@@ -261,9 +261,15 @@ export function applyWeather(scene, weather){
     if(!scene || scene.isDisposed) return
     if(!WEATHER_TYPES.includes(weather)) return
 
-    // captured once per scene, before anything overwrites it
+    // once per scene: the place's own fog as lighting.js set it up. Not the
+    // scene's fog right now - by the first weather call, dayNightSystem.js has
+    // already turned it to the night's if it's night, and putting THAT back
+    // when a storm cleared would leave the night's fog on into the morning
     if(!baseFog || baseFog.scene !== scene){
-        baseFog = { scene, mode: scene.fogMode, density: scene.fogDensity, color: scene.fogColor.clone() }
+        const placeFog = scene.metadata?.placeFog
+        baseFog = placeFog
+            ? { scene, mode: placeFog.mode, density: placeFog.density, color: placeFog.color.clone() }
+            : { scene, mode: scene.fogMode, density: scene.fogDensity, color: scene.fogColor.clone() }
     }
 
     if(current?.scene === scene && current.weather === weather) return

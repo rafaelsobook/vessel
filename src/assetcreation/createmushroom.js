@@ -22,6 +22,17 @@ const PICKUP_RADIUS = 1.8
 // a little light of its own (times its texture), so a cluster can be spotted
 // in the dark between torches
 const GLOW = new Color3(0.22, 0.22, 0.22)
+// the rare kinds glow in their own colour after dark - outdoors at night
+// (setMushroomNightGlow, components/nightAmbience.js), so a rare cluster out
+// in the open world can be spotted from a way off; and always in the
+// character setup forest (setupbackdrop.js)
+export const MUSHROOM_NIGHT_GLOW = {
+    purple: new Color3(0.53, 0.26, 0.75),
+    bluemist: new Color3(0.19, 0.41, 0.75),
+    crimson: new Color3(0.75, 0.12, 0.14),
+    galaxygreen: new Color3(0.26, 0.75, 0.45),
+    devilred: new Color3(0.8, 0.18, 0.06),
+}
 
 // scene -> Promise<Mesh|null>: the model, loaded once, upright and hidden -
 // every kind's template is a clone of it (shared geometry, own material)
@@ -105,6 +116,18 @@ const mushrooms = definePickupKind({
 
 export const createMushroomMesh = mushrooms.create
 export const removeMushroomMesh = mushrooms.remove
+
+// how much the rare kinds glow in `scene` - 0 by day (just GLOW), 1 at full
+// night (MUSHROOM_NIGHT_GLOW). One skin per kind, so this lights every
+// mushroom of that kind on the floor at once.
+export function setMushroomNightGlow(scene, night){
+    kindMaterials.get(scene)?.forEach((mat, kind) => {
+        const glow = MUSHROOM_NIGHT_GLOW[kind]
+        // a fresh colour, not written into the current one - every kind's
+        // skin starts out sharing the one GLOW
+        if(glow) mat.emissiveColor = Color3.Lerp(GLOW, glow, night)
+    })
+}
 
 // A lone mushroom of `kind`, `height` tall, standing on its root's origin -
 // for showing one anywhere but the floor (bonfireCooking.js's roasting spit).

@@ -41,6 +41,9 @@ export function setupLighting(scene, placeDetail) {
     // flat 0.003 they've always rendered with (their sceneTemp values were
     // never applied, so honouring them would change how they all look)
     scene.fogDensity = placeDetail.areaType === "dungeon" && fogDensity !== undefined ? fogDensity : 0.003;
+    // the place's own fog, before night (dayNightSystem.js) or a storm
+    // (weather.js) changes it - what weather.js puts back when a storm clears
+    scene.metadata = { ...scene.metadata, placeFog: { mode: scene.fogMode, density: scene.fogDensity, color: scene.fogColor.clone() } }
 
     // Sky — with no skybox mesh, scene.clearColor IS the sky. Lets sceneTemp
     // paint a dusk/sunset backdrop instead of Babylon's default dark grey-blue.

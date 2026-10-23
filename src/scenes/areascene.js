@@ -58,6 +58,7 @@ import { receiveAchievement } from "../charactersystem/achievement.js";
 import { createWagon } from "../assetcreation/createwagon.js";
 import { startPointLightBudget } from "../tools/lightBudget.js";
 import { startDayNight } from "../components/dayNightSystem.js";
+import { startNightAmbience } from "../components/nightAmbience.js";
 import { startSleepDeprivation } from "../components/sleepDeprivation.js";
 
 export async function areaScene(placeDetail){
@@ -319,6 +320,8 @@ export async function areaScene(placeDetail){
     // world clock lighting (openworld/village only - see dayNightSystem.js),
     // after the switch above so the place's lights, sky and lamp posts exist
     startDayNight(scene, placeDetail.areaType)
+    // and after dark, the fireflies, ground mist and moon round me (nightAmbience.js)
+    startNightAmbience(scene, placeDetail.areaType, () => myCharacter.body)
 
     registerToAtkCollider(scene, "tree", (meshHIT) => {
         console.log("hit tree")
