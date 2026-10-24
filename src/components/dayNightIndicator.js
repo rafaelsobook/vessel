@@ -3,8 +3,10 @@ import { GOLD_BRIGHT, TEXT_BODY } from "./guiKit.js"
 
 // The world clock on screen - top centre, hanging under the weather badge
 // (index.html's .weather-indicator): the moon, a timeline bar, the sun, and
-// a small marker sliding along the bar with the time of day, over a plate
-// reading "Night / 02:15 AM".
+// a small marker sliding along the bar with the time of day, over one line
+// reading "Night  02:15 AM". Small and faint (ALPHA) - a readout you glance
+// at, not something to look at: the whole thing, badge included, is about
+// 55px of the screen.
 //
 // The bar is one day, starting where night does: its left end is sunset
 // (6 PM), so its left half - painted night blue, by the moon - is the night
@@ -24,10 +26,10 @@ import { GOLD_BRIGHT, TEXT_BODY } from "./guiKit.js"
 // a few hundred pixels) and the time text changes once per game minute.
 
 const ICONS = "./images/UI/daynightcycle/"
-const BAR_WIDTH   = 380
+const BAR_WIDTH   = 200
 // timelinebar.webp is 2172x188
 const BAR_HEIGHT  = Math.round(BAR_WIDTH * 188 / 2172)
-const ICON_SIZE   = 46
+const ICON_SIZE   = 22
 // where the bar's glowing line runs, as fractions of the image: across
 // (its tapered tips are left out) and down
 const TRACK_FROM  = 0.03
@@ -36,16 +38,18 @@ const TRACK_Y     = 0.69
 // the time of day at the bar's left end - sunset (dayNightSystem.js: 0.25
 // sunrise, 0.75 sunset)
 const BAR_STARTS_AT = 0.75
-const MARKER_KNOB  = 9
-const MARKER_STICK = 15
-const PLATE_WIDTH  = 150
-const PLATE_HEIGHT = 46
-const GAP_UNDER_BADGE = 2
+const MARKER_KNOB  = 6
+const MARKER_STICK = 8
+const PLATE_WIDTH  = 170
+const PLATE_HEIGHT = 16
+const GAP_UNDER_BADGE = 1
 // with no badge to hang from (it hasn't laid out yet), this far from the top
-const FALLBACK_TOP = 56
+const FALLBACK_TOP = 24
+// how see-through the whole readout is
+const ALPHA = 0.7
 const CHECK_VISIBILITY_EVERY = 15
 // the icons glow for their half of the day and dim for the other
-const ICON_DIM = 0.45
+const ICON_DIM = 0.4
 
 // [from hour, name] - the period the clock is in reads under the bar
 const PERIODS = [
@@ -81,6 +85,7 @@ export function startDayNightIndicator(scene, { getTimeOfDay, getDaylight }){
     root.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER
     root.isPointerBlocker = false
     root.isHitTestVisible = false
+    root.alpha = ALPHA
     ui.addControl(root)
 
     // ── moon | bar | sun ─────────────────────────────────────────────────────
@@ -136,40 +141,39 @@ export function startDayNightIndicator(scene, { getTimeOfDay, getDaylight }){
     knob.background = "#fff8e6"
     knob.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
     knob.shadowColor = "rgba(255,230,160,0.9)"
-    knob.shadowBlur = 8
+    knob.shadowBlur = 5
     marker.addControl(knob)
 
-    // ── "Night / 02:15 AM" plate ─────────────────────────────────────────────
-    // the weather badge's own look (style.scss's .weather-indicator)
+    // ── "Night  02:15 AM" - one line, no plate ───────────────────────────────
     const plateHolder = new GUI.Rectangle("dayNight_plateHolder")
     plateHolder.thickness = 0
-    plateHolder.height = `${PLATE_HEIGHT + 4}px`
+    plateHolder.height = `${PLATE_HEIGHT + 2}px`
     root.addControl(plateHolder)
 
     const plate = new GUI.Rectangle("dayNight_plate")
     plate.width = `${PLATE_WIDTH}px`
     plate.height = `${PLATE_HEIGHT}px`
     plate.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM
-    plate.background = "rgba(0,0,0,0.45)"
-    plate.color = "rgba(202,165,1,0.35)"
-    plate.thickness = 1
-    plate.cornerRadius = 4
+    plate.thickness = 0
     plateHolder.addControl(plate)
 
+    // the period in gold, the time in white, side by side
     const period = new GUI.TextBlock("dayNight_period", "")
     period.fontFamily = "Caudex, serif"
-    period.fontSize = 16
+    period.fontSize = 12
     period.color = GOLD_BRIGHT
-    period.height = "22px"
-    period.top = "-9px"
+    period.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT
+    period.width = `${PLATE_WIDTH / 2 - 4}px`
+    period.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
     plate.addControl(period)
 
     const time = new GUI.TextBlock("dayNight_time", "")
     time.fontFamily = "Caudex, serif"
-    time.fontSize = 14
+    time.fontSize = 12
     time.color = TEXT_BODY
-    time.height = "20px"
-    time.top = "11px"
+    time.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
+    time.width = `${PLATE_WIDTH / 2 - 4}px`
+    time.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT
     plate.addControl(time)
 
     // ── keeping it current ───────────────────────────────────────────────────

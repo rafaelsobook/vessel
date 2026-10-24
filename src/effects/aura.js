@@ -2,6 +2,7 @@ import { Color3, Color4, Constants, DynamicTexture, MeshBuilder, NoiseProcedural
 import { getParticleTexture, particleTexturePath } from "../tools/particlesystem.js"
 import { attachLightning } from "./lightning.js"
 import { auraProfileChanged, auraProfileFromDet } from "./auraProfile.js"
+import { FIRE_PALETTES } from "./transformationFire.js"
 
 // THE FLEX AURA (skill "flexaura") - what a character's aura looks like, grown
 // from effects/auraProfile.js's profile:
@@ -19,6 +20,14 @@ import { auraProfileChanged, auraProfileFromDet } from "./auraProfile.js"
 // even on a weak aura, then black flame inside the blue, then black tendrils
 // lashing up and out from the chest (the spiky dark aura from Noblesse), all
 // with a violet shimmer over them. The more darkness, the more of it.
+//
+// A DEMON (profile.form "demon" - evolution.js) has an aura of its own instead,
+// none of the blue (see "the demon's aura" below): a crimson summoning circle
+// turning under the feet over a pool of black, hellfire - black flame with a
+// burning edge - up the body, black smoke, black spikes with a red glow, a
+// double helix of embers winding up round it, and at full power a second rune
+// ring, a ring of hellfire from the ground, red lightning and crimson shock
+// waves. The same power tiers set how much of it there is.
 //
 // Nothing is built until the aura is first shown, so the many characters that
 // never flare it cost nothing. A change in profile (stats grew) rebuilds it:
@@ -44,6 +53,21 @@ const PULSE_EVERY = 2.6
 const BREATH_RATE = 0.75
 const BREATH_DEPTH = 0.22
 
+// THE DEMON'S - its colours are the evolution's own fire (transformationFire.js)
+const DEMON = FIRE_PALETTES.demon
+// power each of its stages starts at; the hellfire, smoke and circle are
+// there from the start - a demon never has a weak-looking aura
+const DEMON_TIER = { spikes: 0.25, helix: 0.45, overflow: 0.8 }
+// the circle's turn (radians per second); the outer rune ring turns the other way, slower
+const SIGIL_SPIN = 0.5
+// the ember helix: how far out from the body it winds, how fast round
+// (radians per second) and up (body heights per second)
+const HELIX = { radius: 0.62, spin: 4.2, climb: 0.55 }
+// the demon's particle layers run on updateSpeed 1/60, so their numbers are
+// real units - lifetimes in seconds, speeds per second, sizes in metres (a size
+// gradient's values ARE the sizes)
+const REAL_UNITS = 1 / 60
+
 const lerp = (a, b, t) => a + (b - a) * t
 const ramp = (x, from, to) => Math.min(1, Math.max(0, (x - from) / (to - from)))
 const c4 = (color, alpha) => new Color4(color.r, color.g, color.b, alpha)
@@ -67,12 +91,12 @@ function drawTexture(scene, name, width, height, draw){
 
 // a long jagged spike, point at the top - barbs down both edges so it reads
 // as a tendril rather than a needle. Drawn in its own colors (the tendril
-// layer tints it white, i.e. not at all): pitch black, with a violet glow
-// around the edge so it still reads against a night sky
-function drawSpike(ctx, width, height){
+// layer tints it white, i.e. not at all): pitch black, with a glow around the
+// edge so it still reads against a night sky - violet, or a demon's red
+function drawSpike(ctx, width, height, glow = "rgba(175,70,255,1)"){
     const mid = width / 2
     const barbs = [0.12, -0.18, 0.22, -0.1, 0.16, -0.14]
-    ctx.shadowColor = "rgba(175,70,255,1)"
+    ctx.shadowColor = glow
     ctx.shadowBlur = width * 0.18
     ctx.fillStyle = "rgba(0,0,0,1)"
     ctx.beginPath()
@@ -105,6 +129,78 @@ function drawRing(ctx, size){
     ctx.fillRect(0, 0, size, size)
 }
 
+// A demon's summoning circle, in white (its material colours it): a double
+// rim, a band of runes, an inverted pentagram inside a ring, and a small ring
+// at the heart. runesOnly: just the rim and the runes - the second, outer ring
+// a full-power demon has turning the other way. Seeded, so every demon's
+// circle carries the same runes.
+function drawSigil(ctx, size, runesOnly = false){
+    const c = size / 2
+    let seed = 1337
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+    ctx.strokeStyle = "rgba(255,255,255,1)"
+    ctx.shadowColor = "rgba(255,255,255,1)"
+    ctx.shadowBlur = size * 0.012
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+    const circle = (r, w) => {
+        ctx.lineWidth = w
+        ctx.beginPath()
+        ctx.arc(c, c, r, 0, Math.PI * 2)
+        ctx.stroke()
+    }
+    const inner = c * (runesOnly ? 0.8 : 0.74)
+    const outer = c * 0.88
+    circle(c * 0.96, size * 0.009)
+    circle(outer, size * 0.004)
+    circle(inner, size * 0.005)
+    // the runes: a few angular strokes each, standing up off the circle
+    const runes = runesOnly ? 36 : 28
+    for(let i = 0; i < runes; i++){
+        const a = (i / runes) * Math.PI * 2
+        const r = (inner + outer) / 2
+        ctx.save()
+        ctx.translate(c + Math.cos(a) * r, c + Math.sin(a) * r)
+        ctx.rotate(a + Math.PI / 2)
+        const h = (outer - inner) * 0.34, w = h * 0.65
+        ctx.lineWidth = size * 0.0045
+        ctx.beginPath()
+        const strokes = 2 + Math.floor(rnd() * 3)
+        ctx.moveTo((rnd() - 0.5) * w, -h)
+        for(let s = 1; s <= strokes; s++) ctx.lineTo((rnd() - 0.5) * 2 * w, -h + (s / strokes) * 2 * h)
+        if(rnd() < 0.5){
+            ctx.moveTo(-w, (rnd() - 0.5) * h)
+            ctx.lineTo(w, (rnd() - 0.5) * h)
+        }
+        ctx.stroke()
+        ctx.restore()
+    }
+    if(runesOnly) return
+    // the inverted pentagram, its points on the inner ring
+    const star = inner * 0.97
+    const point = j => {
+        const a = Math.PI / 2 + j * (Math.PI * 2 / 5)
+        return [c + Math.cos(a) * star, c + Math.sin(a) * star]
+    }
+    ctx.lineWidth = size * 0.006
+    ctx.beginPath()
+    ;[0, 2, 4, 1, 3, 0].forEach((j, i) => i ? ctx.lineTo(...point(j)) : ctx.moveTo(...point(j)))
+    ctx.stroke()
+    circle(c * 0.3, size * 0.005)
+    circle(c * 0.12, size * 0.004)
+}
+
+// a soft round pool of black, for under the demon's circle
+function drawVoid(ctx, size){
+    const c = size / 2
+    const pool = ctx.createRadialGradient(c, c, 0, c, c, c)
+    pool.addColorStop(0, "rgba(255,255,255,0.8)")
+    pool.addColorStop(0.55, "rgba(255,255,255,0.6)")
+    pool.addColorStop(1, "rgba(255,255,255,0)")
+    ctx.fillStyle = pool
+    ctx.fillRect(0, 0, size, size)
+}
+
 function auraTextures(scene){
     let tex = texturesByScene.get(scene)
     if(tex) return tex
@@ -115,6 +211,11 @@ function auraTextures(scene){
     noise.octaves = 2
     tex = {
         spike: drawTexture(scene, "auraSpike", 64, 256, drawSpike),
+        // the demon's (see "the demon's aura")
+        demonSpike: drawTexture(scene, "auraDemonSpike", 64, 256, (ctx, w, h) => drawSpike(ctx, w, h, DEMON.spikeGlow)),
+        sigil: drawTexture(scene, "auraSigil", 512, 512, (ctx, w) => drawSigil(ctx, w)),
+        runeRing: drawTexture(scene, "auraRuneRing", 512, 512, (ctx, w) => drawSigil(ctx, w, true)),
+        void: drawTexture(scene, "auraVoid", 128, 128, (ctx, w) => drawVoid(ctx, w)),
         ring: drawTexture(scene, "auraRing", 256, 256, (ctx, w) => drawRing(ctx, w)),
         flame: getParticleTexture(scene, particleTexturePath("flame2")),
         smoke: getParticleTexture(scene, particleTexturePath("smoke2")),
@@ -467,14 +568,16 @@ function ignite(k, ringMat){
     burst.maxEmitPower = lerp(2, 4.5, k.P)
     burst.minAngularSpeed = -3
     burst.maxAngularSpeed = 3
-    burst.color1 = new Color4(1, 1, 1, 1)
-    burst.color2 = c4(Color3.Lerp(BLUE.core, DARK.rim, k.D * 0.6), 1)
-    burst.colorDead = c4(BLUE.mid, 0)
+    // a demon's: embers, not glints
+    const demon = k.form === "demon"
+    burst.color1 = demon ? c4(DEMON.hot, 1) : new Color4(1, 1, 1, 1)
+    burst.color2 = demon ? c4(DEMON.ember, 1) : c4(Color3.Lerp(BLUE.core, DARK.rim, k.D * 0.6), 1)
+    burst.colorDead = demon ? c4(DEMON.blood, 0) : c4(BLUE.mid, 0)
     // stops itself after the one burst, then frees itself like any retired layer
     burst.targetStopDuration = 0.2
     burst.onAnimationEnd = () => setTimeout(() => release(k, burst), 0)
     burst.start()
-    if(k.P >= TIER.flames) ringPulse(k, ringMat, lerp(1.8, 3.4, k.P))
+    if(demon || k.P >= TIER.flames) ringPulse(k, ringMat, lerp(1.8, 3.4, k.P))
 }
 
 // a ring sweeping out along the ground from the feet, fading as it goes
@@ -500,10 +603,258 @@ function endRing(k, ring){
     if(!k.rings.delete(ring)) return
     k.scene.onBeforeRenderObservable.remove(ring._auraObserver)
     ring.dispose()
+    // a demon's circle has a material of its own (groundCard) - not the
+    // texture, that's the scene's, shared by every aura
+    ring._auraMat?.dispose(false, false)
 }
 
 function ringColor(profile){
+    if(profile.form === "demon") return DEMON.ember
     return Color3.Lerp(BLUE.mid, DARK.rim, profile.darkness >= DARK_TINT_FROM ? 0.8 : profile.darkness * 0.5)
+}
+
+// ── the demon's aura ─────────────────────────────────────────────────────────
+// (see the header). Drawn the way the evolution's fire is (transformationFire.js):
+// the burning colour added, so it glows at night, and black drawn normally over
+// it, narrower, so what shows is black flame with a burning edge - added light
+// alone washes out pink in daylight, black alone vanishes at night.
+
+// a particle's size over its life: [[at, small, big], ...] in metres
+function sizeOverLife(ps, stops){
+    stops.forEach(([at, small, big]) => ps.addSizeGradient(at, small, big))
+}
+
+// a flat card lying on the ground under the feet, turning with the body -
+// the circle, its outer rune ring, the black pool. Its own material (the
+// colour pulses per aura); freed with it (endRing).
+function groundCard(k, name, size, texture, alphaMode, color, order){
+    const card = MeshBuilder.CreateGround(name, { width: size, height: size }, k.scene)
+    const mat = new StandardMaterial(`${name}_mat`, k.scene)
+    mat.disableLighting = true
+    mat.diffuseColor = Color3.Black()
+    mat.specularColor = Color3.Black()
+    mat.emissiveColor = color.clone()
+    mat.opacityTexture = texture
+    mat.backFaceCulling = false
+    mat.alphaMode = alphaMode
+    // flat on the ground under everything else - never writes depth over it
+    mat.disableDepthWrite = true
+    card.material = mat
+    card.isPickable = false
+    card.parent = k.feet
+    card.position.y = 0.02 + order * 0.005
+    // the pool first, then the circle over it
+    card.alphaIndex = order
+    card._auraMat = mat
+    k.rings.add(card)
+    return card
+}
+// a card going with its aura - fades, then frees itself (endRing)
+function fadeAway(k, card, seconds = 0.45){
+    const from = card.visibility
+    let t = 0
+    card._auraObserver = k.scene.onBeforeRenderObservable.add(() => {
+        t = Math.min(1, t + k.scene.getAnimationRatio() / 60 / seconds)
+        card.visibility = from * (1 - t)
+        if(t >= 1) endRing(k, card)
+    })
+}
+
+// hellfire up the body - the burning edge (added) or the black inside it
+// (dark); outer: the ring of it rising from the ground at full power
+function hellfire(k, { dark = false, outer = false } = {}){
+    const t = outer ? ramp(k.P, DEMON_TIER.overflow, 1) : ramp(k.P, 0, 0.9)
+    const ps = particles(k, `demonFire${outer ? "Outer" : ""}${dark ? "Black" : "Edge"}`, outer ? 260 : 340, k.tex.flame, outer ? k.feet : k.root)
+    ps.updateSpeed = REAL_UNITS
+    if(dark) ps.blendMode = ParticleSystem.BLENDMODE_STANDARD
+    const radius = (outer ? k.radius * 1.75 : k.radius * lerp(0.9, 1.15, t)) * (dark ? 0.85 : 1)
+    ps.createDirectedCylinderEmitter(radius, outer ? 0.2 : k.height * 0.8, 0.35, new Vector3(-0.12, 1, -0.12), new Vector3(0.12, 1, 0.12))
+    // upright tongues of flame, whatever the camera's pitch
+    ps.billboardMode = ParticleSystem.BILLBOARDMODE_Y
+    // the black a little smaller than the edge round it, so the edge shows.
+    // Small and many: big ones merge into solid shards that hide the body
+    const size = lerp(0.15, 0.21, t) * (outer ? 1.35 : 1) * (dark ? 0.85 : 1)
+    sizeOverLife(ps, [[0, size * 0.5, size * 0.9], [0.25, size, size * 1.7], [1, size * 0.25, size * 0.45]])
+    ps.minScaleX = 0.55
+    ps.maxScaleX = 0.8
+    ps.minScaleY = 1.8
+    ps.maxScaleY = 2.8
+    ps.minLifeTime = lerp(0.35, 0.5, t) * (outer ? 1.3 : 1)
+    ps.maxLifeTime = ps.minLifeTime * 1.5
+    ps.minEmitPower = lerp(0.6, 1, t)
+    ps.maxEmitPower = lerp(1, 1.7, t)
+    ps.gravity = new Vector3(0, lerp(0.8, 1.8, t), 0)
+    ps.minInitialRotation = -0.15
+    ps.maxInitialRotation = 0.15
+    const a = outer ? 0.6 : 1
+    if(dark){
+        ps.addColorGradient(0, c4(DEMON.char, 0))
+        ps.addColorGradient(0.15, new Color4(0, 0, 0, 0.85 * a))
+        ps.addColorGradient(0.6, c4(DEMON.char, 0.55 * a))
+        ps.addColorGradient(1, new Color4(0, 0, 0, 0))
+    } else {
+        ps.addColorGradient(0, c4(DEMON.ember, 0))
+        ps.addColorGradient(0.12, c4(DEMON.ember, 0.9 * a))
+        ps.addColorGradient(0.5, c4(DEMON.blood, 0.55 * a))
+        ps.addColorGradient(1, c4(DEMON.blood, 0))
+    }
+    ps.noiseTexture = k.tex.noise
+    ps.noiseStrength = new Vector3(1, 0.3, 1)
+    ps.emitRate = lerp(80, 180, t) * (outer ? 0.55 : 1) * (dark ? 1.1 : 1)
+    ps._auraBreathes = true
+    return ps
+}
+
+// black spikes glowing red, lashing up and out of the chest - fanned up and
+// out, never flat (one pointing at the camera foreshortens into a wedge).
+// Half a metre to a metre long: transformationFire.js's spikes
+function demonSpikes(k){
+    const t = ramp(k.P, DEMON_TIER.spikes, 1)
+    const ps = particles(k, "demonSpikes", 90, k.tex.demonSpike, k.chest)
+    ps.updateSpeed = REAL_UNITS
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD
+    ps.createHemisphericEmitter(0.2, 0.2)
+    ps.startDirectionFunction = (worldMatrix, direction, particle, isLocal) => {
+        const angle = Math.random() * Math.PI * 2
+        const out = 0.45 + Math.random() * 0.5
+        const up = 0.75 + Math.random() * 0.6
+        if(isLocal) direction.set(Math.cos(angle) * out, up, Math.sin(angle) * out)
+        else Vector3.TransformNormalFromFloatsToRef(Math.cos(angle) * out, up, Math.sin(angle) * out, worldMatrix, direction)
+    }
+    ps.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED_LOCAL
+    sizeOverLife(ps, [[0, 0.06, 0.1], [0.2, 0.14, 0.22], [1, 0.08, 0.12]])
+    ps.minScaleY = 3.2
+    ps.maxScaleY = 4.8
+    // kept moving the whole way: stretched billboards misdraw when still
+    ps.minEmitPower = 2.2
+    ps.maxEmitPower = 3.8
+    ps.gravity = new Vector3(0, 2, 0)
+    ps.minLifeTime = 0.3
+    ps.maxLifeTime = 0.5
+    // the texture carries its own black and red - faded by alpha alone
+    ps.addColorGradient(0, new Color4(1, 1, 1, 0))
+    ps.addColorGradient(0.12, new Color4(1, 1, 1, 0.95))
+    ps.addColorGradient(0.7, new Color4(1, 1, 1, 0.7))
+    ps.addColorGradient(1, new Color4(1, 1, 1, 0))
+    ps.emitRate = lerp(10, 28, t)
+    return ps
+}
+
+// black smoke billowing up off the body
+function demonSmoke(k){
+    const t = ramp(k.P, 0, 1)
+    const ps = particles(k, "demonSmoke", 140, k.tex.smoke)
+    ps.updateSpeed = REAL_UNITS
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD
+    ps.createCylinderEmitter(k.radius, k.height * 0.9, 0.5, 0.3)
+    ps.minLifeTime = 1
+    ps.maxLifeTime = 1.8
+    const s = lerp(0.8, 1.2, t)
+    sizeOverLife(ps, [[0, 0.25 * s, 0.4 * s], [1, 0.8 * s, 1.3 * s]])
+    ps.minEmitPower = 0.2
+    ps.maxEmitPower = 0.5
+    ps.gravity = new Vector3(0, 0.8, 0)
+    ps.minInitialRotation = 0
+    ps.maxInitialRotation = Math.PI * 2
+    ps.minAngularSpeed = -0.8
+    ps.maxAngularSpeed = 0.8
+    ps.addColorGradient(0, c4(DEMON.smoke, 0))
+    ps.addColorGradient(0.2, c4(DEMON.smoke, 0.55))
+    ps.addColorGradient(1, c4(DEMON.smoke, 0))
+    ps.emitRate = lerp(10, 34, t)
+    return ps
+}
+
+// sparks rising off it and left behind as it moves (not isLocal)
+function demonEmbers(k){
+    const t = ramp(k.P, 0, 1)
+    const ps = particles(k, "demonEmbers", 140, k.tex.streak)
+    ps.updateSpeed = REAL_UNITS
+    ps.isLocal = false
+    ps.createCylinderEmitter(k.radius * 1.2, k.height * 0.9, 0.5, 0.4)
+    ps.minLifeTime = 0.9
+    ps.maxLifeTime = 1.6
+    // thin1 is a sliver in a big square - a quarter to half a metre of it is a spark
+    sizeOverLife(ps, [[0, 0.25, 0.45], [1, 0, 0.05]])
+    ps.minInitialRotation = 0
+    ps.maxInitialRotation = Math.PI
+    ps.minAngularSpeed = -3
+    ps.maxAngularSpeed = 3
+    ps.minEmitPower = 0.5
+    ps.maxEmitPower = 1.5
+    ps.gravity = new Vector3(0, 0.7, 0)
+    ps.color1 = c4(DEMON.hot, 1)
+    ps.color2 = c4(DEMON.ember, 1)
+    ps.colorDead = c4(DEMON.blood, 0)
+    ps.noiseTexture = k.tex.noise
+    ps.noiseStrength = new Vector3(1.2, 0.4, 1.2)
+    ps.emitRate = lerp(14, 40, t)
+    return ps
+}
+
+// one strand of the ember helix: born at a point winding round the body and
+// up it (moved every frame - demonTick), left where they're born, so each
+// strand draws a glowing spiral; two of them, half a turn apart
+function emberHelix(k, strand){
+    const t = ramp(k.P, DEMON_TIER.helix, 1)
+    const at = new Vector3()
+    const ps = particles(k, `demonHelix${strand}`, 260, k.tex.streak, at)
+    ps.updateSpeed = REAL_UNITS
+    ps.isLocal = false
+    ps.createPointEmitter(new Vector3(-0.2, 0.1, -0.2), new Vector3(0.2, 0.4, 0.2))
+    ps.minLifeTime = 0.5
+    ps.maxLifeTime = 0.9
+    sizeOverLife(ps, [[0, 0.32, 0.48], [1, 0, 0.05]])
+    ps.minInitialRotation = 0
+    ps.maxInitialRotation = Math.PI
+    ps.minEmitPower = 0.05
+    ps.maxEmitPower = 0.25
+    ps.gravity = new Vector3(0, 0.4, 0)
+    ps.color1 = c4(DEMON.hot, 1)
+    ps.color2 = c4(DEMON.ember, 1)
+    ps.colorDead = c4(DEMON.blood, 0)
+    ps.emitRate = lerp(90, 170, t)
+    ps._helix = { at, phase: strand * Math.PI }
+    return ps
+}
+
+// the demon's layers for one profile, in draw order (black under the burning
+// edges, the bright details last) - and its ground cards and what moves them
+function demonLayers(k){
+    const P = k.P
+    const layers = [demonSmoke(k), hellfire(k), hellfire(k, { dark: true })]
+    if(P >= DEMON_TIER.overflow) layers.push(hellfire(k, { outer: true }), hellfire(k, { outer: true, dark: true }))
+    if(P >= DEMON_TIER.spikes) layers.push(demonSpikes(k))
+    const helix = P >= DEMON_TIER.helix ? [emberHelix(k, 0), emberHelix(k, 1)] : []
+    layers.push(...helix, demonEmbers(k))
+
+    // under the feet: the black pool, the circle over it, and at full power a
+    // wider ring of runes round both
+    const size = lerp(1.6, 2.6, P)
+    const pool = groundCard(k, "demonVoid", size * 1.3, k.tex.void, Constants.ALPHA_COMBINE, Color3.Black(), 0)
+    const sigil = groundCard(k, "demonSigil", size, k.tex.sigil, Constants.ALPHA_ADD, DEMON.ember, 1)
+    const runes = P >= DEMON_TIER.overflow ? groundCard(k, "demonRunes", size * 1.55, k.tex.runeRing, Constants.ALPHA_ADD, DEMON.blood, 2) : null
+    const cards = [pool, sigil, runes].filter(Boolean)
+    const glow = DEMON.ember.clone()
+
+    const local = new Vector3()
+    // every frame (the aura's watch): turn the circles, pulse the circle with
+    // the flames' breathing, wind the helix strands up and round
+    const tick = (dt, time, breath) => {
+        sigil.rotation.y += dt * SIGIL_SPIN
+        if(runes) runes.rotation.y -= dt * SIGIL_SPIN * 0.6
+        DEMON.ember.scaleToRef(lerp(0.7, 1, P) * (0.8 + (breath - 1) * 1.6), glow)
+        sigil._auraMat.emissiveColor.copyFrom(glow)
+        const world = k.root.getWorldMatrix()
+        helix.forEach(ps => {
+            const { at, phase } = ps._helix
+            const angle = time * HELIX.spin + phase
+            const climb = (time * HELIX.climb + phase / (Math.PI * 2)) % 1
+            local.set(Math.cos(angle) * HELIX.radius, -k.height / 2 + climb * k.height * 1.2, Math.sin(angle) * HELIX.radius)
+            Vector3.TransformCoordinatesToRef(local, world, at)
+        })
+    }
+    return { layers, cards, tick }
 }
 
 // ── the aura itself ──────────────────────────────────────────────────────────
@@ -579,13 +930,55 @@ export function createBodyAura(det, scene, body, bodyHeight = 1.5){
         const tex = auraTextures(scene)
         ringMat.opacityTexture = tex.ring
         ringMat.emissiveColor = ringColor(p)
-        return { scene, ...anchors, tex, owned, rings, P: p.power, D: p.darkness, height: bodyHeight, radius: 0.3 }
+        return { scene, ...anchors, tex, owned, rings, P: p.power, D: p.darkness, form: p.form ?? null, height: bodyHeight, radius: 0.3 }
+    }
+
+    // starting a build's layers - already burning on a rebuild, so the swap
+    // doesn't blink
+    function startLayers(layers, warm){
+        layers.forEach(ps => {
+            ps._auraBaseRate = ps.emitRate
+            // not a helix strand - pre-warmed at one point, it'd start as a blob
+            if(warm && !ps._helix){
+                ps.preWarmCycles = 40
+                ps.preWarmStepOffset = 3
+            }
+            ps.start()
+        })
+    }
+
+    // the overflow tier's lightning, in the aura's colour - no point light
+    // (withLight): materials stop compiling past 8 lights on some GPUs, and
+    // every aura in view would add one
+    function overflowLightning(P, color){
+        const host = lightningHost()
+        attachLightning(scene, host, color, false, {
+            arcCount: Math.round(lerp(2, 4, ramp(P, TIER.overflow, 1))), width: 0.012, updateInterval: 110, withLight: false,
+        })
+        return host
+    }
+
+    // a demon's (see "the demon's aura")
+    function buildDemon(p, warm){
+        const k = context(p)
+        const { layers, cards, tick } = demonLayers(k)
+        // the helix strands' points placed before anything's born at them
+        tick(0, 0, 1)
+        startLayers(layers, warm)
+        const overflow = k.P >= DEMON_TIER.overflow
+        return {
+            k, layers, cards, tick,
+            lightningOn: overflow ? overflowLightning(k.P, "red") : null,
+            pulses: overflow,
+            ringSize: lerp(2.8, 4.2, ramp(k.P, DEMON_TIER.overflow, 1)),
+        }
     }
 
     // the layers for one profile, in draw order: glows and blue flame first,
     // the black over them, the violet shimmer over the black, then the bright
     // details on top of everything
     function buildFor(p, warm){
+        if(p.form === "demon") return buildDemon(p, warm)
         const k = context(p)
         const D = k.D, P = k.P
         const layers = []
@@ -598,32 +991,18 @@ export function createBodyAura(det, scene, body, bodyHeight = 1.5){
         if(D > 0 && P >= TIER.haze) layers.push(darkGlow(k))
         if(P >= TIER.streaks) layers.push(streaks(k), embers(k))
         layers.push(glitter(k))
-        layers.forEach(ps => {
-            ps._auraBaseRate = ps.emitRate
-            // a rebuild starts already burning, so the swap doesn't blink
-            if(warm){
-                ps.preWarmCycles = 40
-                ps.preWarmStepOffset = 3
-            }
-            ps.start()
-        })
-        // no point light (withLight) - materials stop compiling past 8 lights
-        // on some GPUs, and every aura in view would add one
-        let lightningOn = null
-        if(P >= TIER.overflow){
-            lightningOn = lightningHost()
-            attachLightning(scene, lightningOn, D >= DARK_TINT_FROM ? "purple" : "cyan", false, {
-                arcCount: Math.round(lerp(2, 4, ramp(P, TIER.overflow, 1))), width: 0.012, updateInterval: 110, withLight: false,
-            })
-        }
+        startLayers(layers, warm)
+        const lightningOn = P >= TIER.overflow ? overflowLightning(P, D >= DARK_TINT_FROM ? "purple" : "cyan") : null
         return { k, layers, lightningOn, pulses: P >= TIER.overflow, ringSize: lerp(2.6, 3.8, ramp(P, TIER.overflow, 1)) }
     }
 
-    // stop emitting and let what's in the air burn out (retire)
+    // stop emitting and let what's in the air burn out (retire); a demon's
+    // circle fades out from under it
     function burnOut(old){
         if(!old) return
         old.layers.forEach(ps => retire(old.k, ps))
         old.lightningOn?.dispose()
+        old.cards?.forEach(card => fadeAway(old.k, card))
     }
 
     function watch(){
@@ -637,6 +1016,8 @@ export function createBodyAura(det, scene, body, bodyHeight = 1.5){
             time += dt
             const breath = 1 + BREATH_DEPTH * Math.sin(time * Math.PI * 2 * BREATH_RATE)
             build.layers.forEach(ps => { if(ps._auraBreathes) ps.emitRate = ps._auraBaseRate * breath })
+            // a demon's circles and ember helix
+            build.tick?.(dt, time, breath)
             if(!build.pulses) return
             sincePulse += dt
             if(sincePulse < nextPulse) return

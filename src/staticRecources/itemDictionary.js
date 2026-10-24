@@ -77,6 +77,9 @@ export const ITEM_DICTIONARY = {
     phoenixore: {
         dn: "Phoenix Ore", category: "gem", tintKey: "firecrystal",
         statWeights: { physicalDamage: 5, magicDamage: 8, durability: 4, magicResistance: 3 },
+        // cooled in phoenix-fire - a weapon forged with it carries the fire
+        // (weaponElements below): it cuts what steel alone can't, a ghost
+        element: "fire",
     },
     rubyore: {
         dn: "Ruby Ore", category: "gem", tintKey: "ruby",
@@ -150,6 +153,20 @@ const STAT_CURVE = {
 // actually use magicDmg/magicResistance is a separate, larger change to
 // attackingSystem.js's live damage formulas that needs its own balance
 // pass, not something to fold in silently here.
+// The elements a weapon forged from these materials carries - one entry per
+// element any of its parts brings (a material's own `element`, e.g. Phoenix
+// Ore's fire), the shape a weapon item's `elements` takes. An elemental
+// weapon's swing isn't plain steel: a ghost (physicalImmune) feels it
+// (createEnemy.js's melee hit, tcp's applyDamageToEnemy).
+export function weaponElements(selectedMaterials){
+    const elements = new Set()
+    for (const part of ["blade", "guard", "handle", "pommel"]) {
+        const element = ITEM_DICTIONARY[selectedMaterials[part]?.materialName]?.element
+        if (element) elements.add(element)
+    }
+    return [...elements].map(elementType => ({ elementType }))
+}
+
 export function computeCraftedWeaponStats(selectedMaterials){
     const raw = { physicalDamage: 0, magicDamage: 0, durability: 0, magicResistance: 0 }
 

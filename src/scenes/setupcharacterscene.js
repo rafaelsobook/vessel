@@ -1,4 +1,4 @@
-import { Scene, Vector3, SceneLoader, LoadAssetContainerAsync, Color3, Texture } from "@babylonjs/core";
+import { Scene, Vector3, Quaternion, SceneLoader, LoadAssetContainerAsync, Color3, Texture } from "@babylonjs/core";
 import { setGameStatus } from "../main/main";
 import { avatarGlBpath } from "../constants/constants";
 import { showCreateCharacterPage } from "../pages/createcharacterpage";
@@ -10,7 +10,47 @@ import { createRidingForest, createRiderCamera } from "./setupbackdrop.js";
 import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
 import { ADVENTURER_COLORS } from "../constants/adventurerColors.js";
 import { FEMALE_ONLY_NAMES, findDeepByName, facePartOf, isHiddenFemalePart } from "../charactersystem/createcharacter.js";
-import { layerAvatarMaterials, layerFacePart, tuckOutfit } from "../charactersystem/avatarLayers.js";
+import { layerAvatarMaterials, layerFacePart, layerHelmet, layerWorn, tuckOutfit } from "../charactersystem/avatarLayers.js";
+import { createMaterialFromDir } from "../creations/creationTools.js";
+import { createMetalMat, METAL_COLOR } from "../tools/metalmat.js";
+import { giveArmorDetail } from "../tools/armorDetail.js";
+
+// what the new character wears in the preview, both bodies: the Iron Kraun
+// Mask (npcDetails.js's kraunmask - helmets.glb's helmet.kraunmask.*) and the
+// Priest Belt (avatar.glb's belt.prieststyle1, painted from
+// images/textures/belt/priestbelt)
+const KRAUN_MASK = { modelName: "kraunmask", metalColor: METAL_COLOR.IRON }
+const PRIEST_BELT_MESH = "belt.prieststyle1"
+
+// a clone of the mask from helmets.glb on the head bone - createcharacter.js's
+// createHelmet, for the one mask
+async function putOnKraunMask(scene, headBone){
+    if(!headBone) return
+    let loaded
+    try {
+        loaded = await SceneLoader.ImportMeshAsync("", "./models/helmets/", "helmets.glb", scene)
+    } catch (error) {
+        return console.warn(`[setupCharacterScene] failed to load helmets.glb`, error)
+    }
+    const template = loaded.meshes.find(msh => msh.name.split(".")[1] === KRAUN_MASK.modelName)
+    if(!template) {
+        loaded.meshes[0]?.dispose()
+        return console.warn(`[setupCharacterScene] no "${KRAUN_MASK.modelName}" in helmets.glb`)
+    }
+    const mask = template.clone(`helmet.${KRAUN_MASK.modelName}.preview`)
+    mask.parent = headBone
+    mask.rotationQuaternion = Quaternion.Identity()
+    mask.position = Vector3.Zero()
+    const maskMat = giveArmorDetail(createMetalMat(scene, KRAUN_MASK.metalColor), KRAUN_MASK.metalColor, mask)
+    // drawn over the hair, never under it - avatarLayers.js
+    layerHelmet(maskMat)
+    ;[mask, ...mask.getChildMeshes()].forEach(part => {
+        part.material = maskMat
+        part.isVisible = true
+    })
+    // the rest of helmets.glb isn't needed
+    loaded.meshes[0]?.dispose()
+}
 
 // mainbody/femalebody/scalp aren't always a single flat mesh with no
 // children on this rig (see createcharacter.js's own dispose(true) comment -
@@ -111,6 +151,11 @@ export async function setupCharacterScene(engine){
     // his skin under his clothes, his hair over his scalp - the same layering
     // the in-game avatar gets (avatarLayers.js)
     layerAvatarMaterials({ skinMat, clothMat, pantsMat, hairMat })
+    // createcharacter.js's equipBelt: the belt texture's diffuse + normal, a
+    // dull specular (cloth, not metal), worn over the outfit
+    const priestBeltMat = createMaterialFromDir(scene, "./images/textures/belt", { diff: "priestbelt", normal: "priestbeltnormal" })
+    priestBeltMat.specularColor = new Color3(0.12, 0.12, 0.12)
+    layerWorn(priestBeltMat)
 
     // const clothMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
     // const pantsMat = createMaterial(scene, "clothMat", {r: .2,g:.1,b:.1}, 2, { name: "fabric4" })
@@ -134,6 +179,13 @@ export async function setupCharacterScene(engine){
         // his face's lines (nose, mouth) - on his skin (avatarLayers.js)
         if(meshPartName === "headlines") layerFacePart(mesh)
         if(meshPartName.includes("cloak.")) return mesh.dispose(true);
+        // the Priest Belt, on both bodies - painted as the game paints it
+        // (createcharacter.js's equipBelt)
+        if(meshPartName === PRIEST_BELT_MESH){
+            mesh.material = priestBeltMat
+            mesh.isVisible = true
+            return
+        }
         if(meshPartName.includes("belt.") && !meshPartName.includes("belt.style1")) return mesh.dispose(true);
         if(meshPartName.includes("boots")) return mesh.dispose(true)
         if(meshPartName.includes("armor")) return mesh.dispose(true)
@@ -176,8 +228,11 @@ export async function setupCharacterScene(engine){
                 mesh.isVisible = toSave.gender === "female" && hairStyleName === toSave.hair
                 return
             }
-            // belt.style1/blindfold/mask.style.1/skirt.style1/bag/silverine -
-            // her one fixed default look, no picker
+            // her own belt and skirt come off under the Priest Belt, as in the
+            // game while she wears one (createcharacter.js's underBelt)
+            if(meshPartName.startsWith("belt.style1") || meshPartName.includes("skirt.style")) return setTreeVisible(mesh, false)
+            // blindfold/mask.style.1/bag/silverine - her one fixed default
+            // look, no picker
             femaleAccessories.push(mesh)
             mesh.isVisible = toSave.gender === "female"
             return
@@ -241,6 +296,10 @@ export async function setupCharacterScene(engine){
         hairs.push(hairMsh)
     })
     HairModel.meshes[0]?.dispose()
+
+    // the Iron Kraun Mask on the head, as the game puts on a helmet
+    // (createcharacter.js's createHelmet) - a mask, so the hair stays
+    await putOnKraunMask(scene, headBone)
 
     // registered after the hair model is loaded/parented (not right after
     // container.addAllToScene()) so addShadowCaster's recursive includeChildren

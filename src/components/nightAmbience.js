@@ -70,6 +70,22 @@ const UPDATE_EVERY_FRAMES = 30
 const clamp01 = v => Math.min(1, Math.max(0, v))
 const rand = (a, b) => a + Math.random() * (b - a)
 
+// By day the particle systems are stopped and the fireflies' noise frozen,
+// not just left emitting nothing: an idle system still runs its update every
+// frame, and a live NoiseProceduralTexture redraws itself every frame whether
+// anything uses it or not. Measured in the village by day with nothing in the
+// air: ~2x the frame time running, back to the no-ambience time stopped.
+// The same whenever one has nothing to emit (the fireflies out of the woods).
+// stop() lets what's already in the air live out its life, so dawn still
+// fades them rather than cutting them off.
+function setRunning(ps, on){
+    if(ps._nightRunning === on) return
+    ps._nightRunning = on
+    if(on) ps.start()
+    else ps.stop()
+    if(ps.noiseTexture) ps.noiseTexture.refreshRate = on ? 1 : 0
+}
+
 function findTreeKinds(scene, areaType){
     if(areaType === "village") return VILLAGE_TREES.map(name => scene.getMeshByName(name)).filter(Boolean)
     const kinds = new Set()
@@ -130,6 +146,12 @@ export function startNightAmbience(scene, areaType, getAnchor){
         rate: fireflyRate() * night, capacity: FIREFLIES.capacity, preWarm: night > 0 && nearTrees.length > 0,
     })
     const mist = createGroundMist(scene, { name: "night_mist", emitter: emitAt, ...MIST, preWarm: night > 0 })
+    // they come started; and pre-warmed only this once, on arriving - a
+    // restart at dusk fades in rather than appearing all at once
+    ;[fireflies, mist].forEach(ps => {
+        ps._nightRunning = true
+        ps.preWarmCycles = 0
+    })
     const moon = createMoon(scene, { name: "night_moon", size: MOON_SIZE })
 
     const moonAt = new Vector3()
@@ -142,6 +164,10 @@ export function startNightAmbience(scene, areaType, getAnchor){
         // dying out at dawn rather than vanishing - the ones in the air live on
         fireflies.emitRate = NO_FIREFLIES_IN.includes(weather) ? 0 : fireflyRate() * night
         mist.emitRate = NO_MIST_IN.includes(weather) ? 0 : MIST.rate * night
+        // off whenever there's nothing to emit - by day, and the fireflies out
+        // of the woods too (see setRunning)
+        setRunning(fireflies, fireflies.emitRate > 0)
+        setRunning(mist, mist.emitRate > 0)
         moon.setVisibility(night)
         setMushroomNightGlow(scene, night)
     }

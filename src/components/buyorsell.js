@@ -92,6 +92,7 @@ function render(){
         // 404s, the onerror .png retry 404s too, same broken name).
         if(itm.weaponType === "sword" || itm.weaponType === "spear") img.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
         if(itm.weaponType === "axe") img.src = `./images/items/${itm.itemCateg}/axes.webp`
+        if(itm.weaponType === "staff") img.src = `./images/items/${itm.itemCateg}/staff.webp`
         // helmets key their own icon off modelName, not name - same override
         // inventory.js already applies. Every helmet item's own name is a
         // flavor/save-key string, separate from modelName (the real art

@@ -7,6 +7,9 @@
 //                    blaze with lightning and pressure waves.
 //   darkness (0-1) - a "darkness" aptitude, by its level. 0 without one. Shows
 //                    as black flame and tendrils mixed into the aura.
+//   form           - what the character has evolved into (evolution.js's
+//                    names - "demon"), or null for a human. A form has a look
+//                    of its own (aura.js); power still sets how strong it is.
 
 // what server/routes/characterR.js rolls for a new character (hp 4100-4199,
 // mp 100-199, sp 1000-1099)
@@ -40,9 +43,9 @@ export function darknessOf(aptitude){
 
 // Any one stat growing raises the power, several growing together raise it
 // faster, and it never passes 1: power = 1 - (1-hp)(1-mp)(1-sp).
-export function computeAuraProfile({ maxHp, maxMp, maxSp, aptitude }){
+export function computeAuraProfile({ maxHp, maxMp, maxSp, aptitude, evolution }){
     const power = 1 - (1 - growth(maxHp, "hp")) * (1 - growth(maxMp, "mp")) * (1 - growth(maxSp, "sp"))
-    return { power: round2(power), darkness: darknessOf(aptitude) }
+    return { power: round2(power), darkness: darknessOf(aptitude), form: evolution?.evolutionName ?? null }
 }
 
 // a character record (charState, or another player's det from the socket)
@@ -50,11 +53,11 @@ export function computeAuraProfile({ maxHp, maxMp, maxSp, aptitude }){
 // can read a little lower than that player's own live profile
 export function auraProfileFromDet(det){
     if(det?.aura) return det.aura
-    return computeAuraProfile({ maxHp: det?.maxHp, maxMp: det?.maxMp, maxSp: det?.maxSp, aptitude: det?.aptitude })
+    return computeAuraProfile({ maxHp: det?.maxHp, maxMp: det?.maxMp, maxSp: det?.maxSp, aptitude: det?.aptitude, evolution: det?.evolution })
 }
 
 // whether two profiles look different enough to rebuild the aura over
 export function auraProfileChanged(a, b){
     if(!a || !b) return a !== b
-    return Math.abs(a.power - b.power) >= 0.02 || a.darkness !== b.darkness
+    return Math.abs(a.power - b.power) >= 0.02 || a.darkness !== b.darkness || (a.form ?? null) !== (b.form ?? null)
 }

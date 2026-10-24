@@ -2152,6 +2152,9 @@ export default [
                 effectsWhenHit: [
                     { effectType: "burn", dmgPm: 45, duration: 4000, soundPlayPerDmg: "dmgpm" },
                 ],
+                // its Phoenix Ore handle's fire - it cuts ghosts
+                // (itemDictionary.js's weaponElements, createEnemy.js)
+                elements: [{ elementType: "fire" }],
                 equiped: true,
                 soulFeed: 0,
                 isEnhanceAble: true,

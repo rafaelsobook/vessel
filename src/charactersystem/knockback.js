@@ -7,6 +7,7 @@ import { popShockRing } from "../effects/shockRing.js"
 import { sparkBurst } from "../effects/blessingFx.js"
 import { addCameraTrauma } from "../tools/cameraShake.js"
 import { getAllSounds } from "../components/soundSystem.js"
+import { playBlockingLoop } from "../tools/animation.js"
 
 // KNOCKBACK - a slam (an enemy's det.bashAttack, e.g. the fire slimes' body
 // slam) throwing a player away from whoever hit them: they play hit1 and
@@ -24,6 +25,7 @@ const KNOCKBACK_MS = 280
 const MAX_SPEED = 14        // m/s
 const HOP = 2.2             // upward m/s - knocked off their feet a little
 const MIN_PUSH = 0.8        // already that far away or further: still thrown this much
+const BLOCKED_DISTANCE = 3  // a slam breaking through a block throws this far from the attacker
 const RING = { size: 3, seconds: 0.5, color: new Color3(1, 0.45, 0.1) }
 const SPARK_COLOR = new Color3(1, 0.5, 0.15)
 
@@ -45,8 +47,10 @@ function landingSpot(at, from, distance){
 
 // victim: the player rig hit (playersOnScene's). from: where the slam came
 // from (the attacker's position). isMine: the victim is me. blocked: they
-// had their guard up - the slam still lands (the ring), but they hold their
-// ground. Bots (owner "bot_...") stagger but aren't moved: each client
+// had their guard up - no hp lost (worldsocket.js), but the slam breaks
+// through it: "blockbreak" instead of "hit1", and they're thrown further
+// (BLOCKED_DISTANCE), back into the block pose after if they're still
+// holding it. Bots (owner "bot_...") stagger but aren't moved: each client
 // steps a bot on its own, so a slide here would just get walked back.
 export function bashLanded({ victim, from, distance = 2, isMine = false, blocked = false }){
     const body = victim?.body
@@ -60,11 +64,10 @@ export function bashLanded({ victim, from, distance = 2, isMine = false, blocked
         addCameraTrauma(scene, blocked ? 0.25 : 0.45)
         getAllSounds()?.landedOnGroundS?.play()
     }
-    if(blocked) return
-
-    victim.characterAnimations?.playAction(victim.anims, "hit1", 1)
+    if(blocked) victim.characterAnimations?.playAction(victim.anims, "blockbreak", 1, () => playBlockingLoop(victim))
+    else victim.characterAnimations?.playAction(victim.anims, "hit1", 1)
     if(victim.owner?.startsWith("bot_")) return
-    const to = landingSpot(body.position, from, distance)
+    const to = landingSpot(body.position, from, blocked ? BLOCKED_DISTANCE : distance)
     if(isMine) knockMeBack(victim, from, to)
     else playRemoteLunge(body, { to, ms: KNOCKBACK_MS })
 }

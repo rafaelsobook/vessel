@@ -22,9 +22,10 @@ import { randBetween } from "../tools/random"
 import { emitEnemyIsHit } from "./emits"
 import { evolveInto, devolve } from "../charactersystem/evolution.js"
 import { bashLanded } from "../charactersystem/knockback.js"
+import { createOreDeposit, setOreHp, removeOreDeposit } from "../components/oreDeposits.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
-import { obtain } from "../charactersystem/inventory"
+import { obtain, wearFromBlock } from "../charactersystem/inventory"
 import { popStatusEffect, openClosePopup } from "../tools/popupUI"
 import { receiveWorldChatMessage, appendSystemMessage, sendWorldMessage } from "../components/worldChatSystem"
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
@@ -60,6 +61,9 @@ let tcpGrains = []
 // tcp/recources/mushroomsInDungeon.ts - same model as tcpGrains right above
 // (createmushroom.js dedupes by mushroomId in its own per-scene Map)
 let tcpMushrooms = []
+// tcp/recources/ores.ts - the ore deposits, with their hit points
+// (components/oreDeposits.js dedupes by oreId in its own per-scene Map)
+let tcpOres = []
 // weapons struck into the ground or an enemy body at runtime (see
 // itemInfoSystem.js's struckItemFunc, creations/skills.js's spawnProjectile
 // env-hit/enemy-hit cases) - server-tracked (tcp/index.ts's struckWeapons),
@@ -312,7 +316,7 @@ export function activateOnSocketListeners(socket){
 
     socket.on("userJoined", allDataFromServer => {
         if (!isSocketOn) return
-        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, structures, grains, mushrooms, struckWeapons, weather, dayNight } = allDataFromServer
+        const { currentPlaceId, newPlayerName, isBot, players, placesMD, tcpEnemies, quests, treasures, bonfires, trunks, structures, grains, mushrooms, ores, struckWeapons, weather, dayNight } = allDataFromServer
         // world clock rides on every snapshot too, same reasoning as weather below
         if(dayNight) setDayNightState(dayNight)
         // weather rides on every snapshot, not just its own "weather-changed"
@@ -352,6 +356,7 @@ export function activateOnSocketListeners(socket){
         tcpStructures = structures ?? []
         tcpGrains = grains ?? []
         tcpMushrooms = mushrooms ?? []
+        tcpOres = ores ?? []
         tcpStruckWeapons = struckWeapons ?? []
         
         const characterState = getCharState()
@@ -710,6 +715,9 @@ export function activateOnSocketListeners(socket){
                 const mark = enemy.det?.hitmarks?.find(h => h.attackType === "normal" && h.animationName?.toLowerCase() === swingAnim?.toLowerCase())
                 if(mark) showHitmark(enemy.body.getScene(), mark.hitmarkTexture, victimPlayer.body)
             }
+            // blocked: no hp lost, but the block wears on what took it -
+            // this swing's share of the attack (inventory.js's wearFromBlock)
+            if (victimPlayer.owner === charState.owner && victimPlayer.weaponBlocking) wearFromBlock(data.dmg / shares)
             if (victimPlayer.owner !== charState.owner || victimPlayer.weaponBlocking) return
             // this swing's raw share: deductHp takes defense off it, leaving
             // 1/shares of what the single swing would have dealt after defense
@@ -1254,6 +1262,32 @@ export function activateOnSocketListeners(socket){
         if (!fresh.length) return
         tcpMushrooms.push(...fresh)
         reCreateMeshesInScene()
+    })
+    // an ore deposit's hit points after a pickaxe swing (tcp's "mineOre"),
+    // and the deposit worked out - everyone's copy, the bar over it and the
+    // break (components/oreDeposits.js)
+    socket.on("ore-hp", ({ oreId, hp, maxHp } = {}) => {
+        if (!isSocketOn) return
+        const ore = tcpOres.find(o => o.oreId === oreId)
+        if (ore) ore.hp = hp
+        const scene = getSceneDet()?.scene
+        if (scene) setOreHp(scene, oreId, hp, maxHp)
+    })
+    // a fresh one standing where a worked-out one did, an hour after (tcp's
+    // ORE_RESPAWN_MS), or one an admin put down - the same dedup-and-replay
+    // shape as "mushroom-added"
+    socket.on("ore-added", added => {
+        if (!isSocketOn) return
+        const fresh = [].concat(added).filter(ore => ore && !tcpOres.some(known => known.oreId === ore.oreId))
+        if (!fresh.length) return
+        tcpOres.push(...fresh)
+        reCreateMeshesInScene()
+    })
+    socket.on("ore-removed", oreId => {
+        if (!isSocketOn) return
+        tcpOres = tcpOres.filter(o => o.oreId !== oreId)
+        const scene = getSceneDet()?.scene
+        if (scene) removeOreDeposit(scene, oreId)
     })
     // a chest put down while the game is running (tcp/admin's "treasures.place") -
     // the same dedup-and-replay shape as the two above. A chest that was
@@ -1823,6 +1857,13 @@ export function reCreateMeshesInScene() {
             ? { x, y: openworldGroundY(x, z), z }
             : mushroomTcpInfo.pos
         createMushroomMesh(scene, mushroomPos, mushroomTcpInfo.mushroomId, mushroomTcpInfo.kind)
+    })
+    // ore deposits (components/oreDeposits.js skips ones already standing) -
+    // grounded like a grain in the openworld, tcp knows a dungeon floor's height
+    tcpOres.length && tcpOres.forEach(ore => {
+        if (characterState.currentPlace.placeId !== ore.currentPlaceId) return
+        const groundY = ore.currentPlaceId === OPENWORLD_PLACE_ID ? openworldGroundY(ore.pos.x, ore.pos.z) : ore.pos.y
+        createOreDeposit(scene, ore, groundY)
     })
     if(characterState.currentPlace.placeId === 9){
 

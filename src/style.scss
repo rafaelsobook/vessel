@@ -5237,26 +5237,28 @@ canvas {
 // can never actually overlap.
 .weather-indicator {
   position: fixed;
-  top: 1.5%;
+  top: 0.6%;
   left: 50%;
   transform: translateX(-50%);
   z-index: $uiz;
   display: none;          // shown by weatherSystem.js only in outdoor places
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 5px 18px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(202, 165, 1, 0.35);
-  border-radius: 4px;
+  // one slim line - "RAIN 10°" - and faint: it's there when you look for it
+  flex-direction: row;
+  align-items: baseline;
+  gap: 7px;
+  padding: 1px 10px;
+  opacity: 0.7;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(202, 165, 1, 0.18);
+  border-radius: 10px;
   pointer-events: none;   // never eats a click meant for the scene behind it
   transition: opacity 0.4s ease;
 
   .weather-name {
     margin: 0;
     font-family: "Caudex", serif;
-    font-size: 0.95rem;
-    letter-spacing: 2px;
+    font-size: 0.68rem;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
     color: #edd59f;
   }
@@ -5264,7 +5266,7 @@ canvas {
   .weather-temp {
     margin: 0;
     font-family: "Graduate", cursive;
-    font-size: 0.78rem;
+    font-size: 0.6rem;
     color: rgba(245, 245, 245, 0.6);
   }
 

@@ -166,6 +166,14 @@ export function emitPickupMushroom(mushroomId){
     if(!socket) return
     socket.emit("pickupMushroom", mushroomId)
 }
+// a pickaxe swing landing on an ore deposit (components/oreDeposits.js) -
+// tcp takes one of its hit points ("ore-hp"), and at 0 removes it ("ore-removed")
+export function emitMineOre(oreId){
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("mineOre", oreId)
+}
 // tcp/index.ts's "craft-bonfire" handler - tells every OTHER connected
 // client (and any future joiner, via userJoined's own bonfires array) that
 // a bonfire now exists here too. campcraft.js's own craft flow already

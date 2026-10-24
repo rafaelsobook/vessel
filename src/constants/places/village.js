@@ -172,42 +172,9 @@ export const VILLAGE = {
             entrance: "south",
         }
     ],
-    resources: [
-        {
-            resourceId: randNum(0,9999).toString(),
-            resourceType: "ore", // procedurally generated, see createOre() in createRock.js
-            name: "ore",
-            position: {x: -16, y: 0, z: 108},
-            scale: null,
-            rotation: 0,
-            loots: [
-                {name: "stone", chance: 0.2},
-                {name: "solarore", chance: 0.045},
-                {name: "bronzeore", chance: 0.1},
-            ],
-            physics: {
-                opt: {mass: 0},
-                type: "box"
-            }
-        },
-        {
-            resourceId: randNum(0,9999).toString(),
-            resourceType: "ore", // procedurally generated, see createOre() in createRock.js
-            name: "ore",
-            position: {x: 30, y: 0, z: -100},
-            scale: null,
-            rotation: 0,
-            loots: [
-                {name: "stone", chance: 0.2},
-                {name: "solarore", chance: 0.045},
-                {name: "bronzeore", chance: 0.1},
-            ],
-            physics: {
-                opt: {mass: 0},
-                type: "box"
-            }
-        },
-    ],
+    // the village's ore comes from tcp now (tcp/recources/ores.ts - one plain
+    // vein of stone and bronze at (-16, 108), with hit points)
+    resources: [],
 
     ...generateArea({
     placeId: 1,

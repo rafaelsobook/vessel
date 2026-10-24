@@ -637,26 +637,43 @@ export function reduceDurability(item){
     // itemCateg is always "equipable" for all of these
     switch(item.itemType){
         case "weapon":
-            item.durability.current -= 1
-        break
         case "armor":
         case "helmet":
         case "gauntlet":
         case "boots":
         case "pauldron":
         case "kneearmor":
-            item.durability.current -= 1
+            wearDown(item, 1)
         break
-        default:
-            return
     }
+}
 
-    if(item.durability.current <= 0){
-        item.durability.current = 0
-        return itemBroke(item)
-    }
+// Takes `amount` off the item's durability (to the hundredth - a block's wear
+// comes in fractions); at 0 it breaks (itemBroke). save: false when the
+// caller wears down several and saves once after.
+function wearDown(item, amount, save = true){
+    item.durability.current = Math.max(0, Math.round((item.durability.current - amount) * 100) / 100)
+    if(item.durability.current <= 0) return itemBroke(item)
+    if(save) updateMyDetailsOL(getCharState(), checkIfTokenSaved())
+}
 
-    updateMyDetailsOL(getCharState(), checkIfTokenSaved())
+// BLOCKING - a weapon block (inputMovement.js's right-click hold) stops an
+// enemy's blow, and what it stops wears on what took it: this share of the
+// blow's damage comes off the equipped weapon's durability - or, blocking
+// bare-handed, is split evenly over every equipped piece that has durability
+// (armor, helmet, belt...). worldsocket.js's "enemy-attacked" calls this on
+// the blocker's own client, once per blow.
+const BLOCK_WEAR_SHARE = 0.5
+export function wearFromBlock(damage){
+    const charState = getCharState()
+    const wear = damage * BLOCK_WEAR_SHARE
+    if(!charState || !(wear > 0)) return
+    const worn = charState.items.filter(itm => itm.equiped && itm.itemCateg === "equipable" && itm.durability)
+    const weapon = worn.find(itm => itm.itemType === "weapon")
+    const takers = weapon ? [weapon] : worn
+    if(!takers.length) return
+    takers.forEach(itm => wearDown(itm, wear / takers.length, false))
+    updateMyDetailsOL(charState, checkIfTokenSaved())
 }
 export function itemBroke(item){
     const charState = getCharState()

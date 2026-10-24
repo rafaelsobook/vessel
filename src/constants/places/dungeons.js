@@ -21,34 +21,10 @@ export const DUNGEON_12 = generateBSPDungeon({
     corridorWidth: 3,
     // boss room twice as wide as the BSP carved it
     bossRoomWidthScale: 5,
-    // the generator's ore spots (against the walls of every ordinary room) take
-    // these in turn - a plain vein, then a rich one. Mined through areascene.js
-    // like any place's resources[]. The generator picks the spots, so this
-    // list changes what ore yields, never where it stands.
-    resourceTemplates: [
-        {
-            resourceType: "ore", // procedurally generated, see createOre() in createRock.js
-            name: "ore",
-            loots: [
-                {name: "stone", chance: 0.25},
-                {name: "bronzeore", chance: 0.15},
-                {name: "silverore", chance: 0.08},
-                {name: "solarore", chance: 0.045},
-            ],
-            physics: { opt: {mass: 0}, type: "box" },
-        },
-        {
-            resourceType: "ore",
-            name: "richore",
-            loots: [
-                {name: "stone", chance: 0.15},
-                {name: "rubyore", chance: 0.06},
-                {name: "manastone", chance: 0.05},
-                {name: "bloodstone", chance: 0.03},
-            ],
-            physics: { opt: {mass: 0}, type: "box" },
-        },
-    ],
+    // no resourceTemplates: the ore deposits are tcp's (tcp/recources/ores.ts),
+    // standing on the generator's ore spots - a silver vein, then a rich one -
+    // with hit points. tcp/recources/dungeonLayouts.ts runs this same
+    // generator with these same layout arguments - change one, change both.
     difficulty: 1,
     // floorAlbedoMap: the floor's colour texture. floorBumpHeightMap: its bump -
     // images/modeltex/pillartex1normal.webp is a grey HEIGHT map (white = raised)

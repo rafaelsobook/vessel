@@ -129,7 +129,27 @@ export function scatterRubble(scene, prefix, { count, minDist, maxDist, minRadiu
     return rubble;
 }
 
-export function createOre(scene, worldPos){
+// an ore's look by colour (images/modeltex/recources/ore<color>.jpg - dark,
+// blue, red, gold, white, gloom, green, purple; tcp's ores.ts picks it from
+// what the vein holds), bumped with orebumptex. One material per colour per
+// scene, shared by every ore of it.
+const oreMaterials = new WeakMap()
+function oreMaterial(scene, color){
+    let byColor = oreMaterials.get(scene)
+    if(!byColor) oreMaterials.set(scene, byColor = new Map())
+    let mat = byColor.get(color)
+    if(mat) return mat
+    mat = new PBRMaterial(`oreMat_${color}`, scene)
+    mat.albedoTexture = new Texture(`./images/modeltex/recources/ore${color}.jpg`, scene)
+    mat.bumpTexture = new Texture("./images/modeltex/recources/orebumptex.webp", scene)
+    mat.specularPower = 12
+    mat.ambientColor = new Color3(0.08, 0.08, 0.08)
+    mat.roughness = 0.95
+    byColor.set(color, mat)
+    return mat
+}
+
+export function createOre(scene, worldPos, color = "dark"){
     const oreNoise = createSimplex(311);
 
     // central jagged formation - a few overlapping peaks of varying height.
@@ -155,12 +175,7 @@ export function createOre(scene, worldPos){
     ore.name = "ore";
     ore.refreshBoundingInfo();
 
-    const oreMat = new PBRMaterial("oreMat", scene);
-    oreMat.albedoTexture = new Texture("./images/modeltex/recources/oredark.jpg", scene);
-    oreMat.specularPower = 12;
-    oreMat.ambientColor = new Color3(0.08, 0.08, 0.08);
-    oreMat.roughness = 0.95;
-    ore.material = oreMat;
+    ore.material = oreMaterial(scene, color);
 
     if(worldPos) ore.position = new Vector3(worldPos.x, worldPos.y ? worldPos.y : 0, worldPos.z)
 

@@ -122,74 +122,172 @@ export function createFireFlame(position, scene) {
 
     return particles
 }
-// "wreathed in flame" look for a whole body, not a single torch flame -
-// skillEffects.js's disintegrationSkill (a fire ground-trap that binds
-// whoever walks into it) wanted the bound enemy to actually look like it's
-// burning. Tried createParticlesForMesh(enemy.body, ...) for this first,
-// but that emits from the MESH SURFACE via MeshParticleEmitter - enemy.body
-// is the invisible collision capsule (createEnemy.js), not the visible
-// monster model, and it's small/simply-shaped, so particles only ever
-// showed up as one small poof near the top instead of covering the
-// creature. This instead uses createFireParticles' own proven "rising
-// flame" recipe (direction1/2 drifting upward, warm color gradient) but
-// with minEmitBox/maxEmitBox sized to the mesh's own real bodyHeight/
-// bodyRadius, spawning particles anywhere from feet to head instead of one
-// fixed point - and emitter is the MESH itself (not a static position), so
-// it tracks automatically frame to frame like createParticlesForMesh does.
-// color: "orange" (the default) or "blue" - Azure Pyre's fire (blessingEffects.js)
+// A whole body burning - an enemy set alight (a fire skill's burn, the
+// Majestic Sword's, Azure Pyre's blue fire), a duel opponent caught in a
+// fire trap, the player burning. Drawn the way the auras' flame is
+// (effects/aura.js): upright tongues of flame licking up off the body's
+// surface, each growing then thinning to a tip, a bright core going to a
+// deep colour, added so it glows - over a deeper layer of the same fire drawn
+// normally, which keeps it the fire's own colour in daylight instead of
+// washing out pale. Sparks rising off it; smoke off an orange one.
+//
+// mesh: what's burning - followed, not emitted from: disposing a mesh
+// disposes every particle system it's the emitter of, textures and all, and
+// these textures are shared (getParticleTexture). So a burning enemy dying
+// mid-burn can't take every other fire's texture with it - the flames just
+// stay where it fell and burn out.
+// bodyHeight/bodyRadius: its size - the body's origin is the middle of it
+// (createEnemy.js's capsule), the flames start at its feet. color: "orange"
+// or "blue" (Azure Pyre - blessingEffects.js).
+//
+// Returns { stop, dispose }: stop() ends the emitting, dispose() also frees it
+// all once what's still burning has burnt out - so a burn ending fades
+// rather than vanishing (callers call both, back to back).
+const BODY_FIRE = {
+    orange: {
+        core: new Color3(1.0, 0.85, 0.45), mid: new Color3(1.0, 0.42, 0.06), deep: new Color3(0.6, 0.06, 0.0),
+        body: new Color3(0.85, 0.22, 0.02), spark: new Color3(1.0, 0.7, 0.25), smoke: true,
+    },
+    blue: {
+        core: new Color3(0.82, 0.95, 1.0), mid: new Color3(0.28, 0.66, 1.0), deep: new Color3(0.04, 0.16, 0.85),
+        body: new Color3(0.06, 0.24, 0.9), spark: new Color3(0.6, 0.85, 1.0), smoke: false,
+    },
+}
+// how long after dispose() before it's freed - the longest-lived spark's life
+const BODY_FIRE_BURNOUT_MS = 1600
 export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadius = 0.6, color = "orange") {
-    const particles = new ParticleSystem("body_fire", 300, scene)
-    particles.particleTexture = getParticleTexture(scene, "./images/particles/fireTex.webp")
-    particles.blendMode = ParticleSystem.BLENDMODE_ADD
+    const palette = BODY_FIRE[color] ?? BODY_FIRE.orange
+    const h = bodyHeight || 1.6
+    const r = (bodyRadius || 0.6) * 0.5
+    // a flame's size goes with the body's - a slime's smaller than a person's.
+    // flame2's flame is small in its square: sprites this big are what it
+    // takes for the tongues to overlap into one fire, not scattered drops
+    const s = Math.min(0.6, Math.max(0.25, h * 0.32))
+    const c4 = (c, a) => new Color4(c.r, c.g, c.b, a)
+    const rnd = (a, b) => a + Math.random() * (b - a)
 
-    // enemy.body's own position is VERTICALLY CENTERED on the capsule, not
-    // based at the feet (createEnemy.js: yPos = groundY + bodyHeight/2 +
-    // 0.05) - a first version spanned local Y 0 (assumed feet) to
-    // bodyHeight (assumed head), which actually put the whole emission
-    // volume from mid-body up to a full bodyHeight ABOVE that, floating
-    // well over the creature's actual head. Centered on 0 instead
-    // (-bodyHeight/2 to +bodyHeight/2) correctly spans feet to head
-    // relative to where the mesh's own origin really sits.
-    particles.emitter = mesh
-    particles.minEmitBox = new Vector3(-bodyRadius * 0.5, -bodyHeight * 0.5, -bodyRadius * 0.5)
-    particles.maxEmitBox = new Vector3( bodyRadius * 0.5,  bodyHeight * 0.5,  bodyRadius * 0.5)
+    // where the body is, every frame (see the header)
+    const at = mesh.getAbsolutePosition().clone()
+    const follow = scene.onBeforeRenderObservable.add(() => {
+        if(!mesh.isDisposed()) at.copyFrom(mesh.getAbsolutePosition())
+    })
+    // a spot on the body's surface, feet to near the top
+    // (from inside it out - flames born at the surface alone stand apart)
+    const onBody = (pos, out = 1) => {
+        const a = Math.random() * Math.PI * 2
+        const rr = r * rnd(0.35, 1.05) * out
+        pos.set(at.x + Math.cos(a) * rr, at.y - h / 2 + Math.random() * h * 0.8, at.z + Math.sin(a) * rr)
+    }
+    const upward = (dir, spread) => dir.set(rnd(-spread, spread), rnd(0.85, 1.2), rnd(-spread, spread))
 
-    if(color === "blue"){
-        // fireTex is yellow - tinted blue it goes green. flame2 is grey, so it
-        // takes the colour cleanly (effects/aura.js's blue flame uses it too)
-        particles.particleTexture = getParticleTexture(scene, particleTexturePath("flame2"))
-        particles.color1    = new Color4(0.45, 0.8, 1.0, 1.0)
-        particles.color2    = new Color4(0.1, 0.3, 1.0, 1.0)
-        particles.colorDead = new Color4(0.0, 0.0, 0.2, 0.0)
-    } else {
-        particles.color1    = new Color4(1.0, 0.7, 0.1, 1.0)
-        particles.color2    = new Color4(1.0, 0.2, 0.0, 1.0)
-        particles.colorDead = new Color4(0.15, 0.0, 0.0, 0.0)
+    // real units (updateSpeed 1/60): lifetimes in seconds, speeds per second,
+    // sizes in metres - a size gradient's values ARE the sizes
+    const system = (name, capacity, texture, blendMode) => {
+        const ps = new ParticleSystem(name, capacity, scene)
+        ps.particleTexture = getParticleTexture(scene, particleTexturePath(texture))
+        ps.emitter = at
+        ps.isLocal = false
+        ps.blendMode = blendMode
+        ps.updateSpeed = 1 / 60
+        return ps
+    }
+    // a layer of flame tongues - the glowing edge, or the deep body under it
+    const flames = (name, deep) => {
+        const ps = system(name, deep ? 160 : 260, "flame2", deep ? ParticleSystem.BLENDMODE_STANDARD : ParticleSystem.BLENDMODE_ADD)
+        ps.startPositionFunction = (m, pos) => onBody(pos, deep ? 0.8 : 1)
+        ps.startDirectionFunction = (m, dir) => upward(dir, 0.25)
+        ps.billboardMode = ParticleSystem.BILLBOARDMODE_Y
+        const size = s * (deep ? 0.85 : 1)
+        ps.addSizeGradient(0, size * 0.5, size * 0.9)
+        ps.addSizeGradient(0.25, size, size * 1.7)
+        ps.addSizeGradient(1, size * 0.2, size * 0.4)
+        ps.minScaleX = 0.7
+        ps.maxScaleX = 1
+        ps.minScaleY = 1.3
+        ps.maxScaleY = 1.9
+        ps.minLifeTime = 0.35
+        ps.maxLifeTime = 0.6
+        ps.minEmitPower = 0.4 * h
+        ps.maxEmitPower = 0.8 * h
+        ps.gravity = new Vector3(0, 0.7 * h, 0)
+        ps.minInitialRotation = -0.15
+        ps.maxInitialRotation = 0.15
+        if(deep){
+            ps.addColorGradient(0, c4(palette.body, 0))
+            ps.addColorGradient(0.15, c4(palette.body, 0.5))
+            ps.addColorGradient(0.6, c4(palette.deep, 0.32))
+            ps.addColorGradient(1, c4(palette.deep, 0))
+        } else {
+            ps.addColorGradient(0, c4(palette.core, 0))
+            ps.addColorGradient(0.12, c4(palette.core, 0.95))
+            ps.addColorGradient(0.45, c4(palette.mid, 0.7))
+            ps.addColorGradient(1, c4(palette.deep, 0))
+        }
+        ps.emitRate = (deep ? 55 : 110) * h
+        return ps
     }
 
-    particles.minSize = 0.14
-    particles.maxSize = 0.4
+    const systems = []
+    if(palette.smoke){
+        const smoke = system("body_fire_smoke", 60, "smoke2", ParticleSystem.BLENDMODE_STANDARD)
+        smoke.startPositionFunction = (m, pos) => { onBody(pos, 0.6); pos.y += h * 0.3 }
+        smoke.startDirectionFunction = (m, dir) => upward(dir, 0.2)
+        smoke.minEmitPower = 0.3
+        smoke.maxEmitPower = 0.6
+        smoke.gravity = new Vector3(0, 0.6, 0)
+        smoke.minLifeTime = 0.8
+        smoke.maxLifeTime = 1.4
+        smoke.addSizeGradient(0, s * 1.5, s * 2.5)
+        smoke.addSizeGradient(1, s * 4, s * 6)
+        smoke.minInitialRotation = 0
+        smoke.maxInitialRotation = Math.PI * 2
+        smoke.addColorGradient(0, new Color4(0.08, 0.06, 0.05, 0))
+        smoke.addColorGradient(0.2, new Color4(0.08, 0.06, 0.05, 0.22))
+        smoke.addColorGradient(1, new Color4(0.08, 0.06, 0.05, 0))
+        smoke.emitRate = 14 * h
+        systems.push(smoke)
+    }
+    systems.push(flames("body_fire_deep", true), flames("body_fire", false))
+    const sparks = system("body_fire_sparks", 60, "thin1", ParticleSystem.BLENDMODE_ADD)
+    sparks.startPositionFunction = (m, pos) => onBody(pos, 1.1)
+    sparks.startDirectionFunction = (m, dir) => upward(dir, 0.5)
+    sparks.minEmitPower = 0.8
+    sparks.maxEmitPower = 1.8
+    sparks.gravity = new Vector3(0, 0.5, 0)
+    sparks.minLifeTime = 0.6
+    sparks.maxLifeTime = 1.2
+    // thin1 is a sliver in a big square - this much of it reads as a spark
+    sparks.addSizeGradient(0, 0.2, 0.35)
+    sparks.addSizeGradient(1, 0, 0.04)
+    sparks.minInitialRotation = 0
+    sparks.maxInitialRotation = Math.PI
+    sparks.minAngularSpeed = -3
+    sparks.maxAngularSpeed = 3
+    sparks.color1 = c4(palette.core, 1)
+    sparks.color2 = c4(palette.spark, 1)
+    sparks.colorDead = c4(palette.deep, 0)
+    sparks.emitRate = 12 * h
+    systems.push(sparks)
+    systems.forEach(ps => ps.start())
 
-    particles.minLifeTime = 0.3
-    particles.maxLifeTime = 0.7
-
-    // scaled up from createFireParticles' own 120 - covering a whole body
-    // instead of one torch-sized point needs more particles in flight at
-    // once to read as continuous flame instead of sparse individual puffs
-    particles.emitRate = 220
-
-    particles.direction1 = new Vector3(-0.15, 1.0, -0.15)
-    particles.direction2 = new Vector3( 0.15, 2.0,  0.15)
-
-    particles.minEmitPower = 0.4
-    particles.maxEmitPower = 0.9
-    particles.updateSpeed  = 0.02
-
-    particles.minAngularSpeed = -Math.PI / 6
-    particles.maxAngularSpeed =  Math.PI / 6
-
-    particles.start()
-    return particles
+    let stopped = false
+    let disposed = false
+    const stop = () => {
+        if(stopped) return
+        stopped = true
+        systems.forEach(ps => ps.stop())
+    }
+    // not the textures - they're the shared cache's (getParticleTexture)
+    const dispose = () => {
+        stop()
+        if(disposed) return
+        disposed = true
+        setTimeout(() => {
+            scene.onBeforeRenderObservable.remove(follow)
+            if(!scene.isDisposed) systems.forEach(ps => ps.dispose(false))
+        }, BODY_FIRE_BURNOUT_MS)
+    }
+    return { stop, dispose }
 }
 export function createParticlesForMesh(mesh, scene, textureName = "flare", options = {}) {
     const {

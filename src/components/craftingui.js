@@ -49,7 +49,7 @@ import { getCharState } from "../charactersystem/characterstate"
 import { getSocketContainers } from "../sockets/worldsocket"
 import { obtain } from "../charactersystem/inventory"
 import { randomNum } from "../tools/tools"
-import { ITEM_DICTIONARY, computeCraftedWeaponStats } from "../staticRecources/itemDictionary"
+import { ITEM_DICTIONARY, computeCraftedWeaponStats, weaponElements } from "../staticRecources/itemDictionary"
 import { receiveAchievement } from "../charactersystem/achievement"
 import { epicSwordCraftDetails } from "../staticRecources/epiccrafts"
 import { getWeaponParts } from "../assetcreation/createweapon"
@@ -460,6 +460,8 @@ function buildSwordItem(){
             : `${dn}, a ${rarity} blade forged with a ${guardLabel.toLowerCase()} guard, a ${handleLabel.toLowerCase()} grip${pommelLabel ? `, and a ${pommelLabel.toLowerCase()} pommel` : ""}.`,
         rarity,
         parts: buildSwordParts(epicRecipe),
+        // the fire a Phoenix Ore part brings (itemDictionary.js's weaponElements)
+        elements: weaponElements(selectedMaterials),
     }
 }
 

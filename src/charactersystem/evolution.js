@@ -1,4 +1,4 @@
-import { getCharState, isDead, setCanPress, updateMyDetailsOL } from "./characterstate.js"
+import { applyEvolutionBonus, getCharState, isDead, setCanPress, updateMyDetailsOL } from "./characterstate.js"
 import { capsuleHeight, findDeepByName } from "./createcharacter.js"
 import { standUp } from "./seating.js"
 import { stopResting } from "./uimanagement.js"
@@ -117,6 +117,8 @@ export function devolve(character = myCharacter()){
     if(!isMine) return
     // an empty name, not a deleted field: a save leaves a missing field as it was
     charState.evolution = { evolutionName: null }
+    // and the extra hp/mp/sp goes with it
+    applyEvolutionBonus()
     updateMyDetailsOL(charState, checkIfTokenSaved())
     emitEvolve({ evolutionName: null })
     addCameraTrauma(scene, 0.3)
@@ -203,6 +205,8 @@ export function evolveInto(details, character = myCharacter()){
         addCameraTrauma(scene, 0.65)
         punchCameraFov(scene, 0.05)
         charState.evolution = { evolutionName: details.evolutionName, wingdetail: details.wingdetail }
+        // the evolution's extra hp/mp/sp (evolutionBonuses.js), filled
+        applyEvolutionBonus()
         updateMyDetailsOL(charState, checkIfTokenSaved())
     }
 

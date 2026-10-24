@@ -723,14 +723,19 @@ export default function createEnemy(scene, det) {
             // atkCollider.isPhysicalDmg the moment it hijacks the collider,
             // same isSkillHijacked side-channel this already reads).
             const isPhysicalDmg = atkCollider.isSkillHijacked ? !!atkCollider.isPhysicalDmg : true
+            // a weapon carrying an element (the Majestic Sword's phoenix fire -
+            // itemDictionary.js's weaponElements) isn't plain steel: a ghost
+            // feels it. Rides to tcp's applyDamageToEnemy, which decides the
+            // immunity for everyone.
+            const elements = atkCollider.isSkillHijacked ? undefined : equippedWeapon?.elements
             // my blessings' say in this blow (blessingEffects.js): the damage
             // after them, and their on-hit effects (Azure Pyre's blue fire) added
             // to the weapon's own. A ghost shrugging off steel gets none of it.
-            const isGlance = isPhysicalDmg && det.physicalImmune
+            const isGlance = isPhysicalDmg && det.physicalImmune && !elements?.length
             const swing = isGlance
                 ? { dmgDetails: { ...calcDmg(charState), isPhysicalDmg }, effectsWhenHit: equippedWeapon?.effectsWhenHit }
                 : applyBlessingsToMeleeHit({
-                    dmgDetails: { ...calcDmg(charState), isPhysicalDmg },
+                    dmgDetails: { ...calcDmg(charState), isPhysicalDmg, elements },
                     charState,
                     effectsWhenHit: equippedWeapon?.effectsWhenHit,
                     isSkill: !!atkCollider.isSkillHijacked,
@@ -755,7 +760,7 @@ export default function createEnemy(scene, det) {
                 targetAnims: enemy.anims,
                 isCritical: dmgDetails.isCritical,
                 weaponType: equippedWeapon?.weaponType ?? "fist",
-                outcome: isPhysicalDmg && det.physicalImmune ? "immune" : "hit",
+                outcome: isGlance ? "immune" : "hit",
                 isSkill: !!atkCollider.isSkillHijacked,
             })
             // no notPlayerBody arg - faceForward targets the LOCAL PLAYER's

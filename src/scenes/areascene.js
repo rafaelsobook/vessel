@@ -1,4 +1,4 @@
-import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4 } from "@babylonjs/core"
+import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4, SceneLoader } from "@babylonjs/core"
 import { createMatV2 } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam, enableRoomCameraOcclusion } from "../tools/camera.js";
@@ -80,6 +80,8 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
+    const anvil = await SceneLoader.ImportMeshAsync(null, "./models/outdors/", "anvil.glb", scene)
+    console.log(anvil.meshes[0].getChildMeshes())
     // bigwolf.meshes[0].position = new Vector3(0, 0, 84)
     // // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
     // const wolfLowerSpine = bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren()[0]
@@ -465,7 +467,12 @@ export async function areaScene(placeDetail){
     // pressing it puts you in "minning" mode - a looping state like idle/
     // fighting (see renderer.js/animation.js), not a one-shot action anim.
     // Walking away resets it back to idle.
-    if(placeDetail.resources && placeDetail.resources.length > 0){
+    // ore isn't among them any more: ore deposits are tcp's, with hit points
+    // (tcp/recources/ores.ts, components/oreDeposits.js) - a dungeon's
+    // generator still marks its ore spots in resources[], and tcp stands its
+    // deposits on those same spots
+    const minable = (placeDetail.resources ?? []).filter(res => res.resourceType !== "ore")
+    if(minable.length > 0){
         // fixed setInterval timing can never line up with the animation's own
         // frame-based loop cadence - AnimationGroup already fires its own
         // event every time it wraps back to the start, so just use that
@@ -507,7 +514,7 @@ export async function areaScene(placeDetail){
             resourceColliderTemplate.setEnabled(false); // template only - never used directly, just cloned
         }
 
-        placeDetail.resources.forEach(async res => {
+        minable.forEach(async res => {
             // ore is a procedural mesh (see createRock.js's createOre), everything
             // else falls back to loading a glb like optionalObjects does
             const model = res.resourceType === "ore"

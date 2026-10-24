@@ -2,6 +2,7 @@
 import { getSpawnPos } from "../tools/position.js";
 import { useFetch, checkIfTokenSaved, apiOpt } from "../tools/tools.js";
 import { APIURL } from "../constants/constants.js";
+import { evolutionBonus } from "../constants/evolutionBonuses.js";
 import { createElement, setLoadingInAList, poppingTextMesh } from "../tools/GUITools.js"
 import { openClosePopup, popStatusEffect } from "../tools/popupUI.js";
 import { checkStoryQuestIfCompleted, updateStoryQuestUI } from "./storyQuestSystem.js";
@@ -783,6 +784,24 @@ export function summarizeStats(){
     recomputeAddStats()
     syncMaxHp()
 }
+// Called when I evolve or devolve (evolution.js), right after
+// characterState.evolution changes: the new max comes in, and the bonus
+// comes FILLED - current hp/mp/sp rise by exactly as much as their max did,
+// like raiseBaseMaxHp - rather than keeping their share of the bar the way a
+// gear change does. Losing it (devolving) just caps them at the smaller max.
+export function applyEvolutionBonus(){
+    if(!characterState) return
+    syncMaxHp()                               // settle any earlier max change first
+    const before = { hp: getMaxHp(), mp: getMaxMp(), sp: getMaxSp() }
+    recomputeAddStats()
+    const after = { hp: getMaxHp(), mp: getMaxMp(), sp: getMaxSp() }
+    const settle = (current, key) => Math.max(0, Math.min(after[key], current + Math.max(0, after[key] - before[key])))
+    characterState.hp = settle(characterState.hp, "hp")
+    characterState.mp = settle(characterState.mp, "mp")
+    characterState.sp = settle(characterState.sp, "sp")
+    trackedMaxHp = after.hp
+    updateHpMpSp_UI()
+}
 function recomputeAddStats(){
     try {
         summarizeStatsUnsafe()
@@ -810,9 +829,12 @@ function summarizeStatsUnsafe(){
     // bonus stayed in place forever once nothing granted it anymore (and a
     // character loaded later in the same session inherited it: gameOver's
     // reset gets refilled from the dead one's blessings right after)
-    addStats.additionalHp = maxHp * (totalHpPercent || 0)
-    addStats.additionalMp = maxMp * (totalMpPercent || 0)
-    addStats.additionalSp = maxSp * (totalSpPercent || 0)
+    // what being evolved adds (evolutionBonuses.js), flat, on top of the
+    // blessings' share
+    const evolved = evolutionBonus(characterState.evolution)
+    addStats.additionalHp = maxHp * (totalHpPercent || 0) + evolved.hp
+    addStats.additionalMp = maxMp * (totalMpPercent || 0) + evolved.mp
+    addStats.additionalSp = maxSp * (totalSpPercent || 0) + evolved.sp
     addStats.additionalSpd = stats.spd * (totalSpdPercent || 0)
     addStats.additionalAtkSpd = stats.atkSpd * (totalAtkSpdPercent || 0)
 
@@ -1390,10 +1412,11 @@ function refreshTiredness(){
 }
 
 // FLEX AURA - how strong my aura looks (effects/auraProfile.js): the maxes
-// WITH blessing bonuses, so anything that makes me stronger shows in it
+// WITH blessing bonuses, so anything that makes me stronger shows in it - and
+// what I've evolved into, which has a look of its own (a demon's)
 export function getMyAuraProfile(){
     if(!characterState) return null
-    return computeAuraProfile({ maxHp: getMaxHp(), maxMp: getMaxMp(), maxSp: getMaxSp(), aptitude: characterState.aptitude })
+    return computeAuraProfile({ maxHp: getMaxHp(), maxMp: getMaxMp(), maxSp: getMaxSp(), aptitude: characterState.aptitude, evolution: characterState.evolution })
 }
 // While my aura is up, it keeps up with my stats: a stat point, a heart, a
 // blessing - each grows it on the spot (with a flare), and everyone else's
