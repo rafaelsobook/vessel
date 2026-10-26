@@ -86,7 +86,10 @@ export function attachCam(body){
         camera.target.copyFrom(smoothTarget)
         // after the target moves, so the ray starts where the camera orbits this frame
         applyCameraCollision(scene, scene.getEngine().getDeltaTime() / 1000)
+        // after the collision, so it tests the radius actually rendered
+        hideAvatarsBlockingCamera()
     })
+    followedNode = body
 }
 
 // CAMERA COLLISION - a third-person camera's "spring arm": whenever something
@@ -201,6 +204,138 @@ function applyCameraCollision(scene, dt){
     }
     camera.radius = appliedRadius
 }
+// AVATARS IN THE WAY - another player, bot or npc the camera ends up inside
+// (or that stands between the camera and the player) is hidden outright
+// rather than showing the inside of its body, clothes and hair. They're
+// dynamic bodies, so CAMERA COLLISION above deliberately ignores them.
+//
+// Every avatar createcharacter.js builds registers its capsule body here;
+// everything it wears hangs under that body. Hidden by layerMask, not
+// isVisible: the equip code toggles isVisible on its own meshes (a sheathed
+// weapon, a helmet hiding hair...) and putting that back afterwards would
+// undo it. A mesh whose mask shares no bit with the camera's isn't drawn.
+const AVATAR_HIDDEN_MASK   = 0x10000000  // outside the camera's 0x0FFFFFFF
+const AVATAR_AXIS_BELOW    = 0.7         // the avatar's axis, from its body centre
+const AVATAR_AXIS_ABOVE    = 0.95        //  (feet to the top of the head)
+const AVATAR_RADIUS        = 0.45        // shoulders, skirts, hair
+const AVATAR_CAM_CLEARANCE = 0.65        // minZ (0.5) plus a little - closer than this shows insides
+const AVATAR_TARGET_MARGIN = 0.4         // the end of the sight line near the player isn't tested
+const AVATAR_HYSTERESIS    = 0.15        // a hidden avatar comes back only once this much clearer
+
+const avatarBodies   = new Set()
+const hiddenAvatars  = new Map()  // body -> Map(mesh -> its own layerMask)
+let followedNode     = null       // what attachCam follows - its avatar is never hidden
+const _avatarCamPos  = new Vector3()
+const _avatarSight   = new Vector3()
+
+export function registerCameraAvatar(body){
+    avatarBodies.add(body)
+    body.onDisposeObservable.addOnce(() => {
+        avatarBodies.delete(body)
+        hiddenAvatars.delete(body)
+    })
+}
+
+function findAvatarOf(node){
+    for(let n = node; n; n = n.parent) if(avatarBodies.has(n)) return n
+    return null
+}
+
+// closest distance between segments p1-q1 and p2-q2 (Ericson, Real-Time
+// Collision Detection 5.1.9), on plain numbers - this runs per avatar per frame
+function segmentDistance(p1x, p1y, p1z, q1x, q1y, q1z, p2x, p2y, p2z, q2x, q2y, q2z){
+    const d1x = q1x - p1x, d1y = q1y - p1y, d1z = q1z - p1z
+    const d2x = q2x - p2x, d2y = q2y - p2y, d2z = q2z - p2z
+    const rx = p1x - p2x, ry = p1y - p2y, rz = p1z - p2z
+    const a = d1x * d1x + d1y * d1y + d1z * d1z
+    const e = d2x * d2x + d2y * d2y + d2z * d2z
+    const f = d2x * rx + d2y * ry + d2z * rz
+    const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v
+    let s = 0, t = 0
+    if(a <= 1e-8 && e <= 1e-8){
+        s = t = 0
+    } else if(a <= 1e-8){
+        t = clamp01(f / e)
+    } else {
+        const c = d1x * rx + d1y * ry + d1z * rz
+        if(e <= 1e-8){
+            s = clamp01(-c / a)
+        } else {
+            const b = d1x * d2x + d1y * d2y + d1z * d2z
+            const denom = a * e - b * b
+            s = denom > 1e-8 ? clamp01((b * f - c * e) / denom) : 0
+            t = (b * s + f) / e
+            if(t < 0){ t = 0; s = clamp01(-c / a) }
+            else if(t > 1){ t = 1; s = clamp01((b - c) / a) }
+        }
+    }
+    const dx = (p1x + d1x * s) - (p2x + d2x * t)
+    const dy = (p1y + d1y * s) - (p2y + d2y * t)
+    const dz = (p1z + d1z * s) - (p2z + d2z * t)
+    return Math.sqrt(dx * dx + dy * dy + dz * dz)
+}
+
+function setAvatarHidden(body, hidden){
+    let masks = hiddenAvatars.get(body)
+    if(hidden){
+        if(!masks) hiddenAvatars.set(body, masks = new Map())
+        // every frame while hidden - picks up anything equipped meanwhile
+        body.getChildMeshes(false).forEach(mesh => {
+            if(masks.has(mesh)) return
+            masks.set(mesh, mesh.layerMask)
+            mesh.layerMask = AVATAR_HIDDEN_MASK
+        })
+    } else if(masks){
+        masks.forEach((mask, mesh) => { if(!mesh.isDisposed()) mesh.layerMask = mask })
+        hiddenAvatars.delete(body)
+    }
+}
+
+function hideAvatarsBlockingCamera(){
+    if(!camera || !avatarBodies.size) return
+    // looked up each frame - the player's own avatar may register after attachCam ran
+    const followedAvatar = findAvatarOf(followedNode)
+
+    // where the camera renders from this frame - globalPosition isn't rebuilt
+    // until the view matrix is, after this observer
+    const sinBeta = Math.sin(camera.beta)
+    _avatarCamPos.set(
+        Math.cos(camera.alpha) * sinBeta,
+        Math.cos(camera.beta),
+        Math.sin(camera.alpha) * sinBeta,
+    ).scaleInPlace(camera.radius).addInPlace(camera.target)
+    // the sight line to the player, stopping short of the player itself
+    camera.target.subtractToRef(_avatarCamPos, _avatarSight)
+    const sightLength = _avatarSight.length()
+    const sightScale = sightLength > AVATAR_TARGET_MARGIN ? (sightLength - AVATAR_TARGET_MARGIN) / sightLength : 0
+    const cx = _avatarCamPos.x, cy = _avatarCamPos.y, cz = _avatarCamPos.z
+    const sx = cx + _avatarSight.x * sightScale
+    const sy = cy + _avatarSight.y * sightScale
+    const sz = cz + _avatarSight.z * sightScale
+
+    avatarBodies.forEach(body => {
+        if(body === followedAvatar || body.isDisposed()) return
+        const hidden = hiddenAvatars.has(body)
+        const pos = body.getAbsolutePosition()
+        const grow = hidden ? AVATAR_HYSTERESIS : 0
+        const bottom = pos.y - AVATAR_AXIS_BELOW, top = pos.y + AVATAR_AXIS_ABOVE
+
+        // quick reject: nowhere near the camera or the sight line
+        const reach = AVATAR_RADIUS + AVATAR_CAM_CLEARANCE + grow + 1
+        if(pos.x < Math.min(cx, sx) - reach || pos.x > Math.max(cx, sx) + reach ||
+           pos.z < Math.min(cz, sz) - reach || pos.z > Math.max(cz, sz) + reach){
+            if(hidden) setAvatarHidden(body, false)
+            return
+        }
+
+        const camDistance = segmentDistance(cx, cy, cz, cx, cy, cz, pos.x, bottom, pos.z, pos.x, top, pos.z)
+        const sightDistance = segmentDistance(cx, cy, cz, sx, sy, sz, pos.x, bottom, pos.z, pos.x, top, pos.z)
+        const blocking = camDistance < AVATAR_RADIUS + AVATAR_CAM_CLEARANCE + grow ||
+                         sightDistance < AVATAR_RADIUS + grow
+        if(blocking || hidden) setAvatarHidden(body, blocking)
+    })
+}
+
 // ROOM CAMERA OCCLUSION - areascene.js's "room" case (createroom.js's boxed
 // walls) is the one place this camera can end up INSIDE geometry: the
 // ArcRotateCamera orbits at a fixed radius from its target (attachCam's own

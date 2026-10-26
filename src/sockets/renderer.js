@@ -11,6 +11,7 @@ import { emitEnemyChasePosition } from "./emits.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
 import { stopEnemyEating, isEnemyRoaring, stopEnemyRoar } from "../enemies/createEnemy.js";
 import { findPlaceMetaData } from "../states/placestates.js";
+import { isStunned } from "../charactersystem/stun.js";
 
 let scene;
 
@@ -506,6 +507,13 @@ let renderCallback = function () {
         if(player.mode === "death") return
         if(player._attacking || player.characterAnimations.isActionPlaying()) return
         player.characterAnimations.tickBlend()
+
+        // dazed (charactersystem/stun.js) - its pose over everything below,
+        // moving or not, until it wears off
+        if(isStunned(player)){
+            if(player.stunPose) player.characterAnimations.setState(player.stunPose, 8)
+            return
+        }
 
         // worn out (characterstate.js's isCharacterTired, synced as
         // player.isTired) - "walk_tired" takes over moving and "structed"

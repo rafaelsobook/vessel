@@ -617,9 +617,12 @@ export function activateOnSocketListeners(socket){
         // after defense - see landEnemyHit - not by halving the raw number,
         // which would have taken defense off twice.)
         const enemy = theEnemyToAttack
-        // a slam (createEnemy.js's emitAttack, det.bashAttack): one swing, its
-        // own clip, landing at its impact frame and knocking the victim back
-        const bash = data.bash ? enemy.det?.bashAttack : null
+        // one of its additionalAttacks (createEnemy.js's emitAttack - e.g. the
+        // slimes' slam, tcp/recources/enemyAttacks.ts): one swing, its own
+        // clip, landing at its impact frame - then knockback and stun
+        const bash = data.additionalAttack
+            ? enemy.det?.additionalAttacks?.find(extra => extra.attackType === data.additionalAttack) ?? null
+            : null
         const swings = !bash && enemy.det?.attackCombo?.length ? enemy.det.attackCombo : [data.attackAnimName]
         const clips = swings.map(name => enemy.anims.find(a => a.name.toLowerCase() === name.toLowerCase()))
         const clipMs = clip => clip
@@ -667,7 +670,7 @@ export function activateOnSocketListeners(socket){
             bashLanded({
                 victim: victimPlayer,
                 from: enemy.body.position,
-                distance: bash.distance,
+                attack: bash,
                 isMine: victimPlayer.owner === charState.owner,
                 blocked: !!victimPlayer.weaponBlocking,
             })
@@ -1796,7 +1799,7 @@ export function reCreateMeshesInScene() {
         const chestPos = treasureTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
             ? { x: treasureTcpInfo.pos.x, y: openworldGroundY(treasureTcpInfo.pos.x, treasureTcpInfo.pos.z), z: treasureTcpInfo.pos.z }
             : treasureTcpInfo.pos
-        const chest = createTreasureMesh(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId })
+        const chest = createTreasureMesh(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId, extras: treasureTcpInfo.extras })
         if(chest) treasuresInScene.push({ itemId: treasureTcpInfo.itemId })
     })
     // same three-guard shape as tcpTreasures right above (place filter,

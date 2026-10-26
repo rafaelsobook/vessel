@@ -62,9 +62,12 @@ function hasPartMeshes(weaponType){
 // pickaxe_guard, nothing else). Any weaponType not listed here falls back
 // to the original 4-part list, so this only needs an entry for families
 // that deviate from that.
+// hammer (models/swords/allswords.glb: hammer_blade_common1 - the head - and
+// hammer_handle_common1, no guard or pommel) has just two.
 const WEAPON_PART_LIST = {
     axe: ["blade", "guard", "handle"],
     pickaxe: ["blade", "guard", "handle"],
+    hammer: ["blade", "handle"],
 }
 const DEFAULT_PART_LIST = ["blade", "guard", "handle", "pommel"]
 
@@ -330,4 +333,9 @@ export function createAxe(scene, pos = {x:0,y:0,z:0}, parent, options = AXE_DEFA
 
 export function createPickaxe(scene, pos = {x:0,y:0,z:0}, parent, options = AXE_DEFAULT_OPTIONS, glowingColor) {
     return createWeapon(scene, "pickaxe", pos, parent, undefined, options, glowingColor)
+}
+
+// the hammer's only tier is common1 too (and it has no guard to give one)
+export function createHammer(scene, pos = {x:0,y:0,z:0}, parent, options = AXE_DEFAULT_OPTIONS, glowingColor) {
+    return createWeapon(scene, "hammer", pos, parent, undefined, options, glowingColor)
 }

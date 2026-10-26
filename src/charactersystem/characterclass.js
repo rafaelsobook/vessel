@@ -25,6 +25,7 @@ const WEAPON_DMG_CLASS = {
     spear: "paladin",
     axe: "viking",
     pickaxe: "viking",
+    hammer: "warhammer",
 }
 // flat weaponDmg per class lvl - half of what one spent stats.weapon point
 // gives (x10 in calcDmg), since class levels come free from just swinging
@@ -162,9 +163,9 @@ export function triggerClassLeveling(_weaponType){
 
         case "hammer":
             hammerSwing++
-            if(hammerSwing >= (maxSwingToLevelUp+(charState.characterclass.runecaller.lvl*5))) {
+            if(hammerSwing >= (maxSwingToLevelUp+(charState.characterclass.warhammer.lvl*5))) {
                 hammerSwing = 0
-                charState.characterclass.warbringer.lvl++
+                charState.characterclass.warhammer.lvl++
                 showClassLevelUpGUI("warhammer", charState.characterclass.warhammer.lvl)
             }
         break

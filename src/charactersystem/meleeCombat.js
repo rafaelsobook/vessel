@@ -73,6 +73,8 @@ const FEEL = {
     spear:   { trauma: 0.44, hitstopMs: 88, fov: 0.024 },
     axe:     { trauma: 0.55, hitstopMs: 110, fov: 0.032 },
     pickaxe: { trauma: 0.55, hitstopMs: 110, fov: 0.032 },
+    // the heaviest swing there is - it lands with a thud
+    hammer:  { trauma: 0.68, hitstopMs: 135, fov: 0.04 },
 }
 const CRIT_EXTRA = { trauma: 0.3, hitstopMs: 55, fov: 0.02 }
 const HITSTOP_SPEED = 0.03         // animation speed while frozen (0 would stop the clip's own clock)
@@ -410,6 +412,7 @@ const WEAPON_FX = {
     spear:   { star: 0.55, sparks: 9,  slash: 1.2,  colors: WARM },
     axe:     { star: 0.7,  sparks: 12, slash: 1.2,  colors: WARM },
     pickaxe: { star: 0.7,  sparks: 12, slash: 1.2,  colors: WARM },
+    hammer:  { star: 0.85, sparks: 14, slash: 0.9,  colors: WARM },
 }
 const rgba = (c, a = 1) => new Color4(c[0], c[1], c[2], a)
 

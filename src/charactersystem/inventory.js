@@ -97,6 +97,7 @@ export function insertItemOnInventory(itm){
     if(itm.weaponType === "sword" || 
         itm.weaponType === "spear" || 
         itm.weaponType === "pickaxe" ||
+        itm.weaponType === "hammer" ||
         itm.weaponType === "staff"
     ) itemImg.src = `./images/items/${itm.itemCateg}/${itm.weaponType}.webp`
     // axe is still the one weaponType with no singular "axe.webp" of its
@@ -301,8 +302,12 @@ export function createRoyalPriestBeltItem(){
 // per call, so no extra work needed here to keep pickups distinct. Also hands
 // out every metal-tinted armour piece (TINTED_ARMOR) in each of
 // GIVE_ALL_ARMOR_METALS.
+// how many of a material giveAllItems hands out, where one isn't enough to
+// test with - nails: the camp anvil (campcraft.js) takes 4
+const GIVE_ALL_QNTY = { nail: 20 }
+
 export function giveAllItems(){
-    obtainAll([...lootNames.map(name => createLootItem(name)),
+    obtainAll([...lootNames.map(name => ({ ...createLootItem(name), qnty: GIVE_ALL_QNTY[name] ?? 1 })),
         ...GIVE_ALL_ARMOR_METALS.flatMap(metal => TINTED_ARMOR.map(piece => createTintedArmorItem(piece, metal))),
         createPriestBeltItem(),
         createRoyalPriestBeltItem(),
@@ -574,6 +579,38 @@ export function giveAllItems(){
             desc: "Wanderer's Staff, a simple staff carved whole from a single piece of wood.",
             rarity: "common",
             parts: {
+                handleColor: "wood",
+            }
+        },
+        // the hammer (allswords.glb's hammer_blade_common1 / hammer_handle_common1 -
+        // two parts, common1 being its only tier, no guard or pommel) - swings with
+        // the axe's clips, its icon is images/items/equipable/hammer.webp whatever
+        // its name (see createweapon.js's WEAPON_PART_LIST). Added here so it's
+        // testable without hunting one down first.
+        {
+            itemId: randomNum(),
+            name: "sledgehammer",
+            dn: "Sledge Hammer",
+            itemCateg: "equipable",
+            itemType: "weapon",
+            weaponType: "hammer",
+            equipAbilities: { dmg: 30, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+            consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+            equiped: false,
+            soulFeed: 0,
+            isEnhanceAble: true,
+            enhancedLevel: 0,
+            slots: [],
+            durability: { current: 100, max: 100 },
+            price: { coinType: "bronze", pieces: 24 },
+            qnty: 1,
+            desc: "A sledge hammer with a heavy iron head on a stout wooden handle. Slow to swing, and it lands like a falling wall.",
+            rarity: "common",
+            parts: {
+                bladeRarity: "common1",
+                handleRarity: "common1",
+
+                bladeColor: "iron",
                 handleColor: "wood",
             }
         }

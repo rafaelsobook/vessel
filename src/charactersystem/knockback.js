@@ -2,17 +2,19 @@ import { Color3, Vector3 } from "@babylonjs/core"
 import { capsuleHeight } from "./createcharacter.js"
 import { playRemoteLunge } from "./meleeCombat.js"
 import { faceAttackTarget, markDashActive } from "../controllers/inputMovement.js"
-import { emitFaceTarget } from "../sockets/emits.js"
+import { emitFaceTarget, emitWeaponBlock } from "../sockets/emits.js"
 import { popShockRing } from "../effects/shockRing.js"
 import { sparkBurst } from "../effects/blessingFx.js"
 import { addCameraTrauma } from "../tools/cameraShake.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { playBlockingLoop } from "../tools/animation.js"
+import { stunPlayer } from "./stun.js"
 
-// KNOCKBACK - a slam (an enemy's det.bashAttack, e.g. the fire slimes' body
-// slam) throwing a player away from whoever hit them: they play hit1 and
-// slide back until they're `distance` from the attacker, with a shock ring
-// and sparks bursting at their feet.
+// KNOCKBACK - a slam (one of an enemy's det.additionalAttacks, e.g. the
+// slimes' body slam - tcp/recources/enemyAttacks.ts) throwing a player away
+// from whoever hit them: they play its hit clip and slide back until they're
+// its `knockback` from the attacker, with a shock ring and sparks bursting
+// at their feet - then stay dazed for its stunDuration (./stun.js).
 //
 // Everyone sees it (sockets/worldsocket.js's "enemy-attacked" handler calls
 // bashLanded on every client at the slam's impact frame), but only the
@@ -25,7 +27,6 @@ const KNOCKBACK_MS = 280
 const MAX_SPEED = 14        // m/s
 const HOP = 2.2             // upward m/s - knocked off their feet a little
 const MIN_PUSH = 0.8        // already that far away or further: still thrown this much
-const BLOCKED_DISTANCE = 3  // a slam breaking through a block throws this far from the attacker
 const RING = { size: 3, seconds: 0.5, color: new Color3(1, 0.45, 0.1) }
 const SPARK_COLOR = new Color3(1, 0.5, 0.15)
 
@@ -46,13 +47,14 @@ function landingSpot(at, from, distance){
 }
 
 // victim: the player rig hit (playersOnScene's). from: where the slam came
-// from (the attacker's position). isMine: the victim is me. blocked: they
-// had their guard up - no hp lost (worldsocket.js), but the slam breaks
-// through it: "blockbreak" instead of "hit1", and they're thrown further
-// (BLOCKED_DISTANCE), back into the block pose after if they're still
-// holding it. Bots (owner "bot_...") stagger but aren't moved: each client
-// steps a bot on its own, so a slide here would just get walked back.
-export function bashLanded({ victim, from, distance = 2, isMine = false, blocked = false }){
+// from (the attacker's position). attack: the enemy's additionalAttacks entry
+// that landed. isMine: the victim is me. blocked: they had their guard up -
+// no hp lost (worldsocket.js), and the attack's whenBlocked takes over from
+// its own settings: a stun breaks the guard, none leaves them back in the
+// block pose if they're still holding it. Bots (owner "bot_...") stagger but
+// aren't moved or stunned: each client steps a bot on its own, so a slide
+// here would just get walked back, and the server never stops it.
+export function bashLanded({ victim, from, attack, isMine = false, blocked = false }){
     const body = victim?.body
     if(!body || body.isDisposed() || victim.isDead) return
     const scene = body.getScene()
@@ -64,10 +66,27 @@ export function bashLanded({ victim, from, distance = 2, isMine = false, blocked
         addCameraTrauma(scene, blocked ? 0.25 : 0.45)
         getAllSounds()?.landedOnGroundS?.play()
     }
-    if(blocked) victim.characterAnimations?.playAction(victim.anims, "blockbreak", 1, () => playBlockingLoop(victim))
-    else victim.characterAnimations?.playAction(victim.anims, "hit1", 1)
-    if(victim.owner?.startsWith("bot_")) return
-    const to = landingSpot(body.position, from, blocked ? BLOCKED_DISTANCE : distance)
+    const outcome = blocked ? { ...attack, ...attack.whenBlocked } : attack
+    const isBot = victim.owner?.startsWith("bot_")
+    const stunFor = isBot ? 0 : outcome.stunDuration ?? 0
+    const anims = victim.characterAnimations
+    const stunPose = stunFor > 0
+        ? anims?.stateForClip(victim.anims, outcome.playerAnimationWhenStunned ?? "structed") ?? null
+        : null
+    // the guard breaks - every client drops it on its own copy at once; mine
+    // tells the server too, which echoes it to the others as a no-op
+    if(blocked && stunFor > 0){
+        victim.weaponBlocking = false
+        if(isMine) emitWeaponBlock(false)
+    }
+    const hitClip = outcome.playerAnimationWhenHit ?? (blocked ? "blockbreak" : "hit1")
+    // straight into the stunned pose after, or back into the block (playBlockingLoop
+    // does nothing once the guard's down)
+    anims?.playAction(victim.anims, hitClip, 1, blocked ? () => playBlockingLoop(victim) : null, false, stunPose)
+    if(isBot) return
+    if(stunFor > 0) stunPlayer(victim, stunFor, stunPose, isMine)
+    if(!(outcome.knockback > 0)) return
+    const to = landingSpot(body.position, from, outcome.knockback)
     if(isMine) knockMeBack(victim, from, to)
     else playRemoteLunge(body, { to, ms: KNOCKBACK_MS })
 }

@@ -284,6 +284,7 @@ const WEAPON_HIT_SOUNDS = {
     sword: "swordS1",
     axe: "swordS1",
     pickaxe: "swordS1",
+    hammer: "swordS1",
     spear: "spearS1",
     staff: "staffS1",
 }

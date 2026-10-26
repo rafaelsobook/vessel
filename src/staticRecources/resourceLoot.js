@@ -182,6 +182,31 @@ const LOOT_TEMPLATES = {
         desc: "Tanned hide, supple enough to wrap a grip without slipping.",
         rarity: "common"
     }),
+    // found in the dungeons' common chests (tcp's recources/craftingSupplies.ts
+    // makes its own copies of these - keep the two in step) - nails are what
+    // campcraft.js's anvil is built from
+    nail: () => ({
+        itemId: randomNum(),
+        name: "nail",
+        dn: "Nail",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 1 },
+        desc: "A hand-forged iron nail. Small, but nothing a smith builds holds together without them.",
+        rarity: "common"
+    }),
+    cloth: () => ({
+        itemId: randomNum(),
+        name: "cloth",
+        dn: "Cloth",
+        itemCateg: "crafting",
+        itemType: "material",
+        qnty: 1,
+        price: { coinType: "bronze", pieces: 5 },
+        desc: "A bolt of coarse woven cloth, for bindings, wraps and padding.",
+        rarity: "common"
+    }),
     // itemType "stone" (not "material") to match manastone's category -
     // see craftingui.js's getOwnedMaterials, which accepts both
     stone: () => ({

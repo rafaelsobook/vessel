@@ -1,12 +1,14 @@
-import { StandardMaterial, Texture, Vector3 } from "@babylonjs/core"
+import { StandardMaterial, Texture, TransformNode, Vector3 } from "@babylonjs/core"
+import * as GUI from "@babylonjs/gui"
 import { getSocketContainers, getPlayersOnScene } from "../sockets/worldsocket.js"
-import { getCharState } from "../charactersystem/characterstate.js"
+import { getCharState, isDead } from "../charactersystem/characterstate.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
-import { openCloseInteractBtn } from "../tools/popupUI.js"
-import { obtain } from "../charactersystem/inventory.js"
+import { openCloseInteractBtn, openClosePopup } from "../tools/popupUI.js"
+import { obtain, obtainAll } from "../charactersystem/inventory.js"
 import { randomNum } from "../tools/tools.js"
 import { emitRemoveTreasure } from "../sockets/emits.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
+import { createWorldProgressBar } from "../components/guiKit.js"
 
 // rarity -> chest skin (client/public/images/modeltex/treasure{0,1,2}.jpg) -
 // only 3 chest textures exist for the game's 5-tier rarity scale
@@ -22,6 +24,36 @@ const RARITY_TREASURE_TEX = {
     rare:      "./images/modeltex/treasure1.jpg",
     epic:      "./images/modeltex/treasure1.jpg",
     legendary: "./images/modeltex/treasure2.jpg",
+}
+
+// OPENING TAKES A MOMENT - pressing interact starts a bar over the chest
+// (the same one the bonfire's roasting shows), and only a full bar hands the
+// loot over. The better the loot, the longer it takes: the rarity of what's
+// inside (itemDetail's - the same one that picks the skin) sets the time.
+// Walking off, dying, or someone else getting it open first stops it.
+const OPEN_SECONDS_BY_RARITY = { rare: 10, epic: 15, legendary: 15, mythic: 15 }
+// common, uncommon - and anything unrated (the crypt's lunaraqum is "normal")
+const OPEN_SECONDS_DEFAULT = 5
+const OPEN_BAR_FILL = "#e8c25a"
+// the bar hangs this far over the chest's lid, then this many pixels higher
+const OPEN_BAR_ABOVE = 0.3
+const OPEN_BAR_OFFSET_Y = -14
+
+const openSeconds = rarity => OPEN_SECONDS_BY_RARITY[rarity] ?? OPEN_SECONDS_DEFAULT
+
+// one fullscreen GUI per scene for the bars - its layer only on while one is
+// up (a fullscreen layer composites every frame otherwise, see campcraft.js's
+// openCloseCampcraftUI)
+const openingUIs = new WeakMap()
+function openingUI(scene){
+    let entry = openingUIs.get(scene)
+    if(!entry){
+        const ui = GUI.AdvancedDynamicTexture.CreateFullscreenUI("treasureOpeningUI", true, scene, undefined, true)
+        ui.layer.isEnabled = false
+        entry = { ui, bars: 0 }
+        openingUIs.set(scene, entry)
+    }
+    return entry
 }
 
 // A world-placed chest holding one item - clones containers.js's shared
@@ -51,7 +83,9 @@ const RARITY_TREASURE_TEX = {
 export function createTreasureMesh(scene, position, itemDetail, options = {}){
     if(!itemDetail) return console.warn("[createtreasure] no itemDetail passed")
 
-    const { treasureId } = options
+    // extras: more items in the same chest (tcp's record's `extras`) - the chest's
+    // skin follows itemDetail's rarity alone
+    const { treasureId, extras } = options
     const { itemId, rarity } = itemDetail
 
     const treasureRoot = getSocketContainers()?.treasureRoot
@@ -92,27 +126,73 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
     }
 
     let opened = false
-    onIntersecEnterTrig(chest, myPlayer.body, scene, () => {
-        if(opened) return
-        openCloseInteractBtn("normal", true, () => {
-            if(opened) return
-            opened = true
-            openCloseInteractBtn(false)
+    // { bar, anchor, observer } while the bar is filling
+    let opening = null
 
-            // obtain() already pops its own "acquired X" toast - no need to
-            // layer a second "you found a treasure!" popup on top of it
-            obtain(itemDetail)
-            receiveAchievement("treasure-hunter")
-            // tell the server FIRST, before disposing locally - a
-            // server-tracked treasure (treasureId set) needs every other
-            // client to also drop this chest, so no one else can loot the
-            // same one. No-op for a treasureId-less local/scripted treasure.
-            if(treasureId) emitRemoveTreasure(treasureId)
-            chest.dispose()
+    const stopOpening = message => {
+        if(!opening) return
+        scene.onBeforeRenderObservable.remove(opening.observer)
+        opening.bar.root.dispose()
+        opening.anchor.dispose()
+        opening = null
+        const entry = openingUI(scene)
+        entry.bars--
+        if(entry.bars <= 0) entry.ui.layer.isEnabled = false
+        if(message) openClosePopup(message, true, 1400)
+    }
+
+    const finishOpening = () => {
+        stopOpening()
+        opened = true
+        // obtain() already pops its own "acquired X" toast - no need to
+        // layer a second "you found a treasure!" popup on top of it
+        if(extras?.length) obtainAll([itemDetail, ...extras])
+        else obtain(itemDetail)
+        receiveAchievement("treasure-hunter")
+        // tell the server FIRST, before disposing locally - a
+        // server-tracked treasure (treasureId set) needs every other
+        // client to also drop this chest, so no one else can loot the
+        // same one. No-op for a treasureId-less local/scripted treasure.
+        if(treasureId) emitRemoveTreasure(treasureId)
+        chest.dispose()
+    }
+
+    const startOpening = () => {
+        const entry = openingUI(scene)
+        chest.computeWorldMatrix(true)
+        const lid = chest.getBoundingInfo().boundingBox.maximumWorld.y
+        const anchor = new TransformNode(`treasureBarAnchor_${meshId}`, scene)
+        anchor.position.set(chest.position.x, lid + OPEN_BAR_ABOVE, chest.position.z)
+        const bar = createWorldProgressBar(entry.ui, `treasureBar_${meshId}`, anchor, "Opening chest", {
+            fillColor: OPEN_BAR_FILL, offsetY: OPEN_BAR_OFFSET_Y,
+        })
+        entry.bars++
+        entry.ui.layer.isEnabled = true
+
+        const ms = openSeconds(rarity) * 1000
+        const startedAt = performance.now()
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            // someone else got it open first (worldsocket.js's "treasure-removed")
+            if(chest.isDisposed()) return stopOpening("Someone else opened it first")
+            if(isDead()) return stopOpening()
+            const done = (performance.now() - startedAt) / ms
+            bar.fill.width = `${Math.min(100, done * 100)}%`
+            if(done >= 1) finishOpening()
+        })
+        opening = { bar, anchor, observer }
+    }
+
+    onIntersecEnterTrig(chest, myPlayer.body, scene, () => {
+        if(opened || opening) return
+        openCloseInteractBtn("normal", true, () => {
+            if(opened || opening) return
+            openCloseInteractBtn(false)
+            startOpening()
         })
     })
     onIntersecExitTrig(chest, myPlayer.body, scene, () => {
         if(opened) return
+        stopOpening(opening ? "You stepped away from the chest" : null)
         openCloseInteractBtn(false, false)
     })
 

@@ -103,6 +103,7 @@ function render(){
         // never meant to exist.
         if(itm.itemType === "helmet") img.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
         if(itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/pickaxe.webp`
+        if(itm.weaponType === "hammer") img.src = `./images/items/${itm.itemCateg}/hammer.webp`
         // a skill book shows the icon of the skill it teaches, not an item
         // icon - it has no art of its own (staticRecources/skillBooks.js).
         // Set before the .png onerror fallback below so a book that somehow

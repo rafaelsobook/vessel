@@ -7,6 +7,7 @@ import { getPlayersOnScene, reCreateMeshesInScene, getIsSocketOn, getSocketConta
 import { checkIfTokenSaved, stopAnim, randomNum } from '../tools/tools';
 import { ANIM_STATE, playAnim, playBlockingLoop } from '../tools/animation';
 import { emitMove, emitStop, emitMode, emitWeaponBlock, emitToggleSpawnBots, emitSpawnBotNearMe } from '../sockets/emits';
+import { amIStunned } from '../charactersystem/stun.js';
 import { findMyCurrentPlace } from '../states/placestates';
 import { runSound, playHalfSound, getAllSounds } from '../components/soundSystem';
 import { capsuleHeight } from '../charactersystem/createcharacter';
@@ -318,6 +319,8 @@ export function activateMouseControls(scene){
 
         if(pointerInfo.type === PointerEventTypes.POINTERDOWN){
             if(myPlayer.weaponBlocking) return // already blocking - held button firing repeat down events
+            // dazed (charactersystem/stun.js) - no guard until they come to
+            if(amIStunned()) return
             // stops the browser's own native right-click context menu from
             // popping up over the canvas - nothing in this codebase
             // suppresses it globally yet (confirmed: no oncontextmenu/
@@ -417,6 +420,8 @@ function setupControls(scene, allsounds) {
         if (forward === 0 && right === 0) return;
         // a swing is still turned toward its target - see faceAttackTarget
         if (performance.now() < attackFacingLockUntil) return;
+        // dazed - updateMovement turns them the way the keys point once it's over
+        if (amIStunned()) return;
         rotationHelper.lookAt(camDir, Math.atan2(right, forward), 0, 0);
     }
 
@@ -464,7 +469,7 @@ function setupControls(scene, allsounds) {
             // shouldn't start the sound up; landing/mode-change handles resuming it.
             // None while worn out either (characterstate.js's isCharacterTired) -
             // a tired character drags along, no run sound
-            if(value && player.mode !== "inAir" && !player.isTired){
+            if(value && player.mode !== "inAir" && !player.isTired && !amIStunned()){
                 if(!runsound.isPlaying) playHalfSound(runsound)
             }
             if(!value) {
@@ -1079,6 +1084,7 @@ function setupControls(scene, allsounds) {
 
     function performJump() {
         if (!aggregate || !isGrounded()) return;
+        if (amIStunned()) return;
         if(myPlayer.body) ;
 
         const charState = getCharState()
@@ -1165,7 +1171,7 @@ function setupControls(scene, allsounds) {
     // posted from take-off until you've landed again
     function updateFlight() {
         const now = performance.now()
-        if (!flying && spaceDownAt !== null && now - spaceDownAt >= FLY_HOLD_MS && myPlayer?.wings && getCanPress() && !isDead()) startFlight()
+        if (!flying && spaceDownAt !== null && now - spaceDownAt >= FLY_HOLD_MS && myPlayer?.wings && getCanPress() && !isDead() && !amIStunned()) startFlight()
         // wings gone (devolve), a menu or a cutscene took over, or dead: down you come
         if (flying && (!myPlayer?.wings || !getCanPress() || isDead())) flying = false
         if (flying) {
@@ -1187,6 +1193,9 @@ function setupControls(scene, allsounds) {
             lastEmit = now
         }
     }
+
+    // dazed last tick (charactersystem/stun.js) - see the stun check below
+    let wasStunned = false
 
     function updateMovement() {
 
@@ -1256,6 +1265,25 @@ function setupControls(scene, allsounds) {
         // ever actually rendered
         if(facingOverrideCount === 0){
             aggregate.transformNode.rotationQuaternion.copyFrom(rotationHelper.rotationQuaternion);
+        }
+
+        if (amIStunned()) {
+            // dazed - rooted like casting, held keys and all, once the
+            // knockback's own slide (dashLockUntil) has run its course
+            wasStunned = true
+            if (runsound.isPlaying) runsound.stop()
+            if (performance.now() >= dashLockUntil) {
+                const vel = aggregate.body.getLinearVelocity();
+                if (vel.x !== 0 || vel.z !== 0) aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
+            }
+            return
+        }
+        if (wasStunned) {
+            // came to - a key still held goes the way it points again, not
+            // the way the slam turned them
+            wasStunned = false
+            updateRotation(getCamDir())
+            if (isMoving && myPlayer && myPlayer.mode !== "inAir" && !myPlayer.isTired) playHalfSound(runsound)
         }
 
         if (isMoving && myPlayer?.mode === "casting") {

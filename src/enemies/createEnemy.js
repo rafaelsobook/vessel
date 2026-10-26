@@ -990,14 +990,13 @@ function getBodyTargetInstance(scene, modelStyle, options, enemyId){
 // tools
 function emitAttack(detail, enemId, targetId, placeId, pos, anims) {
     // log(`enemy will attack ${detail.name}`)
-    // now and then a slam instead (det.bashAttack - the fire slimes'), if
-    // this rig has the clip for it: bash rides along so every client plays
-    // the knockback (worldsocket.js's "enemy-attacked")
-    const bash = detail.bashAttack
-    const bashAnim = bash && Math.random() < bash.chance
-        ? anims.find(a => a.name.toLowerCase() === bash.animationName.toLowerCase())
-        : null
-    const attackAnim = bashAnim ?? pickAnimVariant(anims, "attack")
+    // now and then one of its additionalAttacks instead (tcp's
+    // recources/enemyAttacks.ts - the slimes' slam): the first whose chance
+    // comes up and whose clip this rig has. Its attackType rides along so every
+    // client plays out what it does (worldsocket.js's "enemy-attacked")
+    const clipNamed = name => anims.find(a => a.name.toLowerCase() === name.toLowerCase())
+    const extra = detail.additionalAttacks?.find(atk => Math.random() < atk.chance && clipNamed(atk.animationName))
+    const attackAnim = extra ? clipNamed(extra.animationName) : pickAnimVariant(anims, "attack")
     getSocket().emit("enemyWillAttack", {
         currentPlaceId: placeId,
         _id: enemId,
@@ -1007,7 +1006,7 @@ function emitAttack(detail, enemId, targetId, placeId, pos, anims) {
         atkSpd: detail.stats.atkSpd,
         attackAnimName: attackAnim ? attackAnim.name : "attack1",
         effects: detail.effects,
-        bash: !!bashAnim,
+        additionalAttack: extra?.attackType ?? null,
     })
 }
 function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, rangeAtkDetails, anims){

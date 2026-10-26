@@ -158,3 +158,47 @@ export function setButtonDisabled(btn, disabled){
     // the brightened GOLD_BRIGHT hover border on a now-unclickable button
     btn.color = GOLD
 }
+
+// A labelled progress bar hanging over a point in the world - the bonfire's
+// "Roasting ..." (bonfireCooking.js) and a chest being opened
+// (assetcreation/createtreasure.js). anchor: the mesh/node it follows; offsetY:
+// pixels up (negative) from it. Fill it by setting fill.width ("0%".."100%").
+export function createWorldProgressBar(ui, name, anchor, labelText, { fillColor = "#ff9a2e", offsetY = -14 } = {}){
+    // tall and wide enough for the label over the bar - a control clips what
+    // it holds to its own box, so a smaller one cut the label off entirely
+    const root = new GUI.Rectangle(name)
+    root.width = "180px"
+    root.height = "34px"
+    root.thickness = 0
+    ui.addControl(root)
+    root.linkWithMesh(anchor)
+    // offsetY places the bar itself; the box reaches up past it for the label
+    root.linkOffsetY = offsetY - 11
+
+    const label = createText(`${name}_label`, labelText, {
+        fontFamily: FONT_BODY, fontSize: 13, color: GOLD_BRIGHT, height: "18px",
+    })
+    label.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
+    label.outlineWidth = 3
+    label.outlineColor = "black"
+    root.addControl(label)
+
+    const track = new GUI.Rectangle(`${name}_track`)
+    track.width = "50px"
+    track.height = "12px"
+    track.thickness = 1
+    track.color = GOLD
+    track.cornerRadius = 3
+    track.background = "rgba(0,0,0,0.65)"
+    track.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM
+    root.addControl(track)
+
+    const fill = new GUI.Rectangle(`${name}_fill`)
+    fill.thickness = 0
+    fill.width = "0%"
+    fill.background = fillColor
+    fill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
+    track.addControl(fill)
+
+    return { root, label, fill }
+}

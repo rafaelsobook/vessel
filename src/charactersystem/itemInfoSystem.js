@@ -400,6 +400,7 @@ export function equipItem(itemDet, updateItemsListUI){
             if(itemDet.weaponType === "sword" || itemDet.weaponType === "spear") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.weaponType}.webp`
             if(itemDet.weaponType === "axe") eqpdImg.src = `./images/items/${itemDet.itemCateg}/axes.webp`
             if(itemDet.weaponType === "pickaxe") eqpdImg.src = `./images/items/${itemDet.itemCateg}/pickaxe.webp`
+            if(itemDet.weaponType === "hammer") eqpdImg.src = `./images/items/${itemDet.itemCateg}/hammer.webp`
             if(itemDet.itemType === "helmet") eqpdImg.src = `./images/items/${itemDet.itemCateg}/${itemDet.modelName}.webp`
             chld.append(eqpdImg)
             const charState = getCharState()

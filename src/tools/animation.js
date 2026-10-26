@@ -103,6 +103,19 @@ export class CharacterAnimations {
         return !!this._anims[name]
     }
 
+    // the state that loops the clip `name`: one of the table's above, or the
+    // rig's own clip of that name, registered as a state of its own - for a
+    // pose only one thing uses (charactersystem/stun.js's, which an enemy's
+    // data names). null if the rig has no such clip.
+    stateForClip(allAnims, name) {
+        if (!name) return null
+        if (this._anims[name]) return name
+        const clip = allAnims.find(a => a.name.toLowerCase() === name.toLowerCase())
+        if (!clip) return null
+        this._anims[name] = clip
+        return name
+    }
+
     // Makes `state` play a different clip until cleared - SITTING holding a
     // pose of its own (seating.js's sitHere) instead of the default sitting
     // clip, without renderer.js's per-frame setState(SITTING) pulling it back.

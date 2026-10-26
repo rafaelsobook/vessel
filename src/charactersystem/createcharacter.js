@@ -28,6 +28,7 @@ import { evolutionLook } from './evolutionLooks.js';
 import { attachLightning } from '../effects/lightning';
 import { createBodyAura } from '../effects/aura';
 import { onIntersecExitTrig } from '../components/actionManager';
+import { registerCameraAvatar } from '../tools/camera';
 import { getCharState } from './characterstate';
 import { calcDmg } from './attackingSystem';
 import { emitPlayerIsHit } from '../sockets/emits';
@@ -160,6 +161,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const { mode, _moving, _minning } = det
 
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
+    // hidden whenever the camera ends up inside it (tools/camera.js)
+    registerCameraAvatar(body)
 
     let fakeShadowRoot = scene.getMeshByName("fakeShadow")
 
@@ -694,6 +697,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         winganims: [],
         characterAnimations,
         rHand,
+        // what follows the head (effects/stunStars.js's dizzy stars)
+        headBone,
         root,
         mode,
         _moving,

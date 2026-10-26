@@ -8,6 +8,7 @@ import { getSceneDet } from "../main/main.js"
 import { spawnProjectile } from "../creations/skills.js"
 import { Vector3 } from "@babylonjs/core"
 import { emitAttack, emitMode, emitMyLoc, emitThrowSpear } from "../sockets/emits.js"
+import { amIStunned } from "./stun.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
@@ -351,6 +352,8 @@ export function activateBtnOnce(){
             // (inputMovement.js's own handleKeyDown/handleJoystickPointerDown)
             // can end it now
             if(!getCanPress()) return
+            // dazed (stun.js) - no attacking, casting or changing stance till it passes
+            if(amIStunned()) return
             const btnName = e.target.className.split(" ")[1]
             const isSocketOn = getIsSocketOn()
             
@@ -435,21 +438,23 @@ export function activateBtnOnce(){
                     let equippedWeaponType = null
                     charState.items.forEach(itm => {
                         if (itm.itemType === "weapon" && itm.equiped) {
-                            // pickaxe has no animation clips of its own on the
-                            // rig (axeattack1/2, axeattack_1_air, running_axe1
-                            // are the only ones that actually exist) - it
-                            // swings using the exact same clips axe does.
+                            // pickaxe and hammer have no animation clips of their own
+                            // on the rig (axeattack1/2, axeattack_1_air, running_axe1
+                            // are the only ones that actually exist) - they
+                            // swing using the exact same clips axe does.
                             // Only the CLIP NAME is aliased here, not
                             // itm.weaponType itself - hit sound
                             // (duelSystem.js's WEAPON_HIT_SOUNDS), the mesh
                             // building (createweapon.js), and attackInfo's
                             // own weaponType below all still correctly see
                             // the real "pickaxe".
-                            const animWeaponType = itm.weaponType === "pickaxe" ? "axe" : itm.weaponType
+                            const animWeaponType = ["pickaxe", "hammer"].includes(itm.weaponType) ? "axe" : itm.weaponType
                             equippedWeaponType = animWeaponType
                             animName = `${animWeaponType}attack${swordAnimNum}`
 
-                            triggerClassLeveling(equippedWeaponType)
+                            // a hammer swing trains the warhammer class, not the
+                            // axe's - everything else levels what its clip's type says
+                            triggerClassLeveling(itm.weaponType === "hammer" ? "hammer" : equippedWeaponType)
                         }
                     })
 

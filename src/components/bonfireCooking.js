@@ -7,7 +7,7 @@ import { createMushroomModel } from "../assetcreation/createmushroom.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { openCloseInteractBtn, openClosePopup, getInteractBtnOwner, isInteractBtnVisible } from "../tools/popupUI.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { GOLD, GOLD_BRIGHT, TEXT_MUTED, FONT_TITLE, FONT_BODY, FONT_NUM, createNinePatchBg, createDivider, createText, createGoldButton } from "./guiKit.js"
+import { GOLD, GOLD_BRIGHT, TEXT_MUTED, FONT_TITLE, FONT_BODY, FONT_NUM, createNinePatchBg, createDivider, createText, createGoldButton, createWorldProgressBar } from "./guiKit.js"
 
 // Cooking over a crafted bonfire (campcraft.js's "bonfire").
 //
@@ -506,6 +506,8 @@ function buildSpit(s, bonfire){
 const SPIT_MODELS = {
     // tcp's meatLoots.ts - the standing werewolves' Beast Meat
     standingwolfmeat: { path: "./models/outdors/standingwolfmeat.glb", length: 0.6 },
+    // tcp's meatLoots.ts - the stray wolves' Wolf Rib
+    rib: { path: "./models/outdors/rib.glb", length: 0.55 },
 }
 
 // scene -> Map(path -> Promise<Mesh|null>): each model loaded once, off its glTF
@@ -584,38 +586,7 @@ async function createSpitFood(scene, item){
 
 // "Roasting Ember Cap" over a bar that fills, above the mushroom on the spit
 function buildBar(s, bonfire, anchor, raw){
-    const ui = getUI(s)
-    const root = new GUI.Rectangle(`cookBar_${bonfire.name}`)
-    root.width = "50px"
-    root.height = "8px"
-    root.thickness = 0
-    ui.addControl(root)
-    root.linkWithMesh(anchor)
-    root.linkOffsetY = BAR_OFFSET_Y
-
-    const label = createText(`cookBar_${bonfire.name}_label`, `Roasting ${raw.dn}`, {
-        fontFamily: FONT_BODY, fontSize: 13, color: GOLD_BRIGHT, height: "18px",
+    return createWorldProgressBar(getUI(s), `cookBar_${bonfire.name}`, anchor, `Roasting ${raw.dn}`, {
+        fillColor: BAR_FILL_COOKING, offsetY: BAR_OFFSET_Y,
     })
-    label.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP
-    label.outlineWidth = 3
-    label.outlineColor = "black"
-    root.addControl(label)
-
-    const track = new GUI.Rectangle(`cookBar_${bonfire.name}_track`)
-    track.height = "12px"
-    track.thickness = 1
-    track.color = GOLD
-    track.cornerRadius = 3
-    track.background = "rgba(0,0,0,0.65)"
-    track.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM
-    root.addControl(track)
-
-    const fill = new GUI.Rectangle(`cookBar_${bonfire.name}_fill`)
-    fill.thickness = 0
-    fill.width = "0%"
-    fill.background = BAR_FILL_COOKING
-    fill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
-    track.addControl(fill)
-
-    return { root, label, fill }
 }

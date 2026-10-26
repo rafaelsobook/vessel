@@ -4,7 +4,8 @@ import { addBedSeat } from "../charactersystem/seating.js"
 import { armSpikes } from "../components/spikeTraps.js"
 
 // Camp structures from campcraft.js that are just "build it and it stands
-// there" - the leaf bed tent, the spike barricade, and whatever comes next.
+// there" - the leaf bed tent, the spike barricade, the anvil, and whatever
+// comes next.
 // (The bonfire and tree log have their own modules: one cooks, one seats.)
 // Each kind is one hidden template, loaded the first time a place needs it -
 // not on every scene load the way containers.js's props are, since the
@@ -44,6 +45,19 @@ export const STRUCTURES = {
         // components/spikeTraps.js - damage an enemy takes every everyMs
         // while it's within reach of the stakes
         hurtsEnemies: { damage: 60, everyMs: 1000, reach: 0.8 },
+    },
+    anvil: {
+        model: "./models/outdors/anvil.glb",
+        // its four materials came out of export as plain white metal - each is
+        // painted here instead, by a part of its name (paintMaterials)
+        paint: {
+            "charcoal steel": { color: new Color3(0.19, 0.2, 0.22), specular: new Color3(0.32, 0.32, 0.35), gloss: 24 },
+            "striking face":  { color: new Color3(0.5, 0.52, 0.55), specular: new Color3(0.75, 0.75, 0.8), gloss: 64 },
+            "iron nails":     { color: new Color3(0.3, 0.25, 0.22), specular: new Color3(0.15, 0.13, 0.12), gloss: 16 },
+            // wood2.jpg's grain, but it's a red rosewood (~0.6, 0.27, 0.12) -
+            // this turns it walnut brown (over 1 is fine: it multiplies)
+            "walnut stump":   { color: new Color3(0.6, 0.9, 1.3), texture: "./images/modeltex/wood2.jpg" },
+        },
     },
 }
 
@@ -106,10 +120,14 @@ export function getStructureRoot(scene, kind){
             if(def.tint) mat.diffuseColor = def.tint
             mat.specularColor = Color3.Black()
             root.material = mat
+        } else if(def.paint){
+            paintMaterials(root, def.paint, kind, scene)
         } else if(root.material?.albedoTexture){
             root.material = toStandardMaterial(root.material, kind, scene)
         }
-        if(root.material) root.material.maxSimultaneousLights = MAX_LIGHTS
+        // a model of several materials comes out of the merge with a
+        // MultiMaterial over them - the limit is each one's own
+        ;(root.material?.subMaterials ?? [root.material]).forEach(mat => { if(mat) mat.maxSimultaneousLights = MAX_LIGHTS })
         root.refreshBoundingInfo()
         s.loaded.set(kind, root)
         return root
@@ -141,6 +159,27 @@ function toStandardMaterial(pbr, kind, scene){
     mat.specularColor = new Color3(0.05, 0.05, 0.05)
     pbr.dispose(false, false)
     return mat
+}
+
+// A model whose materials carry no colour of their own (the anvil's): each one
+// a def.paint entry names - by a part of its glTF name - is redone as a
+// StandardMaterial of that colour (and texture, if it has one). Any it
+// doesn't name keeps its own.
+function paintMaterials(root, paint, kind, scene){
+    const repaint = pbr => {
+        const key = pbr && Object.keys(paint).find(part => pbr.name.includes(part))
+        if(!key) return pbr
+        const look = paint[key]
+        const mat = new StandardMaterial(`structureMat_${kind}_${key}`, scene)
+        mat.diffuseColor = look.color
+        if(look.texture) mat.diffuseTexture = new Texture(look.texture, scene)
+        mat.specularColor = look.specular ?? new Color3(0.05, 0.05, 0.05)
+        if(look.gloss) mat.specularPower = look.gloss
+        pbr.dispose(false, false)
+        return mat
+    }
+    if(root.material?.subMaterials) root.material.subMaterials = root.material.subMaterials.map(repaint)
+    else root.material = repaint(root.material)
 }
 
 // One built structure at `position` (the ground under it), turned rotY

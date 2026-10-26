@@ -16,7 +16,7 @@ import { STRUCTURES, getStructureRoot, createStructureMesh } from "../assetcreat
 import { receiveAchievement } from "../charactersystem/achievement.js"
 
 // Data for every camp-craftable thing. "bonfire", "treelog" and every
-// assetcreation/createstructure.js STRUCTURES kind (leafbedtent, spikes) have a
+// assetcreation/createstructure.js STRUCTURES kind (leafbedtent, spikes, anvil) have a
 // real CRAFT_HANDLERS entry (below) - anything added here without one
 // still renders a full card (icon/desc/cost), it just tells the player it
 // isn't built yet instead of crafting nothing silently. `section` is what
@@ -51,7 +51,7 @@ export const campcrafts = [
         ],
         needsPlacement: true
     },
-    // the two below are assetcreation/createstructure.js's STRUCTURES - their
+    // the ones below are assetcreation/createstructure.js's STRUCTURES - their
     // names are the keys there (and their icons' file names)
     {
         name: "leafbedtent",
@@ -72,6 +72,20 @@ export const campcrafts = [
         desc: "A row of sharpened stakes driven into the ground. Nothing walks through it - monsters have to go around.",
         requiredItems: [
             { name: "wood", qnty: 6 }
+        ],
+        needsPlacement: true
+    },
+    {
+        name: "anvil",
+        dn: "Anvil",
+        section: "Structures",
+        // short - four cost rows leave the card less room than the others have
+        desc: "A forged iron anvil spiked onto a walnut stump. Every smith's work starts here.",
+        requiredItems: [
+            { name: "wood", qnty: 1 },
+            { name: "stone", qnty: 2 },
+            { name: "bronzeore", qnty: 5 },
+            { name: "nail", qnty: 4 }
         ],
         needsPlacement: true
     }

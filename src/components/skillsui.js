@@ -9,6 +9,7 @@ import { getManaOutputPercent } from "../charactersystem/outputSliders.js";
 import { skillsData, getSkillEffect } from "../staticRecources/skillsData.js";
 import { popupReceiveSkillUI } from "./skillAcquiredUI.js";
 import { receiveAchievement } from "../charactersystem/achievement.js";
+import { amIStunned } from "../charactersystem/stun.js";
 const skillCont = document.querySelector(".skill-container");
 
 
@@ -359,6 +360,8 @@ slotbuttons.forEach(btn => {
         // every raw movement input path and the walkrun-btns click handler
         // already check, extended here so skill casting is unreachable too
         if(!getCanPress()) return
+        // dazed (charactersystem/stun.js) - no casting till it passes
+        if(amIStunned()) return
         const socket = getSocket()
         const charState = getCharState()
         const skillName = btn.className.split(" ")[2]
