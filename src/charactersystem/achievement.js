@@ -12,7 +12,7 @@ import { popupReceiveAchievementUI } from "../components/achievementAcquiredUI.j
 // Wiring status - most entries now have a real receiveAchievement() call at
 // their trigger point (first-forge: craftingui.js, first-blood/monolith-
 // breaker/into-the-dark/demons-bane: createEnemy.js's defeatedAmonster,
-// camp-builder: campcraft.js, miner/woodcutter/into-the-wild: areascene.js,
+// camp-builder: campcraft.js, hammer-and-heat: anvilWork.js, miner/woodcutter/into-the-wild: areascene.js,
 // treasure-hunter: createtreasure.js, awakened/elite-skill: skillsui.js,
 // first-duel: duelSystem.js, proven-hunter/three-of-a-kind/the-guildmaster-
 // calls: createAllNpcInArea.js). Five are still NOT wired, each blocked on
@@ -108,6 +108,12 @@ export const achievements = [
         name: "camp-builder",
         dn: "Camp Builder",
         desc: "Build your first bonfire.",
+        category: "crafting",
+    },
+    {
+        name: "hammer-and-heat",
+        dn: "Hammer and Heat",
+        desc: "Hammer out your first sword at an anvil.",
         category: "crafting",
     },
     {

@@ -1,5 +1,6 @@
 import {  MeshBuilder, Quaternion, DirectionalLight,HemisphericLight, PointLight, Scene, Scalar, Matrix,ArcRotateCamera, FreeCamera, ParticleSystem, ActionManager, ExecuteCodeAction, SceneLoader, Color3, Vector3, PBRMaterial, StandardMaterial, Texture} from "@babylonjs/core"
 import {SkyMaterial} from "@babylonjs/materials"
+import { createFireFlame } from "../tools/particlesystem.js"
 // import "babylonjs-materials"
 
 import { openCloseInteractBtn, openClosePopup } from "../tools/popupUI";
@@ -266,8 +267,14 @@ export function createMainShadow(scene){
 }
 function createDetailedMaterial(scene, wallDet){
     let wallMat
-    if(wallDet.emissive) wallMat = createMaterial(scene, wallDet.tex, wallDet.emissive, wallDet.uScale)
     if(wallDet.tex) wallMat = createMaterial(scene, wallDet.tex, false, wallDet.uScale)
+    // an emissive-only entry ({name: "fire", emissive: {r, g, b}}, no tex) -
+    // a plain material that glows that colour whatever the light, nothing
+    // for the light to colour. createOriginal sets the emissiveColor on it.
+    else if(wallDet.emissive){
+        wallMat = new StandardMaterial(`${wallDet.name}Emissive`, scene)
+        wallMat.diffuseColor = new Color3(0, 0, 0)
+    }
     if(wallDet.transparent) wallMat = createTransparentMat(scene, wallDet.transparent)
 
     if(wallDet.isMetal) wallMat.metallic = 1
@@ -325,12 +332,35 @@ export async function createOriginal(scene, pos, rotationY, textureDets, glbPath
             }
             wallmsh.checkCollisions = true
         }
+        if(wallDet?.emissive && wallmsh.material){
+            wallmsh.material.emissiveColor = new Color3(wallDet.emissive.r, wallDet.emissive.g, wallDet.emissive.b)
+        }
         freeze(wallmsh)
     })
 
     if(willHide) meshes.forEach(mesh => mesh.isVisible = false)
 
+    if(glbPath.endsWith("forge.glb")) lightForgeFire(meshes)
+
     return rootModel
+}
+
+// The forge's mesh named "fire" is the bed of coals - a flame burns on it.
+// Just the flame, no light of its own: the forge's materials are frozen
+// (freeze() above), so a light added now wouldn't reach them anyway.
+function lightForgeFire(meshes){
+    const bed = meshes.find(mesh => mesh.name === "fire")
+    if(!bed) return
+    const box = bed.getBoundingInfo().boundingBox
+    // the bed's top face, in the world (the model's already placed and rotated)
+    const flame = createFireFlame(new Vector3(box.centerWorld.x, box.maximumWorld.y, box.centerWorld.z), bed.getScene())
+    // spread over the bed rather than a single point
+    const halfX = (box.maximumWorld.x - box.minimumWorld.x) * 0.35
+    const halfZ = (box.maximumWorld.z - box.minimumWorld.z) * 0.35
+    flame.minEmitBox = new Vector3(-halfX, 0, -halfZ)
+    flame.maxEmitBox = new Vector3(halfX, 0, halfZ)
+    flame.name = "forge_fire"
+    return flame
 }
 
 export function createOriginalMarking(scene, pos, widthHeight, rots, textureName, markName, visibility){

@@ -12,6 +12,7 @@ import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { calcDmg } from "../charactersystem/attackingSystem.js"
 import { emitStrikeWeapon, emitPickupStruckWeapon } from "../sockets/emits.js"
+import { startTimedPickup } from "../components/timedPickup.js"
 
 // mesh-name substrings (case-insensitive) that count as "natural terrain" for
 // groundWeaponItem's own env-hit check below - openworld chunk meshes
@@ -37,23 +38,39 @@ function registerStuckWeaponPickup(scene, projectileMesh, item, projectileId){
     const myPlayer = getPlayersOnScene().find(pl => pl.owner === getCharState()?.owner)
     if(!myPlayer?.body) return
     let pickedUp = false
-    onIntersecEnterTrig(projectileMesh, myPlayer.body, scene, () => {
+    let inside = false
+    // taking it takes a moment, held for me by the server meanwhile
+    // (components/timedPickup.js) - the same as one struck in the ground
+    const offer = () => openCloseInteractBtn("normal", true, () => {
         if(pickedUp) return
-        openCloseInteractBtn("normal", true, () => {
-            if(pickedUp) return
-            pickedUp = true
-            openCloseInteractBtn(false)
-            obtain({ ...item, equiped: false })
-            // tells every other connected client (which only ever gets a
-            // static createGroundWeapon copy at the enemy's position at the
-            // moment it was struck, not this same following-the-enemy
-            // mesh - see the enemy-hit branch's own emitStrikeWeapon call
-            // below) that it's gone
-            emitPickupStruckWeapon(item.itemId)
-            removeProjectile(projectileId)
+        openCloseInteractBtn(false)
+        startTimedPickup({
+            scene,
+            target: projectileMesh,
+            label: `Picking up ${item.dn ?? "weapon"}`,
+            seconds: 2,
+            radius: 2.5,
+            claim: { kind: "struckWeapon", id: item.itemId },
+            onDone: () => {
+                pickedUp = true
+                obtain({ ...item, equiped: false })
+                // tells every other connected client (which only ever gets a
+                // static createGroundWeapon copy at the enemy's position at the
+                // moment it was struck, not this same following-the-enemy
+                // mesh - see the enemy-hit branch's own emitStrikeWeapon call
+                // below) that it's gone
+                emitPickupStruckWeapon(item.itemId)
+                removeProjectile(projectileId)
+            },
+            onCancel: () => { if(inside && !pickedUp && !projectileMesh.isDisposed()) offer() },
         })
     })
+    onIntersecEnterTrig(projectileMesh, myPlayer.body, scene, () => {
+        inside = true
+        if(!pickedUp) offer()
+    })
     onIntersecExitTrig(projectileMesh, myPlayer.body, scene, () => {
+        inside = false
         if(pickedUp) return
         openCloseInteractBtn(false, false)
     })

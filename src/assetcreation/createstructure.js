@@ -2,6 +2,7 @@ import { Color3, LoadAssetContainerAsync, Mesh, PhysicsAggregate, PhysicsShapeTy
 import "@babylonjs/loaders"
 import { addBedSeat } from "../charactersystem/seating.js"
 import { armSpikes } from "../components/spikeTraps.js"
+import { armAnvil } from "../components/anvilWork.js"
 
 // Camp structures from campcraft.js that are just "build it and it stands
 // there" - the leaf bed tent, the spike barricade, the anvil, and whatever
@@ -58,6 +59,11 @@ export const STRUCTURES = {
             // this turns it walnut brown (over 1 is fine: it multiplies)
             "walnut stump":   { color: new Color3(0.6, 0.9, 1.3), texture: "./images/modeltex/wood2.jpg" },
         },
+        // components/anvilWork.js - the ore slots over it, and hammering at it
+        smithing: true,
+        // the bar of ore lying on its face - hidden until both slots are
+        // filled, and it glows as it's hammered (anvilWork.js)
+        loose: ["ore"],
     },
 }
 
@@ -66,12 +72,13 @@ export const STRUCTURES = {
 const MAX_LIGHTS = 8
 
 // scene -> { roots: Map(kind -> Promise<Mesh|null>), loaded: Map(kind -> Mesh),
+//            loose: Map(kind -> { [part]: Mesh }),
 //            placed: Map(craftId -> Mesh), placing: Set(craftId) }
 const sceneStates = new WeakMap()
 function stateOf(scene){
     let s = sceneStates.get(scene)
     if(!s){
-        s = { roots: new Map(), loaded: new Map(), placed: new Map(), placing: new Set() }
+        s = { roots: new Map(), loaded: new Map(), loose: new Map(), placed: new Map(), placing: new Set() }
         sceneStates.set(scene, s)
     }
     return s
@@ -102,12 +109,30 @@ export function getStructureRoot(scene, kind){
         // the parent chain (see loadmodel.js's loadMeshOnlyParts)
         const parts = container.meshes.filter(m => m.getTotalVertices() > 0)
         parts.forEach(m => { m.setParent(null); m.bakeCurrentTransformIntoVertices() })
-        const root = parts.length > 1 ? Mesh.MergeMeshes(parts, true, true, undefined, false, true) : parts[0]
-        container.meshes.filter(m => m !== root && !m.isDisposed()).forEach(m => m.dispose())
+        // def.loose: parts kept out of the merge, each a hidden template of its
+        // own - every structure built gets its own copy (createStructureMesh),
+        // free to be shown, hidden or recoloured on its own (the anvil's ore)
+        const looseParts = parts.filter(m => def.loose?.includes(m.name))
+        const merged = parts.filter(m => !looseParts.includes(m))
+        const root = merged.length > 1 ? Mesh.MergeMeshes(merged, true, true, undefined, false, true) : merged[0]
+        container.meshes.filter(m => m !== root && !looseParts.includes(m) && !m.isDisposed()).forEach(m => m.dispose())
 
         if(def.scale && def.scale !== 1){
-            root.scaling.setAll(def.scale)
-            root.bakeCurrentTransformIntoVertices()
+            ;[root, ...looseParts].forEach(m => {
+                m.scaling.setAll(def.scale)
+                m.bakeCurrentTransformIntoVertices()
+            })
+        }
+        if(looseParts.length){
+            s.loose.set(kind, Object.fromEntries(looseParts.map(part => {
+                const name = part.name
+                part.rotationQuaternion = null
+                part.name = `structureLoose_${kind}_${name}`
+                part.isVisible = false
+                part.isPickable = false
+                part.refreshBoundingInfo()
+                return [name, part]
+            })))
         }
         root.rotationQuaternion = null
         root.name = `structureRoot_${kind}`
@@ -200,12 +225,29 @@ export function createStructureMesh(scene, kind, position, craftId, rotY = 0, pl
     inst.position.set(position.x, position.y, position.z)
     inst.rotation.y = rotY
     inst.freezeWorldMatrix()
+    // its own copy of each def.loose part, standing where it does, hidden -
+    // whatever the kind does with it shows it (anvilWork.js's ore). A clone,
+    // not an instance: it gets a material of its own.
+    const looseTemplates = s.loose.get(kind)
+    if(looseTemplates){
+        inst._loose = {}
+        Object.entries(looseTemplates).forEach(([name, template]) => {
+            const part = template.clone(`structure_${craftId}_${name}`)
+            part.isVisible = false
+            part.isPickable = false
+            part.position.set(position.x, position.y, position.z)
+            part.rotation.y = rotY
+            inst._loose[name] = part
+        })
+        inst.onDisposeObservable.add(() => Object.values(inst._loose).forEach(part => part.dispose()))
+    }
     new PhysicsAggregate(inst, PhysicsShapeType.BOX, { mass: 0 }, scene)
     s.placed.set(craftId, inst)
 
     const def = STRUCTURES[kind]
     if(def.bed && placeId !== undefined) addBed(scene, placeId, def.bed, position, rotY, craftId)
     if(def.hurtsEnemies) armSpikes(scene, inst, def.hurtsEnemies)
+    if(def.smithing) armAnvil(scene, inst)
     return inst
 }
 

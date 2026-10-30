@@ -1,14 +1,13 @@
-import { StandardMaterial, Texture, TransformNode, Vector3 } from "@babylonjs/core"
-import * as GUI from "@babylonjs/gui"
+import { StandardMaterial, Texture, Vector3 } from "@babylonjs/core"
 import { getSocketContainers, getPlayersOnScene } from "../sockets/worldsocket.js"
-import { getCharState, isDead } from "../charactersystem/characterstate.js"
+import { getCharState } from "../charactersystem/characterstate.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionManager.js"
-import { openCloseInteractBtn, openClosePopup } from "../tools/popupUI.js"
+import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain, obtainAll } from "../charactersystem/inventory.js"
 import { randomNum } from "../tools/tools.js"
 import { emitRemoveTreasure } from "../sockets/emits.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
-import { createWorldProgressBar } from "../components/guiKit.js"
+import { startTimedPickup } from "../components/timedPickup.js"
 
 // rarity -> chest skin (client/public/images/modeltex/treasure{0,1,2}.jpg) -
 // only 3 chest textures exist for the game's 5-tier rarity scale
@@ -27,34 +26,18 @@ const RARITY_TREASURE_TEX = {
 }
 
 // OPENING TAKES A MOMENT - pressing interact starts a bar over the chest
-// (the same one the bonfire's roasting shows), and only a full bar hands the
-// loot over. The better the loot, the longer it takes: the rarity of what's
-// inside (itemDetail's - the same one that picks the skin) sets the time.
-// Walking off, dying, or someone else getting it open first stops it.
+// (components/timedPickup.js, the same one every pickup shows), and only a
+// full bar hands the loot over. The better the loot, the longer it takes: the
+// rarity of what's inside (itemDetail's - the same one that picks the skin)
+// sets the time. While the bar fills, the server holds the chest for me
+// (tcp's pickup claims) - nobody else can start opening it.
 const OPEN_SECONDS_BY_RARITY = { rare: 10, epic: 15, legendary: 15, mythic: 15 }
 // common, uncommon - and anything unrated (the crypt's lunaraqum is "normal")
 const OPEN_SECONDS_DEFAULT = 5
-const OPEN_BAR_FILL = "#e8c25a"
-// the bar hangs this far over the chest's lid, then this many pixels higher
-const OPEN_BAR_ABOVE = 0.3
-const OPEN_BAR_OFFSET_Y = -14
+// walk further than this from it and the opening stops
+const OPEN_RADIUS = 2.5
 
 const openSeconds = rarity => OPEN_SECONDS_BY_RARITY[rarity] ?? OPEN_SECONDS_DEFAULT
-
-// one fullscreen GUI per scene for the bars - its layer only on while one is
-// up (a fullscreen layer composites every frame otherwise, see campcraft.js's
-// openCloseCampcraftUI)
-const openingUIs = new WeakMap()
-function openingUI(scene){
-    let entry = openingUIs.get(scene)
-    if(!entry){
-        const ui = GUI.AdvancedDynamicTexture.CreateFullscreenUI("treasureOpeningUI", true, scene, undefined, true)
-        ui.layer.isEnabled = false
-        entry = { ui, bars: 0 }
-        openingUIs.set(scene, entry)
-    }
-    return entry
-}
 
 // A world-placed chest holding one item - clones containers.js's shared
 // treasureRoot template (a merged, hidden, static mesh - see its own comment
@@ -126,23 +109,10 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
     }
 
     let opened = false
-    // { bar, anchor, observer } while the bar is filling
-    let opening = null
-
-    const stopOpening = message => {
-        if(!opening) return
-        scene.onBeforeRenderObservable.remove(opening.observer)
-        opening.bar.root.dispose()
-        opening.anchor.dispose()
-        opening = null
-        const entry = openingUI(scene)
-        entry.bars--
-        if(entry.bars <= 0) entry.ui.layer.isEnabled = false
-        if(message) openClosePopup(message, true, 1400)
-    }
+    // standing at it - a stopped opening offers the button again
+    let inside = false
 
     const finishOpening = () => {
-        stopOpening()
         opened = true
         // obtain() already pops its own "acquired X" toast - no need to
         // layer a second "you found a treasure!" popup on top of it
@@ -157,42 +127,29 @@ export function createTreasureMesh(scene, position, itemDetail, options = {}){
         chest.dispose()
     }
 
-    const startOpening = () => {
-        const entry = openingUI(scene)
-        chest.computeWorldMatrix(true)
-        const lid = chest.getBoundingInfo().boundingBox.maximumWorld.y
-        const anchor = new TransformNode(`treasureBarAnchor_${meshId}`, scene)
-        anchor.position.set(chest.position.x, lid + OPEN_BAR_ABOVE, chest.position.z)
-        const bar = createWorldProgressBar(entry.ui, `treasureBar_${meshId}`, anchor, "Opening chest", {
-            fillColor: OPEN_BAR_FILL, offsetY: OPEN_BAR_OFFSET_Y,
-        })
-        entry.bars++
-        entry.ui.layer.isEnabled = true
-
-        const ms = openSeconds(rarity) * 1000
-        const startedAt = performance.now()
-        const observer = scene.onBeforeRenderObservable.add(() => {
-            // someone else got it open first (worldsocket.js's "treasure-removed")
-            if(chest.isDisposed()) return stopOpening("Someone else opened it first")
-            if(isDead()) return stopOpening()
-            const done = (performance.now() - startedAt) / ms
-            bar.fill.width = `${Math.min(100, done * 100)}%`
-            if(done >= 1) finishOpening()
-        })
-        opening = { bar, anchor, observer }
-    }
-
-    onIntersecEnterTrig(chest, myPlayer.body, scene, () => {
-        if(opened || opening) return
-        openCloseInteractBtn("normal", true, () => {
-            if(opened || opening) return
-            openCloseInteractBtn(false)
-            startOpening()
+    const offer = () => openCloseInteractBtn("normal", true, () => {
+        if(opened) return
+        openCloseInteractBtn(false)
+        startTimedPickup({
+            scene,
+            target: chest,
+            label: "Opening chest",
+            seconds: openSeconds(rarity),
+            radius: OPEN_RADIUS,
+            // a server-tracked chest is held for me while it opens
+            claim: treasureId ? { kind: "treasure", id: treasureId } : null,
+            onDone: finishOpening,
+            onCancel: () => { if(inside && !opened && !chest.isDisposed()) offer() },
         })
     })
+
+    onIntersecEnterTrig(chest, myPlayer.body, scene, () => {
+        inside = true
+        if(!opened) offer()
+    })
     onIntersecExitTrig(chest, myPlayer.body, scene, () => {
+        inside = false
         if(opened) return
-        stopOpening(opening ? "You stepped away from the chest" : null)
         openCloseInteractBtn(false, false)
     })
 

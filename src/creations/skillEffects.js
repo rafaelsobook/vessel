@@ -213,6 +213,8 @@ export function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyW
     const burnInterval = setInterval(() => {
         ticksDone++
         dealTick(burnEffect.dmgPm)
+        // the fire flares as it bites (only the blue one has a pulse)
+        burnParticles.pulse?.()
         // burnEffect.soundPlayPerDmg (skillsData.js's fire family) - same
         // plain-key-plus-"S" convention characterstate.js's own startBurnDamage
         // (the player's own burn) already follows
@@ -3995,8 +3997,12 @@ function spawnPurificationCircle(scene, skill, groundPos, charState){
         const cureEffect = getSkillEffect(skill, "cure")
         if(!cureEffect) return
 
-        const charState = getCharState()
-        if(!charState.status.length) return // nothing to cure - skip the popup/sound for a no-op cast
+        // mine, not the caster passed in above - named apart from it: a
+        // "const charState" here shadowed the parameter for the WHOLE callback,
+        // so purifyEnemiesInCircle(..., charState) at its top threw
+        // (temporal dead zone) and nothing below it ever ran - no cure at all
+        const myState = getCharState()
+        if(!myState.status.length) return // nothing to cure - skip the popup/sound for a no-op cast
 
         // a full cleanse, not a specific named-effect list - same "wipes
         // whatever's clinging to you entirely" reasoning Vesper's own
@@ -4006,7 +4012,7 @@ function spawnPurificationCircle(scene, skill, groundPos, charState){
         // no ongoing tick of their own (unlike fire's burn, a self-expiring
         // interval with no status entry at all) - see characterstate.js's
         // own deductHp for the full breakdown.
-        charState.status = []
+        myState.status = []
         // heart-status-def UI ("Heart Core is cursed" etc, statsSystem.js) -
         // only ever refreshes when this runs; without it the stale text
         // would sit there until something UNRELATED happened to call

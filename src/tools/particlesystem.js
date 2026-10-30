@@ -140,9 +140,12 @@ export function createFireFlame(position, scene) {
 // (createEnemy.js's capsule), the flames start at its feet. color: "orange"
 // or "blue" (Azure Pyre - blessingEffects.js).
 //
-// Returns { stop, dispose }: stop() ends the emitting, dispose() also frees it
-// all once what's still burning has burnt out - so a burn ending fades
-// rather than vanishing (callers call both, back to back).
+// Returns { stop, dispose, pulse }: stop() ends the emitting, dispose() also
+// frees it all once what's still burning has burnt out - so a burn ending
+// fades rather than vanishing (callers call both, back to back). pulse() - a
+// flare-up on each of the burn's damage ticks (skillEffects.js's
+// startTargetBurn); only the blue fire has one, so callers call pulse?.()
+// The blue fire is its own look - createAzureFire below.
 const BODY_FIRE = {
     orange: {
         core: new Color3(1.0, 0.85, 0.45), mid: new Color3(1.0, 0.42, 0.06), deep: new Color3(0.6, 0.06, 0.0),
@@ -156,6 +159,7 @@ const BODY_FIRE = {
 // how long after dispose() before it's freed - the longest-lived spark's life
 const BODY_FIRE_BURNOUT_MS = 1600
 export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadius = 0.6, color = "orange") {
+    if(color === "blue") return createAzureFire(mesh, scene, bodyHeight, bodyRadius)
     const palette = BODY_FIRE[color] ?? BODY_FIRE.orange
     const h = bodyHeight || 1.6
     const r = (bodyRadius || 0.6) * 0.5
@@ -288,6 +292,188 @@ export function createBodyFireParticles(mesh, scene, bodyHeight = 1.6, bodyRadiu
         }, BODY_FIRE_BURNOUT_MS)
     }
     return { stop, dispose }
+}
+// AZURE PYRE's blue fire - spirit fire rather than a campfire: few flames, but
+// big, long and slow, white-hot at the root going through azure to a violet
+// fringe, so it reads as one cold blaze from a distance rather than a swarm
+// of drops. What makes it worth watching is the rhythm, not the count:
+//   - catching: a flash and a ring of flames bursting off the body, once
+//   - burning:  30 flames a second (plus a few deep ones under them that keep
+//               it blue in daylight - added light alone washes out pale)
+//   - each damage tick: pulse() - a flare-up, so the fire visibly bites
+//   - embers drifting up off it
+// Bursts are manualEmitCount on systems that otherwise emit nothing - no new
+// systems per pulse, ~50 particles a second in all.
+const AZURE = {
+    core:   new Color4(0.9, 0.98, 1.0, 1),
+    cyan:   new Color4(0.35, 0.85, 1.0, 1),
+    azure:  new Color4(0.1, 0.45, 1.0, 1),
+    violet: new Color4(0.38, 0.12, 0.95, 1),
+    deep:   new Color4(0.03, 0.12, 0.7, 1),
+}
+const AZURE_FLAME_RATE = 30
+function createAzureFire(mesh, scene, bodyHeight, bodyRadius){
+    const h = bodyHeight || 1.6
+    const r = (bodyRadius || 0.6) * 0.5
+    // flame2's flame fills only the lower middle of its square - the sprite
+    // has to be about twice the flame it shows
+    const s = Math.min(1.3, Math.max(0.55, h * 0.75))
+    const rnd = (a, b) => a + Math.random() * (b - a)
+    const a4 = (c, a) => new Color4(c.r, c.g, c.b, a)
+
+    // followed, not emitted from - see createBodyFireParticles' header
+    const at = mesh.getAbsolutePosition().clone()
+    const follow = scene.onBeforeRenderObservable.add(() => {
+        if(!mesh.isDisposed()) at.copyFrom(mesh.getAbsolutePosition())
+    })
+    const feet = () => at.y - h / 2
+    // a spot on the body's surface - on the side the camera sees: a flame
+    // behind the body is hidden by it, so every one of the few goes where
+    // it shows. (out > 1 stands it off the surface, upTo is how far up.)
+    const onBody = (pos, out = 1, upTo = 0.6) => {
+        const cam = scene.activeCamera?.globalPosition
+        const toCam = cam ? Math.atan2(cam.z - at.z, cam.x - at.x) : Math.random() * Math.PI * 2
+        const a = toCam + rnd(-1.75, 1.75)
+        const rr = r * rnd(0.85, 1.15) * out
+        pos.set(at.x + Math.cos(a) * rr, feet() + Math.random() * h * upTo, at.z + Math.sin(a) * rr)
+    }
+    const system = (name, capacity, texture, blendMode) => {
+        const ps = new ParticleSystem(name, capacity, scene)
+        ps.particleTexture = getParticleTexture(scene, particleTexturePath(texture))
+        ps.emitter = at
+        ps.isLocal = false
+        ps.blendMode = blendMode
+        ps.updateSpeed = 1 / 60
+        return ps
+    }
+    // upright, a little taller than wide, barely leaning
+    const tongue = ps => {
+        ps.billboardMode = ParticleSystem.BILLBOARDMODE_Y
+        ps.minScaleX = 0.75
+        ps.maxScaleX = 1.05
+        ps.minScaleY = 1.2
+        ps.maxScaleY = 1.7
+        ps.minInitialRotation = -0.12
+        ps.maxInitialRotation = 0.12
+        ps.gravity = new Vector3(0, 0.9 * h, 0)
+    }
+
+    // the blaze
+    const flames = system("azure_fire", 60, "flame2", ParticleSystem.BLENDMODE_ADD)
+    tongue(flames)
+    flames.startPositionFunction = (m, pos) => onBody(pos, 1, 0.75)
+    flames.startDirectionFunction = (m, dir) => dir.set(rnd(-0.12, 0.12), 1, rnd(-0.12, 0.12))
+    flames.minEmitPower = 0.25 * h
+    flames.maxEmitPower = 0.55 * h
+    flames.minLifeTime = 0.7
+    flames.maxLifeTime = 1.05
+    flames.addSizeGradient(0, s * 0.45, s * 0.6)
+    flames.addSizeGradient(0.3, s * 0.95, s * 1.15)
+    flames.addSizeGradient(1, s * 0.3, s * 0.45)
+    flames.addColorGradient(0, a4(AZURE.core, 0))
+    flames.addColorGradient(0.08, a4(AZURE.core, 0.9))
+    flames.addColorGradient(0.3, a4(AZURE.cyan, 0.75))
+    flames.addColorGradient(0.65, a4(AZURE.azure, 0.45))
+    flames.addColorGradient(1, a4(AZURE.violet, 0))
+    flames.emitRate = AZURE_FLAME_RATE
+
+    // under it, drawn normally - the blue that daylight can't wash out
+    const deep = system("azure_fire_deep", 20, "flame2", ParticleSystem.BLENDMODE_STANDARD)
+    tongue(deep)
+    deep.startPositionFunction = (m, pos) => onBody(pos, 0.9, 0.55)
+    deep.startDirectionFunction = (m, dir) => dir.set(0, 1, 0)
+    deep.minEmitPower = 0.2 * h
+    deep.maxEmitPower = 0.4 * h
+    deep.minLifeTime = 0.6
+    deep.maxLifeTime = 0.9
+    deep.addSizeGradient(0, s * 0.6, s * 0.75)
+    deep.addSizeGradient(0.4, s * 1.05, s * 1.25)
+    deep.addSizeGradient(1, s * 0.5, s * 0.6)
+    deep.addColorGradient(0, a4(AZURE.azure, 0))
+    deep.addColorGradient(0.2, a4(AZURE.azure, 0.42))
+    deep.addColorGradient(0.7, a4(AZURE.deep, 0.25))
+    deep.addColorGradient(1, a4(AZURE.deep, 0))
+    deep.emitRate = 10
+
+    // embers - wandering up and fading through violet
+    const embers = system("azure_fire_embers", 24, "flare", ParticleSystem.BLENDMODE_ADD)
+    embers.startPositionFunction = (m, pos) => onBody(pos, 1.2, 0.9)
+    embers.startDirectionFunction = (m, dir) => dir.set(rnd(-0.45, 0.45), 1, rnd(-0.45, 0.45))
+    embers.minEmitPower = 0.5 * h
+    embers.maxEmitPower = 1.1 * h
+    embers.gravity = new Vector3(0, 0.3, 0)
+    embers.minLifeTime = 0.8
+    embers.maxLifeTime = 1.4
+    embers.addSizeGradient(0, 0.05, 0.09)
+    embers.addSizeGradient(1, 0.01, 0.02)
+    embers.addColorGradient(0, a4(AZURE.core, 1))
+    embers.addColorGradient(0.4, a4(AZURE.cyan, 0.9))
+    embers.addColorGradient(1, a4(AZURE.violet, 0))
+    embers.emitRate = 7
+
+    // the bursts: flames thrown out sideways and up, and a flash at the core.
+    // They emit nothing until flare() hands them a count.
+    const burst = system("azure_fire_burst", 40, "flame2", ParticleSystem.BLENDMODE_ADD)
+    tongue(burst)
+    burst.startPositionFunction = (m, pos) => onBody(pos, 1, 0.6)
+    burst.startDirectionFunction = (m, dir) => {
+        const a = Math.random() * Math.PI * 2
+        dir.set(Math.cos(a) * 0.55, rnd(0.8, 1.3), Math.sin(a) * 0.55)
+    }
+    burst.minEmitPower = 1.2 * h
+    burst.maxEmitPower = 2 * h
+    burst.gravity = new Vector3(0, 0.6 * h, 0)
+    burst.minLifeTime = 0.35
+    burst.maxLifeTime = 0.6
+    burst.addSizeGradient(0, s * 0.5, s * 0.7)
+    burst.addSizeGradient(0.35, s * 0.8, s * 1)
+    burst.addSizeGradient(1, s * 0.15, s * 0.25)
+    burst.addColorGradient(0, a4(AZURE.core, 1))
+    burst.addColorGradient(0.35, a4(AZURE.cyan, 0.8))
+    burst.addColorGradient(1, a4(AZURE.violet, 0))
+    burst.emitRate = 0
+
+    const flash = system("azure_fire_flash", 2, "flare", ParticleSystem.BLENDMODE_ADD)
+    flash.startPositionFunction = (m, pos) => { onBody(pos, 1.3, 0); pos.y = feet() + h * 0.45 }
+    flash.minEmitPower = 0
+    flash.maxEmitPower = 0
+    flash.minLifeTime = 0.22
+    flash.maxLifeTime = 0.22
+    flash.addSizeGradient(0, h * 0.8)
+    flash.addSizeGradient(1, h * 2.2)
+    flash.addColorGradient(0, a4(AZURE.cyan, 0.85))
+    flash.addColorGradient(1, a4(AZURE.azure, 0))
+    flash.emitRate = 0
+
+    const systems = [deep, flames, embers, burst, flash]
+    systems.forEach(ps => ps.start())
+
+    let stopped = false
+    let disposed = false
+    const flare = (count, bright) => {
+        if(stopped) return
+        burst.manualEmitCount = count
+        if(bright) flash.manualEmitCount = 1
+    }
+    // catching fire
+    flare(18, true)
+
+    const stop = () => {
+        if(stopped) return
+        stopped = true
+        systems.forEach(ps => ps.stop())
+    }
+    // not the textures - they're the shared cache's (getParticleTexture)
+    const dispose = () => {
+        stop()
+        if(disposed) return
+        disposed = true
+        setTimeout(() => {
+            scene.onBeforeRenderObservable.remove(follow)
+            if(!scene.isDisposed) systems.forEach(ps => ps.dispose(false))
+        }, BODY_FIRE_BURNOUT_MS)
+    }
+    return { stop, dispose, pulse: () => flare(8, false) }
 }
 export function createParticlesForMesh(mesh, scene, textureName = "flare", options = {}) {
     const {

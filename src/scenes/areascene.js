@@ -80,8 +80,8 @@ export async function areaScene(placeDetail){
 
     const allsounds = initSounds(scene);
 
-    const anvil = await SceneLoader.ImportMeshAsync(null, "./models/outdors/", "anvil.glb", scene)
-    console.log(anvil.meshes[0].getChildMeshes())
+    // const anvil = await SceneLoader.ImportMeshAsync(null, "./models/outdors/", "anvil.glb", scene)
+    // console.log(anvil.meshes[0].getChildMeshes())
     // bigwolf.meshes[0].position = new Vector3(0, 0, 84)
     // // bigwolf.meshes[0].addRotation(0, Math.PI, 0);
     // const wolfLowerSpine = bigwolf.skeletons[0].getChildren()[0].getChildren()[4].getChildren()[0]
@@ -100,6 +100,7 @@ export async function areaScene(placeDetail){
     // });
     let reg
     if(placeDetail.areaType === "village"){
+
         reg = await getVillageAssetRegistry()
     }
     await setStartingContainers(scene)

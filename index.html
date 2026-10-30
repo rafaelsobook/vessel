@@ -115,52 +115,7 @@
         <div></div>
     </footer>
 
-    <div class="skill-container cont">
-        <img src="./images/UI/xshield.png" class="close-parent btn"/>
-        <img class="skill-background" src="./images/UI/frames/rightbigcont.webp" alt="">
-        
-        <div class="skill-list-left">
-            <img class="skill-background" src="./images/UI/frames/leftbox.webp" alt="">
-            <ul class="skill-list">
-
-            </ul>
-        </div>
-        <div class="skill-info-right">
-            <img class="skill-background" src="./images/UI/frames/rightbox.webp" alt="">
-            <div class="skill-info">
-                <div class="skill-info-display">
-                    <img src="./images/UI/frames/skillring.webp" alt="" class="info-circle-bg">
-                    <img src="" alt="" class="info-skill-img skillInfoImg">
-                </div>
-                <div class="skill-info-details">
-                    <div class="skill-info-header">
-                        <p class="skill-info-title skillInfoTitle"></p>
-                        <span class="skill-status skillInfoStatus"></span>
-                    </div>
-                    <div class="skill-stats">
-                        <div class="skill-stat-row">
-                            <span class="stat-label">Type</span>
-                            <span class="stat-value skillInfoType"></span>
-                        </div>
-                        <div class="skill-stat-row">
-                            <span class="stat-label">Rank</span>
-                            <span class="stat-value skillInfoRank"></span>
-                        </div>
-                        <div class="skill-stat-row">
-                            <span class="stat-label">Mana Cost</span>
-                            <span class="stat-value skillInfoCost"></span>
-                        </div>
-                        <div class="skill-stat-row">
-                            <span class="stat-label">Cooldown</span>
-                            <span class="stat-value skillInfoCooldown"></span>
-                        </div>
-                    </div>
-                    <p class="skill-info-desc skillInfoDesc"></p>
-                    <button class="skill-assign-btn skillAssignBtn"></button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- the skills window is Babylon GUI now - components/skillsPanel.js -->
     <div class="output-sliders-cont">
         <div class="output-slider-row mana-output-row">
             <span class="output-slider-label">MP</span>
@@ -720,6 +675,8 @@
                 <div class="line"></div>
                 <p class="heart-status">STABLE</p>
                 <p class="heart-status-def">heart is stable and no complications</p>
+                <!-- one card per affliction - statsSystem.js's renderHeartStatus -->
+                <ul class="heart-afflictions"></ul>
             </div>
         </div>
     </div>

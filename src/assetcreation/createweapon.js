@@ -79,6 +79,34 @@ export function getWeaponParts(weaponType){
     return WEAPON_PART_LIST[weaponType] ?? DEFAULT_PART_LIST
 }
 
+// The numbered meshes a part has in a tier - e.g. sword_blade_rare1 AND
+// sword_blade_rare2 both exist - as their suffixes ("rare1", "rare2"), read
+// off allweapons itself (keyed by exact mesh name) rather than a list that
+// would go stale when the glb changes. A weaponType without that tier falls
+// back to whichever tier it does have (axes.glb only has common1, the spear
+// only rare1) - never a made-up "<tier>1" with no mesh behind it, which
+// createPartsWeapon would just skip. Shared by craftingui.js's crafting table
+// and anvilWork.js's forging.
+export function getPartVariants(weaponType, part, tierBase){
+    const { allweapons } = getSocketContainers()
+    if(!allweapons) return [`${tierBase}1`]
+
+    const findVariants = (tier) => {
+        const pattern = new RegExp(`^${weaponType}_${part}_(${tier}\\d+)$`)
+        return Object.keys(allweapons)
+            .map(key => key.match(pattern))
+            .filter(Boolean)
+            .map(match => match[1])
+    }
+
+    const requested = findVariants(tierBase)
+    if(requested.length) return requested
+
+    const otherTier = tierBase === "rare" ? "common" : "rare"
+    const fallback = findVariants(otherTier)
+    return fallback.length ? fallback : [`${tierBase}1`]
+}
+
 // Some weapon families SHARE a specific part's actual mesh with a
 // DIFFERENT weaponType instead of having their own - pickaxe has no
 // pickaxe_handle_* mesh in axes.glb at all (the artist's own outliner only

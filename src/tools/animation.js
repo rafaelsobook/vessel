@@ -53,6 +53,8 @@ export class CharacterAnimations {
         this._blendFrom   = null
         this._blendTo     = null
         this._activeAction = null
+        // whenActionDone's callbacks for the action playing now
+        this._actionDone  = []
         // state -> the state it really plays, see setStateClip
         this._stateAlias  = {}
 
@@ -218,6 +220,8 @@ export class CharacterAnimations {
             this._activeAction.stop()
             this._activeAction.weight = 0
         }
+        // the action being replaced (the same clip again included) is over
+        if (this._activeAction) this._finishAction()
         this._activeAction = actionAnim
 
         // properly stop/reset whatever blend was in flight (e.g. an
@@ -248,6 +252,7 @@ export class CharacterAnimations {
             if (this._activeAction === actionAnim) this._activeAction = null
             this._isActionPlaying = false
             this._state = targetState
+            this._finishAction()
             if (freezeAfter) return
 
             if (loopAnim && loopAnim !== actionAnim) {
@@ -291,6 +296,25 @@ export class CharacterAnimations {
 
     isActionPlaying() {
         return !!this._isActionPlaying
+    }
+
+    // fn runs once the action playing now is over - played out, or cut short
+    // by the next playAction. Use this, not the clip's own
+    // onAnimationEndObservable: playAction clears that when it cuts a clip
+    // short (stop() never fires "end"), so a listener there is never heard
+    // from - attackingSystem.js's attack() left _attacking stuck true that
+    // way when a slam's hit clip cut a swing short, and with it renderer.js
+    // never ticked the blend into the stunned pose: the hit clip's last frame
+    // stayed pinned on a one-frame loop, and the body shook.
+    whenActionDone(fn) {
+        if (this._activeAction) this._actionDone.push(fn)
+        else fn()
+    }
+
+    _finishAction() {
+        const done = this._actionDone
+        this._actionDone = []
+        done.forEach(fn => fn())
     }
 }
 

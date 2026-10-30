@@ -1,7 +1,7 @@
 import { getCharState, setCharStateMode, getTotal, updateMP_UI, updateMyDetailsOL, getCanPress, getMyAuraProfile } from "../charactersystem/characterstate.js";
 import { getSocket } from "../sockets/joinsocket.js";
 import { getIsSocketOn } from "../sockets/worldsocket.js";
-import { createElement, checkIfTokenSaved } from "../tools/tools.js";
+import { checkIfTokenSaved } from "../tools/tools.js";
 import { activateSkill, upgradeSkill } from "../charactersystem/attackingSystem.js";
 import { MULTICAST_MAX_STAGGER_MS } from "../creations/skillEffects.js";
 import { popStatusEffect, openClosePopup } from "../tools/popupUI.js";
@@ -10,28 +10,9 @@ import { skillsData, getSkillEffect } from "../staticRecources/skillsData.js";
 import { popupReceiveSkillUI } from "./skillAcquiredUI.js";
 import { receiveAchievement } from "../charactersystem/achievement.js";
 import { amIStunned } from "../charactersystem/stun.js";
-const skillCont = document.querySelector(".skill-container");
-
-
-// skills list inside the container on left side
-const skillListLeft = document.querySelector(".skill-list");
-
-// ancestor of every skillInfo* element below - carries the rank-based
-// data-rank attribute (see renderSkillInfo/SKILL_RANK_LABELS) that
-// style.scss's own [data-rank="N"] rules key off of, so the rank label AND
-// the description both visually escalate with the skill's actual rank
-// instead of reading identically regardless of tier (High Skill and Basic
-// Class used to render in the exact same plain white/grey)
-const skillInfoPanel    = document.querySelector(".skill-info");
-const skillInfoImg      = document.querySelector(".skillInfoImg");
-const skillInfoTitle    = document.querySelector(".skillInfoTitle");
-const skillInfoStatus   = document.querySelector(".skillInfoStatus");
-const skillInfoType     = document.querySelector(".skillInfoType");
-const skillInfoRank     = document.querySelector(".skillInfoRank");
-const skillInfoCost     = document.querySelector(".skillInfoCost");
-const skillInfoCooldown = document.querySelector(".skillInfoCooldown");
-const skillInfoDesc     = document.querySelector(".skillInfoDesc");
-const skillAssignBtn    = document.querySelector(".skillAssignBtn");
+// the skills window itself is Babylon GUI (skillsPanel.js) - this file says
+// what's in it and what clicking does; the slot bar below stays HTML
+import { renderSkillsPanel, openCloseSkillsPanel } from "./skillsPanel.js";
 
 // SLOTS
 const skillslotsContainer = document.querySelector(".skill-slots");
@@ -40,8 +21,8 @@ const slotbuttons = document.querySelectorAll(".skill-slot-button");
 // index.html's .skill-slots) - a skill's own slotNumber field (skillsData.js)
 // can be any value, but only ones landing in this 1..N range actually render
 // in the bar (updateSkillSlotsUI below); everything else is "known but
-// benched", toggled via the assign/unassign button (see skillAssignBtn's
-// click handler further down)
+// benched", toggled via the assign/unassign button (see assignSelectedSkill
+// further down)
 const SKILL_SLOT_COUNT = slotbuttons.length
 
 // skill.skillrank -> display label (see skillsData.js for which skill gets
@@ -59,12 +40,11 @@ export const SKILL_RANK_LABELS = {
     4: "God Tier",
 }
 
-// currently-selected skill in the left list - tracked here (not just local to
-// selectSkill) so updateSkillListUI can re-select the same skill after a
-// re-render instead of always snapping back to index 0, and so the assign
-// button's click handler knows which skill it's acting on
+// currently-selected skill in the left list - tracked here so
+// updateSkillListUI can re-select the same skill after a re-render instead of
+// always snapping back to the first, and so the assign button knows which
+// skill it's acting on
 let selectedSkillName = null
-let currentSkill = null
 
 // DEBUG CHEAT - bound to the "n" key in controllers/inputMovement.js, e.g.
 // giveSkill(singlecastSkill) or giveSkill(voidrendSkill) (see skillsData.js
@@ -193,51 +173,26 @@ export function upgradeAllOwnedSkills(){
 }
 
 export function openCloseSkills(){
-    skillCont.style.display = skillCont.style.display === "flex" ? "none" : "flex";
-
-
     updateSkillListUI()
+    openCloseSkillsPanel()
 }
 
 export function updateSkillListUI(){
     const state = getCharState()
+    if(!state) return
     updateSkillSlotsUI(state.skills)
-    skillListLeft.innerHTML = ""
 
-    const rows = state.skills.map(skill => {
-        const bx = createElement("div", "skill-bx")
-        const background = createElement("img", "skill-background")
-        background.src = `./images/UI/frames/skillbox.webp`
-
-        const skillImg = createElement("img", "skill-img")
-        skillImg.src = `./images/skills/${skill.name}.webp`
-
-        const textBx = createElement("div", "skill-bx-text")
-        const skillName = createElement("p", "skill-name", skill.displayName)
-        const skillLvl = createElement("p", "skill-lvl", `Lv. ${skill.lvl}`)
-        textBx.append(skillName, skillLvl)
-
-        const statusCol = createElement("div", "skill-status-col")
-        const status = createElement("span", `skill-status ${skill.isActive ? "active" : ""}`, skill.isActive ? "Active" : "Inactive")
-        // which physical skill-slot-button (1..SKILL_SLOT_COUNT) this skill
-        // is currently occupying, if any - "Unassigned" for a known-but-
-        // benched skill (see the Assign/Remove button in the info panel)
-        const slotLabel = createElement("span", `skill-slot-label ${isSkillEquipped(skill) ? "assigned" : ""}`, isSkillEquipped(skill) ? `Slot ${skill.slotNumber}` : "Unassigned")
-        statusCol.append(status, slotLabel)
-
-        bx.append(background, skillImg, textBx, statusCol)
-        bx.addEventListener("click", () => selectSkill(bx, skill))
-
-        skillListLeft.append(bx)
-        return { bx, skill }
+    // keep whatever was selected (e.g. after assigning/unassigning a slot)
+    // instead of snapping back to the first skill - the first the first time,
+    // or if the selected one isn't in the list anymore
+    if(!state.skills.some(sk => sk.name === selectedSkillName)) selectedSkillName = state.skills[0]?.name ?? null
+    renderSkillsPanel({
+        skills: state.skills,
+        selectedName: selectedSkillName,
+        describe: describeSkill,
+        onSelect: selectSkill,
+        onAssign: assignSelectedSkill,
     })
-
-    // re-select whatever was selected before this re-render (e.g. after
-    // assigning/unassigning a slot) instead of always snapping back to the
-    // first skill - falls back to the first row the first time this runs,
-    // or if the previously-selected skill isn't in the list anymore
-    const toSelect = rows.find(r => r.skill.name === selectedSkillName) || rows[0]
-    if(toSelect) selectSkill(toSelect.bx, toSelect.skill)
 }
 
 function updateSkillSlotsUI(skills){
@@ -266,12 +221,9 @@ function updateSkillSlotsUI(skills){
     })
 }
 
-function selectSkill(bx, skill){
+function selectSkill(skill){
     selectedSkillName = skill.name
-    currentSkill = skill
-    skillListLeft.querySelectorAll(".skill-bx").forEach(elem => elem.classList.remove("selected"))
-    bx.classList.add("selected")
-    renderSkillInfo(skill)
+    updateSkillListUI()
 }
 
 // a skill counts as "equipped" only if its slotNumber lands within the
@@ -281,42 +233,32 @@ function isSkillEquipped(skill){
     return skill.slotNumber >= 1 && skill.slotNumber <= SKILL_SLOT_COUNT
 }
 
-function renderSkillInfo(skill){
-    skillInfoImg.src = `./images/skills/${skill.name}.webp`
-    skillInfoTitle.innerText = skill.displayName
-
-    skillInfoStatus.innerText = skill.isActive ? "Active" : "Inactive"
-    skillInfoStatus.classList.toggle("active", skill.isActive)
-
-    // effects is an array now - every skill still only ever carries one
-    // entry today, so its [0] is still "the" type for this one-line label.
-    // A future multi-effect skill would just show its primary/first one here.
-    skillInfoType.innerText = capitalize(skill.effects?.[0]?.effectType)
-    skillInfoRank.innerText = SKILL_RANK_LABELS[skill.skillrank] ?? "—"
-    // drives style.scss's [data-rank="N"] theming on the rank value + desc -
-    // see skillInfoPanel's own comment above
-    if(skillInfoPanel) skillInfoPanel.dataset.rank = skill.skillrank ?? 0
-
+// what the skills window shows for a skill (skillsPanel.js draws it)
+function describeSkill(skill){
+    const equipped = isSkillEquipped(skill)
     const demand = skill.demand?.[0]
-    skillInfoCost.innerText = demand ? `${demand.cost} ${demand.name.toUpperCase()}` : "—"
-
-    skillInfoCooldown.innerText = `${skill.skillCoolDown / 1000}s`
-    skillInfoDesc.innerText = skill.desc
-
-    if(skillAssignBtn){
-        const equipped = isSkillEquipped(skill)
-        skillAssignBtn.innerText = equipped ? "Remove from Slot" : "Assign to Slot"
-        skillAssignBtn.classList.toggle("equipped", equipped)
+    return {
+        // effects is an array - every skill still only carries one entry
+        // today, so its [0] is "the" type for this one-line label
+        type: capitalize(skill.effects?.[0]?.effectType),
+        rank: skill.skillrank ?? 0,
+        rankLabel: SKILL_RANK_LABELS[skill.skillrank] ?? "—",
+        cost: demand ? `${demand.cost} ${demand.name.toUpperCase()}` : "—",
+        cooldown: `${skill.skillCoolDown / 1000}s`,
+        equipped,
+        // which slot-bar button (1..SKILL_SLOT_COUNT) it's in, if any
+        slotLabel: equipped ? `Slot ${skill.slotNumber}` : "Unassigned",
     }
 }
 
-// assigns/unassigns whichever skill is currently selected (currentSkill) -
-// assigning always picks the FIRST vacant physical slot (1..SKILL_SLOT_COUNT),
-// never a specific one, per spec ("if skill-slot-button 2 is vacant then
-// assign it there not in 3")
-skillAssignBtn?.addEventListener("click", () => {
+// assigns/unassigns whichever skill is currently selected - assigning always
+// picks the FIRST vacant physical slot (1..SKILL_SLOT_COUNT), never a
+// specific one, per spec ("if skill-slot-button 2 is vacant then assign it
+// there not in 3")
+function assignSelectedSkill(){
     const charState = getCharState()
-    if(!charState || !currentSkill) return
+    const currentSkill = charState?.skills.find(sk => sk.name === selectedSkillName)
+    if(!currentSkill) return
 
     if(isSkillEquipped(currentSkill)){
         currentSkill.slotNumber = null
@@ -336,7 +278,7 @@ skillAssignBtn?.addEventListener("click", () => {
 
     updateSkillListUI()
     updateMyDetailsOL(charState, checkIfTokenSaved())
-})
+}
 
 // skill.name -> timeoutId for the offense-skill isActive auto-reset below -
 // so a rapid re-press (cancel a cast, immediately recast) cancels the FIRST

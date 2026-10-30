@@ -26,9 +26,16 @@ export function bramData(){
             conversationWithQuestion: toLines(pick(bramGreetings)),
             answers: [
                 { text: "Show me your wares", cb: () => buyOrSell(false, "110_bram") },
-                { text: "I'd like to craft something", cb: () => openCloseCraftUI(true) },
+                // was: cb: () => openCloseCraftUI(true) - the crafting menu, off for now
+                { text: "I'd like to borrow your anvil", cb: () => startQuestionare(302) },
                 { text: "Just looking around.", cb: () => startQuestionare(301) },
             ],
+            cb: () => {}
+        },
+        {
+            questionId: 302,
+            conversationWithQuestion: toLines(["Absolutely. Young adventurers would need to learn and master the art of smithing."]),
+            answers: [],
             cb: () => {}
         },
         {

@@ -150,6 +150,39 @@ export function emitStandUp(){
     if(!socket) return
     socket.emit("stand-up", { ownerId: charState.owner })
 }
+// PICKUP CLAIMS (tcp/recources/pickupClaims.ts) - components/timedPickup.js
+// asks before its bar starts. claim: { kind, id } (kind: "treasure", "grain",
+// "mushroom" or "struckWeapon"); ms: how long the bar takes. Resolves to
+// tcp's answer, { ok, reason? } - ok false when it's gone or someone else is
+// already taking it. Not multiplayer here, or no answer in time (a tcp from
+// before claims): ok, as picking up always was.
+const CLAIM_ANSWER_TIMEOUT_MS = 1500
+export function emitClaimPickup(claim, ms){
+    return new Promise(resolve => {
+        const owner = getCharState()?.owner
+        const socket = getSocket()
+        if(!claim || !owner || !getIsSocketOn() || !socket) return resolve({ ok: true })
+        let answered = false
+        const timer = setTimeout(() => {
+            if(answered) return
+            answered = true
+            resolve({ ok: true, unanswered: true })
+        }, CLAIM_ANSWER_TIMEOUT_MS)
+        socket.emit("claimPickup", { ...claim, owner, ms }, reply => {
+            if(answered) return
+            answered = true
+            clearTimeout(timer)
+            resolve(reply ?? { ok: true })
+        })
+    })
+}
+// a claimed pickup given up before its bar filled - free for anyone again
+export function emitReleasePickup(claim){
+    if(!claim || !getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("releasePickup", { ...claim, owner: getCharState()?.owner })
+}
 // tcp/index.ts's "pickupGrain" handler - same bare-id shape as
 // emitRemoveTreasure right above
 export function emitPickupGrain(grainId){

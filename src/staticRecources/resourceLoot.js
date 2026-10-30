@@ -3,6 +3,10 @@ import { randomNum } from "../tools/tools.js"
 // raw materials minable from world resources (see localroomdb.js's
 // "resources" -> loots, and areascene.js's mining loop). Each factory
 // returns a fresh instance so repeated pickups never share an itemId.
+//
+// Every ore carries a hardness, 0-100 - how hard it is to work: Black Dragon
+// Scale tops the scale at 100, adamantine sits at 50, bronze ore at the
+// bottom. (Wood, leather, stone and the rest have none - they aren't ores.)
 const LOOT_TEMPLATES = {
     solarore: () => ({
         itemId: randomNum(),
@@ -13,6 +17,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 5 },
         desc: "A raw chunk of solar ore, useful for crafting and enhancing gear.",
+        hardness: 22,
         rarity: "rare"
     }),
     crystal: () => ({
@@ -24,6 +29,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 15 },
         desc: "A shard of Celestine Ore, prized by enchanters.",
+        hardness: 28,
         rarity: "rare"
     }),
     adamantine: () => ({
@@ -35,6 +41,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 40 },
         desc: "A rare, near-indestructible metal ore.",
+        hardness: 50,
         rarity: "rare"
     }),
     // newly added icons (./images/items/crafting) - none of these are wired
@@ -49,6 +56,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 25 },
         desc: "A dark, blood-red mineral said to sharpen the wielder's aggression.",
+        hardness: 32,
         rarity: "rare"
     }),
     // no ./images/items/crafting/blackdragon.webp yet either (unlike the
@@ -67,6 +75,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 150 },
         desc: "A scale torn from a black dragon's hide, still cold as void and harder than any forged steel.",
+        hardness: 100,
         rarity: "legendary"
     }),
     bronzeore: () => ({
@@ -78,6 +87,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 8 },
         desc: "A common coppery ore, the backbone of everyday gear.",
+        hardness: 12,
         rarity: "common"
     }),
     manastone: () => ({
@@ -89,6 +99,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 22 },
         desc: "A stone humming faintly with latent magical energy.",
+        hardness: 15,
         rarity: "uncommon"
     }),
     orichalcum: () => ({
@@ -100,6 +111,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 60 },
         desc: "A legendary alloy from a bygone age, said to never tarnish.",
+        hardness: 70,
         rarity: "epic"
     }),
     phoenixore: () => ({
@@ -111,6 +123,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 135 },
         desc: "Ore said to have cooled in phoenix-fire - it's still warm to the touch.",
+        hardness: 45,
         rarity: "epic"
     }),
     rubyore: () => ({
@@ -122,6 +135,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 28 },
         desc: "Ore veined with raw ruby, prized for its brilliant red glow.",
+        hardness: 40,
         rarity: "rare"
     }),
     silverore: () => ({
@@ -133,6 +147,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 12 },
         desc: "A pale, lustrous ore favored by silversmiths.",
+        hardness: 18,
         rarity: "uncommon"
     }),
     sunduskore: () => ({
@@ -144,6 +159,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 30 },
         desc: "Ore quarried at the edge of dusk, warm gold shot through with violet.",
+        hardness: 35,
         rarity: "rare"
     }),
     unobtanium: () => ({
@@ -155,6 +171,7 @@ const LOOT_TEMPLATES = {
         qnty: 1,
         price: { coinType: "bronze", pieces: 100 },
         desc: "An impossibly rare material. If you're holding this, you got lucky.",
+        hardness: 85,
         rarity: "legendary"
     }),
     // baseline organic/stone materials - see itemDictionary.js for their

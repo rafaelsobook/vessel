@@ -54,6 +54,9 @@ const grains = definePickupKind({
     },
     iconImage: "./images/items/crafting/grain.webp",
     pickupRadius: PICKUP_RADIUS,
+    pickupSeconds: 1,
+    pickupLabel: "Gathering grain",
+    claimKind: "grain",
     onPickedUp: grainId => {
         const item = createLootItem("grain")
         if(item) obtain(item)

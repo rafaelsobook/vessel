@@ -684,6 +684,16 @@ export default function createEnemy(scene, det) {
         onIntersecEnterTrig(atkCollider, body, scene, () => {
             const enemy = getEnemiesOnScene().find(ene => ene._id === det._id)
             if (!enemy) return
+            // electric and dark slimes (det.dockChance, genenemy.ts) duck a
+            // plain swing now and then - it misses outright. Not a skill's
+            // strike, and not while it's held down (bound/stunned).
+            if(!atkCollider.isSkillHijacked && det.dockChance && !enemy.isDead && !enemy._disabled
+                && Math.random() < det.dockChance){
+                enemyDocked(enemy)
+                getSocket().emit("enemyWillDock", { _id: det._id, currentPlaceId: det.currentPlaceId })
+                setLastHitEnemy(enemy)
+                return
+            }
             // Handle attack collision logic
             const charState = getCharState()
             // playAnim(entries.animationGroups, `hit1`)
@@ -1065,6 +1075,50 @@ function emitEnemyCastSkill(enemId, skillName, targetId, pos, placeId) {
         skillName,
         targetId,
         pos,
+    })
+}
+// ducked a swing (det.dockChance) - the swinger plays this straight away,
+// everyone else off tcp's "enemy-dock" relay (worldsocket.js)
+export function enemyDocked(enemy){
+    if(!enemy || enemy.isDead || !enemy.body) return
+    poppingTextMesh("miss", "white", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: enemy.det.bodyHeight/2+.5, z: -1 + Math.random() * 2 }, enemy.body, true)
+    const dock = enemy.anims.find(anim => anim.name.toLowerCase() === "dock")
+    if(!dock) return
+    if(dock.to - dock.from > DOCK_POSE_MAX_FRAMES) return dock.play(false)
+    holdDockPose(enemy, dock)
+}
+
+// slime.glb's "dock" is a single key - one pose (the squash), not a motion.
+// Played as a clip it ends the moment it starts and idle/running/attack cover
+// it, so the pose is laid over whatever's playing instead, after the frame's
+// animations: eased in, held, eased back out.
+const DOCK_POSE_MAX_FRAMES = 5
+const DOCK_IN_MS = 70
+const DOCK_HOLD_MS = 260
+const DOCK_OUT_MS = 140
+function holdDockPose(enemy, dock){
+    const scene = enemy.body.getScene()
+    const pose = dock.targetedAnimations.map(({ target, animation }) => ({
+        target, prop: animation.targetProperty, value: animation.getKeys()[0]?.value,
+    })).filter(part => part.value)
+    if(enemy._dockObserver) scene.onAfterAnimationsObservable.remove(enemy._dockObserver)
+    const start = performance.now()
+    const stop = () => {
+        scene.onAfterAnimationsObservable.remove(enemy._dockObserver)
+        enemy._dockObserver = null
+    }
+    enemy._dockObserver = scene.onAfterAnimationsObservable.add(() => {
+        const t = performance.now() - start
+        if(enemy.isDead || enemy.body.isDisposed() || t >= DOCK_IN_MS + DOCK_HOLD_MS + DOCK_OUT_MS) return stop()
+        const w = t < DOCK_IN_MS ? t / DOCK_IN_MS
+            : t < DOCK_IN_MS + DOCK_HOLD_MS ? 1
+            : 1 - (t - DOCK_IN_MS - DOCK_HOLD_MS) / DOCK_OUT_MS
+        pose.forEach(({ target, prop, value }) => {
+            const current = target[prop]
+            if(!current) return
+            if(prop === "rotationQuaternion") Quaternion.SlerpToRef(current, value, w, current)
+            else Vector3.LerpToRef(current, value, w, current)
+        })
     })
 }
 function emitEnemyDodge(enemId, dest, placeId) {

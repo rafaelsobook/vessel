@@ -46,13 +46,12 @@
 import { createElement } from "../tools/GUITools"
 import { openClosePopup } from "../tools/popupUI"
 import { getCharState } from "../charactersystem/characterstate"
-import { getSocketContainers } from "../sockets/worldsocket"
 import { obtain } from "../charactersystem/inventory"
 import { randomNum } from "../tools/tools"
 import { ITEM_DICTIONARY, computeCraftedWeaponStats, weaponElements } from "../staticRecources/itemDictionary"
 import { receiveAchievement } from "../charactersystem/achievement"
 import { epicSwordCraftDetails } from "../staticRecources/epiccrafts"
-import { getWeaponParts } from "../assetcreation/createweapon"
+import { getWeaponParts, getPartVariants } from "../assetcreation/createweapon"
 
 const craftCont     = document.querySelector(".craft-container")
 const craftTitle    = document.querySelector(".craft-title")
@@ -307,24 +306,9 @@ budgetInput.addEventListener("input", () => {
 // Falling back to whichever tier this weaponType DOES have instead means
 // axe/spear crafting works correctly regardless of what budget the player
 // typed, rather than only "working" for whichever tier happens to match.
+// (createweapon.js's getPartVariants - shared with anvilWork.js's forging)
 function getAvailableRarityVariants(weaponType, part, tierBase){
-    const { allweapons } = getSocketContainers()
-    if(!allweapons) return [`${tierBase}1`]
-
-    const findVariants = (tier) => {
-        const pattern = new RegExp(`^${weaponType}_${part}_(${tier}\\d+)$`)
-        return Object.keys(allweapons)
-            .map(key => key.match(pattern))
-            .filter(Boolean)
-            .map(match => match[1])
-    }
-
-    const requested = findVariants(tierBase)
-    if(requested.length) return requested
-
-    const otherTier = tierBase === "rare" ? "common" : "rare"
-    const fallback = findVariants(otherTier)
-    return fallback.length ? fallback : [`${tierBase}1`]
+    return getPartVariants(weaponType, part, tierBase)
 }
 
 function pickRarityVariant(weaponType, part){

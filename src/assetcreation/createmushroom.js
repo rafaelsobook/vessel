@@ -111,6 +111,9 @@ const mushrooms = definePickupKind({
     // inventory shows once it's picked
     iconImage: kind => `./images/items/consumable/${kind}.webp`,
     pickupRadius: PICKUP_RADIUS,
+    pickupSeconds: 1.5,
+    pickupLabel: "Picking a mushroom",
+    claimKind: "mushroom",
     onPickedUp: mushroomId => emitPickupMushroom(mushroomId),
 })
 

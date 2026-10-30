@@ -10,6 +10,7 @@ import { activateSkill } from "./attackingSystem.js"
 import { checkStoryQuestIfCompleted } from "./storyQuestSystem.js"
 import { updateSkillListUI } from "../components/skillsui.js"
 import { METAL_COLOR } from "../tools/metalmat.js"
+import { getAllSounds } from "../components/soundSystem.js"
 
 
 const inventoryCont  = document.querySelector(".inventory-container")
@@ -717,6 +718,7 @@ export function itemBroke(item){
     if(!charState) return
 
     openClosePopup(`${item.dn} broke!`, true, 2000)
+    getAllSounds()?.brokenS?.play()
     unEquip(item.itemType) // clears the armory slot icon, drops mining mode if a weapon just broke mid-swing
 
     charState.items = charState.items.filter(itm => itm.itemId !== item.itemId)

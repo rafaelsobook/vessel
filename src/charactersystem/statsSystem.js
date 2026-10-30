@@ -13,6 +13,8 @@ const statName = document.querySelector(".stat-name")
 const heartBeatImg = document.querySelector(".heart-beat-img")
 const heartStatus = document.querySelector(".heart-status")
 const heartStatusDef = document.querySelector(".heart-status-def")
+const heartBox = document.querySelector(".heart-bx")
+const heartAfflictions = document.querySelector(".heart-afflictions")
 const upgradeDivs = document.querySelectorAll(".upgrade-bx")
 const upgradeBtns = document.querySelectorAll(".upgrade-btn")
 const uniquesList = document.querySelector('.uniques-list')
@@ -188,29 +190,78 @@ export function updateStatUI(){
         div.append(img, pName, pLvl)
         classesList.append(div)
     })
-    // HEART STATUS
-    let statusLength = state.status.length
-    heartStatus.style.color = "limegreen"
-    // heartStatusDef.innerHTML only ever gets WRITTEN inside the
-    // statusLength>=1 branch below, never reset back once status clears -
-    // this early return used to skip right past it, leaving the stale
-    // "Heart Core is cursed"/etc text on screen forever even after a real
-    // cure (Purification skill/Vesper's own service both clear
-    // charState.status fine - this was purely a UI-refresh gap, not a sign
-    // the cure itself didn't work)
-    if(!statusLength){
-        heartStatusDef.innerHTML = ""
-        return heartStatus.innerHTML = "STABLE"
+    renderHeartStatus(state.status ?? [])
+}
+
+// HEART STATUS - what's afflicting the heart core, one card each: its own
+// colour and icon, what it costs you, and what lifts it. The heart itself
+// glows in the worst one's colour and its beat stumbles (style.scss's
+// .heart-bx.afflicted). Colour is never the only cue - every card has its
+// icon and name too.
+// rank: which one's colour the heart takes when there's more than one
+const AFFLICTION_LOOK = {
+    cursed:   { label: "Curse",    color: "#b46cff", icon: "./images/skills/voidcurse.webp", rank: 0,
+                does: "Your own blows backfire on you", cure: "Antidote, Purification or Vesper" },
+    poisoned: { label: "Poison",   color: "#7ed957", icon: "./images/UI/poisoned.png", rank: 1,
+                cure: "Lunaraqum, Purification or Vesper" },
+    bleed:    { label: "Bleeding", color: "#ff4d4d", rank: 2,
+                does: "Loses 2% of max HP every second", cure: "Duskveil or a healing circle" },
+}
+const OTHER_LOOK = { color: "#e2b04a", rank: 3, cure: "Purification or Vesper" }
+// characterstate.js's restInterval - every permanent effect's costs land on it
+const STATUS_TICK_S = 2.2
+const COSTS = [["hpcost", "HP"], ["mpcost", "MP"], ["spcost", "SP"], ["hungercost", "hunger"], ["energycost", "rest"]]
+
+function afflictionDoes(effect, look){
+    if(look.does) return look.does
+    const costs = COSTS.filter(([key]) => effect[key] > 0).map(([key, name]) => `-${effect[key]} ${name}`)
+    return costs.length ? `${costs.join(" · ")} every ${STATUS_TICK_S}s` : "Weighs on your heart"
+}
+
+function renderHeartStatus(status){
+    heartAfflictions.innerHTML = ""
+    if(!status.length){
+        heartBox.classList.remove("afflicted")
+        heartStatus.className = "heart-status"
+        heartStatus.innerHTML = "STABLE"
+        heartStatusDef.innerHTML = "Heart Core is steady"
+        return
     }
-    if(statusLength >= 1){
-        let statusNames = []
-        state.status.forEach(effect =>{
-            statusNames.push(effect.effectType)
-        })
-        heartStatus.innerHTML = `UNSTABLE`
-        heartStatus.style.color = "crimson"
-        heartStatusDef.innerHTML = `Heart Core is ${statusNames.join(", ")}`
-    }
+    const looks = status.map(effect => ({ effect, look: AFFLICTION_LOOK[effect.effectType] ?? OTHER_LOOK }))
+        .sort((a, b) => a.look.rank - b.look.rank)
+    // the heart: the worst one's glow, the next one's under it
+    heartBox.classList.add("afflicted")
+    heartBox.style.setProperty("--aff-color", looks[0].look.color)
+    heartBox.style.setProperty("--aff-color2", (looks[1] ?? looks[0]).look.color)
+    heartStatus.className = "heart-status unstable"
+    heartStatus.innerHTML = "UNSTABLE"
+    heartStatusDef.innerHTML = `${looks.length} affliction${looks.length === 1 ? "" : "s"} on your Heart Core`
+
+    looks.forEach(({ effect, look }, i) => {
+        const card = createElement("li", `affliction ${effect.effectType}`)
+        card.style.setProperty("--aff-color", look.color)
+        // they come in one after another, not all at once
+        card.style.animationDelay = `${i * 90}ms`
+        const iconRing = createElement("div", "affliction-icon")
+        if(look.icon){
+            const img = createElement("img", "")
+            img.src = look.icon
+            iconRing.append(img)
+        } else iconRing.append(createElement("span", "affliction-glyph", (look.label ?? effect.effectType)[0].toUpperCase()))
+        const text = createElement("div", "affliction-text")
+        const head = createElement("div", "affliction-head")
+        head.append(
+            createElement("p", "affliction-name", effect.dn ?? look.label ?? effect.effectType),
+            createElement("span", "affliction-tag", look.label ?? effect.effectType),
+        )
+        text.append(
+            head,
+            createElement("p", "affliction-does", afflictionDoes(effect, look)),
+            createElement("p", "affliction-cure", `Cure: ${look.cure}`),
+        )
+        card.append(iconRing, text)
+        heartAfflictions.append(card)
+    })
 }
 export function updateHeartStatus(stats){
 

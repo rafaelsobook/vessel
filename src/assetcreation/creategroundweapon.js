@@ -4,6 +4,7 @@ import { onIntersecEnterTrig, onIntersecExitTrig } from "../components/actionMan
 import { openCloseInteractBtn } from "../tools/popupUI.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { emitPickupStruckWeapon } from "../sockets/emits.js"
+import { startTimedPickup } from "../components/timedPickup.js"
 
 // GROUND WEAPON LOOT (placeDetail.swordsStrucked, e.g. placeId 200's duel
 // grounds - localroomdb.js) - a real weapon mesh (createWeapon, same call
@@ -43,6 +44,55 @@ import { emitPickupStruckWeapon } from "../sockets/emits.js"
 //
 // Called once per placeDetail.swordsStrucked entry - areascene.js's own
 // setup does `placeDetail.swordsStrucked?.forEach(item => createGroundWeapon(scene, item, myCharacter.body))`.
+// Taking a struck weapon takes a moment (components/timedPickup.js) - and a
+// server-tracked one is held for me while it does, so nobody else can take it
+// too. Wires the interact button for one: walk up, press, bar, take.
+const WEAPON_PICKUP_SECONDS = 2
+const WEAPON_PICKUP_RADIUS = 2.5
+
+function offerWeaponPickup(scene, lootBox, characterBody, item, isMultiplayerSynced){
+    let pickedUp = false
+    let inside = false
+    const take = () => {
+        pickedUp = true
+        // lootPosition is ground-placement metadata, not part of the
+        // actual inventory item shape (compare against any equipped
+        // weapon item elsewhere, e.g. npcDetails.js's Renarden) - strip
+        // it before this becomes a real charState.items entry
+        const { lootPosition: _drop, ...itemToObtain } = item
+        obtain(itemToObtain)
+        // tell the server FIRST, before disposing locally - same
+        // "so no one else can loot the same one" reasoning
+        // createtreasure.js's own emitRemoveTreasure call already
+        // follows
+        if(isMultiplayerSynced) emitPickupStruckWeapon(item.itemId)
+        lootBox.dispose()
+    }
+    const offer = () => openCloseInteractBtn("normal", true, () => {
+        if(pickedUp) return
+        openCloseInteractBtn(false)
+        startTimedPickup({
+            scene,
+            target: lootBox,
+            label: `Picking up ${item.dn ?? "weapon"}`,
+            seconds: WEAPON_PICKUP_SECONDS,
+            radius: WEAPON_PICKUP_RADIUS,
+            claim: isMultiplayerSynced ? { kind: "struckWeapon", id: item.itemId } : null,
+            onDone: take,
+            onCancel: () => { if(inside && !pickedUp && !lootBox.isDisposed()) offer() },
+        })
+    })
+    onIntersecEnterTrig(lootBox, characterBody, scene, () => {
+        inside = true
+        if(!pickedUp) offer()
+    })
+    onIntersecExitTrig(lootBox, characterBody, scene, () => {
+        inside = false
+        if(pickedUp) return
+        openCloseInteractBtn(false, false)
+    })
+}
+
 export function createGroundWeapon(scene, item, characterBody, isMultiplayerSynced = false){
     const { lootPosition } = item
 
@@ -85,32 +135,7 @@ export function createGroundWeapon(scene, item, characterBody, isMultiplayerSync
     const weaponRoot = createWeapon(scene, item.weaponType, { x: 0, y: 0, z: 0 }, lootBox, item.name, { ...item.parts, metalColor: item.metalColor })
     weaponRoot.scaling = new Vector3(0.2, 0.2, 0.2)
 
-    let pickedUp = false
-    onIntersecEnterTrig(lootBox, characterBody, scene, () => {
-        if(pickedUp) return
-        openCloseInteractBtn("normal", true, () => {
-            if(pickedUp) return
-            pickedUp = true
-            openCloseInteractBtn(false)
-
-            // lootPosition is ground-placement metadata, not part of the
-            // actual inventory item shape (compare against any equipped
-            // weapon item elsewhere, e.g. npcDetails.js's Renarden) - strip
-            // it before this becomes a real charState.items entry
-            const { lootPosition: _drop, ...itemToObtain } = item
-            obtain(itemToObtain)
-            // tell the server FIRST, before disposing locally - same
-            // "so no one else can loot the same one" reasoning
-            // createtreasure.js's own emitRemoveTreasure call already
-            // follows
-            if(isMultiplayerSynced) emitPickupStruckWeapon(item.itemId)
-            lootBox.dispose()
-        })
-    })
-    onIntersecExitTrig(lootBox, characterBody, scene, () => {
-        if(pickedUp) return
-        openCloseInteractBtn(false, false)
-    })
+    offerWeaponPickup(scene, lootBox, characterBody, item, isMultiplayerSynced)
 
     return lootBox
 }
@@ -158,24 +183,7 @@ export function createEnemyStuckWeapon(scene, item, enemyBodyTarget, characterBo
     const weaponRoot = createWeapon(scene, item.weaponType, { x: 0, y: 0, z: 0 }, lootBox, item.name, { ...item.parts, metalColor: item.metalColor })
     weaponRoot.scaling = new Vector3(0.2, 0.2, 0.2)
 
-    let pickedUp = false
-    onIntersecEnterTrig(lootBox, characterBody, scene, () => {
-        if(pickedUp) return
-        openCloseInteractBtn("normal", true, () => {
-            if(pickedUp) return
-            pickedUp = true
-            openCloseInteractBtn(false)
-
-            const { lootPosition: _drop, ...itemToObtain } = item
-            obtain(itemToObtain)
-            if(isMultiplayerSynced) emitPickupStruckWeapon(item.itemId)
-            lootBox.dispose()
-        })
-    })
-    onIntersecExitTrig(lootBox, characterBody, scene, () => {
-        if(pickedUp) return
-        openCloseInteractBtn(false, false)
-    })
+    offerWeaponPickup(scene, lootBox, characterBody, item, isMultiplayerSynced)
 
     return lootBox
 }

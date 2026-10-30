@@ -9,6 +9,7 @@ import { spawnProjectile } from "../creations/skills.js"
 import { Vector3 } from "@babylonjs/core"
 import { emitAttack, emitMode, emitMyLoc, emitThrowSpear } from "../sockets/emits.js"
 import { amIStunned } from "./stun.js"
+import { getNearbyAnvil, aimAtAnvil, HAMMER_CLIP } from "../components/anvilWork.js"
 import { getSocket } from "../sockets/joinsocket.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { attack, calcDmg, getAttackInfo } from "./attackingSystem.js"
@@ -334,6 +335,8 @@ export function activateBtnOnce(){
     })
     let clickedTimeOut
     let swordAnimNum = 1
+    // when the "you need a hammer" reminder last showed - not on every swing
+    let anvilHintAt = 0
     walkRunBtns.forEach(iconBtn => {
         iconBtn.addEventListener("click", e => {
             // same reasoning as menuBtns' own blur() above - this is the
@@ -404,7 +407,31 @@ export function activateBtnOnce(){
                         disableEnableWalkRunButtons(true)
                     }, 100)
                 break
-                case "attack":
+                case "attack": {
+                    // at an anvil (components/anvilWork.js) with a hammer in
+                    // hand, the attack button hammers on it instead of swinging -
+                    // turned to face it, and relayed like any attack so everyone
+                    // sees it, but no blow lands on anyone. Only a hammer works an
+                    // anvil: anything else swings as usual (a fight can still
+                    // happen next to one), with a reminder now and then
+                    const anvil = getNearbyAnvil()
+                    if(anvil && weapon?.weaponType !== "hammer" && performance.now() - anvilHintAt > 4000){
+                        anvilHintAt = performance.now()
+                        openClosePopup("Only a hammer can work the anvil", true, 1600)
+                    }
+                    if(anvil && weapon?.weaponType === "hammer"){
+                        if(currentMode !== "fighting"){
+                            setCharStateMode("fighting")
+                            if(isSocketOn) emitMode("fighting", attackInfo.hasWeapon)
+                        }
+                        const hammerInfo = aimAtAnvil(anvil, attackInfo)
+                        attack(hammerInfo, HAMMER_CLIP)
+                        if(isSocketOn) emitAttack(hammerInfo, HAMMER_CLIP)
+                        clickedTimeOut = setTimeout(() => {
+                            disableEnableWalkRunButtons(true)
+                        }, 700)
+                        break
+                    }
                     if(currentMode === "idle"){
                         setCharStateMode("fighting")
                         clickedTimeOut = setTimeout(() => {
@@ -537,6 +564,7 @@ export function activateBtnOnce(){
                     startMeleeSwing(swing, { isRunningAttack, weaponType: attackInfo.weaponType ?? "fist" })
 
                 break
+                }
                 case "cast":
                     clickedTimeOut = setTimeout(() => {
                         disableEnableWalkRunButtons(true)

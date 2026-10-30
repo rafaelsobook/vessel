@@ -46,6 +46,13 @@ export function initSounds(scene){
     const weaponblockS = createSoundSafe("weaponblockS", "./sounds/weapons/weaponblock.mp3", scene,
     {volume: .5, autoplay: false, loop: false})
 
+    // a hammer coming down on an anvil (components/anvilWork.js) - played with weaponblockS
+    const anvilHitS = createSoundSafe("anvilHitS", "./sounds/weapons/anvilhit.mp3", scene,
+    {volume: .7, autoplay: false, loop: false})
+
+    const brokenS = createSoundSafe("brokenS", "./sounds/weapons/brokenS.mp3", scene,
+    {volume: .8, autoplay: false, loop: false})
+
     const throwSpearS = createSoundSafe("throwSpearS", "./sounds/weapons/throwspear.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
@@ -136,6 +143,10 @@ export function initSounds(scene){
     const pickItemS = createSoundSafe("pickItemS", "./sounds/ui/pickitem.mp3", scene,
     {volume: .7, autoplay: false, loop: false})
 
+    // an ore going into one of the anvil's slots (components/anvilWork.js)
+    const insertStoneS = createSoundSafe("insertStoneS", "./sounds/ui/insertstone.mp3", scene,
+    {volume: .8, autoplay: false, loop: false})
+
     const notif1S = createSoundSafe("notif1S", "./sounds/notifs/notif1S.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
@@ -208,10 +219,10 @@ export function initSounds(scene){
         poisonS,
         dmgpmS,
         bulletS,
-        pickItemS,
+        pickItemS, insertStoneS,
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
         staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
-        weaponblockS,
+        weaponblockS, anvilHitS, brokenS,
         throwSpearS,
         eatS, drinkS,
 

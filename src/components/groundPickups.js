@@ -1,6 +1,7 @@
 import * as GUI from "@babylonjs/gui"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { getCharState } from "../charactersystem/characterstate.js"
+import { startTimedPickup, isBeingTaken } from "./timedPickup.js"
 
 // Things lying on the ground that you walk up to and click to take - the
 // server-tracked grain (creategrain.js) and dungeon mushrooms
@@ -31,9 +32,14 @@ const ICON_BG_HOVER = "rgba(60, 45, 15, 0.85)"
  *                 instance standing on groundPos (its y is the ground height)
  * iconImage:      the picture inside the pickup icon - or (variant) => one
  * pickupRadius:   how close (XZ only) the player has to be
+ * pickupSeconds:  how long taking one takes - a bar fills over it first
+ *                 (components/timedPickup.js)
+ * pickupLabel:    the bar's text - or (variant) => one
+ * claimKind:      its kind for tcp's pickup claims (pickupClaims.ts) - while
+ *                 my bar fills, nobody else can take the same one
  * onPickedUp:     (id, variant) => void - give the item, tell the server
  */
-export function definePickupKind({ name, buildTemplate, place, iconImage, pickupRadius, onPickedUp }){
+export function definePickupKind({ name, buildTemplate, place, iconImage, pickupRadius, pickupSeconds, pickupLabel, claimKind, onPickedUp }){
     let state = null
     // picked locally before the server's "<kind>-removed" echo arrives -
     // without this, a reCreateMeshesInScene() in that window would respawn it
@@ -150,8 +156,23 @@ export function definePickupKind({ name, buildTemplate, place, iconImage, pickup
             icon.color = ICON_BORDER
             icon.background = ICON_BG
         })
+        // a moment to take it - and the server holding it for me meanwhile
         icon.onPointerClickObservable.add(() => {
-            if(s.linkedId) pickUp(s.linkedId)
+            const id = s.linkedId
+            const target = id && s.instances.get(id)
+            if(!target || isBeingTaken(target)) return
+            const variant = s.variants.get(id)
+            startTimedPickup({
+                scene: s.scene,
+                target,
+                label: typeof pickupLabel === "function" ? pickupLabel(variant) : pickupLabel,
+                seconds: pickupSeconds,
+                // a little slack past where the icon shows, so the bar doesn't
+                // stop at the very edge of reach
+                radius: pickupRadius + 0.6,
+                claim: claimKind ? { kind: claimKind, id } : null,
+                onDone: () => pickUp(id),
+            })
         })
 
         s.ui.addControl(icon)

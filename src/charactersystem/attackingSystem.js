@@ -1,4 +1,5 @@
 import { getIsSocketOn, getPlayersOnScene } from "../sockets/worldsocket"
+import { hammerStruck, HAMMER_CLIP } from "../components/anvilWork.js"
 import { getAdditionalsFromAbilities, getActiveBuffAdditions, getCharState, getTotalAtkSpd, updateMyDetailsOL, getMyAuraProfile } from "./characterstate"
 import { getPlayerCoord } from "./createcharacter"
 import { getSceneDet } from "../main/main"
@@ -64,6 +65,10 @@ export function attack(_attackInfo, attackAnimName){
     playerAttacked._attacking = true
     if(hasWeapon) playerAttacked.equipSword(hasWeapon, true)
     const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)
+    // hammering at an anvil (components/anvilWork.js) - sparks and a clang off
+    // it on the blow, for everyone watching; with ore on it, the ore heats up -
+    // and my own blow on my own ore forges (the sword's progress)
+    if(played && attackAnimName === HAMMER_CLIP) hammerStruck(dirTarg, 0.8 + atkSpd, !!_attackInfo.anvilOre, owner === getCharState()?.owner)
 
     // spearthrow - the equipped spear itself visibly flips 180° in hand for
     // the throw pose (point-first, instead of its normal carry angle).
@@ -81,8 +86,8 @@ export function attack(_attackInfo, attackAnimName){
     weaponEntry?.mesh.addRotation(Math.PI, 0, 0)
 
     if (played) {
-        const actionAnim = playerAttacked.anims.find(a => a.name.toLowerCase() === attackAnimName.toLowerCase())
-        actionAnim.onAnimationEndObservable.addOnce(() => {
+        // the swing played out, or cut short (a slam's hit clip - knockback.js)
+        playerAttacked.characterAnimations.whenActionDone(() => {
             const plToanim = getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
             if (!plToanim || plToanim.isDead) return
             playerAttacked._attacking = false

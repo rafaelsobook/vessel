@@ -41,7 +41,7 @@ export const VILLAGE = {
                 {name: "iron", tex:"rockTex", uScale: 3, lighten: 1.5},
                 {name: "fabric", tex:"fabric1", uScale: 3, lighten: 1.5},
                 {name: "metalforge", tex:"iron2", uScale: 3, lighten: 1.5},
-                {name: "fire", tex:"iron1", emissive: {r:1, g:0,b:0}, uScale: 3, lighten: 1.5},
+                {name: "fire", emissive: {r:1, g:0,b:0}, uScale: 3, lighten: 1.5},
             ],
             glbPath: "./models/outdors/forge.glb"
         }

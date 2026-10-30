@@ -17,7 +17,7 @@ import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
-import createEnemy, { enemyIsHit, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating, startEnemyRoar } from "../enemies/createEnemy"
+import createEnemy, { enemyIsHit, enemyDocked, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating, startEnemyRoar } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitEnemyIsHit } from "./emits"
 import { evolveInto, devolve } from "../charactersystem/evolution.js"
@@ -1057,6 +1057,14 @@ export function activateOnSocketListeners(socket){
         enemy._wanderTarget = { x: data.x, z: data.z }
         enemy._isMoving = true
         enemy._isDodging = true
+    })
+    // another player's swing ducked (createEnemy.js's enemyDocked)
+    socket.on("enemy-dock", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        enemyDocked(enemiez.find(enem => enem._id === data._id))
     })
     // lesserdemon's own "teleport in near you instead of chasing" (see
     // genenemy.ts's lesserDemonBase, actionType "teleporting", and
