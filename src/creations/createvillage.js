@@ -47,11 +47,12 @@ import {
     HemisphericLight,
     DirectionalLight,
     PointLight,
-    PBRMaterial,
     PhysicsShapeBox,
     Quaternion
 } from '@babylonjs/core';
 import { createGroundMat, createPathMat } from '../tools/groundmat';
+import { makeUnlit } from '../tools/surfacemat';
+import { isGltfMaterial } from '../tools/gltfStandardMaterials';
 import { randNum } from '../tools/random';
 
 // ─── Material helper ──────────────────────────────────────────────────────────
@@ -167,7 +168,8 @@ function buildPaths(scene, paths, namePrefix) {
  */
 function spawnProps(scene, items, mainMesh, addPhysics, shapeType) {
     if (!mainMesh) return;
-    if (mainMesh.material) mainMesh.material.unlit = true;
+    // the model's own material, lit by nothing (was PBR's unlit)
+    if (isGltfMaterial(mainMesh.material)) makeUnlit(mainMesh.material);
 
     // Compute the collision shape once, reuse it for every instance.
     let sharedShape = null;
@@ -213,7 +215,7 @@ function spawnProps(scene, items, mainMesh, addPhysics, shapeType) {
 }
 function spawnNonPhysics(scene, items, mainMesh, yRotOffset = 0) {
     if (!mainMesh) return;
-    if (mainMesh.material) mainMesh.material.unlit = true;
+    if (isGltfMaterial(mainMesh.material)) makeUnlit(mainMesh.material);
     items.forEach(item => {
         const inst = mainMesh.createInstance(`${mainMesh.name}_${item.id}`);
         inst.position   = new Vector3(item.x, item.y, item.z);

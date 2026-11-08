@@ -62,6 +62,9 @@ export const DUELING_GROUNDS = {
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: "sword",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { 
                 dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
@@ -144,6 +147,85 @@ export const COLOUSA_DUELING_GROUNDS = {
             {name:"hemispheric", intensity: 0.5},
         ],
     },
+    isMultiplayer: false
+}
+
+// The two younger witches' arenas - one roster each, like Vesper's (see its
+// comment), each gate leading back into her own tower. Fought from "Let's
+// Spar" in their menus (constants/witchSpar.js).
+export const ILVARA_DUELING_GROUNDS = {
+    placeId: 203,
+    name: "Ilvara's Dueling Grounds",
+    areaType: "duel",
+    npcEnemies: [
+        {
+            npcId: "118_ilvara",
+            position: {x: 0, y: 0.01, z: 20},
+        }
+    ],
+    width: 50,
+    height: 50,
+    wallHeight: 0.5,
+    layout: { cellSize: 1 },
+    spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
+    roomPaths: [
+        {
+            placeId: 16,
+            name: "Ilvara's Tower",
+            areaType: "room",
+            pos: {x: 0, y: 0.5, z: -24},
+        },
+    ],
+    // dusk under an ember-red moon
+    sceneTemp: {
+        fogDensity: 0,
+        fogColor:{ r:0.1, g:0.04, b:0.025},
+        skyColor:{ r:0.04, g:0.015, b:0.01},
+
+        lights: [
+            {name:"directional", intensity: 0.9, color:{ r:1, g:0.68, b:0.5 }, direction:{ x:-0.35, y:-0.6, z:-0.72 }},
+            {name:"hemispheric", intensity: 0.5},
+        ],
+    },
+    theme: { name: "forest", banner: "#7a2410", trim: "#e8b080" },
+    isMultiplayer: false
+}
+
+export const SABLE_DUELING_GROUNDS = {
+    placeId: 204,
+    name: "Sable's Dueling Grounds",
+    areaType: "duel",
+    npcEnemies: [
+        {
+            npcId: "119_sable",
+            position: {x: 0, y: 0.01, z: 20},
+        }
+    ],
+    width: 50,
+    height: 50,
+    wallHeight: 0.5,
+    layout: { cellSize: 1 },
+    spawn: {x: 0, y: 0.4, z: -20, rotation: 0},
+    roomPaths: [
+        {
+            placeId: 17,
+            name: "Sable's Tower",
+            areaType: "room",
+            pos: {x: 0, y: 0.5, z: -24},
+        },
+    ],
+    // night under a pale blue moon
+    sceneTemp: {
+        fogDensity: 0,
+        fogColor:{ r:0.03, g:0.05, b:0.1},
+        skyColor:{ r:0.01, g:0.02, b:0.045},
+
+        lights: [
+            {name:"directional", intensity: 0.9, color:{ r:0.6, g:0.72, b:1 }, direction:{ x:-0.35, y:-0.6, z:-0.72 }},
+            {name:"hemispheric", intensity: 0.5},
+        ],
+    },
+    theme: { name: "forest", banner: "#1a2a4a", trim: "#9fb4d8" },
     isMultiplayer: false
 }
 

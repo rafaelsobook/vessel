@@ -1,4 +1,5 @@
 import { startQuestionare } from '../components/conversations'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Mushruu", isLeft: false, message }))
@@ -161,6 +162,8 @@ export function mushruuData(){
             questionId: MENU,
             conversationWithQuestion: toLines([pick(menuOpeners)]),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("121_mushruu"),
                 ...Object.entries(GROUPS).map(([group, { label }]) => ({ text: label, cb: () => startQuestionare(GROUP_MENUS[group]) })),
                 { text: "Preparing them", cb: () => startQuestionare(COOKING) },
                 { text: "Never mind", cb: () => startQuestionare(FAREWELL) },

@@ -6,7 +6,7 @@ import { obtain } from "./inventory.js"
 export const COIN_VALUES = { bronze: 1, silver: 10, gold: 100 }
 const COIN_ORDER = ["gold", "silver", "bronze"]
 
-function createCoinItem(coinType, qnty){
+export function createCoinItem(coinType, qnty){
     return {
         itemId: `coin_${coinType}`,
         name: coinType, // bronze/silver/gold - also the image name

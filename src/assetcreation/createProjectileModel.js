@@ -20,6 +20,8 @@ import { addGlow } from "../tools/glow.js"
 const PROJECTILE_MODEL_PATHS = {
     stoneshard: "./models/projectiles/stoneshard.glb",
     plasma: "./models/projectiles/plasma.glb",
+    // crescenthowl's wave - instanced by effects/crescentHowl.js, not cloned here
+    crescent: "./models/projectiles/crescent.glb",
 }
 
 // loads every registered path in parallel - one failed/missing glb (a typo'd

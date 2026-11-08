@@ -51,6 +51,7 @@ import { checkIfTokenSaved } from "../tools/tools.js"
 import { isDungeon, isDungeonWallAt } from "../tools/dungeonSight.js"
 import { ATK_COLLIDER_PARKED_Y } from "../charactersystem/createMyCharacter.js"
 import { markDashActive } from "../controllers/inputMovement.js"
+import { createWave as createCrescentWave, windUp as crescentWindUp, release as crescentRelease } from "../effects/crescentHowl.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
 // override this directly via magicCircleImg (radiantjudgment uses "divine1"
@@ -127,13 +128,67 @@ const CIRCLE_SIZE_SCALE = 0.5
 // add into our magic" the user described - this is the "more" slot.
 function computeCasterMagicDmg(skill, charState, abilityAdditions){
     const offenseEffect = getSkillEffect(skill, "offense")
-    if(!offenseEffect?.plusCasterMagicDmg) return 0
+    let dmg = 0
 
-    let magicDmg = (charState.stats.magic * 10 * offenseEffect.plusCasterMagicDmg) + abilityAdditions.additionalMagicDmg.toAdd
-    if(abilityAdditions.additionalMagicDmg.percent){
-        magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+    if(offenseEffect?.plusCasterMagicDmg){
+        let magicDmg = (charState.stats.magic * 10 * offenseEffect.plusCasterMagicDmg) + abilityAdditions.additionalMagicDmg.toAdd
+        if(abilityAdditions.additionalMagicDmg.percent){
+            magicDmg += magicDmg * abilityAdditions.additionalMagicDmg.percent
+        }
+        dmg += magicDmg
     }
-    return magicDmg
+
+    // plusWeaponDmg (crescenthowl) - a WEAPON skill draws on the blade instead:
+    // the same strength + weapon dmg + weapon stat a swing's weaponDmg is
+    // (attackingSystem.js's calcDmg, less its crit and class bonus), times the
+    // skill's own coefficient
+    if(offenseEffect?.plusWeaponDmg){
+        const weapon = charState.items?.find(itm => itm.itemType === "weapon" && itm.equiped)
+        const base = charState.stats.strength * 4 + (weapon?.equipAbilities?.dmg ?? 0) + charState.stats.weapon * 10 + abilityAdditions.additionalMeeleeDmg.toAdd
+        dmg += base * offenseEffect.plusWeaponDmg
+    }
+    return dmg
+}
+
+// What a skill's hit does to its target on top of the damage, as the weapon-
+// style effectsWhenHit list enemyIsHit (createEnemy.js) reads on every client:
+// a "knockback" effect becomes a bash, a "bleed" effect rides along as it is.
+// undefined for a skill with neither (nearly all of them), so nothing extra
+// is sent.
+function skillHitEffects(skill){
+    const list = []
+    const knockback = getSkillEffect(skill, "knockback")
+    if(knockback?.distance > 0) list.push({ effectName: "bash", distanceKnockback: knockback.distance, triggerWhen: "always", particlesystem: null, texture: null })
+    const bleed = getSkillEffect(skill, "bleed")
+    if(bleed) list.push({ effectType: "bleed", dmgPm: bleed.dmgPm, duration: bleed.duration })
+    return list.length ? list : undefined
+}
+
+// A skill's look for the form it was cast in (skill.formLooks[skill._castForm],
+// e.g. crescenthowl's demon): the skill with those fields laid over it, or the
+// skill itself when there's none. A copy, so nothing here touches the real skill.
+function withCastLook(skill){
+    const look = skill?.formLooks?.[skill._castForm]
+    return look ? { ...skill, ...look } : skill
+}
+
+// BLEEDING, for a target that isn't me (the counterpart of startTargetBurn): the
+// target's own blood runs for the whole of it (bloodps - the splatter
+// createcharacter.js/createEnemy.js gave it) and a tick of hp comes off once a
+// second, however THIS target's damage applies (dealTick). Enemies get it from
+// enemyIsHit, on every client, with only the attacker's own client ticking.
+export function startTargetBleed(bleedEffect, bloodps, dealTick){
+    const totalTicks = Math.max(1, Math.round(bleedEffect.duration / 1000))
+    let ticksDone = 0
+    bloodps?.setBleeding(true)
+    const bleedInterval = setInterval(() => {
+        ticksDone++
+        dealTick(bleedEffect.dmgPm)
+        if(ticksDone >= totalTicks){
+            clearInterval(bleedInterval)
+            bloodps?.setBleeding(false)
+        }
+    }, 1000)
 }
 
 // Per-element flat damage multiplier - dark deals 2.5x everyone else's
@@ -255,6 +310,20 @@ function computeCastOrigin(player, skill){
     return { spawnPos, forward }
 }
 
+// The swing of a weapon skill: the clip of the weapon the caster holds (named on
+// cast as skill._castWeaponType - a hammer and a pickaxe have no clips of their
+// own and swing the axe's, as uimanagement.js's combo does), on every screen.
+// The caster's own sword is drawn already (the skill needs "fighting").
+function swingWeapon(scene, player, skill, isMine){
+    const type = ["pickaxe", "hammer"].includes(skill._castWeaponType) ? "axe" : skill._castWeaponType ?? "sword"
+    player.characterAnimations?.playAction(player.anims, `${type}attack1`, 1, null, false, null)
+    // the crescent wave's own wind-up and release (effects/crescentHowl.js) -
+    // the release lands with the wave, castDuration on
+    if(skill.projectileVisual?.shape !== "crescent") return
+    crescentWindUp(scene, player, skill)
+    setTimeout(() => { if(player.body && !player.body.isDisposed()) crescentRelease(scene, player, skill, isMine) }, skill.castDuration * 1000)
+}
+
 // bound to any offense skill's activation (attackingSystem.js's
 // activateSkill, default branch). mp was already charged in skillsui.js's
 // click handler. The circle spawns right away as the "you're now casting"
@@ -265,6 +334,7 @@ function computeCastOrigin(player, skill){
 export function castOffenseSkill(scene, player, skill, charState){
     cancelPendingCast(skill.name)
     if(!player?.body || !scene) return
+    skill = withCastLook(skill)
 
     // captured now, not read again at fire time - skillsui.js sets this at
     // the moment mp got charged, based on wherever the mana slider was then;
@@ -305,7 +375,11 @@ export function castOffenseSkill(scene, player, skill, charState){
         ? computeGroundAOEPos(charState, player, randNum(skill.lightningStrike.minDistance ?? 12, skill.lightningStrike.maxDistance ?? 20), forward)
         : null
     const aoeGroundPos = groundTrapPos ?? meteorGroundPos ?? lightningGroundPos
-    if(aoeGroundPos){
+    if(skill.weaponSwing){
+        // a weapon skill (crescenthowl): no magic circle - the wave leaves the
+        // swing, castDuration on from now
+        swingWeapon(scene, player, skill, charState.owner === getCharState()?.owner)
+    } else if(aoeGroundPos){
         const circleRadius = skill.groundTrap ? getGroundTrapRadius(skill) : (skill.meteorRain?.spread ?? skill.lightningStrike?.spread ?? 4)
         createMagicCircle(aoeGroundPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, null, groundTrapCircleScale(circleRadius))
     } else {
@@ -416,8 +490,10 @@ function fireProjectileVolley(scene, charState, skill, spawnPos, forward, powerS
             : forward
         const isLastShot = i === burstCount - 1
 
+        // which shot of the fan this is (the crescent wave rolls each its own way)
+        const shot = { ...skill, _fanIndex: i }
         const fireId = setTimeout(() => {
-            fireElementalProjectile(scene, charState, skill, spawnPos, shotForward, powerScale)
+            fireElementalProjectile(scene, charState, shot, spawnPos, shotForward, powerScale)
             // only the LAST shot clears the pendingCasts entry - see this
             // function's own header comment for why that has to wait until
             // every bolt has actually gone out, not fire immediately
@@ -1496,7 +1572,10 @@ function buildCustomMesh(scene, box, customMesh, color){
 // returned a plain function, sometimes {cleanup, onHit} depending on style -
 // collapsed into one consistent shape here, with onHit itself internally
 // dispatching skill.onHitVisual.type instead of the caller having to branch).
-function renderGenericProjectile(scene, box, skill){
+// isMine: the caster is me; casterOwner: who cast it (only the crescent wave uses
+// them - its shake and blow land on the caster's screen alone, its ground gash
+// falls back to the caster's feet)
+function renderGenericProjectile(scene, box, skill, { isMine = false, casterOwner = null } = {}){
     const pv = skill.projectileVisual || {}
     const color = skill.explosionColor || "white"
     const scale = skill.projectileScale ?? 1
@@ -1528,6 +1607,7 @@ function renderGenericProjectile(scene, box, skill){
     let disposables = [] // anything with its own .dispose() not already covered by root/box disposal
     let root = null // set for shapes needing an intermediate TransformNode (multi-copy, or explicit root request)
     let customBuild = null
+    let crescentWave = null // shape "crescent" - its own impact on a body it cuts through
 
     if(pv.shape === "particle"){
         const styles = skill.particleStyles ?? [{ name: "oneline", color }]
@@ -1554,6 +1634,15 @@ function renderGenericProjectile(scene, box, skill){
         animatables.push({ node: plane, axes: pv.animation })
         disposables.push(() => plane.dispose(false, materialKind !== "texture"))
         root = plane
+    } else if(pv.shape === "crescent"){
+        // the wave of a weapon skill (crescenthowl) - effects/crescentHowl.js
+        crescentWave = createCrescentWave(scene, box, skill, scale, { isMine, casterOwner })
+        root = box
+        disposables.push(() => crescentWave.dispose())
+        if(skill.particleStyles?.length){
+            const trail = createParticleSystem(scene, box, skill.particleStyles)
+            disposables.push(() => trail.forEach(ps => { ps.stop(); ps.dispose(false) }))
+        }
     } else if(pv.shape === "glbModel" && pv.model){
         // a real modeled GLB projectile (models/projectiles/*.glb, see
         // assetcreation/createProjectileModel.js) instead of a primitive
@@ -1723,6 +1812,7 @@ function renderGenericProjectile(scene, box, skill){
     }
 
     function onHit(enemy, finishCleanup, projectile){
+        crescentWave?.impact(enemy)
         runOnHitVisual(scene, box, skill, skill.onHitVisual, { root, customBuild, launchPosition }, enemy, finishCleanup, projectile)
     }
 
@@ -2062,7 +2152,7 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     // own header comment. onHit is always present now (it internally dispatches
     // skill.onHitVisual.type), collapsing the old "sometimes a plain cleanup
     // function, sometimes {cleanup, onHit}" split into one consistent shape.
-    const { cleanup: cleanupStyle, onHit } = renderGenericProjectile(scene, box, skill)
+    const { cleanup: cleanupStyle, onHit } = renderGenericProjectile(scene, box, skill, { isMine: charState.owner === getCharState()?.owner, casterOwner: charState.owner })
     // marker-style skills (projectileVisual.silentLaunch, astralrainSkill's
     // own targeting box) stay silent too, not just invisible - a stealthy
     // targeting box firing off a fireball whoosh would undercut the whole
@@ -2130,6 +2220,15 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     }
 
     let hasHit = false
+    // projectileVisual.pierce (crescenthowl): it cuts THROUGH - every body it
+    // meets is hit once and it flies on to the end of its run (rangeMs) instead
+    // of stopping at the first. Each enemy's trigger fires once on entry anyway;
+    // this keeps a body from being counted twice if it's ever re-entered.
+    const pierce = !!skill.projectileVisual?.pierce
+    const pierced = new Set()
+    const noCleanup = () => {}
+    // every body this projectile can hit, with what hitting it does (the sweep below)
+    const sweepTargets = []
     // only ever populated below, for skill.swordRain skills - cleanup fns
     // for every environment intersection trigger registered (see the
     // ENV_HIT_KEYWORDS block after the enemy loop), tracked up here so
@@ -2140,14 +2239,14 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
         if(hasHit) return
         envTriggerCleanups.forEach(fn => fn())
         cleanupProjectile()
-    }, PROJECTILE_RANGE_TIMEOUT)
+    }, skill.projectileVisual?.rangeMs ?? PROJECTILE_RANGE_TIMEOUT)
 
     // enemies only - hitting other players isn't wired up here (no PvP
     // damage path was asked for, and deductHp's multiplayer contract wasn't
     // verified against this), so a bolt just passes through them
     getEnemiesOnScene().forEach(enemy => {
         if(!enemy.body) return
-        const enterAction = onIntersecEnterTrig(box, enemy.body, scene, () => {
+        const onEnter = () => {
             if(hasHit) return
             // this trigger is bound to ONE SPECIFIC enemy, captured in this
             // closure back at cast time - if THIS enemy died from
@@ -2166,10 +2265,15 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             // as this projectile's one hit) and let it keep flying toward
             // whatever it might genuinely still reach.
             if(!getEnemiesOnScene().some(e => e._id === enemy._id)) return
-            hasHit = true
-            clearTimeout(missTimeout)
             removeIntersecTrig(box, enterAction)
-            envTriggerCleanups.forEach(fn => fn())
+            if(pierce){
+                if(pierced.has(enemy._id)) return
+                pierced.add(enemy._id)
+            } else {
+                hasHit = true
+                clearTimeout(missTimeout)
+                envTriggerCleanups.forEach(fn => fn())
+            }
 
             // skill.swordRain (astralrainSkill) - this marker doesn't deal
             // damage or explode itself, it only marks where it landed;
@@ -2268,6 +2372,9 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
                     dmgDetails: { physicalDmg: totalDmg, weaponDmg: 0, magicDmg: totalDmg },
                     targetId: enemy._id,
                     currentPlaceId: freshCharState.currentPlace.placeId,
+                    // a knockback/bleed the skill carries (crescenthowl) - rides to
+                    // every client with the hit, where enemyIsHit lands it
+                    effectsWhenHit: skillHitEffects(skill),
                 })
                 registerSkillHitTarget(enemy, freshCharState)
 
@@ -2329,8 +2436,11 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             // first (enemies have no bodytarget/spine mount like players do,
             // so this attaches to the enemy's own whole body); everything
             // else calls finishCleanup immediately, right when it lands
-            onHit(enemy, cleanupProjectile, projectile)
-        })
+            // a piercing wave flies on - its hit visual plays, nothing ends it
+            onHit(enemy, pierce ? noCleanup : cleanupProjectile, projectile)
+        }
+        const enterAction = onIntersecEnterTrig(box, enemy.body, scene, onEnter)
+        sweepTargets.push({ body: enemy.body, onEnter })
     })
 
     // npcFighter duel opponents (npc/duelSystem.js) - never server-tracked
@@ -2343,12 +2453,17 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
     // emitEnemyBind/emitEnemyCurse/registerSkillHitTarget, nothing to relay.
     getDuelOpponentsOnScene().forEach(duelOpp => {
         if(!duelOpp.body) return
-        const enterAction = onIntersecEnterTrig(box, duelOpp.body, scene, () => {
+        const onEnter = () => {
             if(hasHit) return
-            hasHit = true
-            clearTimeout(missTimeout)
             removeIntersecTrig(box, enterAction)
-            envTriggerCleanups.forEach(fn => fn())
+            if(pierce){
+                if(pierced.has(duelOpp)) return
+                pierced.add(duelOpp)
+            } else {
+                hasHit = true
+                clearTimeout(missTimeout)
+                envTriggerCleanups.forEach(fn => fn())
+            }
 
             if(skill.swordRain){
                 triggerSwordRain(scene, charState, skill, duelOpp.body.position.clone(), powerScale)
@@ -2377,10 +2492,38 @@ function fireElementalProjectile(scene, charState, skill, spawnPos, forward, pow
             // burn itself against its own pre-existing bind-visual particles)
             const burnEffect = getSkillEffect(skill, "burn")
             if(burnEffect) startTargetBurn(burnEffect, duelOpp.body, scene, undefined, undefined, dmg => duelOpp.applyDamage(dmg))
+            // a bleed (crescenthowl) - its blood, its tick. Not the knockback:
+            // a duel opponent holds its ground
+            const bleedEffect = getSkillEffect(skill, "bleed")
+            if(bleedEffect) startTargetBleed(bleedEffect, duelOpp.bloodps, dmg => duelOpp.applyDamage(dmg))
 
-            onHit(duelOpp, cleanupProjectile, projectile)
-        })
+            onHit(duelOpp, pierce ? noCleanup : cleanupProjectile, projectile)
+        }
+        const enterAction = onIntersecEnterTrig(box, duelOpp.body, scene, onEnter)
+        sweepTargets.push({ body: duelOpp.body, onEnter })
     })
+
+    // a piercing wave is fast and wide, and a slow frame can carry it clean past a
+    // body between two intersection checks - so it also sweeps: every frame, the
+    // stretch it just crossed is tested against each body, as wide as the wave.
+    // onEnter counts each body once (pierced) however many ways it's reached.
+    if(pierce){
+        let prev = box.position.clone()
+        const sweep = scene.onBeforeRenderObservable.add(() => {
+            if(box.isDisposed()) return scene.onBeforeRenderObservable.remove(sweep)
+            const cur = box.position
+            const reach = box.scaling.x * 0.35 + 0.45 // half the wave across, plus a body
+            const dx = cur.x - prev.x, dz = cur.z - prev.z, len2 = dx * dx + dz * dz
+            sweepTargets.forEach(({ body, onEnter }) => {
+                if(body.isDisposed()) return
+                const p = body.position
+                if(Math.abs(p.y - cur.y) > 2) return
+                const t = len2 ? Math.max(0, Math.min(1, ((p.x - prev.x) * dx + (p.z - prev.z) * dz) / len2)) : 0
+                if(Math.hypot(p.x - (prev.x + dx * t), p.z - (prev.z + dz * t)) <= reach) onEnter()
+            })
+            prev = cur.clone()
+        })
+    }
 
     // skill.swordRain (astralrainSkill) only - the marker can ALSO strike
     // the environment (floor/wall/tree), not just an enemy, via the same

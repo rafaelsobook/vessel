@@ -62,6 +62,39 @@ export const godslayerTitle = {
     color: "#e8dfc8",
 }
 
+// ── SIDE-STORY TITLES (sidestories/) ─────────────────────────────────────────
+// Earned by finishing an NPC's side story, not by being first - shared: true,
+// so every character who earns one holds it (sidestories/kit.js's grantTitle
+// saves it with the character, never through the server's one-holder
+// /claim-title route the titles above use).
+// bonus: what holding it does, read by titleBonus below -
+//   critChance  percentage points on every melee swing's crit roll
+//               (attackingSystem.js's calcDmg, on top of the capped accuracy chance)
+//   meleeDmg    flat damage on every melee swing (calcDmg's physicalDmg)
+export const heroesDescendantTitle = {
+    titleId: "201_heroesdescendant",
+    dn: "Heroes Descendant",
+    desc: "Strong told you the Lantern's secret: strike where they bend, for whoever stands behind you. +8% critical strike chance.",
+    color: "#f2d27a",
+    shared: true,
+    bonus: { critChance: 8 },
+}
+export const oathkeeperTitle = {
+    titleId: "202_oathkeeper",
+    dn: "Oathkeeper",
+    desc: "Closed the debt Halden carried for thirteen years: Vargoth is dead. +15 damage on every melee strike.",
+    color: "#c9d6e8",
+    shared: true,
+    bonus: { meleeDmg: 15 },
+}
+export const friendOfTheHearthTitle = {
+    titleId: "203_friendofthehearth",
+    dn: "Friend of the Hearth",
+    desc: "Brought Tobbin the Founders' Brew's grain, caps and fire-slime core. Your mug is never empty at the Hearth.",
+    color: "#d9894a",
+    shared: true,
+}
+
 export const titlesData = [
     flameWardTitle,
     monsterBaneTitle,
@@ -69,8 +102,16 @@ export const titlesData = [
     heraldOfRuinTitle,
     dragonSlayerTitle,
     godslayerTitle,
+    heroesDescendantTitle,
+    oathkeeperTitle,
+    friendOfTheHearthTitle,
 ]
 
 // title.titleId -> title object, same lookup convention skillsData.js's own
 // SKILLS_BY_NAME already uses
 export const TITLES_BY_ID = Object.fromEntries(titlesData.map(title => [title.titleId, title]))
+
+/** The total of one bonus (e.g. "critChance") over every title a character holds. */
+export function titleBonus(charState, stat){
+    return (charState?.titles ?? []).reduce((total, held) => total + (TITLES_BY_ID[held?.titleId]?.bonus?.[stat] ?? 0), 0)
+}

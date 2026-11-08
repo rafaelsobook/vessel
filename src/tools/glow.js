@@ -19,6 +19,20 @@ export function addGlow(scene, mesh, intensity = 2){
         gl = new GlowLayer("magicGlow", scene, { excludeByDefault: true, blurKernelSize: 64 })
         gl.intensity = GLOW_LAYER_INTENSITY
 
+        // A disposed mesh is NOT taken off the included list by Babylon -
+        // its id stays there for good. With excludeByDefault the layer only
+        // renders while that list has something in it, so one stale id kept
+        // the whole glow pass (a render of every glowing mesh plus four
+        // full-screen blur passes) running every frame for the rest of the
+        // scene - and every enemy skill cast left ~4 more (the flying sword's
+        // parts, createweapon.js, disposed without a dropGlow). Measured: 32
+        // stale ids after 20 casts, the glow pass never switching back off.
+        // Taking every removed mesh off the list here covers every addGlow
+        // caller, the ones that already drop their glow by hand included
+        // (removing twice is harmless).
+        const removed = scene.onMeshRemovedObservable.add(mesh => gl.removeIncludedOnlyMesh(mesh))
+        gl.onDisposeObservable.addOnce(() => scene.onMeshRemovedObservable.remove(removed))
+
         // per-mesh brightness (see the constant's own comment above) - this
         // completely REPLACES the default "just read material.emissiveColor"
         // behavior, so it has to redo that part itself, then scale by

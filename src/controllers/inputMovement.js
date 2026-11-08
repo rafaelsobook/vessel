@@ -32,8 +32,10 @@ import { createAggregate } from '../tools/physics.js';
 import { attachCam } from '../tools/camera.js';
 import { showShortNotice } from '../components/shortNotice.js';
 import { evolveInto, devolve } from '../charactersystem/evolution.js';
+import { getCombatLock, getCombatLockRadius } from '../charactersystem/meleeCombat.js';
 
-let ISINDEVEMODE = true
+let ISINDEVEMODE = false
+let devSpeed = 6
 // the most recent enemy MY OWN melee attack actually landed on (see
 // createEnemy.js's atkCollider hit handler, right alongside its own
 // faceForward call) - createMyCharacter.js's positionAtkCollider reads this
@@ -367,7 +369,7 @@ function setupControls(scene, allsounds) {
     
 
     let walkSpeed = 1;
-    let sprintSpeed = ISINDEVEMODE ? 100 : 3.7;
+    let sprintSpeed = ISINDEVEMODE ? devSpeed : 3.4;
     let currentSpeed = walkSpeed;
     // module-level variable, reset fresh here (not a local `let` anymore -
     // see its own declaration up top for why)
@@ -401,6 +403,27 @@ function setupControls(scene, allsounds) {
 
     const input = { forward: 0, right: 0 };
 
+    // LOCKED ON (charactersystem/meleeCombat.js's getCombatLock - the ring under
+    // an enemy I swung at): I stay turned toward it and the keys move me
+    // relative to it, not to the camera - a/d circle it sideways and s backs
+    // off, at half sprint speed and in their own clips (movingleft/right/back),
+    // while w still runs straight in. A joystick picks by the way it points.
+    const LOCK_TURN_RATE = 14;                    // per second - about all the way round in a fifth of a second
+    const LOCK_RUN_ANGLE = 30 * Math.PI / 180;    // within this of straight at it, it's a run in
+    const LOCK_BACK_ANGLE = 150 * Math.PI / 180;  // past this, backing off
+    const LOCK_STRAFE_SPEED = 0.5;                // of sprintSpeed
+    // I don't walk into it: its body's edge stays this far off (the same distance
+    // a weapon's lunge stops at - meleeCombat.js's STANDOFF). Within LOCK_EASE_GAP
+    // of that, the way in slows to nothing. Moving sideways or away is never held.
+    const LOCK_CLOSEST_GAP = 0.85;
+    const LOCK_EASE_GAP = 0.5;
+    let lockHeld = false;                         // standing against it with a key held - not running on the spot
+    const LOCK_FACE_EMIT_MS = 150;                // standing still, turning to keep it in front - how often others are told
+    let lockedBody = null;
+    let lockFaceEmitAt = 0;
+    const _toTarget = new Vector3();
+    const _lockGoal = new Quaternion();
+
     rotationHelper = MeshBuilder.CreateBox("rotHelper", { size: 0.1 }, scene);
     rotationHelper.rotationQuaternion = Quaternion.Identity();
     rotationHelper.isVisible = false;
@@ -422,7 +445,38 @@ function setupControls(scene, allsounds) {
         if (performance.now() < attackFacingLockUntil) return;
         // dazed - updateMovement turns them the way the keys point once it's over
         if (amIStunned()) return;
+        // locked on - turned toward the enemy every tick instead (updateMovement)
+        if (lockedBody) return;
         rotationHelper.lookAt(camDir, Math.atan2(right, forward), 0, 0);
+    }
+
+    // Locked on: which way the keys move me, measured from the enemy (forward
+    // is straight at it), and the clip that goes with it - null for a plain run
+    // in. Into _velocityVec's x/z as a unit direction; false if I'm on top of it.
+    function lockedStep(targetBody) {
+        const from = aggregate.transformNode.position;
+        _toTarget.set(targetBody.position.x - from.x, 0, targetBody.position.z - from.z);
+        if (_toTarget.lengthSquared() < 1e-4) return false;
+        _toTarget.normalize();
+        const { forward, right } = input;
+        // right of the line to it: (z, -x) of the way to it
+        const x = _toTarget.x * forward + _toTarget.z * right;
+        const z = _toTarget.z * forward - _toTarget.x * right;
+        const len = Math.hypot(x, z) || 1;
+        _velocityVec.set(x / len, 0, z / len);
+        // how much of the way is left between its edge and mine, and how much of
+        // what I'm doing is going in - the part I'm not let do close up
+        const gap = Math.hypot(targetBody.position.x - from.x, targetBody.position.z - from.z) - getCombatLockRadius();
+        const inward = _velocityVec.x * _toTarget.x + _velocityVec.z * _toTarget.z;
+        if (inward > 0) {
+            const room = Math.min(1, Math.max(0, (gap - LOCK_CLOSEST_GAP) / LOCK_EASE_GAP));
+            _velocityVec.x -= _toTarget.x * inward * (1 - room);
+            _velocityVec.z -= _toTarget.z * inward * (1 - room);
+        }
+        const angle = Math.abs(Math.atan2(right, forward));
+        if (angle <= LOCK_RUN_ANGLE) return null;
+        if (angle >= LOCK_BACK_ANGLE) return "movingback";
+        return right < 0 ? "movingleft" : "movingright";
     }
 
     function setPlayerMoving(value) {
@@ -1258,6 +1312,33 @@ function setupControls(scene, allsounds) {
 
         updateFlight()
         if(!getCanPress()) return
+
+        // locked on (see LOCK_TURN_RATE) - turned toward the enemy every tick,
+        // moving or not. Let go with a key still held, and I turn the way it
+        // points again, the way I would have without the lock
+        const lockNow = getCombatLock()
+        if (lockedBody && !lockNow) {
+            lockedBody = null
+            if (myPlayer) myPlayer._strafe = null
+            updateRotation(getCamDir())
+        }
+        lockedBody = lockNow
+        if (lockedBody && !amIStunned()) {
+            const from = aggregate.transformNode.position
+            const dx = lockedBody.position.x - from.x, dz = lockedBody.position.z - from.z
+            if (dx * dx + dz * dz > 1e-4) {
+                Quaternion.RotationAxisToRef(Vector3.Up(), Math.atan2(dx, dz), _lockGoal)
+                const dt = scene.getEngine().getDeltaTime() / 1000
+                Quaternion.SlerpToRef(rotationHelper.rotationQuaternion, _lockGoal, 1 - Math.exp(-LOCK_TURN_RATE * dt), rotationHelper.rotationQuaternion)
+                // standing still, others only hear where I face when I stop -
+                // keep them told while I turn to keep it in front
+                const now = performance.now()
+                if (!isMoving && now - lockFaceEmitAt > LOCK_FACE_EMIT_MS && Math.abs(Quaternion.Dot(rotationHelper.rotationQuaternion, aggregate.transformNode.rotationQuaternion)) < 0.9995) {
+                    lockFaceEmitAt = now
+                    emitStop()
+                }
+            }
+        }
         // facingOverrideCount>0 - faceForward is actively turning the player
         // to face something it just hit (see its own comment on why this
         // guard exists) - back off from this sync for that window instead
@@ -1304,6 +1385,23 @@ function setupControls(scene, allsounds) {
             fwd.y = 0;
             fwd.normalize();
             const vel = aggregate.body.getLinearVelocity();
+            // locked on - the keys go round the enemy, not the way I face
+            const strafe = lockedBody ? lockedStep(lockedBody) : null;
+            if (lockedBody && strafe !== false) fwd.set(_velocityVec.x, 0, _velocityVec.z);
+            if (myPlayer) myPlayer._strafe = strafe || null;
+            // up against it, with nothing left to move: stand there (and tell the
+            // others) rather than run on the spot - and run again once a key
+            // takes me somewhere
+            const held = !!lockedBody && strafe !== false && Math.hypot(fwd.x, fwd.z) < 0.08;
+            if (held !== lockHeld) {
+                lockHeld = held;
+                setPlayerMoving(!held);
+                if (held) emitStop();
+            }
+            if (held) {
+                aggregate.body.setLinearVelocity(new Vector3(0, vel.y, 0));
+                return;
+            }
 
             // setLinearVelocity takes a rate (units/second), not a per-frame
             // delta - Havok's own integrator already multiplies this by real
@@ -1315,12 +1413,14 @@ function setupControls(scene, allsounds) {
             // worn out (characterstate.js's isCharacterTired) - walking pace
             // only, fighting mode and shift included
             // a blessing's speed (the Shard of the Moon at night) on top
-            const speed = (myPlayer?.isTired ? walkSpeed : currentSpeed) * (1 + getMoveSpeedBonus())
+            // sideways or backing off while locked on: half a sprint
+            const pace = myPlayer?.isTired ? walkSpeed : strafe ? sprintSpeed * LOCK_STRAFE_SPEED : currentSpeed
+            const speed = pace * (1 + getMoveSpeedBonus())
             _velocityVec.set(fwd.x * speed, vel.y, fwd.z * speed)
             aggregate.body.setLinearVelocity(_velocityVec);
             const now = performance.now();
             if (now - lastEmit > 50) {
-                emitMove();
+                emitMove(myPlayer?._strafe);
                 lastEmit = now;
             }
         }

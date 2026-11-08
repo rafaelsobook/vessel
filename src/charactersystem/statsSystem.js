@@ -22,12 +22,14 @@ const classesList = document.querySelector('.classes-list')
 const statPointsAvailable = document.querySelector(".stat-points-available")
 
 // characterclass keys -> their icon in public/images/stats/ (server/models/
-// charDetM.js's characterclass schema). duskrunner has no icon art yet and
-// no weapon case in characterclass.js's triggerClassLeveling either, so it's
+// charDetM.js's characterclass schema), or `src` where the art lives
+// elsewhere (the paladin's is the spear item's). duskrunner has no icon art,
+// and nothing trains it (characterclass.js - the pickaxe is Viking's), so it's
 // left out here rather than showing a broken image for a class nothing
-// actually levels up yet.
+// actually levels up.
 const classIcons = [
     { key: "warbringer", label: "Warbringer", icon: "sword" },
+    { key: "paladin", label: "Paladin", src: "./images/items/equipable/spear.webp" },
     { key: "viking", label: "Viking", icon: "axe" },
     { key: "warhammer", label: "Warhammer", icon: "hammer" },
     { key: "berserker", label: "Berserker", icon: "fist" },
@@ -177,7 +179,7 @@ export function updateStatUI(){
     // from actually swinging the matching weapon, see characterclass.js's
     // triggerClassLeveling, not a spendable point like strength/dex/magic)
     classesList.innerHTML = ''
-    classIcons.forEach(({key, label, icon}) => {
+    classIcons.forEach(({key, label, icon, src}) => {
         const classDet = state.characterclass?.[key]
         if(!classDet) return
 
@@ -186,7 +188,7 @@ export function updateStatUI(){
         const pName = createElement('p', 'classes-name', label)
         const pLvl = createElement('p', 'classes-lvl', `Lv. ${classDet.lvl}`)
 
-        img.src = `./images/stats/${icon}.webp`
+        img.src = src ?? `./images/stats/${icon}.webp`
         div.append(img, pName, pLvl)
         classesList.append(div)
     })

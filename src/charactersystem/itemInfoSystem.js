@@ -26,7 +26,7 @@ import { updateThrowButtonVisibility } from "./uimanagement.js"
 // every other "you now know X" already goes through - slot bumping, saving,
 // the acquired popup and the achievements all come with it.
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
-import { giveSkill } from "../components/skillsui.js"
+import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 
 
 const itemInfoCont = document.querySelector(".item-info-cont")
@@ -340,6 +340,10 @@ let consumeItemFunc = async () => {
 //
 // The book stores only skillName, never a copy of the skill itself, so this
 // always teaches the CURRENT version of it (see skillBooks.js's own comment).
+//
+// A skill already known isn't refused: the tome is spent to LEVEL it up one,
+// through the same upgradeOwnedSkill the skill panel's cheat key uses (the
+// owned copy's lvl and power, the skill UI, the save and the "Lv. N" popup).
 let learnSkillFunc = async () => {
     if(!itemDetail) return
     if(itemDetail.itemCateg !== "skillbook") return
@@ -352,20 +356,20 @@ let learnSkillFunc = async () => {
     const charState = getCharState()
     if(!charState) return
 
-    // checked BEFORE spending the book, so a misclick on something you
-    // already know costs nothing. giveSkill guards this too, but it has no
-    // way to tell us it refused, and by then the copy would already be gone.
-    if(charState.skills?.find(sk => sk.name === skill.name)){
-        return openClosePopup(`You already know ${skill.displayName}`, true, 1500)
-    }
+    const alreadyKnown = !!charState.skills?.find(sk => sk.name === skill.name)
 
     openCloseMiniLS(`Studying ${itemDetail.dn} ...`, true)
     enableDisableInfoBtns(true)
 
-    // the shared grant path - pushes onto charState.skills with a free slot,
-    // refreshes the skill UI, persists, and fires the acquired popup and the
-    // "awakened"/"elite-skill" achievements
-    giveSkill(skill)
+    if(alreadyKnown){
+        // a second copy deepens what you know: one level
+        upgradeOwnedSkill(skill)
+    }else{
+        // the shared grant path - pushes onto charState.skills with a free slot,
+        // refreshes the skill UI, persists, and fires the acquired popup and the
+        // "awakened"/"elite-skill" achievements
+        giveSkill(skill)
+    }
 
     // spend one copy, same stack-aware deduction consumeItemFunc uses
     let theItemAfterDeducted = itemDetail
@@ -455,10 +459,9 @@ export function showItemInfo(_itemDet){
     itemInfoCont.style.display = "flex"
 
     itemImg.src = `./images/items/${itemCateg}/${name}.webp`
-    // a skill book has no art of its own - it shows the icon of the skill it
-    // teaches (skillBooks.js's own comment), same kind of override the
-    // helmet/weapon lines further down already are
-    if(itemCateg === "skillbook") itemImg.src = `./images/skills/${_itemDet.skillName}.webp`
+    // a skill book shows the art of its rarity (skillBooks.js), not one per
+    // skill - same kind of override the helmet/weapon lines further down are
+    if(itemCateg === "skillbook") itemImg.src = `./images/items/skillbook/${_itemDet.rarity ?? "normal"}.webp`
     // an item can name its own picture - a cooked mushroom keeps its raw one's,
     // toasted (cooking.js). Reset every time: this panel reuses one <img>.
     if(_itemDet.icon) itemImg.src = _itemDet.icon

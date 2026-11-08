@@ -49,6 +49,7 @@ import { getCharState } from "../charactersystem/characterstate"
 import { obtain } from "../charactersystem/inventory"
 import { randomNum } from "../tools/tools"
 import { ITEM_DICTIONARY, computeCraftedWeaponStats, weaponElements } from "../staticRecources/itemDictionary"
+import { effectsWhenHitFor } from "../staticRecources/weaponEffects.js"
 import { receiveAchievement } from "../charactersystem/achievement"
 import { epicSwordCraftDetails } from "../staticRecources/epiccrafts"
 import { getWeaponParts, getPartVariants } from "../assetcreation/createweapon"
@@ -427,6 +428,8 @@ function buildSwordItem(){
         itemCateg: "equipable",
         itemType: "weapon",
         weaponType: activeCategory,
+        // a critical throws what it hits back - and a hammer stuns (weaponEffects.js)
+        effectsWhenHit: effectsWhenHitFor(activeCategory),
         equipAbilities: {
             dmg, magicDmg, magicResistance, def: 0, plusStr: 0, plusDex: 0, plusInt: 0,
         },

@@ -1,4 +1,4 @@
-import { PBRMaterial, StandardMaterial, Color3, Texture, Engine, FresnelParameters } from "@babylonjs/core";
+import { StandardMaterial, Color3, Texture, Engine, FresnelParameters } from "@babylonjs/core";
 
 let MatUsed = StandardMaterial
 

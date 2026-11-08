@@ -104,11 +104,11 @@ function render(){
         if(itm.itemType === "helmet") img.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
         if(itm.weaponType === "pickaxe") img.src = `./images/items/${itm.itemCateg}/pickaxe.webp`
         if(itm.weaponType === "hammer") img.src = `./images/items/${itm.itemCateg}/hammer.webp`
-        // a skill book shows the icon of the skill it teaches, not an item
-        // icon - it has no art of its own (staticRecources/skillBooks.js).
-        // Set before the .png onerror fallback below so a book that somehow
-        // has no skill icon still falls back the same way everything else does.
-        if(itm.itemCateg === "skillbook") img.src = `./images/skills/${itm.skillName}.webp`
+        // a skill book shows the art of its rarity (images/items/skillbook/,
+        // staticRecources/skillBooks.js), not the skill's icon. Set before the
+        // .png onerror fallback below so a rarity with no art still falls back
+        // the same way everything else does.
+        if(itm.itemCateg === "skillbook") img.src = `./images/items/skillbook/${itm.rarity ?? "normal"}.webp`
         // some existing item art is .png rather than .webp (see npcDetails.js sellers' toSell weapons) - fall back once
         img.onerror = () => { img.onerror = null; img.src = `./images/items/${itm.itemCateg}/${itm.name}.png` }
         const name = createElement("p", "bs-item-name", itm.dn)
@@ -137,22 +137,38 @@ tabBtns.forEach(btn => {
     })
 })
 
+// one buy or sell at a time: each waits on a server save, and a click landing
+// during that wait used to run the whole thing again - selling the same item
+// for its price two, three, four times over
+let trading = false
+
 actionBtn.addEventListener("click", async () => {
-    if(!selectedItem) return
+    if(!selectedItem || trading) return
     const charState = getCharState()
-
-    if(mode === "buy"){
-        if(!canAfford(charState, selectedItem.price)) return openClosePopup("Not enough coins", true, 1500)
-        spendOnPrice(charState, selectedItem.price)
-        // obtain() handles stacking, the acquired popup, and persisting charState
-        await obtain({...selectedItem, itemId: randomNum()})
-    }else{
-        await earnFromPrice(selectedItem.price)
-        charState.items = charState.items.filter(itm => itm.itemId !== selectedItem.itemId)
-        await updateMyDetailsOL(charState, checkIfTokenSaved())
-    }
-
-    selectedItem = null
+    if(!charState) return
+    trading = true
     actionBtn.disabled = true
-    render()
+    const item = selectedItem
+    selectedItem = null
+
+    try {
+        if(mode === "buy"){
+            if(!canAfford(charState, item.price)) return openClosePopup("Not enough coins", true, 1500)
+            spendOnPrice(charState, item.price)
+            // obtain() handles stacking, the acquired popup, and persisting charState
+            await obtain({...item, itemId: randomNum()})
+        }else{
+            // still in the bag? if not, it was already sold - nothing to pay for
+            if(!charState.items.some(itm => itm.itemId === item.itemId)) return
+            // out of the bag BEFORE the coins come in, so there's never a moment
+            // where you hold both the item and its price
+            charState.items = charState.items.filter(itm => itm.itemId !== item.itemId)
+            await earnFromPrice(item.price)
+            await updateMyDetailsOL(charState, checkIfTokenSaved())
+        }
+    } finally {
+        trading = false
+        actionBtn.disabled = true
+        render()
+    }
 })

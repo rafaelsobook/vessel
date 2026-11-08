@@ -1,4 +1,4 @@
-import { Color3, Matrix, Mesh, MeshBuilder, PBRMaterial, Texture, Vector3 } from "@babylonjs/core"
+import { Color3, Matrix, Mesh, MeshBuilder, StandardMaterial, Texture, Vector3 } from "@babylonjs/core"
 import { createSimplex } from "../tools/noise"
 import { createAggregate } from "../tools/physics.js"
 import { createJaggedRock, scatterRubble } from "./createRock.js"
@@ -124,15 +124,14 @@ export function createCaveEntrance(scene, position, rotationY = 0){
 }
 
 function getCaveMaterial(scene){
-    const mat = new PBRMaterial("caveRockMat", scene)
+    const mat = new StandardMaterial("caveRockMat", scene)
     const tex = new Texture(ROCK_TEXTURE, scene)
     // the hill's UVs wrap all the way round a ~20 unit circumference
     tex.uScale = 4
     tex.vScale = 2
-    mat.albedoTexture = tex
-    mat.albedoColor = ROCK_TINT
-    mat.roughness = 1
-    mat.metallic = 0
-    mat.environmentIntensity = 0.3
+    mat.diffuseTexture = tex
+    mat.diffuseColor = ROCK_TINT
+    // rough rock - no shine
+    mat.specularColor = Color3.Black()
     return mat
 }

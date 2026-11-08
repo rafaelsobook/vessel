@@ -1,4 +1,29 @@
-import {PBRMaterial, Texture, DynamicTexture, Color3} from "@babylonjs/core";
+import {StandardMaterial, Texture, DynamicTexture, Color3} from "@babylonjs/core";
+
+// Every material in the game is a StandardMaterial - no PBRMaterial anywhere
+// (glTF models included: tools/gltfStandardMaterials.js). These two stand in
+// for the PBR knobs the code used to set.
+
+// A surface's shine from the metal/roughness it would have had as PBR: a rough
+// one (roughness 1) has none, a smooth one a small tight highlight, and metal
+// tints its highlight with its own colour, the way polished metal does.
+export function applyShine(mat, { roughness = 1, metallic = 0, tint = Color3.White() } = {}){
+    const gloss = 1 - Math.min(1, Math.max(0, roughness))
+    const strength = gloss * gloss * (0.15 + 0.6 * metallic)
+    mat.specularColor = Color3.Lerp(Color3.White(), tint, metallic).scale(strength)
+    mat.specularPower = 8 + gloss * gloss * 120
+    return mat
+}
+
+// Lit by nothing - its own colour (and texture) at full strength, fog still
+// on it. What PBR's `unlit = true` did: the lights skip it, and its colour comes
+// through the emissive instead.
+export function makeUnlit(mat){
+    if(!mat) return mat
+    mat.disableLighting = true
+    mat.emissiveColor = (mat.diffuseColor ?? Color3.White()).clone()
+    return mat
+}
 
 // ── Height-map bumps ───────────────────────────────────────────────────────
 // Babylon's bumpTexture only understands TANGENT-SPACE NORMAL MAPS (the blue-ish
@@ -127,11 +152,12 @@ function texturePath(folder, name, suffix = ""){
 // materials, so two materials can use one texture on the GPU instead of two.
 // albedoTexture: likewise a ready-made colour texture (createAlbedoTexture),
 // used instead of <texName>; albedoColor3 then TINTS it rather than replacing it.
-export function createPBRMat(pathName, texName, scene, 
+// A matte stone surface - no shine (it was a roughness-1 PBR one).
+export function createSurfaceMat(pathName, texName, scene, 
     {
     uScale = DEFAULT_REPEAT, vScale = DEFAULT_REPEAT, bumpTexture, albedoTexture
     } = {}, albedoColor3) {
-    const mat = new PBRMaterial(texName, scene);
+    const mat = new StandardMaterial(texName, scene);
 
     let bumpTex = bumpTexture
     if(!bumpTex){
@@ -140,24 +166,21 @@ export function createPBRMat(pathName, texName, scene,
         bumpTex.vScale  = vScale;
     }
 
-    mat.albedoColor          = Color3.White();
-    mat.roughness            = 1;
-    mat.metallic             = 0;
-    mat.environmentIntensity = 0.3;
-    // mat.emissiveColor = new Color3(0.02, 0.1, 0.05);
+    mat.diffuseColor = Color3.White();
+    applyShine(mat, { roughness: 1 });
 
     // the albedo texture is only loaded when it's actually shown - with a flat
     // albedoColor it used to be downloaded and then never used
     if(albedoTexture){
-        mat.albedoTexture = albedoTexture
-        if(albedoColor3) mat.albedoColor = albedoColor3   // multiplies the texture
+        mat.diffuseTexture = albedoTexture
+        if(albedoColor3) mat.diffuseColor = albedoColor3   // multiplies the texture
     }else if(albedoColor3){
-        mat.albedoColor = albedoColor3
+        mat.diffuseColor = albedoColor3
     }else{
         const albTex = new Texture(texturePath(pathName, texName), scene);
         albTex.uScale   = uScale;
         albTex.vScale   = vScale;
-        mat.albedoTexture = albTex
+        mat.diffuseTexture = albTex
     }
     mat.bumpTexture = bumpTex
     return mat;

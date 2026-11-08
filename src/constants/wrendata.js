@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { offerStarterQuest } from '../npc/questOffer.js'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -48,6 +49,8 @@ export function wrenData(){
             questionId: 90,
             conversationWithQuestion: toLines(pick(wrenOpener)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("107_wren"),
                 { text: "Got any tips?", cb: () => startQuestionare(91) },
                 {
                     text: "Need a hand with anything?",

@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { offerStarterQuest } from '../npc/questOffer.js'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -47,6 +48,8 @@ export function arminData(){
             questionId: 400,
             conversationWithQuestion: toLines(pick(arminOpener)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("102_armin"),
                 { text: "What are you doing here?", cb: () => startQuestionare(401) },
                 {
                     text: "Got a trial for me?",

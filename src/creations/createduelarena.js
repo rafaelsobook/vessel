@@ -323,7 +323,6 @@ function nightAtmosphere(scene){
     })
     if(moonLight) moonLight.specular = new Color3(0.12, 0.14, 0.2)
     scene.fogDensity = 0.0065
-    scene.environmentIntensity = 0.35
 
     const toMoon = moonLight ? moonLight.direction.scale(-1).normalize() : new Vector3(-0.3, 0.6, 0.75).normalize()
     const moonColor = moonLight?.diffuse ?? new Color3(0.62, 0.72, 1)

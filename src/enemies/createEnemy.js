@@ -1,4 +1,4 @@
-import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, MeshBuilder, Quaternion, Sound } from "@babylonjs/core"
+import { Texture,PhysicsMotionType, Vector3, Color3, StandardMaterial, ActionManager, Mesh, MeshBuilder, Quaternion, Sound, Engine } from "@babylonjs/core"
 import { checkDistance, createMesh, createMonsterMaterial } from "../creations/creationTools.js"
 import { lookAt } from "../tools/tools"
 import { createGlowingMat, fresnelMat } from "../tools/materials.js"
@@ -14,7 +14,10 @@ import { playAnim, playRandomAnim, pickAnimVariant, findAnimVariants } from "../
 import { getSocket } from "../sockets/joinsocket.js"
 import { createAggregate } from "../tools/physics.js"
 import { calcDmg, getAttackInfo } from "../charactersystem/attackingSystem.js"
-import { emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget, emitEnemyTeleport } from "../sockets/emits.js"
+import { emitEnemyYCorrection, emitSpawnCircle, emitFaceTarget, emitEnemyTeleport, emitEnemyBind } from "../sockets/emits.js"
+import { weaponEffectsWhenHit, triggeredEffect } from "../staticRecources/weaponEffects.js"
+import { knockEnemyAway } from "../charactersystem/knockback.js"
+import { showStunStars } from "../effects/stunStars.js"
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { openClosePopup } from "../tools/popupUI.js"
@@ -25,12 +28,14 @@ import { getAllSounds, playSound, runSound } from "../components/soundSystem.js"
 import { createBloodSplatter } from "../tools/particlesystem.js"
 import { openworldGroundY } from "../tools/groundHeight.js"
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
-import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
-import { castEnemySkill, startTargetBurn } from "../creations/skillEffects.js"
+import { SKILLS_BY_NAME, getSkillEffect } from "../staticRecources/skillsData.js"
+import { maybeEscape } from "./voltstep.js"
+import { castEnemySkill, startTargetBurn, startTargetBleed } from "../creations/skillEffects.js"
 import { hasDungeonLineOfSight } from "../tools/dungeonSight.js"
 import { faceForward, lastHitEnemy, setLastHitEnemy } from "../controllers/inputMovement.js"
 import { onMeleeConnect, onMeleeKill } from "../charactersystem/meleeCombat.js"
 import { applyBlessingsToMeleeHit } from "../charactersystem/blessingEffects.js"
+import { watchRangeAttack } from "./rangeAttack.js"
 
 // modelStyles that don't bleed at all (see this file's own bloodps setup
 // below) - slime is gooey, not fleshy; ghost is an incorporeal spirit, same
@@ -293,6 +298,8 @@ export default function createEnemy(scene, det) {
         if (thisEnemy._disabled) return
         // still roaring at you (startEnemyRoar) - the swing comes after
         if (isEnemyRoaring(thisEnemy)) return
+        // charging a ranged attack (rangeAttack.js) - that comes first
+        if (thisEnemy._channelingUntil > performance.now()) return
         if (thisEnemy._targetId) {
             const targetHero = getPlayersOnScene().find(pl => pl.owner === thisEnemy._targetId)
             if (!targetHero) return
@@ -442,6 +449,11 @@ export default function createEnemy(scene, det) {
         body.onDisposeObservable.add(() => clearInterval(sightInterval))
     }
 
+    // --- its ranged attack (det.rangeAtkDetails - the electric slimes'
+    // lightning, the fire slimes' fireball, orangelith's sonic boom): past melee reach, it shoots at whoever
+    // it's after - see rangeAttack.js
+    if(det.rangeAtkDetails) watchRangeAttack(det, body)
+
     // --- enemy skill casting (det.skills - only fireslime/electricslime
     // for now, see tcp/recources/enemyDetails.ts) - deliberately its own
     // plain proximity poll, not the atkDetection/chaseDetector
@@ -492,7 +504,11 @@ export default function createEnemy(scene, det) {
                 // a random one of det.skills each cast - was always
                 // det.skills[0], so an enemy given more than one skill (the
                 // ghost's blinkstrike + darkorb) only ever used its first
-                const skillName = det.skills[Math.floor(Math.random() * det.skills.length)]
+                // escapes (voltstep.js) aren't cast on this timer - they fire
+                // from enemyIsHit
+                const castable = det.skills.filter(name => !getSkillEffect(SKILLS_BY_NAME[name], "escape"))
+                if (!castable.length) return
+                const skillName = castable[Math.floor(Math.random() * castable.length)]
                 const skill = SKILLS_BY_NAME[skillName]
                 if (!skill) return console.warn(`[enemy skill] unknown skill "${skillName}" on enemy`, det.name)
 
@@ -649,42 +665,13 @@ export default function createEnemy(scene, det) {
             emitEnemyDodge(thisEnemy._id, { x: dodgeTo.x, z: dodgeTo.z }, det.currentPlaceId)
         }, DODGE_CHECK_INTERVAL_MS)
     }
-    // let intervalAtk
-    // let intervalDistanceChecker
-
-    // if(det.actionType === "dynamic" || det.actionType === "throwing"){
-    //     const rangeAtkDetection = createMesh(scene, `rangeAtkDetection${det._id}`,
-    //     { size: det.rangeAtkDetails.range , height: det.bodyHeight}, { x: 0, y: 0, z: 0 }, .5, false, true)
-        
-    //     rangeAtkDetection.parent = body
-    //     rangeAtkDetection.isPickable = false
-
-    //     regActionEnter(rangeAtkDetection, heroBody, () => {
-    //         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-    //         const myCharId = heroBody.name.split(".")[1]
-    //         const heroPos = heroBody.position
-    //         if (!thisEnemy) return
-    //         if(thisEnemy.isDead) return 
-    //         console.warn(det.name, " emit range attack")
-    //         emitRangeAttack(det, thisEnemy._id, false, det.cPlace, getMeshPos(thisEnemy.body), getMeshPos(heroBody), det.rangeAtkDetails)
-    //     })
-    //     regActionExit(rangeAtkDetection, heroBody, () =>{
-    //         const thisEnemy = getEnemiesOnScene().find(ene => ene._id === det._id)
-    //         const myCharId = heroBody.name.split(".")[1]
-    //         const heroPos = heroBody.position
-    //         if (!thisEnemy) return
-    //         if(thisEnemy.isDead) return 
-    //         emitRangeAttack(det, thisEnemy._id, false, det.cPlace, getMeshPos(thisEnemy.body), getMeshPos(heroBody), det.rangeAtkDetails)
-    //     })
-    // }
-
     // for my attack
     const atkCollider = scene.getMeshByName(`atkCollider`)
     if(atkCollider){
         onIntersecEnterTrig(atkCollider, body, scene, () => {
             const enemy = getEnemiesOnScene().find(ene => ene._id === det._id)
             if (!enemy) return
-            // electric and dark slimes (det.dockChance, genenemy.ts) duck a
+            // water, electric and dark slimes (det.dockChance, genenemy.ts) duck a
             // plain swing now and then - it misses outright. Not a skill's
             // strike, and not while it's held down (bound/stunned).
             if(!atkCollider.isSkillHijacked && det.dockChance && !enemy.isDead && !enemy._disabled
@@ -743,11 +730,13 @@ export default function createEnemy(scene, det) {
             // to the weapon's own. A ghost shrugging off steel gets none of it.
             const isGlance = isPhysicalDmg && det.physicalImmune && !elements?.length
             const swing = isGlance
-                ? { dmgDetails: { ...calcDmg(charState), isPhysicalDmg }, effectsWhenHit: equippedWeapon?.effectsWhenHit }
+                ? { dmgDetails: { ...calcDmg(charState), isPhysicalDmg }, effectsWhenHit: weaponEffectsWhenHit(equippedWeapon) }
                 : applyBlessingsToMeleeHit({
                     dmgDetails: { ...calcDmg(charState), isPhysicalDmg, elements },
                     charState,
-                    effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                    // its own, or its type's (staticRecources/weaponEffects.js) - the
+                    // knockback/stun a critical brings among them
+                    effectsWhenHit: weaponEffectsWhenHit(equippedWeapon),
                     isSkill: !!atkCollider.isSkillHijacked,
                     targetId: det._id,
                     targetBody: body,
@@ -828,6 +817,9 @@ export default function createEnemy(scene, det) {
         hpbar,
         hpmesh,
         anims: entries.animationGroups,
+        // its own copies of the rig's skeletons (instantiateModelsToScene) -
+        // enemyDispose frees them, nothing else does
+        skeletons: entries.skeletons,
         meshes: mainBodyMeshes.getChildMeshes(),
         isDead: false,
         actionType: det.actionType,
@@ -876,11 +868,22 @@ export default function createEnemy(scene, det) {
 
         intervalWillAttack
     }
-    // a monster sharing its sounds (SOUND_FOLDERS below) gets them a moment
-    // later, once it's known which folder has each file
+    // its sounds arrive a moment later, once each file's decoded audio is in
+    // (monsterSounds below)
     sounds.ready?.then(shared => {
         if(body.isDisposed()) return Object.values(shared).forEach(snd => snd?.dispose())
         Object.assign(enemy, shared)
+    })
+    // and go with it - they were never disposed before, so every enemy ever
+    // spawned in a place (openworld respawns every 10 s) kept its sounds in
+    // the scene's soundtrack until the place was left. One still playing (its
+    // death cry, played just before the body goes) finishes first.
+    body.onDisposeObservable.addOnce(() => {
+        ;[enemy.runSound, enemy.deathSound, enemy.hitSound, enemy.attackSound, enemy.roarSound].forEach(snd => {
+            if(!snd) return
+            if(snd.isPlaying) snd.onEndedObservable.addOnce(() => snd.dispose())
+            else snd.dispose()
+        })
     })
     return enemy
 }
@@ -904,43 +907,51 @@ const SOUND_FOLDERS = {
     standingwolf: ["standingwolf", "wolf"],
 }
 const SOUND_FILES = ["run", "death", "hitbynosharp", "attack", "roar"]
-// url -> Promise<boolean>, once per file per session. Checks the content
-// type, not just the status: vite (and an SPA host) answers a missing file
-// with 200 + index.html
-const soundFileChecks = new Map()
-function hasSoundFile(url){
-    if(!soundFileChecks.has(url)){
-        soundFileChecks.set(url, fetch(url, { method: "HEAD" })
-            .then(res => res.ok && /audio|mpeg|octet-stream/i.test(res.headers.get("content-type") ?? ""))
-            .catch(() => false))
+// url -> Promise<AudioBuffer | null>: each monster sound fetched and decoded
+// ONCE per session, the decoded audio then shared by every monster playing it
+// (a Sound made from an AudioBuffer uses it as-is - Babylon's
+// _WebAudioStaticSoundBuffer, no copy). Made from the url, every Sound
+// fetched and decoded its own copy: ~1 MB of decoded audio per slime
+// (measured), more per wolf (its run loop alone is ~13 s of sound), for every
+// enemy within 300 units - and they were never freed (see createEnemy's body
+// dispose). A missing file is null
+// once, rather than a failed fetch and decode per enemy: the content type is
+// checked, not just the status - vite (and an SPA host) answers a missing
+// file with 200 + index.html.
+const decodedSounds = new Map()
+function decodedSound(url){
+    if(!decodedSounds.has(url)){
+        const context = Engine.audioEngine?.audioContext
+        decodedSounds.set(url, !context ? Promise.resolve(null) : fetch(url)
+            .then(res => res.ok && /audio|mpeg|octet-stream/i.test(res.headers.get("content-type") ?? "") ? res.arrayBuffer() : null)
+            .then(data => data ? context.decodeAudioData(data) : null)
+            .catch(() => null))
     }
-    return soundFileChecks.get(url)
+    return decodedSounds.get(url)
 }
 function monsterSounds(scene, det, body, anims){
-    const folders = SOUND_FOLDERS[det.modelStyle]
-    if(folders){
-        // sounds start null (every caller already treats null as "nothing to
-        // play") and arrive through ready - createEnemy assigns them
-        const ready = Promise.all(SOUND_FILES.map(async file => {
-            for(const folder of folders){
-                const url = `./sounds/monsters/${folder}/${file}.mp3`
-                if(await hasSoundFile(url)) return url
-            }
-            return null
-        })).then(([run, death, hitbynosharp, attack, roar]) => {
-            if(scene.isDisposed) return {}
-            const urls = { run, death, hitbynosharp, attack, roar }
-            return createMonsterSounds(scene, det, body, anims, file => urls[file])
-        })
-        return { ready }
-    }
-    return createMonsterSounds(scene, det, body, anims, file => `./sounds/monsters/${det.modelStyle}/${file}.mp3`)
+    const folders = SOUND_FOLDERS[det.modelStyle] ?? [det.modelStyle]
+    // sounds start null (every caller already treats null as "nothing to
+    // play") and arrive through ready - createEnemy assigns them. Each file
+    // comes from the first of its folders that has it.
+    const ready = Promise.all(SOUND_FILES.map(async file => {
+        for(const folder of folders){
+            const buffer = await decodedSound(`./sounds/monsters/${folder}/${file}.mp3`)
+            if(buffer) return buffer
+        }
+        return null
+    })).then(([run, death, hitbynosharp, attack, roar]) => {
+        if(scene.isDisposed) return {}
+        const buffers = { run, death, hitbynosharp, attack, roar }
+        return createMonsterSounds(scene, det, body, anims, file => buffers[file])
+    })
+    return { ready }
 }
-// urlFor(file) - the mp3 to use for "run"/"death"/..., or null for none
-function createMonsterSounds(scene, det, body, anims, urlFor){
+// audioFor(file) - the decoded AudioBuffer for "run"/"death"/..., or null for none
+function createMonsterSounds(scene, det, body, anims, audioFor){
     const sound = (file, options) => {
-        const url = urlFor(file)
-        return url ? createSoundSafe(`${det.modelStyle}${file}`, url, scene, options) : null
+        const audio = audioFor(file)
+        return audio ? createSoundSafe(`${det.modelStyle}${file}`, audio, scene, options) : null
     }
     const runSound = sound("run", {
         maxDistance: 30, spatialSound: true, loop: false, autoplay: false
@@ -1017,21 +1028,6 @@ function emitAttack(detail, enemId, targetId, placeId, pos, anims) {
         attackAnimName: attackAnim ? attackAnim.name : "attack1",
         effects: detail.effects,
         additionalAttack: extra?.attackType ?? null,
-    })
-}
-function emitRangeAttack(detail, enemId, targetId, cPlace, pos, targetPos, rangeAtkDetails, anims){
-    const attackAnim = pickAnimVariant(anims, "attack")
-    getSocket().emit("enemyAttackedRange", {
-        currentPlace: cPlace,
-        _id: enemId,
-        pos,
-        targetPos,
-        targetId: false,
-        dmg: detail.stats.dmg,
-        atkSpd: detail.stats.atkSpd,
-        attackAnimName: attackAnim ? attackAnim.name : "attack1",
-        effects: detail.effects,
-        rangeAtkDetails
     })
 }
 function emitChase(enemId, heroId, cPlaceId, actionType) {
@@ -1166,6 +1162,8 @@ export function enemyIsHit(data){
     // abyssaldamnationSkill's absorb effect in skillEffects.js) reads a
     // real, live number instead of a stale spawn-time one.
     enemy.det.hp = data.hp
+    // hurt enough, it may flee (voltstep.js) - my blows only
+    maybeEscape(enemy, data)
     playRandomAnim(enemy.anims, "hit")
     enemy.hitSound?.play()
     enemy.bloodps?.play()
@@ -1207,7 +1205,33 @@ export function enemyIsHit(data){
         )
     }
 
+    // a bleed (skillEffects.js's startTargetBleed - crescenthowl): blood runs on
+    // every client, only the attacker's own ticks hp off, as the burn above does
+    const bleedEffect = data.effectsWhenHit?.find(eff => eff.effectType === "bleed")
+    if(bleedEffect){
+        startTargetBleed(
+            bleedEffect,
+            enemy.bloodps,
+            playerId === charState.owner
+                ? dmg => dealDamageToEnemy({ playerId, dmgDetails: { physicalDmg: dmg, weaponDmg: 0 }, targetId, currentPlaceId })
+                : () => {}
+        )
+    }
+
     const player = getPlayersOnScene().find(pl => pl.owner === playerId)
+
+    // the weapon's bash and stun (staticRecources/weaponEffects.js) - on a
+    // critical by default. Every client throws its own copy of the enemy back
+    // (charactersystem/knockback.js), so everyone sees it fly; a stun is one
+    // more bind on tcp (it holds the timer), asked for by the swinger alone
+    const hit = { isCritical: isCrit }
+    const bash = triggeredEffect(data.effectsWhenHit, "bash", hit)
+    if(bash && player?.body) knockEnemyAway(enemy, player.body.position, bash, playerId === charState.owner)
+    const stun = triggeredEffect(data.effectsWhenHit, "stun", hit)
+    if(stun && data.hp > 0 && playerId === charState.owner){
+        emitEnemyBind({ targetId, shape: "stun", bindDuration: stun.stunDuration ?? 1.5, currentPlaceId })
+    }
+
     if(!player) return
     lookAt(enemy.body, player.body.position) // enemy will look on the player
 
@@ -1260,7 +1284,13 @@ export function enemyIsHit(data){
             defeatedAmonster(enemy.det)
             // getSocket().emit('enemyChangeTarget', { _id: targetId, newTargetId: null })
         }
-        return getSocket().emit("removeEnemy", {enemyId: targetId})        
+        // no "removeEnemy" back to tcp: its applyDamageToEnemy already took
+        // the enemy off its list on this very hit. (It was sent as
+        // {enemyId}, which tcp's handler read as the id itself - so it never
+        // matched anything, and its "enemy-removed" echo never pruned anyone's
+        // list either. Sent right, the echo would dispose the body on every
+        // client at once and cut its death clip short.)
+        return
     }
 }
 export function defeatedAmonster(data){
@@ -1318,6 +1348,12 @@ export function enemyDispose(enemy) {
     setTimeout(() => {
         enemy.anims.forEach(anim => anim?.dispose())
         enemy.meshes.forEach(chld => chld.dispose())
+        // hung off a bone (attachToBone), not under the body - the body's
+        // dispose never reached it, so each one ever spawned stayed, still
+        // following its dead rig's bone every frame
+        enemy.bodytarget?.dispose()
+        // and that rig: a skeleton per enemy, with its bone-matrix texture
+        enemy.skeletons?.forEach(skeleton => skeleton.dispose())
         enemy.body.dispose()
         enemy.chaseDetector.dispose()
         enemy.nameMesh.dispose()
@@ -1475,6 +1511,14 @@ export function applyEnemyBind(scene, targetId, shape, bindDuration){
         // torus branch above already takes.
         mesh.material = fresnelMat(scene, "white")
         addGlow(scene, mesh, 0.5)
+    } else if(shape === "stun"){
+        // a weapon's stun (staticRecources/weaponEffects.js - a hammer's
+        // critical): no seal, just dazed - stars circling its head, fading
+        // once the bind lets go. An enemy has no head bone, so the top of its
+        // body stands in for one
+        const halfHeight = (enemy.det?.bodyHeight ?? 1) / 2
+        const head = { getAbsolutePosition: () => enemy.body.getAbsolutePosition().add(new Vector3(0, halfHeight - 0.1, 0)) }
+        showStunStars(scene, { body: enemy.body, headBone: head }, () => !enemy._disabled || enemy.isDead, null)
     }
 
     const timeoutId = setTimeout(() => removeEnemyBind(targetId), bindDuration * 1000 + 300)

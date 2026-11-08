@@ -64,12 +64,6 @@ export async function createNpc(scene, det) {
 
     root.getChildMeshes().forEach(mesh => {
         if (!mesh.material) return
-        const mat = mesh.material
-        if (mat.getClassName() === 'PBRMaterial') {
-            mat.environmentIntensity = 0.3
-            mat.directIntensity     = 1
-            mat.emissiveIntensity   = 0
-        }
         // console.log(mesh.name)
         // if(mesh.name.includes(det.name) || mesh.name.includes("Armature")){
         //     mesh.isVisible = true

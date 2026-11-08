@@ -24,7 +24,9 @@ export function isStunned(player){
 // player: a createCharacter() rig. seconds: how long. pose: the
 // characterAnimations state to loop meanwhile (stateForClip's). isMine: the
 // victim is me. Stunned again while still dazed, it lasts whichever ends later.
-export function stunPlayer(player, seconds, pose, isMine){
+// stars: false for a stun that isn't a daze (lightning's - effects/electrocute.js
+// holds them in its own pose, no stars round the head)
+export function stunPlayer(player, seconds, pose, isMine, { stars = true } = {}){
     if(!player?.body || !(seconds > 0)) return
     const until = performance.now() + seconds * 1000
     if(until <= (player.stunnedUntil ?? 0)) return
@@ -32,7 +34,7 @@ export function stunPlayer(player, seconds, pose, isMine){
     player.stunPose = pose
     if(isMine) myStunnedUntil = until
     // still up (or fading) from the last stun - they'll stay for this one
-    if(player._stunStars) return
+    if(!stars || player._stunStars) return
     player._stunStars = showStunStars(
         player.body.getScene(), player,
         () => !isStunned(player) || player.mode === "death",

@@ -45,12 +45,14 @@ export async function getVillageAssetRegistry() {
     const rocks = await loadVillagePropSafe("./models/rocks/rocks_1.glb");
 
 
-    const grass = createSinglePlane("grass_black")
-    const grass2 = createSinglePlane("grass2_black")
+    // the last number is how far each sways in the breeze (tools/windSway.js):
+    // stiff bushes barely, the flowers on their thin stems most
+    const grass = createSinglePlane("grass_black", 1, 0, 0.22)
+    const grass2 = createSinglePlane("grass2_black", 1, 0, 0.22)
 
-    const bush = createSinglePlane("bush1")
+    const bush = createSinglePlane("bush1", 1, 0, 0.1)
 
-    const flower = createSinglePlane("flower1", 0.4, 1)
+    const flower = createSinglePlane("flower1", 0.4, 1, 0.4)
 
     if(mediumHouse) mediumHouse.isVisible = false
     if(bigHouse) bigHouse.isVisible = false

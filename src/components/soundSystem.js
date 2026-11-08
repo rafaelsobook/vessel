@@ -1,4 +1,6 @@
 import { Sound, Vector3 } from "@babylonjs/core"
+import { addSonicSounds } from "../effects/sonicSounds.js"
+import { addDarkSlashSounds } from "../effects/darkSlashSounds.js"
 let allSounds = {}
 
 // Missing/corrupt sound files don't throw synchronously - Sound fetches
@@ -27,6 +29,12 @@ export function initSounds(scene){
 
     const staffS1 = createSoundSafe("staffS1", "./sounds/weapons/staffS1.mp3", scene,
     {volume: .5, autoplay: false, loop: false})
+
+    // a hammer's blow landing (meleeCombat.js's playHitSound, duelSystem.js's
+    // WEAPON_HIT_SOUNDS) - quieter at the source than the others, so .6 puts it
+    // level with the spear's and staff's at .5
+    const hammerS1 = createSoundSafe("hammerS1", "./sounds/weapons/hammerS1.mp3", scene,
+    {volume: .6, autoplay: false, loop: false})
 
     const punchedS = createSoundSafe("punchedS", "./sounds/weapons/punched.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
@@ -84,6 +92,20 @@ export function initSounds(scene){
     {volume: 1, autoplay: false, loop: false})
 
     const electricHitS = createSoundSafe("electricHitS", "./sounds/magic/electrichit.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+
+    // the same crackle, quiet and pitched way up - an electric slime charging
+    // its bolt (enemies/rangeAttack.js). Its own Sound: Sound.clone() hands
+    // back a broken one in this Babylon (its name getter throws)
+    const electricChargeS = createSoundSafe("electricChargeS", "./sounds/magic/electrichit.mp3", scene,
+    {volume: 0.3, autoplay: false, loop: false, playbackRate: 2.2})
+
+    // a player struck by an electric slime's bolt (effects/electrocute.js),
+    // on top of electrichit
+    const electrifiedS = createSoundSafe("electrifiedS", "./sounds/magic/electrified.mp3", scene,
+    {volume: 1, autoplay: false, loop: false})
+    // an electric slime fleeing in a bolt (enemies/voltstep.js)
+    const voltstepS = createSoundSafe("voltstepS", "./sounds/magic/voltstep.mp3", scene,
     {volume: 1, autoplay: false, loop: false})
 
     const waterHitS = createSoundSafe("waterHitS", "./sounds/magic/waterhit.mp3", scene,
@@ -202,7 +224,7 @@ export function initSounds(scene){
         magicCircle,
         fireBallS,
         fireHitS,
-        electricHitS,
+        electricHitS, electricChargeS, electrifiedS, voltstepS,
         waterHitS,
         enteredS,
         giantencounterS,
@@ -221,7 +243,7 @@ export function initSounds(scene){
         bulletS,
         pickItemS, insertStoneS,
         swordS1,punchedS,swordWhooshS, drawSword, voiceAttackS,
-        staffS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
+        staffS1,hammerS1,goblinDeathS,notif1S,notif2S,titleAcquiredS,achievementUnlockS,
         weaponblockS, anvilHitS, brokenS,
         throwSpearS,
         eatS, drinkS,
@@ -229,6 +251,10 @@ export function initSounds(scene){
         rainy,
         windy
     }
+    // the orangelith's sonic boom - made in code, they turn up in allSounds
+    // a moment from now (effects/sonicSounds.js)
+    addSonicSounds(scene, allSounds)
+    addDarkSlashSounds(scene, allSounds)
     return allSounds;
 }
 
@@ -271,7 +297,6 @@ export function playSoundNear(sound, position, maxDistance = EARSHOT_DISTANCE){
     if(!sound) return
     if(!listenerBody || !position) return sound.play()
     if(Vector3.Distance(listenerBody.position, position) > maxDistance) return
-    console.log("playing ", sound.name)
     sound.play()
 }
 export function playSound(sound){

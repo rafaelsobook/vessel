@@ -529,17 +529,16 @@ function loadFoodBase(scene, path){
         base.isVisible = false
         base.isPickable = false
         base.refreshBoundingInfo()
-        // its own textures on a StandardMaterial, like the mushroom's - the
+        // its own textures on a material of its own, like the mushroom's - the
         // browning and ember glow (ROASTED_TINT/GLOW) and the fire's light are
-        // tuned for that. On the glb's PBR material the fire's close point
-        // light and the glow washed it out to a flat, untextured peach.
-        const pbr = base.material
+        // tuned for that, nearly matte
+        const own = base.material
         const mat = new StandardMaterial(`${base.name}_spitMat`, scene)
-        mat.diffuseTexture = pbr?.albedoTexture ?? pbr?.diffuseTexture ?? null
-        mat.bumpTexture = pbr?.bumpTexture ?? null
+        mat.diffuseTexture = own?.diffuseTexture ?? null
+        mat.bumpTexture = own?.bumpTexture ?? null
         mat.specularColor = new Color3(0.08, 0.08, 0.08)
         base.material = mat
-        pbr?.dispose(false, false)
+        own?.dispose(false, false)
         return base
     })().catch(error => {
         console.warn(`[bonfireCooking] ${path} didn't load - that food roasts as a mushroom`, error?.message ?? error)

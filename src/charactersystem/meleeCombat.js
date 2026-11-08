@@ -1,4 +1,4 @@
-import { Vector3, ParticleSystem, DynamicTexture, Color4, Color3, MeshBuilder, StandardMaterial } from "@babylonjs/core"
+import { Vector3, ParticleSystem, DynamicTexture, Color4, Color3, MeshBuilder, StandardMaterial, PhysicsMotionType } from "@babylonjs/core"
 import { getCharState } from "./characterstate.js"
 import { getPlayersOnScene, getEnemiesOnScene, getDuelOpponentsOnScene, getIsSocketOn } from "../sockets/worldsocket.js"
 import { faceAttackTarget, markDashActive, lastHitEnemy } from "../controllers/inputMovement.js"
@@ -17,8 +17,14 @@ import { getParticleTexture, particleTexturePath } from "../tools/particlesystem
 //     stays on one enemy instead of hopping to whichever is nearest.
 //  2. TURN + LUNGE: the avatar snaps round to face it, and if it's a step or
 //     two away it lunges in - a quick hop forward that ends just in reach,
-//     timed to arrive as the blade comes down. Already in reach: no lunge. No
-//     target: no movement at all, the swing just plays where you face.
+//     timed to arrive as the blade comes down. With a weapon in hand the
+//     lunge is the jump attack (LUNGE_ANIM) rather than the combo's own
+//     swing, and it reaches 10 m: it is the FIRST swing at an enemy that is
+//     off that dashes in, and the swings after it, already in reach, are the
+//     combo. A long dash runs in first and leaps at the end - the clip is
+//     started late enough that its strike lands as the dash does. Already in
+//     reach: no lunge. No target: no movement at all, the swing just plays
+//     where you face.
 //  3. THE BLOW LANDS ON THE IMPACT FRAME, not the moment you press: the attack
 //     box goes live when the striking hand/foot is moving fastest in that
 //     clip (IMPACT_AT, measured off avatar.glb's own animation data), and only
@@ -41,26 +47,44 @@ const IMPACT_AT = {
     spearattack1: 0.26, spearattack2: 0.29,
     staffattack1: 0.29, staffattack2: 0.23,
     running_sword1: 0.70, running_spear1: 0.25,
+    // measured the same way (hand.R's fastest frame, less the ~0.03 this
+    // method reads high on the clips above): it starts in the air, blade
+    // overhead, strikes early and has touched down by about 65%
+    weaponjumpattack: 0.42,
 }
 const DEFAULT_IMPACT_AT = 0.3
+// the clip a weapon swing plays when it lunges (avatar.glb)
+const LUNGE_ANIM = "weaponjumpattack"
 const HIT_WINDOW_BEFORE_MS = 40    // the box goes live this long before the impact frame...
 const HIT_WINDOW_AFTER_MS = 110    // ...and stays live this long after it
 
 // targeting - distances from my centre to the target's near side
-const ACQUIRE_RANGE = 6            // further than this, nothing gets the lock
+const ACQUIRE_RANGE = 6            // further than this, nothing gets the lock (a weapon's lunge reaches further, and its lock with it)
 const IN_REACH = 1.15              // the attack box covers ~0.5-1.5 in front - no lunge needed
 const STANDOFF = 0.85              // where a lunge stops: their near side this far in front
-const LUNGE_MAX = { weapon: 4, fist: 3 }   // beyond this they're faced but not leapt at
+const LUNGE_MAX = { weapon: 10, fist: 3 }  // beyond this they're faced but not leapt at
+// what a weapon's lunge used to reach. Past it the lunge is a long run in a
+// straight line: the cone narrows (coneCosFor) and the way has to be clear
+// (pathIsClear)
+const LONG_LUNGE_FROM = 4
 const CONE_COS_NEAR = Math.cos(80 * Math.PI / 180)   // right next to me: almost beside me still counts
 const CONE_COS_FAR = Math.cos(55 * Math.PI / 180)
+const CONE_COS_LONG = Math.cos(35 * Math.PI / 180)   // at the far end of a weapon's lunge
 const MAX_HEIGHT_DIFF = 2.5
 const STICKY_MS = 5000             // how long the last enemy I hit keeps priority
 const STICKY_BONUS = 1.2
+// pathIsClear: the ray's height off my centre (my centre is about 0.75 up, so
+// this is about knee height - low rocks and rises count), and how far short of
+// the target a hit still counts as in the way
+const PATH_RAY_LIFT = -0.3
+const PATH_CLEAR_MARGIN = 0.4
 
 // the lunge
 const LUNGE_MIN_MS = 110
-const LUNGE_MAX_MS = 280
-const LUNGE_MAX_SPEED = 15         // m/s
+const LUNGE_MAX_MS = 480
+const LUNGE_PACE = 15              // m/s - what a lunge is timed at, as every short one always was
+const LUNGE_GRACE_MS = 150        // a hitching frame mid-dash leaves a long one short of its target - it runs this much past its time, flat out, to make it up
+const LUNGE_MAX_SPEED = 22         // m/s - the most it will run at, which only a dash over ~7 m needs: at the pace it would take longer than LUNGE_MAX_MS
 const LUNGE_HOP = { far: 2.4, near: 1.3 }   // upward m/s - the little jump into the blow
 
 // impact feel per weapon - trauma (0..1 shake), hitstop (ms frozen), fov (zoom punch, radians)
@@ -111,6 +135,36 @@ function candidates(){
     return list
 }
 
+// how wide the cone in front of me is at this gap, as the cosine of its half
+// angle: wide right next to me, narrower further out - and for a weapon's long
+// lunge narrower still, or a swing would turn me round and send me across the
+// field after something well off to the side
+function coneCosFor(gap, hasWeapon){
+    if(gap < IN_REACH + 0.3) return CONE_COS_NEAR
+    if(!hasWeapon || gap <= LONG_LUNGE_FROM) return CONE_COS_FAR
+    const t = Math.min(1, (gap - LONG_LUNGE_FROM) / (LUNGE_MAX.weapon - LONG_LUNGE_FROM))
+    return CONE_COS_FAR + (CONE_COS_LONG - CONE_COS_FAR) * t
+}
+
+// Whether nothing solid stands between me and the target. A long lunge runs
+// in a straight line, and would stop dead against a tree, a wall, or a rise in
+// the ground. Level at about knee height, centre to centre; only static bodies
+// count - another player in the way is something to push past, not a wall.
+function pathIsClear(player, target){
+    const physics = player.body.getScene()?.getPhysicsEngine?.()
+    if(!physics) return true
+    const from = player.body.position.clone()
+    const to = target.body.position.clone()
+    from.y += PATH_RAY_LIFT
+    to.y += PATH_RAY_LIFT
+    const length = Vector3.Distance(from, to)
+    const query = player.aggregate?.body ? { ignoreBody: player.aggregate.body } : undefined
+    const hit = physics.raycast(from, to, query)
+    if(!hit?.hasHit || hit.body?.getMotionType?.() !== PhysicsMotionType.STATIC) return true
+    // the target's own side doesn't count - it may stand against something
+    return hit.hitDistance >= length - target.radius - PATH_CLEAR_MARGIN
+}
+
 // the enemy this swing should go for, or null - see this file's header
 export function findMeleeTarget(player, hasWeapon){
     if(!player?.body) return null
@@ -122,20 +176,29 @@ export function findMeleeTarget(player, hasWeapon){
 
     const stickyBody = lastHitEnemy?.body ?? (performance.now() - lastStruck.at < STICKY_MS ? lastStruck.body : null)
     const lungeMax = hasWeapon ? LUNGE_MAX.weapon : LUNGE_MAX.fist
+    // a weapon's lunge reaches further than the lock used to, and takes it along
+    const acquire = hasWeapon ? Math.max(ACQUIRE_RANGE, lungeMax) : ACQUIRE_RANGE
     let best = null
     candidates().forEach(c => {
         const dx = c.body.position.x - from.x, dz = c.body.position.z - from.z
         if(Math.abs(c.body.position.y - from.y) > MAX_HEIGHT_DIFF + c.height / 2) return
         const dist = Math.hypot(dx, dz)
         const gap = Math.max(0, dist - c.radius)
-        if(gap > ACQUIRE_RANGE) return
+        if(gap > acquire) return
         const cos = dist < 1e-3 ? 1 : (dx * forward.x + dz * forward.z) / dist
-        if(cos < (gap < IN_REACH + 0.3 ? CONE_COS_NEAR : CONE_COS_FAR)) return
+        if(cos < coneCosFor(gap, hasWeapon)) return
         let score = gap + (1 - cos) * 3
         if(c.body === stickyBody) score -= STICKY_BONUS
         if(!best || score < best.score) best = { ...c, gap, dist, score }
     })
-    if(best) best.canLunge = best.gap > IN_REACH && best.gap <= lungeMax
+    if(best){
+        best.canLunge = best.gap > IN_REACH && best.gap <= lungeMax
+        if(best.canLunge && best.gap > LONG_LUNGE_FROM && !pathIsClear(player, best)){
+            best.canLunge = false
+            // past the old lock range there is nothing worth turning for
+            if(best.gap > ACQUIRE_RANGE) return null
+        }
+    }
     return best
 }
 
@@ -151,32 +214,52 @@ function clipSeconds(player, animName){
 /**
  * Before the swing is sent: picks the target and turns toward it. Returns what
  * the attack relay should carry so everyone else sees the same turn and lunge:
- * { target, dirTarg, lunge: { to: {x, z}, ms } | null }.
+ * { target, dirTarg, lunge: { to: {x, z}, ms } | null, impactMs, animName,
+ * clipDelayMs } - animName being the clip to play, which is not the one asked
+ * for when the swing lunges (a weapon's jump attack, LUNGE_ANIM), and
+ * clipDelayMs how long into the lunge that clip starts (0 for a short one).
+ * impactMs is from the press to the blow landing, the delay included.
  */
 export function prepareMeleeSwing({ animName, speedRatio = 1, hasWeapon, airborne }){
     const player = myPlayer()
-    if(!player) return { target: null, dirTarg: null, lunge: null, impactMs: 0 }
-
-    const clip = clipSeconds(player, animName) ?? 0.8
-    const impactMs = (IMPACT_AT[animName] ?? DEFAULT_IMPACT_AT) * clip / Math.max(0.2, speedRatio) * 1000
+    if(!player) return { target: null, dirTarg: null, lunge: null, impactMs: 0, animName, clipDelayMs: 0 }
 
     const target = findMeleeTarget(player, hasWeapon)
-    if(!target) return { target: null, dirTarg: null, lunge: null, impactMs }
+    const lunges = !!target?.canLunge && !airborne
+    // the jump attack, but only where the rig has it - and not bare-handed, a
+    // punch has no blade to bring down
+    if(lunges && hasWeapon && clipSeconds(player, LUNGE_ANIM)) animName = LUNGE_ANIM
+
+    const clip = clipSeconds(player, animName) ?? 0.8
+    let impactMs = (IMPACT_AT[animName] ?? DEFAULT_IMPACT_AT) * clip / Math.max(0.2, speedRatio) * 1000
+
+    if(!target) return { target: null, dirTarg: null, lunge: null, impactMs, animName, clipDelayMs: 0 }
 
     const tp = target.body.position
-    faceAttackTarget(tp, impactMs + HIT_WINDOW_AFTER_MS + 40)
-    showTargetRing(target)
     const dirTarg = { x: tp.x, y: player.body.position.y, z: tp.z }
 
     let lunge = null
-    if(target.canLunge && !airborne){
+    let clipDelayMs = 0
+    if(lunges){
         const travel = target.gap - STANDOFF
-        const ms = Math.min(LUNGE_MAX_MS, Math.max(LUNGE_MIN_MS, impactMs - 30, travel / LUNGE_MAX_SPEED * 1000))
+        const ms = Math.min(LUNGE_MAX_MS, Math.max(LUNGE_MIN_MS, impactMs - 30, travel / LUNGE_PACE * 1000))
         const from = player.body.position
         const k = travel / Math.max(1e-3, target.dist)
         lunge = { to: { x: from.x + (tp.x - from.x) * k, z: from.z + (tp.z - from.z) * k }, ms, hop: target.gap > 2 ? LUNGE_HOP.far : LUNGE_HOP.near }
+        // the jump attack is a leap onto them, so its blow comes as the lunge
+        // ends: a long dash runs in first and the clip starts late enough to
+        // land with it (attackingSystem.js's attack() holds it back; the
+        // run-up is renderer.js's). A short one is over before the clip's own
+        // blow comes, and starts it at once
+        if(animName === LUNGE_ANIM){
+            clipDelayMs = Math.max(0, Math.round(ms - impactMs))
+            impactMs += clipDelayMs
+        }
     }
-    return { target, dirTarg, lunge, impactMs }
+    faceAttackTarget(tp, impactMs + HIT_WINDOW_AFTER_MS + 40)
+    showTargetRing(target)
+    lockOn(target)
+    return { target, dirTarg, lunge, impactMs, animName, clipDelayMs }
 }
 
 /**
@@ -224,7 +307,7 @@ function runLunge(player, target, lunge){
         const toX = (tp?.x ?? lunge.to.x) - me.x, toZ = (tp?.z ?? lunge.to.z) - me.z
         const dist = Math.hypot(toX, toZ)
         const remaining = (tp ? dist - target.radius : dist) - (tp ? STANDOFF : 0)
-        if(elapsed >= lunge.ms || remaining <= 0.05 || player.isDead){
+        if(elapsed >= lunge.ms + LUNGE_GRACE_MS || remaining <= 0.05 || player.isDead){
             body.setLinearVelocity(new Vector3(0, Math.min(vel.y, 0.5), 0))
             scene.onBeforePhysicsObservable.remove(observer)
             // where I ended up, for everyone else (they tweened toward lunge.to)
@@ -248,10 +331,14 @@ export function playRemoteLunge(body, lunge){
     if(!scene || !body || !lunge?.to) return
     const from = { x: body.position.x, z: body.position.z }
     const start = performance.now()
+    // easing out is right for a hop of a step or two, but over a long dash it
+    // would cover most of the way in the first frames and then crawl - those run
+    // at an even pace, as the lunge itself does on the screen it began on
+    const long = Math.min(1, Math.max(0, (Math.hypot(lunge.to.x - from.x, lunge.to.z - from.z) - LONG_LUNGE_FROM + 1) / 3))
     const observer = scene.onBeforeRenderObservable.add(() => {
         if(body.isDisposed()) return scene.onBeforeRenderObservable.remove(observer)
         const t = Math.min(1, (performance.now() - start) / lunge.ms)
-        const e = 1 - Math.pow(1 - t, 3)
+        const e = (1 - Math.pow(1 - t, 3)) * (1 - long) + t * long
         body.position.x = from.x + (lunge.to.x - from.x) * e
         body.position.z = from.z + (lunge.to.z - from.z) * e
         if(t >= 1) scene.onBeforeRenderObservable.remove(observer)
@@ -333,7 +420,7 @@ function contactPoint(myBody, targetBody){
 function playHitSound(weaponType, isCritical){
     const sounds = getAllSounds()
     if(!sounds) return
-    const byWeapon = { staff: sounds.staffS1, spear: sounds.spearS1, fist: sounds.punchedS }
+    const byWeapon = { staff: sounds.staffS1, spear: sounds.spearS1, hammer: sounds.hammerS1, fist: sounds.punchedS }
     playSound(byWeapon[weaponType] ?? sounds.swordS1)
     // a crit lands with a second, meatier layer under it
     if(isCritical && weaponType !== "fist") playSound(sounds.punchedS)
@@ -370,8 +457,10 @@ function flash(meshes, isCritical){
     }), FLASH_MS)
 }
 
+// everything animated slowed to timeScale for `ms` - a heavy hit's hitstop
+// (here, and effects/scorch.js's fireball blast)
 let slowMoUntil = 0
-function slowMotion(scene, timeScale, ms){
+export function slowMotion(scene, timeScale, ms){
     const until = performance.now() + ms
     if(until <= slowMoUntil) return
     slowMoUntil = until
@@ -666,9 +755,53 @@ function killEffect(scene, at){
     ringAt(scene, at, k, 1.5, GOLD)
 }
 
-// ── the lock-on ring ─────────────────────────────────────────────────────────
-// A thin ring on the ground under whatever the swing just locked onto, fading
-// out over a moment - so it's clear which enemy the attack is going for.
+// ── the lock-on ──────────────────────────────────────────────────────────────
+// A swing at an enemy locks onto it (the ring under it), and while the lock
+// holds I fight it face to face: controllers/inputMovement.js keeps me turned
+// toward it and the keys move me round it instead of turning me away - a/d
+// circle it, s backs off, w closes in. It lets go when the enemy is dead or
+// gone, when I'm too far off, out of the fight (walking, sitting...), or
+// haven't swung at it for a while.
+const LOCK_IDLE_MS = 8000          // since the last swing at it
+const LOCK_BREAK_RANGE = 14        // m from its near side
+const LOCK_MODES = ["fighting", "inAir", "casting"]
+let lock = null                    // { target (a candidate), at }
+
+function lockOn(target){
+    lock = { target, at: performance.now() }
+}
+
+function lockAlive(target){
+    if(target.body.isDisposed()) return false
+    if(target.enemy) return !target.enemy.isDead && (target.enemy.det?.hp ?? 1) > 0 && getEnemiesOnScene().includes(target.enemy)
+    // a duel opponent or an undead is taken off the list the moment it falls
+    return getDuelOpponentsOnScene().some(o => o.body === target.body)
+}
+
+/** How wide the body I'm locked onto is, from its centre to its edge (0 with no lock). */
+export function getCombatLockRadius(){
+    return lock?.target.radius ?? 0
+}
+
+/** The body I'm locked onto, or null - and the lock let go, if it no longer holds. */
+export function getCombatLock(){
+    if(!lock) return null
+    const player = myPlayer()
+    const t = lock.target
+    const holds = !!player?.body && LOCK_MODES.includes(player.mode)
+        && performance.now() - lock.at < LOCK_IDLE_MS
+        && lockAlive(t)
+        && Math.hypot(t.body.position.x - player.body.position.x, t.body.position.z - player.body.position.z) - t.radius <= LOCK_BREAK_RANGE
+    if(!holds){
+        lock = null
+        return null
+    }
+    return t.body
+}
+
+// A thin ring on the ground under whatever the swing just locked onto - so
+// it's clear which enemy the attack is going for. It stays while the lock
+// holds, and fades out over a moment once it lets go.
 const RING_MS = 900
 let ring = null
 function showTargetRing(target){
@@ -687,6 +820,7 @@ function showTargetRing(target){
         ring.observer = scene.onBeforeRenderObservable.add(() => {
             const r = ring
             if(!r?.target || r.mesh.isDisposed()) return
+            if(lock?.target.body === r.target.body && getCombatLock()) r.until = Math.max(r.until, performance.now() + 300)
             const left = r.until - performance.now()
             if(left <= 0 || r.target.body.isDisposed()){
                 r.mesh.isVisible = false

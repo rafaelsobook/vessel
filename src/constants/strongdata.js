@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { grantStoryQuest } from '../tools/questHelpers'
+import { sideStoryOption } from '../sidestories/index.js'
 
 // picks a random variant so repeat visits don't always say the exact same thing
 function pick(variants){
@@ -55,6 +56,8 @@ export function strongData(){
             questionId: 40,
             conversationWithQuestion: toLines(pick(strongOpener)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("104_strong"),
                 { text: "You seem distracted lately.", cb: () => startQuestionare(41) },
                 { text: "Anything I can help with?", cb: () => startQuestionare(42) },
                 { text: "Just doing my rounds too. Carry on.", cb: () => startQuestionare(43) },

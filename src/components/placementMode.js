@@ -143,7 +143,6 @@ function firstBlockingObstacle(obstacles, point){
 // player-facing copy, shown as-is when they tap an illegal spot.
 function evaluateSpot(state, pointerX, pointerY){
     const { scene, heroBody, obstacles, characterRoots } = state
-    console.log("evaluate")
     // Skips isPickable:false meshes, which is why this reports the ground
     // UNDER a tree rather than the tree - handled by the obstacle pass below,
     // not here. Babylon only does those checks itself when NO predicate is

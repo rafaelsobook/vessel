@@ -65,7 +65,11 @@ export function giveSkill(skillDetail){
     let slotNumber = skillDetail.slotNumber
     while(usedSlots.has(slotNumber)) slotNumber++
 
-    charState.skills.push({ ...skillDetail, slotNumber })
+    // a deep copy, not the skillsData.js object itself: levelling a skill rewrites
+    // its nested effects/projectileVisual in place (upgradeSkill), which would
+    // otherwise change the definition every later learner - and every npc
+    // fighter's copy - starts from, until the next reload
+    charState.skills.push({ ...JSON.parse(JSON.stringify(skillDetail)), slotNumber })
     updateSkillListUI()
     updateMyDetailsOL(charState, checkIfTokenSaved())
     // rank-framed celebration popup (skillAcquiredUI.js) instead of the old
@@ -370,6 +374,12 @@ slotbuttons.forEach(btn => {
         // skillEffects.js's computeCastOrigin knows whether to spread this
         // particular skill's spawn point out or leave it centered
         skill._castSpread = cascadeActive
+
+        // what a weapon skill needs to look right on every screen (it rides the
+        // relay with the skill, like _castPowerScale): the weapon swung (its
+        // clip) and the form I'm in (a demon's wave is black and red)
+        skill._castForm = charState.evolution?.evolutionName ?? null
+        skill._castWeaponType = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)?.weaponType ?? null
 
         // casting a skill mid-mining should drop it same as walking away or unequipping
         if(charState.mode === "minning") setCharStateMode("idle")

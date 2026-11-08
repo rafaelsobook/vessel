@@ -580,6 +580,9 @@ export function forgeSword(bladeOre, guardOre){
         itemCateg: "equipable",
         itemType: "weapon",
         weaponType: "sword",
+        effectsWhenHit: [
+            { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+        ],
         equipAbilities: { dmg, magicDmg, magicResistance, def: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
         consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: tier === "rare" ? 1 : 0 },
         equiped: false,

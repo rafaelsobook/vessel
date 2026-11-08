@@ -1,15 +1,8 @@
 import { SpotLight, HemisphericLight, DirectionalLight,Color3, Color4, Vector3, Scene } from "@babylonjs/core";
 
 export function setupLighting(scene, placeDetail) {
-    // ── Environment texture ────────────────────────────────────────────────
-    // PBRMaterial needs scene.environmentTexture to calculate reflections and
-    // indirect lighting. Without it everything looks flat regardless of lights.
-    scene.createDefaultEnvironment({
-        createGround:       false,
-        createSkybox:       false,
-        // environmentTexture: "https://assets.babylonjs.com/environments/environmentSpecular.env",
-    });
-    // scene.environmentIntensity = 0.15; // low — dungeon is dark, just enough for surface detail
+    // no environment texture: it only ever lit PBR materials, and there are
+    // none - every material is a StandardMaterial (tools/surfacemat.js)
 
     // ── Hemispheric ambient fill ───────────────────────────────────────────
     // Prevents pitch-black shadows. Very dim — just lifts the floor off zero.

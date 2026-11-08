@@ -53,9 +53,16 @@ export function createCrystalMat(scene, modelStyle, textureName){
     return mat
 }
 
+// one per element and scene, shared by every slime of it (like createCrystalMat
+// above) - was a new material per slime, never disposed with it, so every
+// slime ever spawned in a place left one behind. Nothing changes a slime's
+// material per slime: its flashes and glows are its mesh's own overlay.
 export function createSlimeMat(scene, body, elementType = "water"){
-    const mat = new StandardMaterial("slimeMat", scene);
     const palette = SLIME_ELEMENT_COLORS[elementType] ?? SLIME_ELEMENT_COLORS.water;
+    const name = `slimeMat.${SLIME_ELEMENT_COLORS[elementType] ? elementType : "water"}`
+    const existing = scene.getMaterialByName(name)
+    if(existing) return existing
+    const mat = new StandardMaterial(name, scene);
 
     mat.diffuseColor = palette.diffuse;
     // mat.specularColor = new Color3(0.4, 1.0, 0.5);

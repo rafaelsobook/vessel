@@ -110,6 +110,12 @@ export default class Conversation {
                 return clearInterval(this.intervalGenerating)
             }
             if(!messages[nextPageNum]){
+                // the last line: this conversation is over. The button stays
+                // clickable through the close animation (and to code), and a
+                // second click here used to run the callback again - a quest
+                // turn-in's reward paid twice. Done is done; a conversation the
+                // callback starts sets its own proceedToNext.
+                this.proceedToNext = () => {}
                 if(callback) {
                     this.close({name, message, isLeft })
                     return callback()

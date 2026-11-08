@@ -1,6 +1,7 @@
 import { startQuestionare } from '../components/conversations';
 import { getCharState, rankOrder } from '../charactersystem/characterstate';
 import { offerStarterQuest } from '../npc/questOffer.js';
+import { sideStoryOption } from '../sidestories/index.js'
 
 // tier key is literally the rank label - every rank gets its own flavor of Kraun's ore lore
 function getKraunTier(){
@@ -88,6 +89,8 @@ export function kraunsData(){
             questionId: 20,
             conversationWithQuestion: toLines(pick(kraunGreetings[tier])),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("103_kraun"),
                 {
                     text: "Tell me more about ores",
                     cb: () => {

@@ -16,13 +16,11 @@ import { randomNum } from "../tools/tools"
 // three patches ago should teach the CURRENT version of the skill, not a
 // snapshot of whatever it looked like when it was printed.
 //
-// Books have no icon art of their own and do not need any: a book's icon is
-// the icon of the skill it teaches (./images/skills/<skillName>.webp, which
-// already exists for every skill but purification). That is also the most
-// readable choice - you can see what a book teaches from the inventory grid
-// without opening it. inventory.js/buyorsell.js/itemInfoSystem.js each carry
-// the same one-line override for it, alongside the ones they already have
-// for weapons and helmets.
+// A book's icon is the art of its RARITY (./images/items/skillbook/<rarity>.webp -
+// normal, rare, epic, legendary), the same few pictures for every skill; what
+// it teaches is in its name ("Tome of ...") and its panel. inventory.js/
+// buyorsell.js/itemInfoSystem.js each carry the same one-line override for it,
+// alongside the ones they already have for weapons and helmets.
 
 // A book's price and rarity come from the SKILL's own skillrank, not from
 // hand-written per-book numbers - so a new skill dropped into skillsData.js

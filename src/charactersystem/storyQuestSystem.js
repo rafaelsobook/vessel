@@ -105,6 +105,10 @@ export function initOnceStorySystem(){
 // inventory before the quest was even received (e.g. stone mined while
 // exploring, before ever meeting Bram), instead of always starting every
 // entry at 0 regardless of what's already owned.
+// how many of this item (by name) the character carries, over every stack
+export function ownedCount(charState, name){
+    return (charState?.items ?? []).filter(itm => itm.name === name).reduce((total, itm) => total + (itm.qnty || 0), 0)
+}
 export function prepareGrantedQuest(quest){
     const cloned = { ...quest, questRequirements: { ...quest.questRequirements } }
     const req = cloned.questRequirements
@@ -136,6 +140,15 @@ export function prepareGrantedQuest(quest){
 // now". No-ops (returns the quest untouched) for every other reqType.
 export function evaluateLiveQuestRequirements(quest){
     const req = quest?.questRequirements
+    // a fetch quest that takes what it asks for (consume: true - sidestories/kit.js's
+    // fetchQuest): counted from what's in the bag right now, both ways - eaten,
+    // sold or dropped since it last counted, and it isn't done any more
+    if(req?.consume && req.itemLists){
+        const charState = getCharState()
+        req.itemLists.forEach(listEntry => { listEntry.current = Math.min(listEntry.total, ownedCount(charState, listEntry.name)) })
+        req.completed = req.itemLists.every(listEntry => listEntry.current >= listEntry.total)
+        return quest
+    }
     if(!req || req.completed) return quest
 
     if(req.reqType === "craft"){
@@ -195,7 +208,10 @@ export function checkStoryQuestIfCompleted(_reqType, itemOrEnemyName){
             let matched = false
             req.itemLists.forEach(listEntry => {
                 if(listEntry.name !== itemOrEnemyName || listEntry.current >= listEntry.total) return
-                listEntry.current++
+                // counted from the bag, not +1 per pickup: one pickup can be several
+                // (a bundle of grain, a stack bought at once). Never lower here -
+                // evaluateLiveQuestRequirements recounts a consume quest both ways
+                listEntry.current = Math.min(listEntry.total, Math.max(listEntry.current + 1, ownedCount(charState, listEntry.name)))
                 matched = true
             })
             if(!matched) return

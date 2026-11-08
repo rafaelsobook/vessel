@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { buyOrSell } from '../components/buyorsell'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -29,6 +30,8 @@ export function maelaData(){
             questionId: 320,
             conversationWithQuestion: toLines(pick(maelaGreetings)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("115_maela"),
                 { text: "Something to eat", cb: () => buyOrSell(false, "115_maela") },
                 { text: "Just wondering around.", cb: () => startQuestionare(321) },
             ],

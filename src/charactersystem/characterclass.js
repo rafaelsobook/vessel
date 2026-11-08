@@ -1,38 +1,65 @@
 import { Mesh, Animation } from "@babylonjs/core"
 import * as GUI from "@babylonjs/gui"
-import { getCharState } from "./characterstate"
+import { getCharState, updateMyDetailsOL } from "./characterstate"
 import { getSceneDet } from "../main/main.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { capsuleHeight } from "./createcharacter.js"
 import { getAllSounds } from "../components/soundSystem.js"
+import { checkIfTokenSaved } from "../tools/tools.js"
+import { getSkillEffect } from "../staticRecources/skillsData.js"
 
-let swordSwing = 0
-let spearSwing = 0
-let axeSwing = 0
-let hammerSwing = 0
-let fistattacks = 0
-let castMagic = 0
+// COMBAT CLASSES - charState.characterclass: one entry per class, { experties,
+// lvl, progress }, each levelled on its own just by doing what it's for:
+//   warbringer   swinging a sword           paladin     swinging a spear
+//   viking       swinging an axe or pickaxe warhammer   swinging a hammer
+//   berserker    punching bare-handed       runecaller  swinging a staff, or casting any spell
+//   necromancer  casting a dark spell
+// (duskrunner is in the schema but nothing trains it - the pickaxe is Viking's.)
+// uimanagement.js's attack button calls triggerClassLeveling on every swing,
+// attackingSystem.js's activateSkill calls triggerSpellClassLeveling on every
+// spell I cast. Nothing has to be hit: a swing is a swing.
+//
+// `progress` is how far into the current level a class is - swings or casts.
+// It fills to SWINGS_PER_LEVEL - the same at every level, whatever the class is
+// at - then the class levels up and it starts over. It lives on the class
+// entry, so it's saved with it: characterstate.js's vitals autosave sends the
+// classes whenever they change, and a level-up is saved at once.
+const SWINGS_PER_LEVEL = 122
 
-let maxSwingToLevelUp = 2
-let maxCastToLevel = 2
-
-// weaponType -> the class whose lvl adds onto that weapon's damage (read by
-// attackingSystem.js's calcDmg). pickaxe shares viking with axe since
-// uimanagement.js already aliases it to "axe" before triggerClassLeveling
-// sees it - the class a pickaxe swing levels is the same one that boosts it.
-const WEAPON_DMG_CLASS = {
+// weaponType -> the class it trains, and whose lvl adds onto that weapon's
+// damage (read by attackingSystem.js's calcDmg). pickaxe shares viking with
+// axe since uimanagement.js already aliases it to "axe" before
+// triggerClassLeveling sees it - the class a pickaxe swing levels is the same
+// one that boosts it. "fist" is no weapon: bare hands.
+const CLASS_OF_WEAPON = {
     sword: "warbringer",
     spear: "paladin",
     axe: "viking",
     pickaxe: "viking",
     hammer: "warhammer",
+    staff: "runecaller",
+    fist: "berserker",
 }
-// flat weaponDmg per class lvl - half of what one spent stats.weapon point
-// gives (x10 in calcDmg), since class levels come free from just swinging
+// the spells' classes: dark ones train the Necromancer, every other spell the Runecaller
+const SPELL_CLASS = "runecaller"
+const DARK_SPELL_CLASS = "necromancer"
+// charDetM.js's `experties` for each, to make a class entry the server didn't send
+const EXPERTISE = {
+    warbringer: "sword",
+    paladin: "spear",
+    viking: "axe",
+    warhammer: "hammer",
+    berserker: "fist",
+    runecaller: "staff",
+    necromancer: "summoner",
+    duskrunner: "pickaxe",
+}
+// flat damage per class lvl - half of what one spent stats.weapon point gives
+// (x10 in calcDmg), since class levels come free from just swinging
 const CLASS_DMG_PER_LVL = 5
 
 export function getClassDmgBonus(charState, weaponType){
-    const className = WEAPON_DMG_CLASS[weaponType]
+    const className = CLASS_OF_WEAPON[weaponType]
     if(!className) return 0
     return (charState.characterclass?.[className]?.lvl ?? 0) * CLASS_DMG_PER_LVL
 }
@@ -129,61 +156,53 @@ function showClassLevelUpGUI(className, lvl){
     })
 }
 
-export function triggerClassLeveling(_weaponType){
+// the class's entry on the character - made when it has none yet (an older
+// character, or one the server sent without it), so a missing class can't
+// take a swing down
+function classOf(charState, className){
+    charState.characterclass ??= {}
+    return charState.characterclass[className] ??= { experties: EXPERTISE[className], lvl: 0, progress: 0 }
+}
 
+function trainClass(className){
     const charState = getCharState()
-    switch(_weaponType){
-        case "sword":
-            swordSwing++
-            if(swordSwing >= (maxSwingToLevelUp+(charState.characterclass.warbringer.lvl*5))) {
-                swordSwing = 0
-                charState.characterclass.warbringer.lvl++
-                showClassLevelUpGUI("warbringer", charState.characterclass.warbringer.lvl)
-            }
-        break
-        case "axe":
-            axeSwing++
-            if(axeSwing >= (maxSwingToLevelUp+(charState.characterclass.viking.lvl*5))) {
-                axeSwing = 0
-                charState.characterclass.viking.lvl++
-                showClassLevelUpGUI("viking", charState.characterclass.viking.lvl)
-            }
-        break
-        case "spear":
-            spearSwing++
-            if(spearSwing >= (maxSwingToLevelUp+(charState.characterclass.paladin.lvl*5))) {
-                spearSwing = 0
-                charState.characterclass.paladin.lvl++
-                showClassLevelUpGUI("paladin", charState.characterclass.paladin.lvl)
-            }
-                console.log("triggering ", _weaponType)
-                console.log(spearSwing)
-                console.log((maxSwingToLevelUp+(charState.characterclass.warhammer.lvl*5)))
-        break
+    if(!charState) return
+    const cls = classOf(charState, className)
+    cls.lvl ??= 0
+    cls.progress = (cls.progress ?? 0) + 1
+    if(cls.progress < SWINGS_PER_LEVEL) return
+    cls.progress = 0
+    cls.lvl++
+    showClassLevelUpGUI(className, cls.lvl)
+    // saved now, not left for the next full save (an item picked up, a
+    // character level-up...)
+    updateMyDetailsOL(charState, checkIfTokenSaved())
+}
 
-        case "hammer":
-            hammerSwing++
-            if(hammerSwing >= (maxSwingToLevelUp+(charState.characterclass.warhammer.lvl*5))) {
-                hammerSwing = 0
-                charState.characterclass.warhammer.lvl++
-                showClassLevelUpGUI("warhammer", charState.characterclass.warhammer.lvl)
-            }
-        break
-        case "cast":
-            castMagic++
-            if(castMagic >= (maxSwingToLevelUp+(charState.characterclass.berserker.lvl*5))) {
-                castMagic = 0
-                charState.characterclass.runecaller.lvl++
-                showClassLevelUpGUI("runecaller", charState.characterclass.runecaller.lvl)
-            }
-        break
-        case "fist":
-            fistattacks++
-            if(axeSwing >= maxCastToLevel) {
-                fistattacks = 0
-                charState.characterclass.berserker.lvl++
-                showClassLevelUpGUI("berserker", charState.characterclass.berserker.lvl)
-            }
-        break
-    }
+/**
+ * A swing with `weaponType` in hand - "fist" bare-handed. Every swing that
+ * spends the stamina for it (uimanagement.js's attack button), hit or not.
+ */
+export function triggerClassLeveling(weaponType){
+    const className = CLASS_OF_WEAPON[weaponType]
+    if(className) trainClass(className)
+}
+
+// what counts as a spell: anything that damages, heals, cures or shields, or
+// an elemental buff (mjolnir). Not the weapon strikes (dashstrike, blinkstrike),
+// not multicast (it casts the others, which count themselves), not the flex aura.
+const SPELL_EFFECTS = ["offense", "heal", "cure", "barrier"]
+function isSpell(skill){
+    if(SPELL_EFFECTS.some(effectType => getSkillEffect(skill, effectType))) return true
+    return !!getSkillEffect(skill, "buff") && !!skill.element && skill.element !== "normal"
+}
+
+/**
+ * I cast `skill` (attackingSystem.js's activateSkill, my own casts only).
+ */
+export function triggerSpellClassLeveling(skill){
+    // a swing that throws a wave (crescenthowl) trains the weapon's class, not a caster's
+    if(skill.weaponSwing) return triggerClassLeveling(skill._castWeaponType)
+    if(!isSpell(skill)) return
+    trainClass(skill.element === "dark" ? DARK_SPELL_CLASS : SPELL_CLASS)
 }

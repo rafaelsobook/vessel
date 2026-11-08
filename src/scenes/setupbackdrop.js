@@ -5,6 +5,7 @@ import {
 } from "@babylonjs/core"
 import "@babylonjs/loaders"
 import { mergeAndLoadModel } from "../tools/loadmodel.js"
+import { swayInWind } from "../tools/windSway.js"
 import { createFireParticles } from "../tools/particlesystem.js"
 import { createMushroomModel, MUSHROOM_NIGHT_GLOW } from "../assetcreation/createmushroom.js"
 import { findDeepByName } from "../charactersystem/createcharacter.js"
@@ -16,7 +17,7 @@ import { NIGHT_FOG_COLOR, MOONLIGHT, createFireflies, createGroundMist, createMo
 // them, a campfire in front lighting the rider's face warm (warm key against
 // a cool world, so the character stands out from it), the moon catching
 // their outline from behind, fireflies, glowing mushrooms and low mist
-// drifting through the grass.
+// drifting through grass that sways in a slow breeze.
 //
 // The beast stands at the origin facing -Z, the rider on its back. The camera
 // looks at the rider from the beast's +X side, a little ahead of its
@@ -256,16 +257,18 @@ function placeBonfire(scene, shadowGenerator){
 }
 
 // grass cards - the village's tufts (black reads as clear), two crossed
-// planes each, thin-instanced: a lot of them for very little
+// planes each, thin-instanced: a lot of them for very little. All of them
+// sway in a slow breeze (tools/windSway.js) - sway is that file's strength:
+// the stiff bushes barely, the flowers on their thin stems a little more
 function scatterGrass(scene){
     const kinds = [
-        { file: "grass_black.jpg", w: 0.9, h: 0.75, count: 260 },
-        { file: "grass2_black.jpg", w: 0.9, h: 0.9, count: 220 },
-        { file: "bush1.jpg", w: 1.2, h: 1.0, count: 50 },
-        { file: "flower1.jpg", w: 0.5, h: 0.45, count: 70 },
+        { file: "grass_black.jpg", w: 0.9, h: 0.75, count: 260, sway: 0.08 },
+        { file: "grass2_black.jpg", w: 0.9, h: 0.9, count: 220, sway: 0.07 },
+        { file: "bush1.jpg", w: 1.2, h: 1.0, count: 50, sway: 0.035 },
+        { file: "flower1.jpg", w: 0.5, h: 0.45, count: 70, sway: 0.15 },
     ]
     const cam = cameraGroundSpot()
-    kinds.forEach(({ file, w, h, count }) => {
+    kinds.forEach(({ file, w, h, count, sway }) => {
         const tex = new Texture(`./images/textures/grass/${file}`, scene)
         tex.getAlphaFromRGB = true
         const mat = new StandardMaterial(`setup_${file}_mat`, scene)
@@ -275,6 +278,7 @@ function scatterGrass(scene){
         mat.alphaCutOff = 0.3
         mat.backFaceCulling = false
         mat.specularColor = Color3.Black()
+        swayInWind(mat, sway)
         const a = MeshBuilder.CreatePlane(`setup_${file}_a`, { width: w, height: h }, scene)
         const b = MeshBuilder.CreatePlane(`setup_${file}_b`, { width: w, height: h }, scene)
         b.rotation.y = Math.PI / 2

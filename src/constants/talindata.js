@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { offerStarterQuest } from '../npc/questOffer.js'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -48,6 +49,8 @@ export function talinData(){
             questionId: 100,
             conversationWithQuestion: toLines(pick(talinOpener)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("109_talin"),
                 { text: "Tell me how things work here.", cb: () => startQuestionare(101) },
                 {
                     text: "Need a hand with anything?",

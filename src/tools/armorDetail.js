@@ -45,6 +45,7 @@ const ARMOR_FINISH = {
     ruby:        { map: "forged", tileSize: 0.55, strength: 0.6 },
     mythril:     { map: "forged", tileSize: 0.65, strength: 0.5 },
     adamantine:  { map: "forged", tileSize: 0.5,  strength: 0.6 },
+    emerald:     { map: "forged", tileSize: 0.55, strength: 0.6 },
     dragonscale: { map: "scales", tileSize: 0.45, strength: 1.0, uvMap: "dragonscale", uvStrength: 1.0 },
     black:       { map: "forged", tileSize: 0.45, strength: 1.1 },
 }
@@ -199,10 +200,7 @@ class ArmorDetailPlugin extends MaterialPluginBase {
 export function giveArmorDetail(material, metalColor, mesh){
     const scene = material.getScene()
     const finish = ARMOR_FINISH[metalColor] ?? ARMOR_FINISH.iron
-    // a glossy metal's highlight would sparkle on detail too fine to see from
-    // afar - this widens it where the surface turns faster than a pixel
-    material.enableSpecularAntiAliasing = true
-    if(finish.uvMap && material.albedoTexture && mesh?.isVerticesDataPresent(VertexBuffer.UVKind)){
+    if(finish.uvMap && material.diffuseTexture && mesh?.isVerticesDataPresent(VertexBuffer.UVKind)){
         // invertY as the colour image is loaded, so the two line up
         material.bumpTexture = detailTexture(scene, MAPS[finish.uvMap], true)
         material.bumpTexture.level = finish.uvStrength

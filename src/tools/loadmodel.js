@@ -84,7 +84,17 @@ export async function mergeAndLoadModel(path, scene, functionBeforeMerge){
     return mesh
 }
 export async function loadAvatarContainer(path, scene){
-    return await LoadAssetContainerAsync(path, scene);
+    const container = await LoadAssetContainerAsync(path, scene);
+    // The glTF loader starts each file's first clip on load (its default
+    // animationStartMode) - here, on a template that is never shown and only
+    // ever cloned (instantiateModelsToScene, whose clones start stopped and
+    // are played by createEnemy/createCharacter themselves). Those template
+    // clips still run in the scene's animation loop: 765 of the 1047
+    // animatables in a measured openworld scene (1 player, 6 enemies) were
+    // the invisible templates' - nearly three quarters of all animation work,
+    // the biggest CPU cost in a frame and its biggest source of garbage.
+    container.animationGroups.forEach(group => group.stop())
+    return container
 }
 
 export async function loadMeshOnlyParts(path, scene) {

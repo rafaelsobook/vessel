@@ -2,6 +2,7 @@ import { startQuestionare } from '../components/conversations'
 import { findPlaceMetaData } from '../states/placestates.js'
 import { offerStarterQuest } from '../npc/questOffer.js'
 import { travelToPlace } from '../tools/travel.js'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Doran", isLeft: false, message }))
@@ -53,6 +54,8 @@ export function wagonData(){
             questionId: 80,
             conversationWithQuestion: doranOpener,
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("106_doran"),
                 { text: "Travel", cb: () => startQuestionare(81) },
                 {
                     text: "Any trouble on the road?",

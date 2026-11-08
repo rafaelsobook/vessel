@@ -1,4 +1,4 @@
-import { Mesh, MeshBuilder, Vector3, PBRMaterial, Color3, Texture, VertexBuffer, VertexData } from "@babylonjs/core";
+import { Mesh, MeshBuilder, Vector3, StandardMaterial, Color3, Texture, VertexBuffer, VertexData } from "@babylonjs/core";
 import { createSimplex } from "../tools/noise";
 export function createRock(scene, worldPos){
     const rockNoise = createSimplex(137);
@@ -41,12 +41,10 @@ export function createRock(scene, worldPos){
     rock.updateVerticesData(VertexBuffer.NormalKind, rockNormals);
     rock.refreshBoundingInfo();
 
-    const rockMat = new PBRMaterial("rockMat", scene);
-    rockMat.albedoColor  = new Color3(0.30, 0.27, 0.23);  // dark grey-brown
-    // rockMat.spe = new Color3(0.08, 0.08, 0.08);
-    rockMat.specularPower = 16;
+    const rockMat = new StandardMaterial("rockMat", scene);
+    rockMat.diffuseColor  = new Color3(0.30, 0.27, 0.23);  // dark grey-brown
+    rockMat.specularColor = Color3.Black();                // rough rock - no shine
     rockMat.ambientColor  = new Color3(0.1, 0.09, 0.08);
-    rockMat.roughness = 1
     rock.material = rockMat;
 
     if(worldPos) rock.position = new Vector3(worldPos.x, worldPos.y ? worldPos.y : 0, worldPos.z)
@@ -139,12 +137,13 @@ function oreMaterial(scene, color){
     if(!byColor) oreMaterials.set(scene, byColor = new Map())
     let mat = byColor.get(color)
     if(mat) return mat
-    mat = new PBRMaterial(`oreMat_${color}`, scene)
-    mat.albedoTexture = new Texture(`./images/modeltex/recources/ore${color}.jpg`, scene)
+    mat = new StandardMaterial(`oreMat_${color}`, scene)
+    mat.diffuseTexture = new Texture(`./images/modeltex/recources/ore${color}.jpg`, scene)
     mat.bumpTexture = new Texture("./images/modeltex/recources/orebumptex.webp", scene)
+    // nearly matte - the faintest glint off the ore's facets
+    mat.specularColor = new Color3(0.03, 0.03, 0.03)
     mat.specularPower = 12
     mat.ambientColor = new Color3(0.08, 0.08, 0.08)
-    mat.roughness = 0.95
     byColor.set(color, mat)
     return mat
 }

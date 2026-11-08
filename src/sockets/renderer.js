@@ -8,6 +8,7 @@ import { openworldGroundY } from '../tools/groundHeight.js'
 import { isNearCastle } from "../creations/createcastle.js";
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js";
 import { emitEnemyChasePosition } from "./emits.js";
+import { tickUndead } from "../enemies/undead.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
 import { stopEnemyEating, isEnemyRoaring, stopEnemyRoar } from "../enemies/createEnemy.js";
 import { findPlaceMetaData } from "../states/placestates.js";
@@ -319,7 +320,7 @@ const ENEMY_SEPARATION_MARGIN = 0.6
 let enemySeparationInterval = null
 
 function runEnemySeparationPass(){
-    const chasers = getEnemiesOnScene().filter(en => en._isMoving && en._targetId && en.body && !en._disabled)
+    const chasers = getEnemiesOnScene().filter(en => en._isMoving && en._targetId && en.body && !en._disabled && !(en._knockedUntil > performance.now()))
     if(chasers.length < 2) return
 
     // grouped by target FIRST - the pairwise check below only ever runs
@@ -502,9 +503,21 @@ let renderCallback = function () {
             }
         }
 
+        // THE UNDEAD (enemies/undead.js) - walked toward where tcp says each
+        // one is, through whatever leap or roll it is in, on the ground
+        if(player._undead) tickUndead(player, dt)
+
         if(!player.characterAnimations) return
 
         if(player.mode === "death") return
+        // a long lunge's run-up (charactersystem/attackingSystem.js's attack()):
+        // running, whatever the mode or the ground under it - mid-hop it would
+        // read as falling - until the jump attack's clip takes over
+        if(player._runUntil > performance.now() && !player.characterAnimations.isActionPlaying()){
+            player.characterAnimations.tickBlend()
+            player.characterAnimations.setState(ANIM_STATE.RUNNING, 4)
+            return
+        }
         if(player._attacking || player.characterAnimations.isActionPlaying()) return
         player.characterAnimations.tickBlend()
 
@@ -530,9 +543,12 @@ let renderCallback = function () {
                 case "idle":
                     player.characterAnimations.setState(ANIM_STATE.WALK, 8)
                 break
-                case "fighting":
-                    player.characterAnimations.setState(ANIM_STATE.RUNNING, 8)
-                break
+                case "fighting": {
+                    // locked onto an enemy and moving round it (controllers/inputMovement.js) -
+                    // sideways or backing off in its own clip, where the rig has it
+                    const strafe = player._strafe && player.characterAnimations.stateForClip(player.anims, player._strafe)
+                    player.characterAnimations.setState(strafe || ANIM_STATE.RUNNING, 8)
+                } break
             }
             return
         }
@@ -639,6 +655,9 @@ let renderCallback = function () {
         // enemyBind) - "cannot move" while true, regardless of
         // _isMoving/_targetId state
         if(en._disabled) return
+        // thrown back by a blow (charactersystem/knockback.js's knockEnemyAway) -
+        // that slide moves it until it lands
+        if(en._knockedUntil > performance.now()) return
 
         // roaring at the target it just picked (createEnemy.js's
         // startEnemyRoar) - stands its ground, turned to face them, until
@@ -747,6 +766,9 @@ let renderCallback = function () {
         // existing enemy's own actionType is already "chasing", so this is
         // a no-op change for all of them.
         if (en._isMoving && en._targetId && en.det.actionType === "chasing") {
+            // charging a ranged attack (enemies/rangeAttack.js) - it holds its
+            // ground, the charge itself keeps it turned to its target
+            if (en._channelingUntil > performance.now()) return
             // was scene.getMeshByName() - an O(n) linear scan over every mesh in
             // the scene (thousands, counting village foliage instances), done
             // every frame per chasing enemy. getPlayersOnScene() is a tiny array.

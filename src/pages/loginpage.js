@@ -2,41 +2,55 @@ import { APIURL } from "../constants/constants.js"
 import { startScene } from "../main/main.js"
 import { keepAccountWithTokenDet, getCharDetFromDB } from "../constants/api.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { setLoading, hideHomePage } from "./mainpage.js"
-const usernameInput = document.querySelector("#usernameInp")
-const passwordInput = document.querySelector("#passwordInp")
-const confirmInput = document.querySelector("#confirmpass")
-const enterBtn = document.querySelector("#enterWorldBtn")
-
-const msg = document.querySelector("#auth-msg")
+import { setLoading, hideHomePage, setAuthMode, rememberHowEntered } from "./mainpage.js"
+import { usernameInput, passwordInput, showAuthError, clearAuthError } from "./authform.js"
 
 export function formMessage(_infoMessage){
-    msg.textContent = _infoMessage
-
     const homePage = document.querySelector(".home-page")
     homePage.classList.remove("hidden")
-    formMessage("Server Error")
+    showAuthError(_infoMessage)
 }
 export function showLoginPage() {
-    confirmInput.classList.add("hidden")
+    setAuthMode("login")
+}
+
+/**
+ * Into the game with an account the server just answered with ({ token, details }):
+ * kept for this tab, then the world - or character creation if it has no hero yet.
+ * Shows the error and returns false when it can't get in.
+ */
+export async function enterWithAccount(data){
+    try {
+        keepAccountWithTokenDet(data)
+
+        const charData = await getCharDetFromDB(data)
+        if(!charData || charData === "tokenfailed") return failEntry()
+
+        const entered = await startScene(charData === "notfound")
+        if(!entered) return failEntry()
+
+        hideHomePage()
+        return true
+    } catch (err) {
+        return failEntry()
+    }
+}
+function failEntry(){
     setLoading(false)
-    msg.textContent = ""
-    usernameInput.value = ""
-    passwordInput.value = ""
-    confirmInput.value = ""
-    usernameInput.focus()
+    showAuthError("Server error, try again.")
+    return false
 }
 
 export async function login() {
     const username = usernameInput.value.trim()
     const password = passwordInput.value
 
-    if (!username || !password) { 
-        setLoading(false)
-        msg.textContent = "Fill in all fields."; return }
+    if (!username || !password) {
+        return showAuthError("Fill in all fields.", username ? passwordInput : usernameInput)
+    }
 
     setLoading(true)
-    msg.textContent = ""
+    clearAuthError()
 
     try {
         const res = await fetch(`${APIURL}/users/login`, {
@@ -48,28 +62,15 @@ export async function login() {
         const data = await res.json()
 
         if (data === "norecord") {
-            msg.textContent = "Invalid username or password."
             setLoading(false)
-            return
+            return showAuthError("Invalid username or password.", passwordInput)
         }
-        keepAccountWithTokenDet(data)
+        if (!data?.token) return failEntry()
 
-        const charRes = await fetch(`${APIURL}/characters/${data.details._id}`, {
-            headers: { authori: `Bearer ${data.token}` }
-        })
-        const charData = await charRes.json()
-
-        const entered = await startScene(charData === "notfound")
-        if (!entered) {
-            msg.textContent = "Server error, try again."
-            setLoading(false)
-            return
-        }
-        hideHomePage()
+        if (await enterWithAccount(data)) rememberHowEntered("account", username)
 
     } catch (err) {
-        msg.textContent = "Server error, try again."
-        setLoading(false)
+        failEntry()
     }
 }
 
@@ -78,23 +79,6 @@ export async function continueSession() {
     if (!saved) return showLoginPage()
 
     setLoading(true)
-    msg.textContent = ""
-    try {
-        const charData = await getCharDetFromDB(saved)
-        if(!charData){
-            formMessage("Server Error")
-            return showLoginPage()
-        }
-        const entered = await startScene(charData === "notfound")
-        if (!entered) {
-            msg.textContent = "Server error, try again."
-            setLoading(false)
-            return
-        }
-        hideHomePage()
-    } catch (err) {
-        msg.textContent = "Server error, try again."
-        setLoading(false)
-    }
+    clearAuthError()
+    await enterWithAccount(saved)
 }
-

@@ -15,14 +15,13 @@ const FONT_BODY   = "'Bellefair'"
 
 // fixed pixel widths shared by the column-header row and every data row
 // below it, so everything actually lines up in columns - must sum to the
-// panel's own content width (root's 576px minus its 20px left/right padding)
-// MINUS SCROLLBAR_WIDTH_PX below, since the data rows sit inside a
+// panel's own content width (root's 660px minus its 40px left and 24px right
+// padding) MINUS SCROLLBAR_WIDTH_PX below, since the data rows sit inside a
 // ScrollViewer that reserves that much width for its own bar - the column
-// header row above it isn't squeezed the same way, so shrinking "map" here
-// (rather than widening the whole panel) is what keeps both rows lined up:
-// the header just ends with a few pixels of blank space where the bar
-// would sit below it.
-const COL_WIDTH = { index: "30px", name: "160px", lvl: "60px", cls: "140px", map: "136px" }
+// header row above it isn't squeezed the same way, so the header just ends
+// with a few pixels of blank space where the bar would sit below it.
+// "distance" is the Distance Traveled column (charactersystem/travelRecord.js)
+const COL_WIDTH = { index: "30px", name: "190px", lvl: "56px", map: "174px", distance: "136px" }
 
 // data rows scroll instead of the panel growing forever - past this many
 // players the ScrollViewer below caps out and a scrollbar takes over,
@@ -40,30 +39,10 @@ function createText(name, text, options = {}){
     t.textHorizontalAlignment = options.align ?? GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
     t.height = options.height ?? "22px"
     t.resizeToFit = false
+    // a name or map too long for its column ends in "..." instead of running into the next one
+    if(options.ellipsis) t.textWrapping = GUI.TextWrapping?.Ellipsis ?? 2
     if(options.width !== undefined) t.width = options.width
     return t
-}
-
-// picks whichever characterclass entry (server/models/charDetM.js's own
-// warbringer/runecaller/duskrunner/berserker/paladin/necromancer, each with
-// its own independently-tracked lvl - there's no single "active class" field
-// on a character) currently has the highest lvl, capitalized for display.
-// Every entry starts at lvl 0 (nobody's trained anything yet), and a bot's
-// player object never carries a characterclass at all - both fall back to
-// "Rookie" rather than an arbitrary always-lvl-0 class name.
-function getClassLabel(characterclass){
-    if(!characterclass) return "Hunter"
-    let bestName = null
-    let bestLvl = 0
-    for(const className in characterclass){
-        const lvl = characterclass[className]?.lvl ?? 0
-        if(lvl > bestLvl){
-            bestLvl = lvl
-            bestName = className
-        }
-    }
-    if(!bestName) return "Hunter"
-    return bestName.charAt(0).toUpperCase() + bestName.slice(1)
 }
 
 // one AdvancedDynamicTexture for this panel, built lazily and scene-tracked
@@ -88,7 +67,14 @@ let rowsScrollViewer = null
 // separate from the static column-header row below it
 let titleText = null
 
-function buildRow(index, name, lvl, className, mapName, isSelf, isBot){
+// "1,284 m" - what the Distance Traveled column shows. "-" for anyone with no
+// record to show (a bot, or a player whose client predates it)
+function formatDistance(meters){
+    if(typeof meters !== "number" || !Number.isFinite(meters)) return "-"
+    return `${Math.round(meters).toLocaleString("en-US")} m`
+}
+
+function buildRow(index, name, lvl, mapName, distance, isSelf, isBot){
     const row = new GUI.StackPanel(`playerlist_row_${name}_${Math.random()}`)
     row.isVertical = false
     row.height = "24px"
@@ -100,10 +86,10 @@ function buildRow(index, name, lvl, className, mapName, isSelf, isBot){
     const label = name + (isSelf ? " (You)" : "") + (isBot ? "" : "")
 
     row.addControl(createText("idx", `${index}`, { fontSize: 13, color: TEXT_MUTED, width: COL_WIDTH.index }))
-    row.addControl(createText("name", label, { fontSize: 14, color: nameColor, width: COL_WIDTH.name }))
+    row.addControl(createText("name", label, { fontSize: 14, color: nameColor, width: COL_WIDTH.name, ellipsis: true }))
     row.addControl(createText("lvl", `${lvl}`, { fontSize: 14, color: GOLD, width: COL_WIDTH.lvl }))
-    row.addControl(createText("cls", className, { fontSize: 14, color: TEXT_BODY, width: COL_WIDTH.cls }))
-    row.addControl(createText("map", mapName, { fontSize: 13, color: TEXT_MUTED, width: COL_WIDTH.map }))
+    row.addControl(createText("map", mapName, { fontSize: 13, color: TEXT_MUTED, width: COL_WIDTH.map, ellipsis: true }))
+    row.addControl(createText("distance", distance, { fontSize: 13, color: isSelf ? GOLD_BRIGHT : TEXT_BODY, width: COL_WIDTH.distance }))
     return row
 }
 
@@ -119,8 +105,8 @@ function buildColumnHeaderRow(){
     row.addControl(createText("h_idx", "#", { ...headerOpts, width: COL_WIDTH.index }))
     row.addControl(createText("h_name", "Name", { ...headerOpts, width: COL_WIDTH.name }))
     row.addControl(createText("h_lvl", "Level", { ...headerOpts, width: COL_WIDTH.lvl }))
-    row.addControl(createText("h_cls", "Class", { ...headerOpts, width: COL_WIDTH.cls }))
     row.addControl(createText("h_map", "Map/Area", { ...headerOpts, width: COL_WIDTH.map }))
+    row.addControl(createText("h_distance", "Distance Traveled", { ...headerOpts, width: COL_WIDTH.distance }))
     return row
 }
 
@@ -128,9 +114,10 @@ function buildPanel(scene){
     const texture = getUITexture(scene)
 
     const root = new GUI.Rectangle("playerlist_root")
-    // wide enough for #/Name/Level/Class/Map-Area side by side (COL_WIDTH
-    // above sums to exactly 536 = this minus the 40px/24px left/right padding)
-    root.width = "600px"
+    // wide enough for #/Name/Level/Map-Area/Distance Traveled side by side
+    // (COL_WIDTH above sums to 586, plus the scrollbar's 10 = this minus the
+    // 40px/24px left/right padding)
+    root.width = "660px"
     // grown/shrunk per-refresh below (rows.length * rowHeight + header) -
     // starts at a single-row height so an empty place doesn't flash a tall
     // empty box before the first refresh sizes it properly
@@ -173,8 +160,8 @@ function buildPanel(scene){
     root.addControl(inner)
 
     // title ("Players (N)") + "Press Tab to close" hint, side by side -
-    // widths below (380 + 156 = 536) match COL_WIDTH's own total so this
-    // row lines up flush with the table beneath it
+    // widths below (440 + 156 = 596) match the table's own width (COL_WIDTH
+    // plus the scrollbar) so this row lines up flush with the table beneath it
     const headerRow = new GUI.StackPanel("playerlist_header")
     headerRow.isVertical = false
     headerRow.height = "28px"
@@ -183,7 +170,7 @@ function buildPanel(scene){
     inner.addControl(headerRow)
 
     titleText = createText("playerlist_title", "Players", {
-        fontFamily: FONT_TITLE, fontSize: 18, color: GOLD_BRIGHT, height: "28px", width: "380px",
+        fontFamily: FONT_TITLE, fontSize: 18, color: GOLD_BRIGHT, height: "28px", width: "440px",
     })
     titleText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER
     headerRow.addControl(titleText)
@@ -274,19 +261,24 @@ function refreshRows(){
     // that actually has to not show me twice regardless of the cause
 
     // const others = getPlayersOnScene().filter(pl => pl.currentPlaceId === myPlaceId && pl.owner !== charState.owner)
-    const others = getPlayersOnScene()
+    // the fog's undead are bodies in playersOnScene too (enemies/undead.js),
+    // but nobody you'd call people
+    // areascene.js pushes MY OWN player into this list too, and I'm already the
+    // first row below (from charState) - so everyone else only
+    const others = getPlayersOnScene().filter(pl => pl.owner !== charState.owner && !pl.owner?.startsWith("undead_"))
 
     if(titleText) titleText.text = `People`
 
     let index = 1
-    // charState.owner/lvl/name/characterclass is what THIS client actually
+    // charState.owner/lvl/name is what THIS client actually
     // is - never in getPlayersOnScene() itself (that array is every OTHER
     // player/bot's own render object, see worldsocket.js's
     // reCreateMeshesInScene, which explicitly skips pushing a mesh for
     // tcpCharDet.owner === my own owner)
     rowsPanel.addControl(buildRow(
         index++, charState.name, charState.lvl,
-        getClassLabel(charState.characterclass), charState.currentPlace?.name ?? "-",
+        charState.currentPlace?.name ?? "-",
+        formatDistance(charState.maxDistanceTraveled ?? 0),
         true, false,
     ))
 
@@ -295,7 +287,8 @@ function refreshRows(){
         console.log(pl)
         rowsPanel.addControl(buildRow(
             index++, pl.name, pl.det?.lvl ?? 1,
-            getClassLabel(pl.det?.characterclass), pl.det?.currentPlace?.name ?? "-",
+            pl.det?.currentPlace?.name ?? "-",
+            isBot ? "-" : formatDistance(pl.det?.maxDistanceTraveled),
             false, isBot,
         ))
     })

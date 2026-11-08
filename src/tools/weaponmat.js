@@ -1,5 +1,6 @@
-import { StandardMaterial, PBRMaterial, Color3, Texture } from "@babylonjs/core"
+import { StandardMaterial, Color3, Texture } from "@babylonjs/core"
 import { METAL_TINTS, METAL_ROUGHNESS, MATERIAL_TEXTURES } from "./metalmat"
+import { applyShine } from "./surfacemat.js"
 
 // shared across every guard material instance - avoids reloading the same
 // image once per (rarity, materialName) cache entry in createweapon.js.
@@ -117,12 +118,10 @@ function resolveMaterialTint(materialName) {
     return { key, color: undefined, category: undefined }
 }
 
-// blade/guard/pommel are "hard" parts - metal or polished stone/crystal.
-// They use PBRMaterial so they pick up scene.environmentTexture reflections
-// (set up once in tools/lighting.js) the same way armor already does via
-// metalmat.js - a StandardMaterial only ever shows a small specular
-// highlight dot from direct lights and never reflects its surroundings,
-// which is why the sword looked dull/flat next to the armor.
+// blade/guard/pommel are "hard" parts - metal or polished stone/crystal:
+// a highlight from the metal/gem's own roughness (surfacemat.js's
+// applyShine), tinted with its colour for metal, the way the armour's is
+// (metalmat.js).
 function buildHardPartMat(scene, namePrefix, rarity, materialName, fallbackKey, blendBase, blendPerLevel, blendCap, emissiveScale) {
     const { level, base, isBudgetTier } = parseRarity(rarity)
     const { key, color, category } = resolveMaterialTint(materialName)
@@ -132,7 +131,7 @@ function buildHardPartMat(scene, namePrefix, rarity, materialName, fallbackKey, 
     const matName = `${namePrefix}Mat_${resolvedKey}_${rarity}`
 
     // organic materialName shouldn't normally reach blade/guard/pommel (that's
-    // handle's job), but fall back safely to a matte look instead of a PBR one
+    // handle's job), but fall back safely to a matte look instead of a shiny one
     if (resolvedCategory === "organic") {
         const mat = new StandardMaterial(matName, scene)
         mat.diffuseColor = tint
@@ -140,23 +139,23 @@ function buildHardPartMat(scene, namePrefix, rarity, materialName, fallbackKey, 
         return mat
     }
 
-    const mat = new PBRMaterial(matName, scene)
-    mat.metallic = resolvedCategory === "metal" ? 1 : 0
-    mat.roughness = resolvedCategory === "metal" ? (METAL_ROUGHNESS[resolvedKey] ?? 0.4) : (GEM_ROUGHNESS[resolvedKey] ?? 0.3)
-    mat.environmentIntensity = 0.7
+    const mat = new StandardMaterial(matName, scene)
+    const isMetal = resolvedCategory === "metal"
+    const roughness = isMetal ? (METAL_ROUGHNESS[resolvedKey] ?? 0.4) : (GEM_ROUGHNESS[resolvedKey] ?? 0.3)
     // isBudgetTier gate - see parseRarity's own comment. A recipe-driven
     // rarity (epic1 etc) skips this blend/emissive entirely instead of
     // picking up RARITY_COLORS' generic per-tier tint on top of the
     // material's own true color.
     const blend = isBudgetTier ? Math.min(blendBase + level * blendPerLevel, blendCap) : 0
-    mat.albedoColor = isBudgetTier ? Color3.Lerp(tint, base, blend) : tint
+    mat.diffuseColor = isBudgetTier ? Color3.Lerp(tint, base, blend) : tint
+    applyShine(mat, { roughness, metallic: isMetal ? 1 : 0, tint: mat.diffuseColor })
     mat.emissiveColor = isBudgetTier ? base.scale(emissiveScale * level) : Color3.Black()
     if (SELF_GLOW.has(resolvedKey)) mat.emissiveColor = mat.emissiveColor.add(tint.scale(SELF_GLOW_INTENSITY))
     // MATERIAL_TEXTURES (metalmat.js) - only materials with a real surface
     // image set one (dragonscale so far); everything else stays flat-tinted
     // exactly as before
     const texturePath = MATERIAL_TEXTURES[resolvedKey]
-    if(texturePath) mat.albedoTexture = new Texture(texturePath, scene)
+    if(texturePath) mat.diffuseTexture = new Texture(texturePath, scene)
     return mat
 }
 
@@ -181,8 +180,7 @@ export function createHandleMat(scene, rarity = "common1", materialName = "leath
     mat.specularColor = new Color3(0.05, 0.05, 0.05)
     mat.specularPower = 8
     if (SELF_GLOW.has(key)) mat.emissiveColor = tint.scale(SELF_GLOW_INTENSITY)
-    // MATERIAL_TEXTURES (metalmat.js) - same as buildHardPartMat above, just
-    // diffuseTexture instead of albedoTexture since this is a StandardMaterial
+    // MATERIAL_TEXTURES (metalmat.js) - same as buildHardPartMat above
     const texturePath = MATERIAL_TEXTURES[key]
     if(texturePath) mat.diffuseTexture = new Texture(texturePath, scene)
     return mat

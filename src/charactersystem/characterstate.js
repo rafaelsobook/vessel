@@ -557,6 +557,9 @@ export function getCharSocket(){
         // what I've evolved into (evolution.js) - so anyone meeting me sees
         // the wings it gave me
         evolution: characterState.evolution,
+        // how far from the openworld's spawn I've ever been, metres (travelRecord.js) -
+        // the Tab list's "Distance Traveled" column on everyone else's screen
+        maxDistanceTraveled: characterState.maxDistanceTraveled ?? 0,
     }
 }
 
@@ -885,6 +888,8 @@ export async function initiateCharacter(_accountDet){
     characterState = loaded
     // what the server has right now - the vitals autosave only sends changes
     lastSavedVitals = JSON.stringify(vitalsOf(characterState))
+    lastSavedClasses = classesOf(characterState)
+    lastSavedTravel = characterState.maxDistanceTraveled ?? 0
 
     activateLifeSystem()
     updateSkillListUI(characterState.skills)
@@ -1547,6 +1552,8 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
     // the vitals as sent - what the server holds once this lands, not whatever
     // they've moved on to by the time it answers
     const sentVitals = JSON.stringify(vitalsOf(toSave))
+    const sentClasses = classesOf(toSave)
+    const sentTravel = toSave.maxDistanceTraveled ?? 0
     try {
         const data = await useFetch(`${APIURL}/characters/updateall/${toSave._id}`, "PATCH", accountDet.token, toSave)
         // useFetch gives back undefined when the request fails, and the server
@@ -1569,7 +1576,11 @@ export async function updateMyDetailsOL(toSave, accountDet, willUpdateCharState,
         // caller today) has nothing to bring back; a separate copy is copied
         // INTO the live object.
         if(willUpdateCharState && characterState && toSave !== characterState && data._id === characterState._id) Object.assign(characterState, data)
-        if(characterState && toSave._id === characterState._id) lastSavedVitals = sentVitals
+        if(characterState && toSave._id === characterState._id){
+            lastSavedVitals = sentVitals
+            lastSavedClasses = sentClasses
+            lastSavedTravel = Math.max(lastSavedTravel, sentTravel)
+        }
         return data
     } catch (error) {
         return error.message
@@ -1612,6 +1623,14 @@ const VITALS_SAVE_EVERY_MS = 10 * 1000
 let vitalsSaveInterval = null
 // JSON of the vitals the server last confirmed - nothing's sent while they match
 let lastSavedVitals = null
+// the same for the combat classes (characterclass: levels and progress toward
+// the next one - characterclass.js). They ride this autosave, but only when
+// THEY changed here: a character left open in another tab or device mustn't
+// write class levels back that it never touched
+let lastSavedClasses = null
+// the farthest-travelled record (travelRecord.js) the server has - it rides the
+// vitals save too, but only once it has grown past this
+let lastSavedTravel = 0
 let vitalsPageHooked = false
 
 function vitalsOf(state){
@@ -1624,6 +1643,11 @@ function vitalsOf(state){
     }
 }
 
+// JSON of the combat classes - null for a character without any
+function classesOf(state){
+    return state.characterclass ? JSON.stringify(state.characterclass) : null
+}
+
 // keepalive - for a page that's going away: the request still completes after
 // the page is gone (the body is tiny, far under keepalive's 64KB limit)
 async function saveVitals(keepalive = false){
@@ -1631,15 +1655,26 @@ async function saveVitals(keepalive = false){
     const id = characterState._id
     const vitals = vitalsOf(characterState)
     const json = JSON.stringify(vitals)
-    if(json === lastSavedVitals) return
+    const classes = classesOf(characterState)
+    const classesChanged = classes !== null && classes !== lastSavedClasses
+    const travel = characterState.maxDistanceTraveled ?? 0
+    const travelChanged = travel > lastSavedTravel
+    if(json === lastSavedVitals && !classesChanged && !travelChanged) return
     const accountDet = checkIfTokenSaved()
     if(!accountDet?.token) return
     try {
-        const res = await fetch(`${APIURL}/characters/updateall/${id}`, { ...apiOpt("PATCH", vitals, accountDet.token), keepalive })
+        const body = { ...vitals }
+        if(classesChanged) body.characterclass = characterState.characterclass
+        if(travelChanged) body.maxDistanceTraveled = travel
+        const res = await fetch(`${APIURL}/characters/updateall/${id}`, { ...apiOpt("PATCH", body, accountDet.token), keepalive })
         // not res.ok - the server answers its failures with a 200 too
         // ('tokenfailed', an error object); only the character coming back
         // means these vitals are on it
-        if(isCharacterDoc(await res.json(), id)) lastSavedVitals = json
+        if(isCharacterDoc(await res.json(), id)){
+            lastSavedVitals = json
+            if(classesChanged) lastSavedClasses = classes
+            if(travelChanged) lastSavedTravel = Math.max(lastSavedTravel, travel)
+        }
     } catch (err) {
         // offline, or the server asleep - the next tick tries again
     }

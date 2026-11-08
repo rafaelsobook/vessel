@@ -441,7 +441,11 @@ export function activateBtnOnce(){
                     }
                     const dmgDetails = calcDmg(charState)
 
-                    const spToDeduct = (dmgDetails.physicalDmg/5) + (dmgDetails.weaponDmg/10)
+                    // a punch's class bonus (the Berserker's) costs stamina the way a
+                    // weapon class's does - a tenth of a point each, not the fifth
+                    // plain physical damage costs
+                    const bareClassDmg = dmgDetails.bareClassDmg ?? 0
+                    const spToDeduct = ((dmgDetails.physicalDmg - bareClassDmg)/5) + (bareClassDmg/10) + (dmgDetails.weaponDmg/10)
                     clickedTimeOut = setTimeout(() => {
                         disableEnableWalkRunButtons(true)
                     },swordAnimNum === 1 ? 400: 800)
@@ -484,6 +488,8 @@ export function activateBtnOnce(){
                             triggerClassLeveling(itm.weaponType === "hammer" ? "hammer" : equippedWeaponType)
                         }
                     })
+                    // bare hands train the Berserker
+                    if(!equippedWeaponType) triggerClassLeveling("fist")
 
                     // airborne + weapon equipped uses the dedicated air-attack
                     // clip instead of the normal grounded combo (no alternating
@@ -552,8 +558,16 @@ export function activateBtnOnce(){
                         hasWeapon: !!equippedWeaponType,
                         airborne: !getIsGrounded(),
                     })
+                    // a weapon swing that lunges in plays the jump attack, not
+                    // the combo's own clip - prepareMeleeSwing decided, having
+                    // seen how far the target is (the first swing at one a few
+                    // steps off; the ones after it are in reach, and the combo)
+                    animName = swing.animName
                     if(swing.dirTarg) attackInfo.dirTarg = swing.dirTarg
                     if(swing.lunge) attackInfo.lunge = { to: swing.lunge.to, ms: swing.lunge.ms }
+                    // a long dash runs in before the jump attack's clip starts -
+                    // on everyone's screen, so it rides the relay too
+                    if(swing.clipDelayMs) attackInfo.clipDelayMs = swing.clipDelayMs
 
                     // my own swing plays right now - it used to wait for the
                     // server to echo it back, so in multiplayer the animation

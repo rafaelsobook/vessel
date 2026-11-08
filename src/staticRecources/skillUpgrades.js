@@ -193,6 +193,43 @@ export function growMulticastEfficiency(skillDetail){
     skillDetail.skillCoolDown = Math.max(3000, baseCooldown - (skillDetail.lvl - 1) * 400)
 }
 
+// crescenthowl only - the wave itself changes with level, not just its size:
+//   - one more crescent per level, up to CRESCENT_HOWL_MAX_CRESCENTS, loosed all at
+//     once (burstIntervalMs 0) in a fan CRESCENT_HOWL_FAN_DEG wider for each
+//   - from level 2 a "knockback" effect: what a crescent hits is thrown back,
+//     further each level (skillEffects.js turns it into a bash on the hit)
+//   - from level 3 a "bleed" effect: what it hits bleeds for a few seconds,
+//     harder and longer each level (startTargetBleed)
+// Every number is worked out from the level, not added to what's there, so a
+// skill saved at any level (upgradeSkill's own dmgPm bump runs first and would
+// otherwise inflate the bleed) lands on the same values.
+const CRESCENT_HOWL_MAX_CRESCENTS = 5
+const CRESCENT_HOWL_FAN_DEG = 11
+const CRESCENT_HOWL_KNOCKBACK_FROM = 2
+const CRESCENT_HOWL_BLEED_FROM = 3
+export function growCrescentHowl(skillDetail){
+    const lvl = skillDetail.lvl
+    const pv = skillDetail.projectileVisual
+    if(pv){
+        const count = Math.min(CRESCENT_HOWL_MAX_CRESCENTS, lvl)
+        pv.burstCount = count
+        pv.burstIntervalMs = 0
+        pv.spreadDeg = (count - 1) * CRESCENT_HOWL_FAN_DEG
+    }
+    const setEffect = (effectType, values) => {
+        const effect = skillDetail.effects.find(e => e.effectType === effectType)
+        if(effect) Object.assign(effect, values)
+        else skillDetail.effects.push({ effectType, ...values })
+    }
+    if(lvl >= CRESCENT_HOWL_KNOCKBACK_FROM){
+        setEffect("knockback", { distance: Math.min(6, 1.5 + (lvl - CRESCENT_HOWL_KNOCKBACK_FROM) * 0.75) })
+    }
+    if(lvl >= CRESCENT_HOWL_BLEED_FROM){
+        const past = lvl - CRESCENT_HOWL_BLEED_FROM
+        setEffect("bleed", { dmgPm: 12 + past * 6, duration: Math.min(8000, 3000 + past * 1000) })
+    }
+}
+
 // Registry, looked up by STRING KEY - skillsData.js sets onLevelUp to one of
 // these key names (e.g. "growArcAura"), never a function reference directly.
 // This matters: skill objects get JSON.stringify'd on every save
@@ -214,4 +251,5 @@ export const UPGRADE_TEMPLATES = {
     growLightningLine,
     growDarkOrb,
     growMulticastEfficiency,
+    growCrescentHowl,
 }

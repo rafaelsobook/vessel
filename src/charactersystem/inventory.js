@@ -34,12 +34,15 @@ let isInventoryLoading = false
 // for the top tier. "normal" (toSell.js's own common-tier spelling, see
 // style.scss's own .common/.normal split) falls back to the common border
 // via the same ?? default as an unrecognized rarity.
+// mythic (tcp's black armour, the hidden places' best pieces) shares the gold
+// frame - its slot background (style.scss's .mythic) is what sets it apart.
 const RARITY_BORDERS = {
     common: "./images/UI/border4.png",
     uncommon: "./images/UI/border3.webp",
     rare: "./images/UI/border.png",
     epic: "./images/UI/border5.png",
     legendary: "./images/UI/border2.png",
+    mythic: "./images/UI/border2.png",
 }
 let buttonsActivated   = false
 
@@ -107,10 +110,9 @@ export function insertItemOnInventory(itm){
     // sword/spear, now that a real pickaxe.webp exists)
     if(itm.weaponType === "axe") itemImg.src = `./images/items/${itm.itemCateg}/axes.webp`
     if(itm.itemType === "helmet") itemImg.src = `./images/items/${itm.itemCateg}/${itm.modelName}.webp`
-    // a skill book shows the icon of the skill it teaches - it has no art of
-    // its own (staticRecources/skillBooks.js), so you can read a shelf of
-    // them straight off the grid
-    if(itm.itemCateg === "skillbook") itemImg.src = `./images/skills/${itm.skillName}.webp`
+    // a skill book shows the art of its rarity (images/items/skillbook/<rarity>.webp,
+    // staticRecources/skillBooks.js) - what it teaches is in its name and panel
+    if(itm.itemCateg === "skillbook") itemImg.src = `./images/items/skillbook/${itm.rarity ?? "normal"}.webp`
 
     // every sword shares the same placeholder icon above, so this is the
     // only way to tell which generated variant a slot actually is - shown
@@ -202,12 +204,10 @@ const TINTED_ARMOR = [
 ]
 // What each metal does to a piece - mirrors tcp/recources/botItems.ts's
 // METAL_TIERS, so a piece from here matches one a bot earns (a black Knight's
-// Scale is def 60 against iron's 20). rarity is "legendary" for both: tcp calls
-// black "mythic", but the inventory has no mythic border or background yet, so
-// it would show up as a common slot.
+// Scale is def 60 against iron's 20), rarity included: black is mythic.
 const ARMOR_METAL_TIERS = {
     [METAL_COLOR.DRAGONSCALE]: { prefix: "Dragonscale", rarity: "legendary", defMult: 2.6, resMult: 2.4, priceMult: 14 },
-    [METAL_COLOR.BLACK]:       { prefix: "Black",       rarity: "legendary", defMult: 3.0, resMult: 3.0, priceMult: 20 },
+    [METAL_COLOR.BLACK]:       { prefix: "Black",       rarity: "mythic",    defMult: 3.0, resMult: 3.0, priceMult: 20 },
 }
 // the metals the "i" key hands the armour out in - one full set of each. For
 // another metal, add its METAL_COLOR here and its tier above.
@@ -531,6 +531,9 @@ export function giveAllItems(){
             itemCateg: "equipable",
             itemType: "weapon",
             weaponType: "spear",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { dmg: 25, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
             equiped: false,
@@ -567,6 +570,9 @@ export function giveAllItems(){
             itemCateg: "equipable",
             itemType: "weapon",
             weaponType: "staff",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { dmg: 10, def: 0, magicDmg: 12, plusStr: 0, plusDex: 0, plusInt: 0 },
             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
             equiped: false,
@@ -595,6 +601,10 @@ export function giveAllItems(){
             itemCateg: "equipable",
             itemType: "weapon",
             weaponType: "hammer",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                { effectName: "stun", stunDuration: 1.5, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { dmg: 30, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
             equiped: false,

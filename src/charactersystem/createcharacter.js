@@ -1,3 +1,4 @@
+import { weaponEffectsWhenHit } from "../staticRecources/weaponEffects.js"
 import { layerAvatarMaterials, layerFacePart, layerHelmet, layerWorn, tuckOutfit } from "./avatarLayers.js";
 import { 
     Vector3, 
@@ -5,7 +6,7 @@ import {
     MeshBuilder,
     PhysicsAggregate,
     PhysicsShapeType,
-    PBRMaterial,
+    StandardMaterial,
     Texture,
     Color3
 } from '@babylonjs/core';
@@ -110,27 +111,12 @@ function createAnimeBodyMaterials(scene, det){
     // before this switch from flat diffuseColor to textures (those still
     // carry the old {r,g,b} shape, which won't match a SKIN_TEXTURES key).
     const skinTexPath = SKIN_TEXTURES[skinColor] ?? SKIN_TEXTURES.skin1
-    // PBRMaterial here, not createMat's plain StandardMaterial - createnpc.js's
-    // own NPCs render their skin through a PBRMaterial straight off their glb
-    // (metallic-roughness workflow, tuned with environmentIntensity/
-    // directIntensity below), and a StandardMaterial is a genuinely different
-    // shader/lighting model, not just a different color setting - the same
-    // exact skin texture visibly mismatches an NPC's skin under identical
-    // scene lighting no matter how its diffuseColor/emissiveColor is tuned.
-    // Building this one material the same way NPCs' skin already is removes
-    // that mismatch at the source instead of chasing it with color hacks.
-    const skinMat = new PBRMaterial("skin_mat", scene)
-    skinMat.albedoTexture = new Texture(skinTexPath, scene)
-    // skin is a non-metal, mostly-matte surface - no metallic sheen, no sharp
-    // specular highlight
-    skinMat.metallic = 0
-    skinMat.roughness = 1
-    // same three knobs createnpc.js sets on every NPC's own PBRMaterial -
-    // keeping these identical is what actually makes the two match under the
-    // same scene lighting, not just "using PBRMaterial" in isolation
-    skinMat.environmentIntensity = 0.3
-    skinMat.directIntensity = 1
-    skinMat.emissiveIntensity = 0
+    // a StandardMaterial, the same kind NPCs' skin comes off their glb as
+    // (tools/gltfStandardMaterials.js), so the two match under the same light.
+    // Skin is matte - no highlight.
+    const skinMat = new StandardMaterial("skin_mat", scene)
+    skinMat.diffuseTexture = new Texture(skinTexPath, scene)
+    skinMat.specularColor = Color3.Black()
 
     // his skin under his clothes, his hair over his scalp - avatarLayers.js
     if(det.gender !== "female") layerAvatarMaterials({ skinMat, clothMat, pantsMat, hairMat })
@@ -161,8 +147,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const { mode, _moving, _minning } = det
 
     const {body, bodytarget, camParent, aggregate} = createCapsuleBody(scene, det, spawnPos, det.owner, usePhysics)
-    // hidden whenever the camera ends up inside it (tools/camera.js)
-    registerCameraAvatar(body)
+    // hidden whenever the camera ends up inside it (tools/camera.js) - but
+    // never the fog's undead: an enemy coming at you must stay on screen
+    if(det.race !== "undead") registerCameraAvatar(body)
 
     let fakeShadowRoot = scene.getMeshByName("fakeShadow")
 
@@ -195,7 +182,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     const {root, animationGroups, rHand, belts, cloaks, 
         armors, boots, spineBone, headBone, lowerArmL, lowerArmR, 
         shoulderL, shoulderR, characterHairs, mainBodyLegs,
-        underArmor, underBelt, lowerLegL, lowerLegR, faceParts} = createAnimeBody(containers, body, bodytarget, det, scene)
+        underArmor, underBelt, lowerLegL, lowerLegR, faceParts, skeletonMesh} = createAnimeBody(containers, body, bodytarget, det, scene)
 
     const nameMesh = createTextMesh(scene, body, det.name, "white", {x:0,y: capsuleHeight,z:0}, 30);
     nameMesh.isVisible = false
@@ -603,7 +590,8 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
     characterAnimations.playAll()
 
 
-    const bloodps = createBloodSplatter(scene)
+    // an undead has no blood in it - its bones throw up dust instead
+    const bloodps = createBloodSplatter(scene, undefined, false, det.race === "undead" ? UNDEAD_DUST : undefined)
     bloodps.ps.emitter = spineBone
     // already bleeding when this client met them (getCharSocket's isBleeding)
     if(det.isBleeding) bloodps.setBleeding(true)
@@ -640,13 +628,16 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                 // just relayed through tcp's new "playerIsHit" handler
                 // instead of "enemyIsHit" (a player/bot isn't in tcpEnemies)
                 const equippedWeapon = charState.items.find(itm => itm.itemType === "weapon" && itm.equiped)
+                // its on-hit effects ride along (staticRecources/weaponEffects.js) -
+                // only the undead's own server (tcp/recources/undead.ts) acts on
+                // them here: a critical's knockback, a hammer's stun
                 // my blessings' say in the blow (blessingEffects.js) - the damage
                 // after them. Its on-hit effects aren't used here: nothing on
                 // the player side reads effectsWhenHit yet (worldsocket.js).
                 const dmgDetails = applyBlessingsToMeleeHit({
                     dmgDetails: calcDmg(charState),
                     charState,
-                    effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                    effectsWhenHit: weaponEffectsWhenHit(equippedWeapon),
                     isSkill: !!atkCollider.isSkillHijacked,
                     targetBody: body,
                 }).dmgDetails
@@ -656,7 +647,7 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
                     targetId: det.owner,
                     currentPlaceId: det.currentPlace.placeId,
                     isPhysical: true,
-                    effectsWhenHit: equippedWeapon?.effectsWhenHit,
+                    effectsWhenHit: weaponEffectsWhenHit(equippedWeapon),
                 })
                 // the blow's impact on my screen - meleeCombat.js
                 onMeleeConnect({
@@ -700,6 +691,9 @@ export function createCharacter(scene, spawnPos, det, usePhysics, isNpc = false)
         // what follows the head (effects/stunStars.js's dizzy stars)
         headBone,
         root,
+        // the skeleton under the skin (avatar.glb's undeadbody) - hidden,
+        // until lightning lights them up to the bones (effects/electrocute.js)
+        skeletonMesh,
         mode,
         _moving,
         _minning,
@@ -813,6 +807,10 @@ const KNEE_ARMOR_FIT = {
     male:   { scale: 2.6, down: 0.6,  forward: 0.52, inward: -0.08 },
     female: { scale: 2.1, down: 0.48, forward: 0.28, inward: 0.22 },
 }
+
+// what a blow knocks off an undead (det.race "undead") instead of blood - pale
+// bone dust, through the same splatter (createBloodSplatter's color)
+const UNDEAD_DUST = { r: 0.5, g: 0.46, b: 0.38 }
 
 // belt textures (images/textures/belt) that aren't .jpg, by item name
 const BELT_TEXTURE_EXT = { royalpriest: "webp" }
@@ -932,19 +930,13 @@ function applyEvolutionLook(faceParts, evolution, scene){
     if(look.eyeback && mat){
         // what it was, once - resetEvolutionLook puts it back
         faceParts.originalEyeback ??= {
-            color: ("albedoColor" in mat ? mat.albedoColor : mat.diffuseColor)?.clone(),
-            texture: "albedoColor" in mat ? mat.albedoTexture : mat.diffuseTexture,
+            color: mat.diffuseColor?.clone(),
+            texture: mat.diffuseTexture,
             emissiveColor: mat.emissiveColor?.clone(),
             emissiveTexture: mat.emissiveTexture,
         }
-        // PBR or standard, whichever the glb gave it
-        if("albedoColor" in mat){
-            mat.albedoColor = look.eyeback.clone()
-            mat.albedoTexture = null
-        } else {
-            mat.diffuseColor = look.eyeback.clone()
-            mat.diffuseTexture = null
-        }
+        mat.diffuseColor = look.eyeback.clone()
+        mat.diffuseTexture = null
         mat.emissiveColor = look.eyeback.clone()
         mat.emissiveTexture = null
     }
@@ -961,20 +953,26 @@ function resetEvolutionLook(faceParts, det, scene){
     }
     const mat = eyeback?.material
     if(mat && originalEyeback){
-        if("albedoColor" in mat){
-            if(originalEyeback.color) mat.albedoColor = originalEyeback.color.clone()
-            mat.albedoTexture = originalEyeback.texture
-        } else {
-            if(originalEyeback.color) mat.diffuseColor = originalEyeback.color.clone()
-            mat.diffuseTexture = originalEyeback.texture
-        }
+        if(originalEyeback.color) mat.diffuseColor = originalEyeback.color.clone()
+        mat.diffuseTexture = originalEyeback.texture
         if(originalEyeback.emissiveColor) mat.emissiveColor = originalEyeback.emissiveColor.clone()
         mat.emissiveTexture = originalEyeback.emissiveTexture
     }
 }
 
+// The eyes' texture file (images/modeltex/eyes/<name>eye.jpg) for a race - its own
+// name unless listed here. An undead's burn like a demon's, red in the dark of
+// its skull, until it has a texture of its own
+const RACE_EYE_TEXTURE = { undead: "demon" }
+// and the glow a night riser's eyes take on over that red (nightfall's dead
+// are the stronger ones - tcp's recources/undead.ts)
+const UNDEAD_NIGHT_EYES = new Color3(0.42, 0, 0.62)
+
 function giveRaceEyes(eyes, det, scene){
-    const eyeTexture = new Texture(`./images/modeltex/eyes/${det.race ?? "human"}eye.jpg`, scene, false, false)
+    const race = det.race ?? "human"
+    // own keys only - a race name can come from another player over the network
+    const file = Object.hasOwn(RACE_EYE_TEXTURE, race) ? RACE_EYE_TEXTURE[race] : race
+    const eyeTexture = new Texture(`./images/modeltex/eyes/${file}eye.jpg`, scene, false, false)
     const eyeMat = eyes.material.clone(`eye_mat_${det._id}`)
     eyeMat.emissiveTexture = eyeTexture
     eyes.material = eyeMat
@@ -991,6 +989,9 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     // gender branch below
     const isFemale = det.gender === "female"
     if(!isFemale) det.gender = "male"
+    // the fog's dead (tcp's recources/undead.ts, enemies/undead.js) - the
+    // skeleton under the skin IS the body, nothing living left on it
+    const isUndead = det.race === "undead"
 
 
     let belts = []
@@ -1005,7 +1006,10 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     let underArmor = []
     let underBelt = []
     let mainBodyLegs = undefined
-    const {hairMat,femaleHair1Mat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = createAnimeBodyMaterials(scene, det)
+    // undeadbody - the skeleton, skinned to the same bones as the body
+    let skeletonMesh = null
+    // no skin, hair or clothes on the undead, so none of their materials
+    const {hairMat,femaleHair1Mat,femaleHair2Mat,clothMat,pantsMat,skinMat, bootsMat} = isUndead ? {} : createAnimeBodyMaterials(scene, det)
    
     const entries = animeBody.instantiateModelsToScene()
     entries.animationGroups.map(ani => ani.name = ani.name.split(" ")[2])
@@ -1133,6 +1137,48 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         // alongside the new female body parts in avatar.glb, same "generated
         // junk, not a real body part" category as ref/hiddenbody above
         if(mes.name.includes("tripo_node")) return disposeMeshTree(mes)
+        // the skeleton under the skin - kept, out of sight, for when lightning
+        // shows the bones through a charred body (effects/electrocute.js).
+        // On an undead it is the body itself, so it shows
+        if(mes.name === "undeadbody"){
+            mes.isVisible = isUndead
+            skeletonMesh = mes
+            return
+        }
+        // an undead keeps only what can be worn over bones: the armour and
+        // the equipable belts, hidden until equipped as on anyone (equipArmor/
+        // equipBelt). Helmets, pauldrons, gauntlets and knee armour hang off
+        // the bones from their own glbs, so they need nothing here. Every
+        // part of a living body - either gender's skin, face, hair, clothes,
+        // boots, her fixed outfit - goes.
+        if(isUndead){
+            // the Armature's own nodes sit among these too (pelvis, under
+            // Root) - not a mesh, never disposed: the skeleton and everything
+            // worn on its bones hang off them
+            if(typeof mes.getTotalVertices !== "function") return
+            const isFemaleNode = FEMALE_ONLY_NAMES.some(n => mes.name.includes(n))
+            if(mes.name.startsWith("armor.") && mes.name.split(".")[1]){
+                mes.isVisible = false
+                armors.push({name: mes.name.split(".")[1], mesh: mes, isUsed: false})
+                return
+            }
+            if(mes.name.startsWith("belt.") && mes.name.split(".")[1] && !isFemaleNode){
+                mes.isVisible = false
+                belts.push({name: mes.name.split(".")[1], mesh: mes})
+                return
+            }
+            // its eyes: the avatar's own eyes mesh (the irises, skinned to the
+            // head - a demon's glowing eyes are painted on this same mesh),
+            // left burning in the skull's sockets. The eyeback, the whites
+            // behind them, goes with the rest of the living face
+            if(mes.name === "eyes"){
+                giveRaceEyes(mes, det, scene)
+                if(det.night) mes.material.emissiveColor = UNDEAD_NIGHT_EYES.clone()
+                showHideEquip(mes, true)
+                return
+            }
+            return disposeMeshTree(mes)
+        }
         // log(mes.name)
 
         // his bare legs, swapped out for boots (equipBoots/unEquip). Hers are
@@ -1309,14 +1355,14 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
     })
     // what his own shirt and pants cover of his skin isn't drawn, nor the top
     // of his pants under his shirt - avatarLayers.js
-    if(!isFemale){
+    if(!isFemale && !isUndead){
         const parts = mainBodyMeshes.getChildren()
         tuckOutfit(
             parts.filter(part => part.name.startsWith("mainbody")),
             parts.find(part => part.name === `cloth.${det.cloth}`),
             parts.find(part => part.name === `pants.${det.pants}`))
     }
-    if(!isFemale){
+    if(!isFemale && !isUndead){
         hairs.forEach(hairMsh => {
             if(hairMsh.name.includes("root")) return hairMsh.parent = headBone
             const hairStyleName = hairMsh.name.split(".")[1]
@@ -1354,7 +1400,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
         underBelt,
         lowerLegL,
         lowerLegR,
-        faceParts
+        faceParts,
+        skeletonMesh
     }
 }
 function createCapsuleBody(scene, det, spawnPos, ownerId, usePhysics) {

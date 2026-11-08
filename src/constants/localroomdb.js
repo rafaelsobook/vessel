@@ -12,7 +12,7 @@ import { DUNGEON_12 } from './places/dungeons.js';
 import { VILLAGE } from './places/village.js';
 import { STARTING_ROOM, GUILD_HALL, GUILDMASTER_OFFICE } from './places/guildHall.js';
 import { WITCH_HOUSE, ILVARA_TOWER, SABLE_TOWER, TOWER_SPOTS, TOWER_FOOTPRINT, TOWER_DOOR, towerDoor } from './places/witchTowers.js';
-import { DUELING_GROUNDS, COLOUSA_DUELING_GROUNDS, VESPER_DUELING_GROUNDS } from './places/duelingGrounds.js';
+import { DUELING_GROUNDS, COLOUSA_DUELING_GROUNDS, VESPER_DUELING_GROUNDS, ILVARA_DUELING_GROUNDS, SABLE_DUELING_GROUNDS } from './places/duelingGrounds.js';
 import { TAVERN } from './places/tavern.js';
 
 export const metaDatas = [
@@ -27,6 +27,8 @@ export const metaDatas = [
     DUELING_GROUNDS,
     COLOUSA_DUELING_GROUNDS,
     VESPER_DUELING_GROUNDS,
+    ILVARA_DUELING_GROUNDS,
+    SABLE_DUELING_GROUNDS,
     // openworld
     {
         // 13 plots across the openworld, streamed in around the player - the

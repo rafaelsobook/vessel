@@ -124,11 +124,12 @@ export function ringBurst(scene, position, color, size = 3.5, seconds = 0.7){
 }
 
 // a one-off burst of glints from `position`. Sizes in metres - with the size
-// gradient Babylon takes the values AS the sizes (see effects/transformationFire.js)
-export function sparkBurst(scene, position, color, { count = 60, power = 4, size = [0.25, 0.5], life = [0.4, 0.9] } = {}){
+// gradient Babylon takes the values AS the sizes (see effects/transformationFire.js).
+// texture: another particle texture's name (images/particles/) in place of the glint
+export function sparkBurst(scene, position, color, { count = 60, power = 4, size = [0.25, 0.5], life = [0.4, 0.9], texture = "thin1" } = {}){
     if(!scene || scene.isDisposed) return
     const ps = new ParticleSystem("blessing.sparks", count, scene)
-    ps.particleTexture = getParticleTexture(scene, particleTexturePath("thin1"))
+    ps.particleTexture = getParticleTexture(scene, particleTexturePath(texture))
     ps.emitter = position.clone()
     ps.blendMode = ParticleSystem.BLENDMODE_ADD
     ps.updateSpeed = 1 / 60

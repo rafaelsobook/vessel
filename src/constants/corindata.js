@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { offerStarterQuest } from '../npc/questOffer.js'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -48,6 +49,8 @@ export function corinData(){
             questionId: 95,
             conversationWithQuestion: toLines(pick(corinOpener)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("108_corin"),
                 { text: "Any advice for the border?", cb: () => startQuestionare(96) },
                 {
                     text: "Need help with the tree line?",

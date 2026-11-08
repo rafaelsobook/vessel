@@ -11,9 +11,12 @@ import { getSkillEffect } from "../staticRecources/skillsData"
 import { updateSkillListUI } from "../components/skillsui.js"
 import { openClosePopup } from "../tools/popupUI.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { getClassDmgBonus } from "./characterclass.js"
+import { getClassDmgBonus, triggerSpellClassLeveling } from "./characterclass.js"
 import { playRemoteLunge } from "./meleeCombat.js"
+import { markLocalSkillCast } from "./localCasts.js"
+import { ANIM_STATE } from "../tools/animation.js"
 import { Vector3 } from "@babylonjs/core"
+import { titleBonus } from "../staticRecources/titlesData.js"
 
 // CRITICAL HITS - stats.accuracy drives the CHANCE of a crit landing,
 // stats.critical drives the MULTIPLIER once it does. Both start at 1 (see
@@ -64,39 +67,58 @@ export function attack(_attackInfo, attackAnimName){
     }
     playerAttacked._attacking = true
     if(hasWeapon) playerAttacked.equipSword(hasWeapon, true)
-    const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd)
-    // hammering at an anvil (components/anvilWork.js) - sparks and a clang off
-    // it on the blow, for everyone watching; with ore on it, the ore heats up -
-    // and my own blow on my own ore forges (the sword's progress)
-    if(played && attackAnimName === HAMMER_CLIP) hammerStruck(dirTarg, 0.8 + atkSpd, !!_attackInfo.anvilOre, owner === getCharState()?.owner)
+    // a long lunge (meleeCombat.js's prepareMeleeSwing) runs in first and
+    // starts the clip late enough for its blow to land as the dash does - the
+    // run-up being renderer.js's (_runUntil), on every screen
+    const clipDelay = Math.max(0, _attackInfo.clipDelayMs ?? 0)
+    // after a run-up the clip is started from the running pose, and its end
+    // would blend back into that before the right one took over - say where it
+    // lands: combat idle (a weapon is out), or idle if it is not
+    const settleAfter = clipDelay > 0 ? (playerAttacked.mode === "idle" ? ANIM_STATE.IDLE : ANIM_STATE.COMBAT_IDLE) : null
+    const playClip = () => {
+        const played = playerAttacked.characterAnimations.playAction(playerAttacked.anims, attackAnimName, 0.8 + atkSpd, null, false, settleAfter)
+        // hammering at an anvil (components/anvilWork.js) - sparks and a clang off
+        // it on the blow, for everyone watching; with ore on it, the ore heats up -
+        // and my own blow on my own ore forges (the sword's progress)
+        if(played && attackAnimName === HAMMER_CLIP) hammerStruck(dirTarg, 0.8 + atkSpd, !!_attackInfo.anvilOre, owner === getCharState()?.owner)
 
-    // spearthrow - the equipped spear itself visibly flips 180° in hand for
-    // the throw pose (point-first, instead of its normal carry angle).
-    // Runs here (not uimanagement.js's own case "throw") so it plays for
-    // EVERY client watching via the attack()/emitAttack() relay, same as
-    // the animation itself - not just on the thrower's own screen. Same
-    // swordMeshes lookup applyWeaponBuff (skillEffects.js) already uses to
-    // find whichever weapon entry is actually the visible one right now.
-    // Reverted once the clip itself actually finishes below (not a fixed
-    // timeout), so it stays correct regardless of playback speed (0.8 +
-    // atkSpd above changes how long that actually takes).
-    const weaponEntry = attackAnimName === "spearthrow"
-        ? playerAttacked.swordMeshes?.find(sw => sw.mesh?.getChildMeshes().some(m => m.isVisible))
-        : null
-    weaponEntry?.mesh.addRotation(Math.PI, 0, 0)
+        // spearthrow - the equipped spear itself visibly flips 180° in hand for
+        // the throw pose (point-first, instead of its normal carry angle).
+        // Runs here (not uimanagement.js's own case "throw") so it plays for
+        // EVERY client watching via the attack()/emitAttack() relay, same as
+        // the animation itself - not just on the thrower's own screen. Same
+        // swordMeshes lookup applyWeaponBuff (skillEffects.js) already uses to
+        // find whichever weapon entry is actually the visible one right now.
+        // Reverted once the clip itself actually finishes below (not a fixed
+        // timeout), so it stays correct regardless of playback speed (0.8 +
+        // atkSpd above changes how long that actually takes).
+        const weaponEntry = attackAnimName === "spearthrow"
+            ? playerAttacked.swordMeshes?.find(sw => sw.mesh?.getChildMeshes().some(m => m.isVisible))
+            : null
+        weaponEntry?.mesh.addRotation(Math.PI, 0, 0)
 
-    if (played) {
-        // the swing played out, or cut short (a slam's hit clip - knockback.js)
-        playerAttacked.characterAnimations.whenActionDone(() => {
-            const plToanim = getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
-            if (!plToanim || plToanim.isDead) return
+        if (played) {
+            // the swing played out, or cut short (a slam's hit clip - knockback.js)
+            playerAttacked.characterAnimations.whenActionDone(() => {
+                const plToanim = getPlayersOnScene().find(pl => pl.owner === playerAttacked.owner)
+                if (!plToanim || plToanim.isDead) return
+                playerAttacked._attacking = false
+                weaponEntry?.mesh.addRotation(-Math.PI, 0, 0)
+            })
+        } else {
             playerAttacked._attacking = false
             weaponEntry?.mesh.addRotation(-Math.PI, 0, 0)
-        })
-    } else {
-        playerAttacked._attacking = false
-        weaponEntry?.mesh.addRotation(-Math.PI, 0, 0)
+        }
     }
+    if(clipDelay > 0){
+        playerAttacked._runUntil = performance.now() + clipDelay
+        setTimeout(() => {
+            playerAttacked._runUntil = 0
+            // gone, dead or sent elsewhere in the meantime
+            if(!getPlayersOnScene().includes(playerAttacked) || playerAttacked.mode === "death" || playerAttacked.body.isDisposed()) return
+            playClip()
+        }, clipDelay)
+    } else playClip()
 }
 // aura - flexaura only: the caster's aura profile (effects/auraProfile.js),
 // riding the same relay as casterStats (skillsui.js's activate-skill emit)
@@ -123,6 +145,9 @@ export function activateSkill(ownerId, skillDetail, casterStats, aura){
     const charState = getCharState()
     if(!charState) return
     const isMe = ownerId === charState.owner
+    // remembered for hit paths that only ever see the skill, not its caster
+    // (localCasts.js - the undead's spell hits)
+    if(isMe) markLocalSkillCast(skillDetail?.name)
     const casterState = isMe ? charState : {
         owner: ownerId,
         currentPlace: charState.currentPlace,
@@ -141,6 +166,9 @@ export function activateSkill(ownerId, skillDetail, casterStats, aura){
     // this skill's OWN level - same isMe/isActive gate as the aptitude
     // tracking just above, for the same reason
     if(isMe && skillDetail.isActive) trackSkillUsage(skillDetail.name)
+    // the Runecaller's class levels from every spell I cast - the Necromancer's
+    // from the dark ones (characterclass.js)
+    if(isMe && skillDetail.isActive) triggerSpellClassLeveling(skillDetail)
 
     switch(skillDetail.name){
         case "flexaura":
@@ -409,7 +437,8 @@ export function calcDmg(charState){
         }
     })
 
-    let physicalDmg = abilityAdditions.additionalMeeleeDmg.toAdd + buffAdditions.toAdd + charState.stats.strength*4
+    // + a held title's flat melee bonus (titlesData.js - Oathkeeper)
+    let physicalDmg = abilityAdditions.additionalMeeleeDmg.toAdd + buffAdditions.toAdd + charState.stats.strength*4 + titleBonus(charState, "meleeDmg")
 
     // log(abilityAdditions.additionalMeeleeDmg.toAdd)
     // log(abilityAdditions.additionalMeeleeDmg.percent)
@@ -419,6 +448,16 @@ export function calcDmg(charState){
         // console.log(addedDmgByPercent)
     }
     
+    // bare-handed, the Berserker's class levels add to the punch - flat, after
+    // the percent bonus, the way a weapon class's does. Also returned apart
+    // (bareClassDmg), so the stamina it costs can match a weapon class's
+    // (uimanagement.js's spToDeduct)
+    let bareClassDmg = 0
+    if(!weaponDet){
+        bareClassDmg = getClassDmgBonus(charState, "fist")
+        physicalDmg += bareClassDmg
+    }
+
     let accuracy = abilityAdditions.additionalAccuracy + charState.stats.accuracy
 
     let weaponDmg = 0
@@ -452,7 +491,9 @@ export function calcDmg(charState){
     // push an already-high-accuracy character toward a near-guaranteed crit
     // on that one empowered strike instead of being swallowed by the cap.
     const critChanceBuff = getActiveBuffAdditions().critChance || { toAdd: 0 }
-    const critChancePercent = Math.min(CRIT_CHANCE_CAP, accuracy * CRIT_CHANCE_PER_ACCURACY) + critChanceBuff.toAdd
+    // a held title's crit bonus (titlesData.js - Heroes Descendant) adds the
+    // same way, past the cap
+    const critChancePercent = Math.min(CRIT_CHANCE_CAP, accuracy * CRIT_CHANCE_PER_ACCURACY) + critChanceBuff.toAdd + titleBonus(charState, "critChance")
     const isCritical = Math.random() * 100 < critChancePercent
     if(isCritical){
         const critMultiplier = 1 + charState.stats.critical * CRIT_DMG_PER_CRITICAL
@@ -461,7 +502,7 @@ export function calcDmg(charState){
         magicDmg = Math.round(magicDmg * critMultiplier)
     }
 
-    return { physicalDmg, weaponDmg, magicDmg, accuracy, isCritical, weaponType }
+    return { physicalDmg, weaponDmg, magicDmg, accuracy, isCritical, weaponType, bareClassDmg }
 }
 export function calcPercent(currentNum, totalNum){
     return currentNum/totalNum * 100

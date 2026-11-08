@@ -147,8 +147,11 @@ export function getStructureRoot(scene, kind){
             root.material = mat
         } else if(def.paint){
             paintMaterials(root, def.paint, kind, scene)
-        } else if(root.material?.albedoTexture){
-            root.material = toStandardMaterial(root.material, kind, scene)
+        } else if(root.material?.diffuseTexture){
+            // nearly matte - a light-coloured model (the tent's canvas) right
+            // next to a dungeon torch, an intensity-5 light tuned for the dark
+            // stone, otherwise washes out to near white
+            root.material.specularColor = new Color3(0.05, 0.05, 0.05)
         }
         // a model of several materials comes out of the merge with a
         // MultiMaterial over them - the limit is each one's own
@@ -161,46 +164,21 @@ export function getStructureRoot(scene, kind){
     return loading
 }
 
-// A model's own PBR material, redone as a StandardMaterial from the same
-// textures. As PBR, a light-coloured model (the tent's canvas) right next to
-// a dungeon torch - an intensity-5 light, tuned for the dark stone - washed
-// out to near white; the dungeon's own props are all StandardMaterials and
-// read right under the same light.
-function toStandardMaterial(pbr, kind, scene){
-    const mat = new StandardMaterial(`structureMat_${kind}`, scene)
-    mat.diffuseTexture = pbr.albedoTexture
-    if(pbr.albedoTexture?.hasAlpha){
-        mat.useAlphaFromDiffuseTexture = true
-        mat.transparencyMode = pbr.transparencyMode
-    }
-    if(pbr.bumpTexture){
-        mat.bumpTexture = pbr.bumpTexture
-        // glTF's normal maps are the other handedness - the loader flips
-        // these on the PBR material, so carry them over as they are
-        mat.invertNormalMapX = pbr.invertNormalMapX
-        mat.invertNormalMapY = pbr.invertNormalMapY
-    }
-    mat.backFaceCulling = pbr.backFaceCulling
-    mat.specularColor = new Color3(0.05, 0.05, 0.05)
-    pbr.dispose(false, false)
-    return mat
-}
-
 // A model whose materials carry no colour of their own (the anvil's): each one
 // a def.paint entry names - by a part of its glTF name - is redone as a
 // StandardMaterial of that colour (and texture, if it has one). Any it
 // doesn't name keeps its own.
 function paintMaterials(root, paint, kind, scene){
-    const repaint = pbr => {
-        const key = pbr && Object.keys(paint).find(part => pbr.name.includes(part))
-        if(!key) return pbr
+    const repaint = own => {
+        const key = own && Object.keys(paint).find(part => own.name.includes(part))
+        if(!key) return own
         const look = paint[key]
         const mat = new StandardMaterial(`structureMat_${kind}_${key}`, scene)
         mat.diffuseColor = look.color
         if(look.texture) mat.diffuseTexture = new Texture(look.texture, scene)
         mat.specularColor = look.specular ?? new Color3(0.05, 0.05, 0.05)
         if(look.gloss) mat.specularPower = look.gloss
-        pbr.dispose(false, false)
+        own.dispose(false, false)
         return mat
     }
     if(root.material?.subMaterials) root.material.subMaterials = root.material.subMaterials.map(repaint)

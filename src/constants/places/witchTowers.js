@@ -7,10 +7,18 @@
 // (each interior's roomPaths below) are all worked out from it. No y: the
 // tower is stood on the real ground as it's placed (creations/
 // groundBuilding.js), and its door and way out go on the ground with it.
+//
+// Each stands beside a road out of the spawn, 17-20 units off its centreline:
+// close enough that Zerech's wagon (assetcreation/summonwagon.js) can drive
+// there along the road and stop on it, clear of the castles that stood in the
+// way of the old cross-country spots. Picked from a terrain survey: dry,
+// under 0.8 of rise across the footprint, clear of castles, graveyards and
+// the hidden sites. Vesper's is north of the west road, Ilvara's south of the
+// east road, Sable's west of the south road (its door faces the road).
 export const TOWER_SPOTS = {
-    vesper: { x: -1893, z: 563 },
-    ilvara: { x: 1200,  z: 800 },
-    sable:  { x: -600,  z: -1400 },
+    vesper: { x: -1857, z: 569 },
+    ilvara: { x: 1238,  z: 430 },
+    sable:  { x: -12.5, z: -1418 },
 }
 // tower.glb at the towers' shared rotation (-PI/2): its base is about this
 // wide, and its door is this far off its centre, facing +x
@@ -30,7 +38,7 @@ function towerExit(spot){
 
 export const WITCH_HOUSE = {
     // Witch House interior - entered via placeId 888's own roomPaths
-    // entry (walking up to the "Witch House" building at {x:20,z:10} in
+    // entry (walking up to the "Witch House" tower, TOWER_SPOTS.vesper, in
     // the wilderness), same procedural boxed-room shape as "Simple
     // Room"/"Guild House" above (createroom.js), not a custom modeled
     // interior. Houses Colousa's own "friend" ("114_colousa"'s

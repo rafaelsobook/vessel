@@ -1,9 +1,9 @@
 import { startQuestionare, startConv } from '../components/conversations'
 import { buyOrSell } from '../components/buyorsell.js'
 import { findPlaceMetaData } from '../states/placestates.js'
-import { travelToPlace } from '../tools/travel.js'
-import { summonTravelWagon } from '../assetcreation/summonwagon.js'
-import { getCharState } from '../charactersystem/characterstate.js'
+import { summonTravelWagon, roadRoute } from '../assetcreation/summonwagon.js'
+import { getCharState, updateMyDetailsOL } from '../charactersystem/characterstate.js'
+import { checkIfTokenSaved } from '../tools/tools.js'
 import { canAfford, spendOnPrice, priceToBronze, getWealthInBronze } from '../charactersystem/currencySystem.js'
 import { SPAWN_X, SPAWN_Z } from 'infterrain'
 import { OPENWORLD_PLACE_ID, ZERECH_FARE } from './constants.js'
@@ -26,8 +26,9 @@ function pick(variants){
 // via buyOrSell, nothing about the items themselves is duplicated here.
 //
 // Picking a destination doesn't send you there on the spot: Zerech calls a
-// wagon round to his stand (WAGON_STAND below), parked facing that tower
-// (assetcreation/summonwagon.js), and the trip starts when you walk up and
+// wagon round to his stand (WAGON_STAND below), parked facing the road to
+// that tower (assetcreation/summonwagon.js - it drives along that road and
+// stops on it, beside the tower), and the trip starts when you walk up and
 // board it. The fare is charged at boarding, not at summoning, so a wagon
 // you never board costs nothing - and summoning again just replaces it.
 //
@@ -179,21 +180,30 @@ function chooseRoute(trip){
     tellShortfall(trip)
 }
 
-// Boarding = paying and going, in one step. spendOnPrice only edits
-// charState in memory, and travelToPlace saves charState on its way out, so
-// the fare and the arrival persist together - there's no moment where one
-// is saved without the other. spendOnPrice's own refusal is the last guard,
-// for coin spent between summoning the wagon and climbing into it (his own
-// wares are right there) - false tells the wagon the trip didn't start, so
-// the player can board again once they can pay.
+// Boarding = paying; the wagon then drives you there itself (summonwagon.js -
+// along the tower's road, stopping on it beside the tower, its door a few
+// steps away). spendOnPrice only edits charState in memory, so the fare is
+// saved right here - the ride doesn't change place, and nothing else would
+// save it. spendOnPrice's own refusal is the last guard, for coin spent
+// between summoning the wagon and climbing into it (his own wares are right
+// there) - false tells the wagon the trip didn't start, so the player can
+// board again once they can pay.
 async function boardWagon(trip){
     const charState = getCharState()
     if(!spendOnPrice(charState, trip.fare)){
         tellShortfall(trip)
         return false
     }
-    // await travelToPlace(trip.door)
+    updateMyDetailsOL(charState, checkIfTokenSaved())
     return true
+}
+
+// Calls the wagon round for `trip`: parked at the stand facing the way it'll
+// set off, with its road to the tower (summonwagon.js's roadRoute - onto the
+// tower's road, along it, stopping at the point of it nearest the tower)
+function summonFor(trip){
+    const route = roadRoute(WAGON_STAND, towerPosition(trip))
+    summonTravelWagon({ at: WAGON_STAND, facing: route[0], route, destination: trip.door.pos, onBoard: () => boardWagon(trip) })
 }
 
 export function zerechData(){
@@ -234,7 +244,7 @@ export function zerechData(){
             questionId: trip.departId,
             conversationWithQuestion: toLines([ROAD_LINES[trip.direction] ?? OFF_ROAD_LINE, trip.closer, pick(wagonReady)]),
             answers: [],
-            cb: () => summonTravelWagon({ at: WAGON_STAND, facing: towerPosition(trip), onBoard: () => boardWagon(trip) }),
+            cb: () => summonFor(trip),
         })),
         {
             questionId: 584,

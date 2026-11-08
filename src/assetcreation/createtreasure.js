@@ -15,14 +15,15 @@ import { startTimedPickup } from "../components/timedPickup.js"
 // that scale in use), so the two tiers without a texture of their own double
 // up onto their nearest visual neighbor instead: common/uncommon share the
 // plain wood-and-brass look, rare/epic share the cool steel-blue look, and
-// legendary keeps the gold-leaf skin exclusively to itself so it still reads
-// as the one unmistakable top-tier chest.
+// the gold-leaf skin is kept for the top tiers - legendary, and the mythic
+// pieces in the hidden places' hoards (tcp's hiddenHoards.ts).
 const RARITY_TREASURE_TEX = {
     common:    "./images/modeltex/treasure0.jpg",
     uncommon:  "./images/modeltex/treasure0.jpg",
     rare:      "./images/modeltex/treasure1.jpg",
     epic:      "./images/modeltex/treasure1.jpg",
     legendary: "./images/modeltex/treasure2.jpg",
+    mythic:    "./images/modeltex/treasure2.jpg",
 }
 
 // OPENING TAKES A MOMENT - pressing interact starts a bar over the chest

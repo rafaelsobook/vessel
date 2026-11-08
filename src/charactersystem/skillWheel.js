@@ -237,6 +237,8 @@ export function eligibleSkillsFor(charState){
     return skillsData.filter(sk => {
         // everyone starts with these (flexaura) - never an offer
         if(sk.starter) return false
+        // taught by a book alone (a witch's tome), not handed out by a wheel
+        if(sk.bookOnly) return false
         if(sk.element === "normal") return true
         if(sk.element === "lightning") return lightningUnlocked
         return myElements.has(sk.element)

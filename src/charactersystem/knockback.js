@@ -1,4 +1,4 @@
-import { Color3, Vector3 } from "@babylonjs/core"
+import { Color3, Vector3, PhysicsMotionType } from "@babylonjs/core"
 import { capsuleHeight } from "./createcharacter.js"
 import { playRemoteLunge } from "./meleeCombat.js"
 import { faceAttackTarget, markDashActive } from "../controllers/inputMovement.js"
@@ -9,6 +9,9 @@ import { addCameraTrauma } from "../tools/cameraShake.js"
 import { getAllSounds } from "../components/soundSystem.js"
 import { playBlockingLoop } from "../tools/animation.js"
 import { stunPlayer } from "./stun.js"
+import { openworldGroundY } from "../tools/groundHeight.js"
+import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
+import { emitEnemyChasePosition } from "../sockets/emits.js"
 
 // KNOCKBACK - a slam (one of an enemy's det.additionalAttacks, e.g. the
 // slimes' body slam - tcp/recources/enemyAttacks.ts) throwing a player away
@@ -85,16 +88,28 @@ export function bashLanded({ victim, from, attack, isMine = false, blocked = fal
     anims?.playAction(victim.anims, hitClip, 1, blocked ? () => playBlockingLoop(victim) : null, false, stunPose)
     if(isBot) return
     if(stunFor > 0) stunPlayer(victim, stunFor, stunPose, isMine)
-    if(!(outcome.knockback > 0)) return
-    const to = landingSpot(body.position, from, outcome.knockback)
-    if(isMine) knockMeBack(victim, from, to)
+    if(outcome.knockback > 0) knockAway(victim, from, outcome.knockback, isMine)
+}
+
+/**
+ * The throw on its own: `victim` sent straight away from `from` until they're
+ * `distance` from it (or MIN_PUSH further than they already are) - a slam's,
+ * or a blast's (effects/scorch.js's fireball). hop: how hard up off their
+ * feet. Only the victim's own client moves their real body; every other
+ * client slides its copy of them there. Not bots (see bashLanded).
+ */
+export function knockAway(victim, from, distance, isMine, { hop = HOP } = {}){
+    const body = victim?.body
+    if(!body || body.isDisposed() || victim.isDead || victim.owner?.startsWith("bot_")) return
+    const to = landingSpot(body.position, from, distance)
+    if(isMine) knockMeBack(victim, from, to, hop)
     else playRemoteLunge(body, { to, ms: KNOCKBACK_MS })
 }
 
 // my own body, thrown to `to` - velocity every physics tick, re-aimed at the
 // spot, so it lands about the same distance whatever the ground's friction.
 // A wall stops it where it is.
-function knockMeBack(player, from, to){
+function knockMeBack(player, from, to, hop = HOP){
     const scene = player.body.getScene()
     const body = player.aggregate?.body
     if(!body) return
@@ -119,9 +134,85 @@ function knockMeBack(player, from, to){
         }
         const timeLeft = Math.max(0.03, (KNOCKBACK_MS - elapsed) / 1000)
         const speed = Math.min(MAX_SPEED, remaining / timeLeft)
-        const vy = first ? HOP : vel.y
+        const vy = first ? hop : vel.y
         first = false
         body.setLinearVelocity(new Vector3(toX / remaining * speed, vy, toZ / remaining * speed))
     })
     scene.onDisposeObservable.addOnce(() => scene.onBeforePhysicsObservable.remove(observer))
+}
+
+// ── an enemy thrown back ─────────────────────────────────────────────────────
+// A weapon's "bash" (staticRecources/weaponEffects.js - item.effectsWhenHit,
+// on a critical by default): the enemy it lands on is thrown straight back
+// from whoever swung, distanceKnockback metres - a little off its feet, a ring
+// and a burst at them - and stops short of a wall. Every client throws its own
+// copy at once (createEnemy.js's enemyIsHit runs on all of them off tcp's
+// "enemy-is-hit"), each moving it the same way; the swinger's client then tells
+// tcp where it landed, so its record - what a wander or a late joiner starts
+// from - doesn't pull it back. renderer.js leaves it be meanwhile (_knockedUntil).
+
+const ENEMY_KNOCK_MS = 320
+const ENEMY_HOP = 0.35              // metres up at the top of the arc
+const WALL_MARGIN = 0.5             // stops this far short of a wall in the way
+const ENEMY_RING = { size: 2.4, seconds: 0.45, color: new Color3(1, 0.7, 0.3) }
+const ENEMY_SPARK_COLOR = new Color3(1, 0.75, 0.35)
+
+// how far it can go along (dx, dz) before something solid - from its centre,
+// knee-high off its feet so a low rock counts. Static bodies only: another
+// enemy or a player in the way is pushed past, not a wall
+function clearRun(enemy, dx, dz, distance){
+    const body = enemy.body
+    const physics = body.getScene()?.getPhysicsEngine?.()
+    if(!physics) return distance
+    const halfHeight = (enemy.det?.bodyHeight ?? 1) / 2
+    const radius = (enemy.det?.bodyWidenes ?? 1) / 2
+    const from = new Vector3(body.position.x, body.position.y - halfHeight + 0.4, body.position.z)
+    const to = new Vector3(from.x + dx * (distance + radius), from.y, from.z + dz * (distance + radius))
+    const hit = physics.raycast(from, to, body.physicsBody ? { ignoreBody: body.physicsBody } : undefined)
+    if(!hit?.hasHit || hit.body?.getMotionType?.() !== PhysicsMotionType.STATIC) return distance
+    return Math.max(0, Math.min(distance, hit.hitDistance - radius - WALL_MARGIN))
+}
+
+/**
+ * enemy: a createEnemy() enemy. from: where the blow came from (the swinger's
+ * position). bash: the weapon's bash entry ({ distanceKnockback, texture }).
+ * isMine: my swing - I report where it landed.
+ */
+export function knockEnemyAway(enemy, from, bash, isMine = false){
+    const body = enemy?.body
+    const distance = bash?.distanceKnockback ?? 0
+    if(!body || body.isDisposed() || !from || !(distance > 0)) return
+    const scene = body.getScene()
+    let dx = body.position.x - from.x
+    let dz = body.position.z - from.z
+    const len = Math.hypot(dx, dz)
+    if(len < 0.01){ dx = 0; dz = 1 } else { dx /= len; dz /= len }
+    const push = clearRun(enemy, dx, dz, distance)
+
+    const halfHeight = (enemy.det?.bodyHeight ?? 1) / 2
+    const feet = new Vector3(body.position.x, body.position.y - halfHeight + 0.05, body.position.z)
+    const k = Math.max(0.7, enemy.det?.bodyWidenes ?? 1)
+    popShockRing(scene, feet, { ...ENEMY_RING, size: ENEMY_RING.size * k })
+    sparkBurst(scene, feet.add(new Vector3(0, 0.2, 0)), ENEMY_SPARK_COLOR, { count: 36, power: 4, texture: bash.texture ?? "thin1" })
+    if(push < 0.05) return
+
+    const start = performance.now()
+    const sx = body.position.x, sz = body.position.z, sy = body.position.y
+    const tx = sx + dx * push, tz = sz + dz * push
+    const onGround = enemy.det?.currentPlaceId === OPENWORLD_PLACE_ID
+    enemy._knockedUntil = start + ENEMY_KNOCK_MS
+    const observer = scene.onBeforeRenderObservable.add(() => {
+        if(body.isDisposed()) return scene.onBeforeRenderObservable.remove(observer)
+        const t = Math.min(1, (performance.now() - start) / ENEMY_KNOCK_MS)
+        // fast off the blow, slowing as it lands
+        const e = 1 - Math.pow(1 - t, 3)
+        body.position.x = sx + (tx - sx) * e
+        body.position.z = sz + (tz - sz) * e
+        const ground = onGround ? openworldGroundY(body.position.x, body.position.z) + halfHeight + 0.05 : sy
+        body.position.y = ground + ENEMY_HOP * 4 * t * (1 - t)
+        if(t < 1) return
+        scene.onBeforeRenderObservable.remove(observer)
+        enemy._knockedUntil = 0
+        if(isMine && enemy._id) emitEnemyChasePosition(enemy._id, body.position.x, body.position.z)
+    })
 }

@@ -801,7 +801,14 @@ export function createExplosionBurst(scene, position, powerScale = 1, fireScale 
     fireExp1.addColorGradient(1,  new Color4(fColor.r, fColor.g, fColor.b, .1),  new Color4(rgb2.r, rgb2.g, rgb2.b, .1))
     fireExp1.start()
 
-    const emberFire = ParticleSystem.Parse(EMBER_JSON, scene, "")
+    // capacity sized to what it emits (emitRate a second for targetStopDuration
+    // 2 below, every one still alive at the end), not the editor export's
+    // 10000 - that was a 400 KB vertex array and GPU buffer per explosion for
+    // ~30 embers. And no texture in the JSON: Parse would build a new Texture
+    // from it every explosion (never disposed - dispose(false) below - so
+    // scene.textures grew by one per burst); the shared cached one instead.
+    const emberFire = ParticleSystem.Parse({ ...EMBER_JSON, capacity: Math.min(2000, scaledEmberRate * 3 + 16), texture: null }, scene, "")
+    emberFire.particleTexture = getParticleTexture(scene, particleTexturePath("flare"))
     emberFire.emitter = new Vector3(position.x, position.y, position.z)
     emberFire.emitRate = scaledEmberRate
     emberFire.gravity = new Vector3(0, 2 * gravitySign, 0)
@@ -822,7 +829,9 @@ export function createExplosionBurst(scene, position, powerScale = 1, fireScale 
     let spherSmoke = null
     if(includeSmoke){
         // qnty (7th arg) is this layer's own emitRate - halved from 5 to 3
-        spherSmoke = createCustomizedSmoke(scene, new Vector3(position.x, position.y, position.z), "smoke", false, { min: 2, max: 3 }, { min: 1.5, max: 2 }, 3, false, {r: 0, g: 0, b: 0}, {r: 0.37, g: 0.2, b: 0.2}, false, false, 1, true)
+        // capacity 32 (last arg): it emits 3 a second for 1 second - the
+        // default 8000 was a 320 KB buffer per explosion for 3 puffs
+        spherSmoke = createCustomizedSmoke(scene, new Vector3(position.x, position.y, position.z), "smoke", false, { min: 2, max: 3 }, { min: 1.5, max: 2 }, 3, false, {r: 0, g: 0, b: 0}, {r: 0.37, g: 0.2, b: 0.2}, false, false, 1, true, 32)
         spherSmoke.targetStopDuration = 1
         spherSmoke.updateSpeed = 0.04
         spherSmoke.createPointEmitter(new Vector3(.5, .2, .5), new Vector3(-.5, -.2, .5))
@@ -978,8 +987,8 @@ export function createBloodSplatter(scene, pos, burst, color){
 
     return { ps, play, setBleeding }
 }
-export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSize, minMaxLifeTime, minMaxEmitPower, qnty, gravityVector3, rgb1, rgb2, isDefaultSizeGrad, particleType, particleTypeRadius, activateRotations){
-    const particleSystem = new ParticleSystem("particles", 8000, scene);
+export function createCustomizedSmoke(scene, emitter, particleImgName, minMaxSize, minMaxLifeTime, minMaxEmitPower, qnty, gravityVector3, rgb1, rgb2, isDefaultSizeGrad, particleType, particleTypeRadius, activateRotations, capacity = 8000){
+    const particleSystem = new ParticleSystem("particles", capacity, scene);
     //Texture of each particle
     particleSystem.particleTexture = getParticleTexture(scene, particleTexturePath(particleImgName));
     // lifetime

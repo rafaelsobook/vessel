@@ -61,7 +61,7 @@ function createRippleBumpTexture(scene) {
                 dx += slope * ku;
                 dy += slope * kv;
             }
-            // same sign convention as pbrmat.js's height-map normals
+            // same sign convention as surfacemat.js's height-map normals
             let nx = dx * RIPPLE_STRENGTH * S / 8, ny = -dy * RIPPLE_STRENGTH * S / 8;
             const len = Math.hypot(nx, ny, 1);
             const i = (y * S + x) * 4;

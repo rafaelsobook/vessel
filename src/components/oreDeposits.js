@@ -1,5 +1,6 @@
 import { Color3, MeshBuilder, Vector3 } from "@babylonjs/core"
 import * as GUI from "@babylonjs/gui"
+import { createCrystalNode } from "infterrain"
 import { createOre } from "../assetcreation/createRock.js"
 import { createAggregate } from "../tools/physics.js"
 import { onIntersecEnterTrig, onIntersecExitTrig } from "./actionManager.js"
@@ -35,6 +36,9 @@ import { sparkBurst } from "../effects/blessingFx.js"
 const depositsByScene = new WeakMap()
 // the deposit I'm mining right now - the one the swings land on
 let mining = null
+
+// the splinters of a broken crystal, by tint (violet, teal, rose)
+const CRYSTAL_BURST = [new Color3(0.7, 0.55, 1), new Color3(0.45, 0.95, 0.95), new Color3(1, 0.55, 0.78)]
 
 const HP_BAR = { width: 70, height: 7, offsetY: -55 }
 
@@ -135,19 +139,34 @@ export function createOreDeposit(scene, ore, groundY = ore.pos.y){
     const player = myPlayer()
     if(!player?.body) return null
 
-    const mesh = createOre(scene, { x: ore.pos.x, y: groundY, z: ore.pos.z }, ore.color)
+    // the Crystal Hollows' "hollow" vein stands as one of the hollows' own great
+    // crystals (infterrain's createCrystalNode) - violet, teal or rose by tcp's
+    // tint, its shape from the oreId so everyone sees the same one. Every other
+    // vein is the rock mound.
+    const isCrystal = ore.vein === "hollow"
+    const mesh = isCrystal
+        ? createCrystalNode(scene, { x: ore.pos.x, y: groundY, z: ore.pos.z }, { palette: ore.tint ?? 0, scale: 1.1, seed: parseInt(String(ore.oreId).slice(-4)) || 0 })
+        : createOre(scene, { x: ore.pos.x, y: groundY, z: ore.pos.z }, ore.color)
     mesh.name = `ore_${ore.oreId}`
     mesh.rotation.y = ore.rotation ?? 0
     mesh.isPickable = false
     const aggregate = createAggregate(mesh, { mass: 0 }, "box", scene)
 
     // the walk-up zone round it
-    const zone = MeshBuilder.CreateBox(`ore_zone_${ore.oreId}`, { size: 2 }, scene)
+    // (a crystal's body is wide - the zone has to reach out past it, to where
+    // the player's own body can stand)
+    let zoneSize = 2
+    if(isCrystal){
+        mesh.computeWorldMatrix(true)
+        const ext = mesh.getBoundingInfo().boundingBox.extendSizeWorld
+        zoneSize = 2 * (Math.max(ext.x, ext.z) + 1.6) / mesh.scaling.x
+    }
+    const zone = MeshBuilder.CreateBox(`ore_zone_${ore.oreId}`, { size: zoneSize }, scene)
     zone.isVisible = false
     zone.isPickable = false
     zone.parent = mesh
 
-    const deposit = { ore: { ...ore }, mesh, aggregate, zone, gone: false }
+    const deposit = { ore: { ...ore }, mesh, aggregate, zone, gone: false, burstColor: isCrystal ? CRYSTAL_BURST[ore.tint ?? 0] : null }
     deposit.bar = hpBar(scene, mesh, ore)
     onIntersecEnterTrig(zone, player.body, scene, () => {
         if(deposit.gone) return
@@ -181,7 +200,7 @@ export function removeOreDeposit(scene, oreId){
     deposits.delete(oreId)
     stopMining(deposit)
     const at = deposit.mesh.position.clone().addInPlaceFromFloats(0, 0.4, 0)
-    sparkBurst(scene, at, new Color3(0.55, 0.5, 0.45), { count: 50, power: 3.5, size: [0.25, 0.5], life: [0.5, 1.1] })
+    sparkBurst(scene, at, deposit.burstColor ?? new Color3(0.55, 0.5, 0.45), { count: 50, power: 3.5, size: [0.25, 0.5], life: [0.5, 1.1] })
     playSound(getAllSounds().minningS)
     deposit.bar.frame.dispose()
     deposit.aggregate?.dispose()

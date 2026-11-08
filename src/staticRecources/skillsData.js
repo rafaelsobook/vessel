@@ -1679,6 +1679,82 @@ export const blinkstrikeSkill = {
     desc: "Blink instantly to the nearest foe within range and land a guaranteed critical strike.",
 }
 
+// --- crescent howl TENSHO (a weapon skill that throws a wave) ---
+// A swing of whatever weapon is in hand that sends a crescent of spirit
+// energy off it. The first weapon skill with a projectile - every other one
+// (dashstrike, blinkstrike) is a melee strike. It rides the generic offense
+// engine (skillEffects.js's castOffenseSkill) like any bolt, with these on top:
+//   - weaponSwing: no magic circle - the caster swings their own weapon
+//     instead (the clip of whatever they hold, stamped on cast as
+//     skill._castWeaponType) and the wave leaves it
+//   - plusWeaponDmg on the offense effect: a share of the WEAPON's own damage
+//     (strength*4 + the weapon's dmg + the weapon stat*10), where a spell's is
+//     the magic stat's - so it grows with the blade, not the mind
+//   - formLooks: how it looks per form (skill._castForm, stamped on cast from
+//     charState.evolution) - white-blue for a human, black with a red edge for
+//     a demon (evolution.js)
+//   - shape "crescent": the wave itself, models/projectiles/crescent.glb instanced
+//     with its wind-up, release, afterimages, ground gash and impacts
+//     (effects/crescentHowl.js)
+//   - pierce: it cuts through everything in its path, rangeMs long, rather than
+//     stopping at the first body it meets
+// Levelling (skillUpgrades.js's growCrescentHowl) is what makes it a different skill:
+// one more crescent per level up to five, all loosed at once in a fan; from
+// level 2 it throws what it hits back, and from level 3 it opens a bleed.
+// bookOnly: taught by Sable's tomes and nothing else - never offered by the
+// skill wheel or a ritual (skillWheel.js's eligibleSkillsFor).
+export const crescenthowlSkill = {
+    slotNumber: 41,
+    equiped: true,
+    isActive: false,
+    name: "crescenthowl",
+    lvl: 1,
+    pointsToClaim: 1,
+    pointsForUpgrade: 1,
+    element: "normal",
+    // a drawn weapon (the casting button's "casting" is for spells)
+    requireMode: "fighting",
+    requiresWeapon: true,
+    bookOnly: true,
+    weaponSwing: true,
+    skillElementType: "na",
+    animationLoop: false,
+    displayName: "Crescent Howl",
+    // the swing's wind-up: the wave leaves the blade this long after the press -
+    // about where a sword/axe clip's blow lands (meleeCombat.js's IMPACT_AT)
+    castDuration: 0.32,
+    returnModeDura: 900,
+    skillCoolDown: 4500,
+    demand: [{ name: "mp", minCost: 55, cost: 0 }],
+    effects: [
+        { effectType: "offense", dmgPm: 0, plusWeaponDmg: 0.8, plusDmg: 60, chance: 1, bashPower: 0.4 },
+    ],
+    skillrank: 3,
+    upgradePlus: 18,
+    explosionColor: "blue",
+    explosionScale: 1,
+    onLevelUp: "growCrescentHowl",
+    particleStyles: [{ name: "oneline", color: "blue" }],
+    projectileVisual: {
+        useProjectile: true, visible: true, shape: "crescent",
+        speedMult: 1.5, launchSound: "swordWhooshS",
+        // through every body on its way, for ~25 m (18 m/s)
+        pierce: true, rangeMs: 1400,
+        burstCount: 1, burstIntervalMs: 0, spreadDeg: 0,
+    },
+    // no burst of its own: a wave cuts through, and its hits are effects/crescentHowl.js's
+    // (a ring, sparks, and meleeCombat.js's own blow) - a burst per body per wave
+    // piled into one big glare
+    onHitVisual: [{ type: "none", impactSound: "struckS" }],
+    formLooks: {
+        demon: {
+            explosionColor: "red",
+            particleStyles: [{ name: "oneline", color: "red" }],
+        },
+    },
+    desc: "Swing your weapon and loose a crescent of spirit energy from it. Each level adds another crescent, fired together in a fan; from level 2 they throw back whatever they hit, and from level 3 they leave it bleeding. White-blue for a human, black and red for a demon.",
+}
+
 // --- METEOR (God Tier) ---
 // astralrainSkill's own "sword rain" mechanic (skill.swordRain, see that
 // skill's header comment), generalized to a shared skill.swordRain/
@@ -2145,7 +2221,7 @@ export const skillsData = [
     darkorbSkill,
     burstshotsSkill,
     multicastSkill, disintegrationSkill, massivedisintegrationSkill,
-    mjolnirSkill, dashstrikeSkill, blinkstrikeSkill,
+    mjolnirSkill, dashstrikeSkill, blinkstrikeSkill, crescenthowlSkill,
     meteorSkill,
     thunderclapSkill,
     wellspringSkill,
@@ -2160,7 +2236,29 @@ export const skillsData = [
 // no notion of the actual skill objects, so createEnemy.js/worldsocket.js
 // resolve the real object through this map). Built once here instead of at
 // each call site.
-export const SKILLS_BY_NAME = Object.fromEntries(skillsData.map(skill => [skill.name, skill]))
+//
+// Enemy-only skills sit OUTSIDE skillsData so they never turn up in a
+// player's skill pools (skillsui.js, skillWheel.js, popupUI.js,
+// aptitudeSystem.js all draw from it) - only this map knows them.
+//
+// Volt Step: the electric slime's escape (enemies/voltstep.js). Hit while
+// at or under hpBelow of its hp, `chance` it flees minDist-maxDist away from
+// every player round it in a bolt of lightning - no magic circle. Once per
+// skillCoolDown.
+export const voltstepSkill = {
+    name: "voltstep",
+    displayName: "Volt Step",
+    element: "lightning",
+    skillCoolDown: 8000,
+    effects: [
+        { effectType: "escape", hpBelow: 0.2, chance: 0.85, minDist: 9, maxDist: 13 },
+    ],
+    color: "yellow",
+    sound: "voltstep",
+    desc: "Flees in a bolt of lightning to somewhere far from its attackers.",
+}
+export const ENEMY_ONLY_SKILLS = [voltstepSkill]
+export const SKILLS_BY_NAME = Object.fromEntries([...skillsData, ...ENEMY_ONLY_SKILLS].map(skill => [skill.name, skill]))
 
 // effects is an ARRAY now (was a single object) - every skill above still
 // only carries one entry in it today, but the shape now allows a skill to

@@ -17,6 +17,7 @@ import { removeRenderObservable, addRenderObservable } from "./renderer"
 import { stopAnim } from "../tools/tools"
 import { poppingTextMesh } from "../tools/GUITools"
 import { attack, activateSkill } from "../charactersystem/attackingSystem"
+import { handleRangeAttack, showRangeLanded } from "../enemies/rangeAttack.js"
 import createEnemy, { enemyIsHit, enemyDocked, applyEnemyBind, removeEnemyBind, applyEnemyCurse, enemyDispose, startEnemyEating, startEnemyRoar } from "../enemies/createEnemy"
 import { randBetween } from "../tools/random"
 import { emitEnemyIsHit } from "./emits"
@@ -25,6 +26,7 @@ import { bashLanded } from "../charactersystem/knockback.js"
 import { createOreDeposit, setOreHp, removeOreDeposit } from "../components/oreDeposits.js"
 import { castEnemySkill } from "../creations/skillEffects.js"
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
+import { playEscape } from "../enemies/voltstep.js"
 import { obtain, wearFromBlock } from "../charactersystem/inventory"
 import { popStatusEffect, openClosePopup } from "../tools/popupUI"
 import { receiveWorldChatMessage, appendSystemMessage, sendWorldMessage } from "../components/worldChatSystem"
@@ -41,6 +43,8 @@ import { onPlayerSat, onPlayerStood, onSitRejected, applyRosterSeat, syncSeatOcc
 import { spawnProjectile } from "../creations/skills.js"
 import { createGroundWeapon, createEnemyStuckWeapon } from "../assetcreation/creategroundweapon.js"
 import { refreshPlayerListIfOpen } from "../components/playerListUI"
+import { setupUndead, teardownUndead, applyUndeadMove, playUndeadAction, setUndeadHp, haltUndead, isUndeadOwner, undeadRiseNotice, undeadBlowSound } from "../enemies/undead.js"
+import { showShortNotice } from "../components/shortNotice.js"
 // From TCPs
 let allPlayersFromTCP = []
 let allEnemiez = []
@@ -71,6 +75,12 @@ let tcpOres = []
 // filtered out on "struck-weapon-removed"), just player-created at runtime
 // like tcpBonfires instead of seeded.
 let tcpStruckWeapons = []
+// tcp/recources/undead.ts - the fog's undead, owner -> the body's det. Not in
+// allPlayersFromTCP (tcp keeps them out of `players`); kept current by the
+// undead-* events whatever place I'm in, so a body can be built from the
+// latest position the moment I'm in the open world with them
+// (spawnUndeadBodies, also run by every reCreateMeshesInScene pass)
+const tcpUndeads = new Map()
 
 // In Client
 let playersOnScene = []
@@ -196,8 +206,11 @@ export function resetArray(){
     // back in a quest-board place
     questsOnScene = []
     duelOpponentsOnScene = []
-    // unlike treasuresInScene/bonfiresInScene above (never reset here - a
-    // pre-existing gap for those, not something copied on purpose), a
+    // the chests and struck weapons go with the old scene too - left in here,
+    // reCreateMeshesInScene took them for still standing and never made them
+    // again once you were back (bonfiresInScene/trunksInScene still have that gap)
+    treasuresInScene = []
+    struckWeaponsInScene = []
     containers = {
         hairs: null,
         animeBody: null,
@@ -243,8 +256,18 @@ export function getPlayersOnScene(){
 export function getEnemiesOnScene(){
     return enemiez
 }
+// a dead enemy leaves BOTH lists: enemiez (what's on my screen) and
+// allEnemiez (my copy of tcp's list). Left in allEnemiez, the next
+// reCreateMeshesInScene() - the openworld's 1s recheck, or any grain/ore/
+// treasure/craft event - found it with no body (enemyDispose takes it 2s
+// after death) and built it again: a ghost with its old id that tcp no longer
+// had, so it took no damage, yet its skills still landed (tcp relays
+// "enemyWillCastSkill" for whatever id it's handed). Only a fresh snapshot
+// from tcp ("userJoined", "registered-playerAsEnemy", "enemy-respawned")
+// arriving inside those 2s hid it - hence only sometimes.
 export function removeEnemyOnScene(enemyId){
     enemiez = enemiez.filter(enmy => enmy._id !== enemyId)
+    allEnemiez = allEnemiez.filter(enmy => enmy._id !== enemyId)
 }
 export function getDuelOpponentsOnScene(){
     return duelOpponentsOnScene
@@ -791,6 +814,11 @@ export function activateOnSocketListeners(socket){
         } else {
             victimPlayer.bloodps?.play()
         }
+        // one of the fog's undead (enemies/undead.js) - its weapon rings as the blow lands
+        if(!victimPlayer.weaponBlocking && isUndeadOwner(data.playerId)){
+            const attacker = playersOnScene.find(pl => pl.owner === data.playerId)
+            if(attacker) undeadBlowSound(attacker, victimPlayer.body.position)
+        }
 
         if (victimPlayer.owner === charState.owner && !victimPlayer.weaponBlocking) {
             camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
@@ -819,45 +847,30 @@ export function activateOnSocketListeners(socket){
         if(!bot) return
         bot.det.servantOfOwnerId = servantOfOwnerId
     })
+    // an enemy's ranged attack (its rangeAtkDetails - the electric slimes'
+    // lightning, the fire slimes' fireball, orangelith's sonic boom) - its target's client asked, tcp checked
+    // it against the enemy and relayed it to everyone; everyone plays it, only
+    // the target takes the damage (enemies/rangeAttack.js)
     socket.on("enemy-attacked-range", data => {
-        const {pos, _id, targetPos, dmg, attackAnimName, effects, rangeAtkDetails} = data
-        const meshModelName = rangeAtkDetails.modelName
-        const mesh = scene.getMeshByName(meshModelName)
-
-        const dt = scene.getEngine().getDeltaTime() / 1000
-        const spd = 20
-        const forwardV = new Vector3(0,0,spd*dt)
-
-        const caster = enemiez.find(enem => enem._id === _id)
-
-        if(mesh && caster){
-            lookAt(caster.body, Vector3, targetPos)
-            playAnim(caster.anims, attackAnimName)
-            const rangeMeshClone = mesh.clone("")
-            rangeMeshClone.position = new Vector3(pos.x, pos.y,pos.z)
-            rangeMeshClone.lookAt(new Vector3(targetPos.x, targetPos.y, targetPos.z),0,0,0)
-            const myCharacter = playersOnScene.find(pl => pl.owner === getCharState().owner)
-            rangeMeshClone.actionManager = new ActionManager(scene)
-            if(myCharacter){
-                regActionEnter(rangeMeshClone, myCharacter.body, () => {
-                    // getAllSounds().struckS.play()
-                    scene.getSoundByName(rangeAtkDetails.soundWhenHit).play()
-                    camShake(getSceneDet().scene, getSceneDet().scene.activeCamera, .01, true)
-                    // a death reports itself (characterstate.js's die) - this
-                    // used to test deductHp's promise itself, always truthy,
-                    // so every ranged hit told tcp the player had died
-                    deductHp(dmg, effects)
-                })
-            }
-            
-            let renderForRangeAtk = scene.onBeforeRenderObservable.add(() => {
-                rangeMeshClone.locallyTranslate(forwardV)
-            })
-            setTimeout(() => {
-                scene.onBeforeRenderObservable.remove(renderForRangeAtk)
-                disposeMesh(rangeMeshClone)
-            }, 3000)
-        }
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        const enemy = enemiez.find(enem => enem._id === data._id)
+        if (enemy) handleRangeAttack(enemy, data)
+    })
+    // a ranged attack landed on someone else - their client took the damage;
+    // here it shows on them: lit up to the bones by lightning
+    // (effects/electrocute.js), burnt to a crisp by a fireball (effects/scorch.js),
+    // thrown reeling by a sonic boom (effects/concussed.js)
+    socket.on("range-attack-landed", data => {
+        if (!isSocketOn) return
+        const charState = getCharState()
+        if (getGameStatus() === "loading") return
+        if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
+        if (data.owner === charState.owner) return
+        const victim = playersOnScene.find(pl => pl.owner === data.owner)
+        if (victim) showRangeLanded(victim, data)
     })
     // enemy skill-casting (det.skills, see createEnemy.js's own comment on
     // the decision side, skillEffects.js's castEnemySkill/
@@ -1092,6 +1105,8 @@ export function activateOnSocketListeners(socket){
         if (!charState || data.currentPlaceId !== charState.currentPlace.placeId) return
         const enemy = enemiez.find(enem => enem._id === data._id)
         if (!enemy || !enemy.body) return
+        // an escape (the electric slime's Volt Step) - moves it with the bolt
+        if (data.style) return playEscape(data)
 
         enemy.body.position.x = data.x
         enemy.body.position.z = data.z
@@ -1174,13 +1189,15 @@ export function activateOnSocketListeners(socket){
         // separate catch from the enemiez check above - a mesh can exist
         // in the SCENE without a matching enemiez entry (e.g. it was
         // already filtered out of enemiez by an earlier pass but the mesh
-        // itself never got disposed for some other reason) - (false, true)
-        // also frees its material/texture, same convention every other
-        // dispose call in this codebase follows now, not just the mesh
+        // itself never got disposed for some other reason). The mesh only,
+        // NOT its materials: an enemy's materials are its kind's, shared by
+        // every enemy of it (createMonsterMaterial, skins.js) - freeing them
+        // here blanked every other one still standing. What's its own (name
+        // tag and hp bar textures, its sounds) goes with the body by itself.
         const enemyBodyHere = getSceneDet().scene.getMeshByName(`enemy.${enemyId}`)
         if (enemyBodyHere) {
             // console.log("enemyBodyHere ", enemyBodyHere.name)
-            enemyBodyHere.dispose(false, true)
+            enemyBodyHere.dispose()
         }
     })
     socket.on('enemy-respawned', tcpEnemies => {
@@ -1399,6 +1416,8 @@ export function activateOnSocketListeners(socket){
         
         player._moving = true
         player.mode = mode
+        // locked onto an enemy and moving round it (see emitMove) - renderer.js plays this instead of running
+        player._strafe = data.strafe ?? null
         player.body.position.x = pos.x
         player.body.position.y = pos.y
         player.body.position.z = pos.z
@@ -1417,6 +1436,7 @@ export function activateOnSocketListeners(socket){
         if(!player) return
         
         player._moving = false
+        player._strafe = null
         player.mode = mode
         player.body.position.x = pos.x
         player.body.position.y = pos.y
@@ -1619,6 +1639,17 @@ export function activateOnSocketListeners(socket){
         if(evolution?.evolutionName == null) devolve(player)
         else evolveInto(evolution, player)
     })
+    // another player's farthest-from-spawn record grew (emits.js's emitTravelRecord) -
+    // the Tab list's "Distance Traveled" column reads it off their details
+    socket.on("emitted-travel", data => {
+        const { ownerId, maxDistanceTraveled } = data
+        const charState = getCharState()
+        if (!charState || ownerId === charState.owner) return
+        const player = playersOnScene.find(pl => pl.owner === ownerId)
+        if(!player?.det) return
+        player.det.maxDistanceTraveled = maxDistanceTraveled
+        refreshPlayerListIfOpen()
+    })
     socket.on("emitted-loc", data => {
         const { ownerId, pos, dirTarg, mode, weaponName} = data
         const charState = getCharState()
@@ -1672,6 +1703,66 @@ export function activateOnSocketListeners(socket){
         if (!isSocketOn) return
         onSitRejected(data)
     })
+    // THE UNDEAD (tcp's recources/undead.ts, enemies/undead.js). New ones, or
+    // every one already up when I walk into the open world - the roster is
+    // kept whatever place I'm in (and mid-transition, socket off or not),
+    // bodies are only built in the open world
+    socket.on("undead-spawned", data => {
+        const list = data?.undeads ?? []
+        // fresh out of the ground (not the roster I get walking in) - their
+        // bodies climb out first (enemies/undead.js's riseFromGround)
+        const risingAt = data?.rising ? performance.now() : 0
+        list.forEach(det => {
+            det._risingAt = risingAt
+            tcpUndeads.set(det.owner, det)
+        })
+        if (!isSocketOn) return
+        if(getCharState()?.currentPlace?.placeId === OPENWORLD_PLACE_ID){
+            const notice = undeadRiseNotice(list)
+            if(notice) showShortNotice(notice)
+        }
+        spawnUndeadBodies()
+    })
+    // where each moving one is now - ten times a second, in one message
+    socket.on("undead-moves", data => {
+        data?.moves?.forEach(move => {
+            const det = tcpUndeads.get(move.o)
+            if(det){
+                det.pos.x = move.x
+                det.pos.z = move.z
+            }
+            if (!isSocketOn) return
+            const player = playersOnScene.find(pl => pl.owner === move.o)
+            if(player) applyUndeadMove(player, move)
+        })
+    })
+    socket.on("undead-action", data => {
+        const det = tcpUndeads.get(data.ownerId)
+        // where it ends up, for a body built later
+        const lands = data.to ?? (data.x !== undefined ? { x: data.x, z: data.z } : null)
+        if(det && lands){
+            det.pos.x = lands.x
+            det.pos.z = lands.z
+        }
+        if (!isSocketOn) return
+        const player = playersOnScene.find(pl => pl.owner === data.ownerId)
+        if(player) playUndeadAction(player, data)
+    })
+    socket.on("undead-hp", data => {
+        const det = tcpUndeads.get(data.ownerId)
+        if(det) det.hp = data.hp
+        if (!isSocketOn) return
+        const player = playersOnScene.find(pl => pl.owner === data.ownerId)
+        if(player) setUndeadHp(player, data.hp, data.maxHp)
+    })
+    socket.on("undead-died", data => {
+        removeUndead(data.ownerId)
+    })
+    // the fog lifted, or the one they hunted is gone (killed, logged off,
+    // walked out of the open world)
+    socket.on("undead-cleared", data => {
+        data?.owners?.forEach(removeUndead)
+    })
     socket.on('removeChar', ({ ownerId, playerName, placeId }) => {
         if(ownerId === getCharState().owner) return
         removePlayer({ ownerId, playerName, placeId })
@@ -1717,6 +1808,14 @@ function createQuestPlaneMesh(quest, _scene) {
     rankLabel.billboardMode = Mesh.BILLBOARDMODE_NONE
 
     questsOnScene.push({ questId: quest.questId, mesh: questPlane })
+}
+
+// The height an openworld chest or mushroom from tcp stands at. tcp has no
+// terrain, so most carry y 0 and are grounded here - but the hidden places'
+// loot (tcp's hiddenHoards.ts, exactY) already has its floor: down a well or
+// in a grotto, where the terrain's surface is the lid far overhead.
+function openworldRecordY(rec){
+    return rec.exactY ? rec.pos.y : openworldGroundY(rec.pos.x, rec.pos.z)
 }
 
 export function reCreateMeshesInScene() {
@@ -1803,9 +1902,10 @@ export function reCreateMeshesInScene() {
         const treasureMesh = sceneDet.scene.getMeshByName(`treasure_${treasureTcpInfo.itemId}`)
         if(treasureMesh) return
 
-        // tcp has no terrain - an openworld chest stands on the ground found here
+        // tcp has no terrain - an openworld chest stands on the ground found
+        // here, unless tcp knows its floor (openworldRecordY)
         const chestPos = treasureTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
-            ? { x: treasureTcpInfo.pos.x, y: openworldGroundY(treasureTcpInfo.pos.x, treasureTcpInfo.pos.z), z: treasureTcpInfo.pos.z }
+            ? { x: treasureTcpInfo.pos.x, y: openworldRecordY(treasureTcpInfo), z: treasureTcpInfo.pos.z }
             : treasureTcpInfo.pos
         const chest = createTreasureMesh(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId, extras: treasureTcpInfo.extras })
         if(chest) treasuresInScene.push({ itemId: treasureTcpInfo.itemId })
@@ -1826,6 +1926,60 @@ export function reCreateMeshesInScene() {
 
         const bonfire = createBonfireMesh(scene, bonfireTcpInfo.pos, bonfireTcpInfo.craftId)
         if(bonfire) bonfiresInScene.push({ craftId: bonfireTcpInfo.craftId })
+    })
+    // same three-guard shape as tcpTreasures/tcpBonfires above. The striker's
+    // own client already rendered its own local copy the instant it struck
+    // (itemInfoSystem.js's struckItemFunc / creations/skills.js's
+    // spawnProjectile) under the same swordstuck_<itemId> name, so the mesh
+    // check is what skips it there - and once that copy is gone with a
+    // reload, they see it again like everyone else. tcp's own (the hidden
+    // places' - hiddenHoards.ts) have no striker at all. pos is always the
+    // real spot: where a player stood, or a hidden place's floor.
+    // characterBody is resolved fresh per client rather than passed through
+    // the server payload - "purely a local pickup trigger, every client wires
+    // its own" (creategroundweapon.js's own header comment).
+    tcpStruckWeapons.length && tcpStruckWeapons.forEach(weaponTcpInfo => {
+        if (characterState.currentPlace.placeId !== weaponTcpInfo.currentPlaceId) return
+
+        // enemy-stick case (creations/skills.js's own enemy-hit branch) -
+        // looked up UP FRONT (not just at first-creation time) so the
+        // isAlreadyHere/weaponMesh branch just below can also use it to fix
+        // up a weapon that got created BEFORE its target enemy was on this
+        // client's own scene yet (openworld's distance-gated enemy
+        // creation - the enemies loop above only creates enemies within
+        // OPENWORLD_ENEMY_CREATE_DIST of this player, so a weapon struck on
+        // a still-out-of-range enemy falls back to the static ground
+        // rendering below, floating at that enemy's mid-body height until
+        // this catches up and reparents it properly)
+        const struckEnemy = weaponTcpInfo.targetEnemyId && enemiez.find(en => en._id === weaponTcpInfo.targetEnemyId)
+
+        const isAlreadyHere = struckWeaponsInScene.find(w => w.itemId === weaponTcpInfo.itemId)
+        const weaponMesh = sceneDet.scene.getMeshByName(`swordstuck_${weaponTcpInfo.itemId}`)
+        if(isAlreadyHere || weaponMesh){
+            // already created on an earlier pass - if we now know it
+            // should be riding on a specific enemy and it isn't parented
+            // there yet, fix it up instead of leaving it wherever the
+            // earlier fallback pass put it
+            if(weaponMesh && struckEnemy?.bodytarget && weaponMesh.parent !== struckEnemy.bodytarget){
+                weaponMesh.parent = struckEnemy.bodytarget
+                weaponMesh.position.set(0, 0, 0.4)
+            }
+            return
+        }
+
+        const myPlayer = playersOnScene.find(pl => pl.owner === characterState.owner)
+        if(!myPlayer) return
+
+        // enemy-stick case - parent directly to that enemy's own bodytarget
+        // so it visually rides along with them, matching what the striking
+        // player's own client already sees locally, instead of a floating
+        // static copy. Falls back to the plain ground-stick rendering
+        // below if that enemy isn't (yet, or anymore) on THIS client's own
+        // scene - see this block's own struckEnemy comment above.
+        const lootBox = struckEnemy?.bodytarget
+            ? createEnemyStuckWeapon(scene, weaponTcpInfo.itemDetail, struckEnemy.bodytarget, myPlayer.body, true)
+            : createGroundWeapon(scene, { ...weaponTcpInfo.itemDetail, lootPosition: weaponTcpInfo.pos }, myPlayer.body, true)
+        if(lootBox) struckWeaponsInScene.push({ itemId: weaponTcpInfo.itemId })
     })
     // same three-guard shape as tcpBonfires right above, for campcraft.js's
     // "treelog" craft (createTrunkMesh's own trunk_${craftId} naming)
@@ -1865,7 +2019,7 @@ export function reCreateMeshesInScene() {
         if (characterState.currentPlace.placeId !== mushroomTcpInfo.currentPlaceId) return
         const { x, z } = mushroomTcpInfo.pos
         const mushroomPos = mushroomTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
-            ? { x, y: openworldGroundY(x, z), z }
+            ? { x, y: openworldRecordY(mushroomTcpInfo), z }
             : mushroomTcpInfo.pos
         createMushroomMesh(scene, mushroomPos, mushroomTcpInfo.mushroomId, mushroomTcpInfo.kind)
     })
@@ -1880,6 +2034,39 @@ export function reCreateMeshesInScene() {
 
         allQuests.length && allQuests.forEach(quest => createQuestPlaneMesh(quest, sceneDet.scene))
     }
+    spawnUndeadBodies()
+}
+
+// THE UNDEAD (enemies/undead.js) - a body for every one in tcpUndeads that
+// doesn't have one on my screen yet, open world only. Like any player's it
+// goes into playersOnScene; it also joins the duel-opponent registry, which is
+// what my spells and melee aim search for targets that aren't wild enemies.
+function spawnUndeadBodies(){
+    if(!tcpUndeads.size) return
+    const charState = getCharState()
+    if(!charState || charState.currentPlace.placeId !== OPENWORLD_PLACE_ID) return
+    if(getGameStatus() !== "running") return
+    const { scene } = getSceneDet()
+    if(!scene) return
+    tcpUndeads.forEach(det => {
+        if(playersOnScene.some(pl => pl.owner === det.owner)) return
+        const spawnPos = { x: det.pos.x, y: openworldGroundY(det.pos.x, det.pos.z), z: det.pos.z }
+        const player = createCharacter(scene, spawnPos, det, false)
+        if(!player) return
+        pushPlayer(player)
+        const entry = setupUndead(player, scene)
+        if(entry) pushDuelOpponentOnScene(entry)
+    })
+}
+// one is done - killed, or crumbling as the fog lifts or its player goes. Off
+// every target list at once, then the death clip, then gone (playerDied)
+function removeUndead(ownerId){
+    tcpUndeads.delete(ownerId)
+    const player = playersOnScene.find(pl => pl.owner === ownerId)
+    if(!player || player.mode === "death") return
+    removeDuelOpponentOnScene(player.body)
+    haltUndead(player)
+    playerDied(ownerId, OPENWORLD_PLACE_ID)
 }
 
 
@@ -1944,6 +2131,10 @@ export function removePlayer({ ownerId, playerName, placeId }){
     // the body first so the body's dispose below takes it too. Before the
     // playersOnScene filter, since seating.js finds the player through it
     releaseSeatOf(ownerId)
+    if(isUndeadOwner(ownerId)){
+        removeDuelOpponentOnScene(playerToRemove.body)
+        teardownUndead(playerToRemove)
+    }
     playerToRemove.anims.forEach(anim => anim.dispose())
     // the body's dispose below doesn't take the blood splatter with it - a
     // bleeding one would keep spraying where they stood. (false) keeps

@@ -1,23 +1,14 @@
 import { APIURL } from "../constants/constants.js"
-import { keepAccountWithTokenDet } from "../constants/api.js"
-import { startScene } from "../main/main.js"
-import { setLoading, hideHomePage } from "./mainpage.js"
-const usernameInput = document.querySelector("#usernameInp")
-const passwordInput = document.querySelector("#passwordInp")
-const confirmInput = document.querySelector("#confirmpass")
-const enterBtn = document.querySelector("#enterWorldBtn")
-const rotatingIcon = document.querySelector(".rotating")
-const msg = document.querySelector("#auth-msg")
+import { useFetch } from "../tools/tools.js"
+import { setLoading, setAuthMode, rememberHowEntered } from "./mainpage.js"
+import { enterWithAccount } from "./loginpage.js"
+import { getSavedGuest, forgetGuest, logInGuest } from "./guestlogin.js"
+import { usernameInput, passwordInput, confirmInput, showAuthError, clearAuthError, USERNAME_MIN, PASSWORD_MIN } from "./authform.js"
+const keepGuestBox = document.querySelector("#keepGuestHero")
 
 
 export function showRegisterPage() {
-    confirmInput.classList.remove("hidden")
-    setLoading(false)
-    msg.textContent = ""
-    usernameInput.value = ""
-    passwordInput.value = ""
-    confirmInput.value = ""
-    usernameInput.focus()
+    setAuthMode("register")
 }
 
 export async function   register() {
@@ -25,38 +16,47 @@ export async function   register() {
     const password = passwordInput.value
     const confirmPassword = confirmInput.value
 
-    if (!username || !password) { msg.textContent = "Fill in all fields."; return }
-    if (password !== confirmPassword) { msg.textContent = "Passwords do not match."; return }
+    if (!username || !password) return showAuthError("Fill in all fields.", username ? passwordInput : usernameInput)
+    if (username.length < USERNAME_MIN) return showAuthError(`Username needs at least ${USERNAME_MIN} characters.`, usernameInput)
+    if (password.length < PASSWORD_MIN) return showAuthError(`Password needs at least ${PASSWORD_MIN} characters.`, passwordInput)
+    if (password !== confirmPassword) return showAuthError("Passwords do not match.", confirmInput)
 
     setLoading(true)
-    msg.textContent = ""
+    clearAuthError()
+
+    // on a device that has played as a guest the box starts ticked: the guest's
+    // own account takes this username and password, so its hero comes along
+    const guest = getSavedGuest()
+    const claiming = !!guest && keepGuestBox.checked
 
     try {
-        const res = await fetch(`${APIURL}/users/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password })
-        })
+        const data = claiming
+            ? await claimGuest(guest, username, password)
+            : await useFetch(`${APIURL}/users/register`, "POST", null, { username, password })
 
-        const data = await res.json()
+        if (data === "Username Exist") return refuse("Username already taken.", usernameInput)
+        if (!data?.token) return refuse("Server error, try again.")
+        if (claiming) forgetGuest()
 
-        if (data === "Username Exist") {
-            msg.textContent = "Username already taken."
-            setLoading(false)
-            return
-        }
-        keepAccountWithTokenDet(data)
-
-        const entered = await startScene(true)
-        if (!entered) {
-            msg.textContent = "Server error, try again."
-            setLoading(false)
-            return
-        }
-        hideHomePage()
+        if (await enterWithAccount(data)) rememberHowEntered("account", username)
 
     } catch (err) {
-        msg.textContent = "Server error, try again."
-        setLoading(false)
+        refuse("Server error, try again.")
     }
+}
+
+async function claimGuest(guest, username, password){
+    const session = await logInGuest(guest)
+    // the guest's account is gone - an ordinary new account then
+    if (session === "norecord") {
+        forgetGuest()
+        return useFetch(`${APIURL}/users/register`, "POST", null, { username, password })
+    }
+    if (!session?.token) return session
+    return useFetch(`${APIURL}/users/claim`, "POST", session.token, { username, password })
+}
+
+function refuse(text, field){
+    setLoading(false)
+    showAuthError(text, field)
 }

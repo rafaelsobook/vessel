@@ -5,6 +5,8 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/src/style.css" />
+    <!-- the home page's illustration is a CSS background - fetch it with the stylesheet, not after it -->
+    <link rel="preload" as="image" href="./images/wallpaper/dbhomeback.jpg" />
     <title>client</title>
   </head>
   <body background-color="black">
@@ -61,47 +63,139 @@
         <p class="ils-cap"></p>
         <img class="loading-img" src="./images/UI/ms/vessellogo.webp" alt="" class="src">
     </div>
-    <div class="home-page">
-        <div class="server-status">
-            <p class="server-status-title">Server Status</p>
-            <div class="server-status-row">
-                <span class="status-dot"></span>
-                <span class="status-text">Online</span>
+    <!-- HOME / LOGIN - pages/mainpage.js runs it, pages/homefx.js animates it
+         (sparks, parallax, the summoning when you enter), homemusic.js plays the theme.
+         "intro": the opening plays from the first paint, while the game's code loads -->
+    <div class="home-page intro">
+        <div class="hp-scene">
+            <div class="hp-back"></div>
+            <div class="hp-rays"></div>
+            <div class="hp-altar hp-parallax" style="--depth: 14">
+                <div class="hp-circle">
+                    <div class="hp-shock"></div>
+                    <img class="hp-circle-glow" src="./images/wallpaper/spinningcirc.webp" alt="">
+                    <img class="hp-circle-img" src="./images/wallpaper/spinningcirc.webp" alt="">
+                    <img class="hp-runes" src="./images/UI/magCircle.png" alt="">
+                </div>
+                <img class="hp-vessel" src="./images/wallpaper/floatingchar.webp" alt="">
             </div>
-            <div class="server-status-players">
-                <span class="players-label">Players Online</span>
-                <span class="players-count-small">0</span>
-            </div>
-            <p class="players-count-big">0</p>
+            <canvas class="hp-sparks"></canvas>
+            <div class="hp-mist hp-parallax" style="--depth: 30"></div>
+            <div class="hp-vignette"></div>
         </div>
-        <img src="./images/UI/ms/vessellogo.webp" alt="" class="db-logo db-placeup">
 
-        <!-- KEEP -->
-        <div class="center-animation">
-            <img class="floating-char" src="./images/wallpaper/floatingchar.webp" />
-            <img class="spinningcirc circ1" src="./images/wallpaper/spinningcirc.webp" />
-            <img class="spinningcirc" src="./images/wallpaper/spinningcirc.webp" />
+        <header class="hp-top">
+            <div class="hp-live">
+                <p class="server-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Online</span>
+                    <span class="players-count">0</span>
+                    <span class="players-label">in the realm</span>
+                </p>
+                <!-- what's new - one line each, they take turns -->
+                <p class="hp-news">
+                    <span class="hp-news-tag">New</span>
+                    <span class="hp-news-item shown">The fog has risen. The undead hunt the open world</span>
+                    <span class="hp-news-item">Critical hits hurl foes back. Hammers stun</span>
+                    <span class="hp-news-item">Legendary hoards lie hidden in wells, grottos and falls</span>
+                </p>
+            </div>
+            <div class="hp-corner">
+                <a class="hp-icon-btn" href="https://discord.gg/3BCjhKvmn2" target="_blank" rel="noopener" aria-label="Join the Discord" title="Join the Discord">
+                    <img src="./images/UI/socials/discord.webp" alt="">
+                </a>
+                <button class="hp-icon-btn hp-sound-btn" aria-label="Sound" title="Sound">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path class="hp-speaker" d="M4 9h4l5-4v14l-5-4H4z"/>
+                        <path class="hp-waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/>
+                        <path class="hp-cross" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="hp-title hp-parallax" style="--depth: 6">
+            <div class="hp-logo">
+                <img src="./images/UI/ms/vessellogo.webp" alt="Vessel">
+                <span class="hp-logo-shine"></span>
+            </div>
+            <p class="hp-tagline">Summoned as a vessel. <em>Rise as a legend.</em></p>
         </div>
 
-        <div class="login-register-form">
-            <div class="auth-fields">
-                <img src="./images/UI/ms/form.webp" alt="" class="form-background">
-                <p class="page-msg" id="auth-msg"></p>
-                <input type="text" placeholder="username" id="usernameInp" class="username inp">
-                <input type="password" placeholder="password" id="passwordInp" class="password inp">
-                <input type="password" placeholder="confirm password" id="confirmpass" class="confirm-password inp hidden">
-
-                <button class="btn toggle-auth-mode" id="toggleAuthMode">Need an account? Register</button>
+        <!-- THE SIGN-IN FORM. data-mode "play" is the big button alone (a guest, or the account this
+             tab is still logged in as); "login" and "register" open the framed panel (.gate) above
+             it, the button hanging off its bottom edge. pages/mainpage.js switches the modes,
+             pages/authform.js runs the fields -->
+        <form class="login-register-form" data-mode="play" novalidate>
+            <div class="gate" role="tabpanel" aria-label="Sign in">
+                <span class="gate-gem"></span>
+                <div class="gate-tabs" role="tablist">
+                    <button type="button" class="auth-tab" role="tab" data-go="login" aria-selected="false">Log in</button>
+                    <button type="button" class="auth-tab" role="tab" data-go="register" aria-selected="false">Create account</button>
+                    <button type="button" class="gate-close" data-go="play" aria-label="Back" title="Back (Esc)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                    </button>
+                    <span class="tab-bar"></span>
+                </div>
+                <p class="gate-sub">
+                    <span data-for="login">Welcome back, vessel.</span>
+                    <span data-for="register">Your legend begins here.</span>
+                </p>
+                <div class="auth-fields">
+                    <div class="field" style="--i: 0">
+                        <input type="text" id="usernameInp" class="username inp" name="username" placeholder=" " autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+                        <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                        <label class="field-label" for="usernameInp">Username</label>
+                    </div>
+                    <div class="field" style="--i: 1">
+                        <input type="password" id="passwordInp" class="password inp" name="password" placeholder=" " autocomplete="current-password">
+                        <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                        <label class="field-label" for="passwordInp">Password</label>
+                        <button type="button" class="reveal" aria-label="Show password" aria-pressed="false">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <g class="eye"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g>
+                                <g class="eye-off"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></g>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="strength" data-level="0" aria-hidden="true">
+                        <span class="strength-bars"><i></i><i></i><i></i><i></i></span>
+                        <span class="strength-label"></span>
+                    </div>
+                    <div class="field confirm-field" style="--i: 2">
+                        <input type="password" id="confirmpass" class="confirm-password inp" name="confirm-password" placeholder=" " autocomplete="new-password">
+                        <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                        <label class="field-label" for="confirmpass">Confirm password</label>
+                        <svg class="field-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                    </div>
+                    <label class="keep-guest hidden" style="--i: 3">
+                        <span class="kg-text">Keep my guest hero <b class="keep-guest-name"></b></span>
+                        <input type="checkbox" id="keepGuestHero" checked>
+                        <span class="kg-switch"></span>
+                    </label>
+                </div>
+                <p class="caps-warn" role="status">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l8 9h-5v6H9v-6H4z"/></svg>
+                    Caps Lock is on
+                </p>
+                <p class="page-msg" id="auth-msg" role="alert"></p>
             </div>
-            <button class="enter-button"  id="enterWorldBtn">
-                <img src="./images/UI/ms/button.webp" />
-                <img class="rotating" src="./images/UI/rotating.webp" />
-                <p class="enter-caption">Enter World</p>
+            <p class="page-msg play-msg" id="play-msg" role="alert"></p>
+            <button class="enter-button" id="enterWorldBtn" type="submit">
+                <img class="enter-frame" src="./images/UI/ms/button.webp" alt="">
+                <img class="rotating" src="./images/UI/rotating.webp" alt="">
+                <span class="enter-caption">Play Now</span>
             </button>
+            <p class="enter-sub">Free · No sign-up · Play in your browser</p>
+            <nav class="auth-links">
+                <button type="button" class="auth-link" data-go="login">Log in</button>
+                <button type="button" class="auth-link" data-go="register">Create account</button>
+                <button type="button" class="auth-link guest-link" data-go="guest">Play as a guest</button>
+            </nav>
+        </form>
 
-        </div>
-        
-        <!-- <div class="copyright">Ⓒ dungeonBorn 2023 beta</div> -->
+        <p class="hp-credit">Illustration by Kheil Artimist / jpandog</p>
+        <div class="hp-flash"></div>
     </div>
     <footer class="site-footer">
         <div class="socials">

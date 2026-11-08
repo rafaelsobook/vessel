@@ -1,6 +1,7 @@
 import { Mesh, Animation, Vector3 } from "@babylonjs/core"
 import * as GUI from "@babylonjs/gui"
 import { getSceneDet } from "../main/main.js";
+import { createMeshGui } from "../gui/textmesh.js";
 // import itemsToSell from "../staticRecources/toSell.js";
 
 const hitScreen = document.querySelector(".hit-screen")
@@ -9,14 +10,16 @@ hitScreen.addEventListener("transitionend", () => {
     hitScreen.style.display = "none"
 })
 
+// one per damage number, miss, heal... - a band 1024 x 160 across a 6-wide
+// plane (was a 6x6 plane on a 1024 square, never freed - see createMeshGui):
+// tall enough for the biggest of them, a 95 px critical hit
 export function poppingTextMesh(textToDisplay,color,fontSize, maxPosY,pos, theParent, willAnimate){
     const scene = getSceneDet().scene
-    const popTextMesh = Mesh.CreatePlane("poptext", 6, scene);
+    const { mesh: popTextMesh, ui: textureForName } = createMeshGui("poptext", 6, 1024, 160, scene)
     popTextMesh.isPickable = false
     popTextMesh.isVisible = true
 
     popTextMesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    const textureForName = GUI.AdvancedDynamicTexture.CreateForMesh(popTextMesh);
 
     var text1 = new GUI.TextBlock();
     text1.text = textToDisplay
@@ -53,11 +56,12 @@ export function poppingTextMesh(textToDisplay,color,fontSize, maxPosY,pos, thePa
     
     return popTextMesh
 }
+// the bar (300 x 40 px at most) on a band 1024 x 64 across a 3-wide plane -
+// was a 3x3 plane on a 1024 square, never freed (see createMeshGui)
 export function createHpBar(posY, theId, parentMesh, hp, maxHp){
-    const hpmesh = Mesh.CreatePlane(`enemyhpmesh.${theId}`, 3);
+    const { mesh: hpmesh, ui: advancedTexture } = createMeshGui(`enemyhpmesh.${theId}`, 3, 1024, 64, parentMesh.getScene())
     hpmesh.position.y = posY;
     hpmesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    const advancedTexture = GUI.AdvancedDynamicTexture.CreateForMesh(hpmesh);
 
     
     var hpbar = new GUI.Rectangle();

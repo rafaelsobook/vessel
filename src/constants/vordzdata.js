@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { grantStoryQuest } from '../tools/questHelpers'
+import { sideStoryOption } from '../sidestories/index.js'
 
 function pick(variants){
     return variants[Math.floor(Math.random() * variants.length)]
@@ -53,6 +54,8 @@ export function vordzData(){
             questionId: 60,
             conversationWithQuestion: toLines(pick(vordzOpener)),
             answers: [
+                // this NPC's side story, when there's something to say (sidestories/)
+                ...sideStoryOption("105_vords"),
                 { text: "Just saying hello.", cb: () => startQuestionare(61) },
                 { text: "Is Strong okay? He seems... off.", cb: () => startQuestionare(62) },
                 { text: "Tell me about this posting.", cb: () => startQuestionare(63) },

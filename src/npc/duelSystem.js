@@ -38,6 +38,8 @@ import { receiveTitle } from "../components/titleUI.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
 import { getSkillEffect } from "../staticRecources/skillsData.js"
 import { cheerArenaCrowd } from "../creations/createduelarena.js"
+import { bashLanded } from "../charactersystem/knockback.js"
+import { triggeredEffect } from "../staticRecources/weaponEffects.js"
 
 const DUEL_PLACE_ID     = 200
 // the arena's crowd (createduelarena.js's cheerArenaCrowd) - the share of it
@@ -168,6 +170,10 @@ const DODGE_MELEE_MAX_DIST      = 2.2
 const DODGE_PROJECTILE_MIN_DIST = 3
 const DODGE_PROJECTILE_MAX_DIST = 5
 const DODGE_DURATION_MS    = 220
+// attitude.jumping - a dodge taken in the air instead: the same hop, but
+// leapt, rising JUMP_DODGE_HEIGHT and slower so the arc reads
+const JUMP_DODGE_DURATION_MS = 520
+const JUMP_DODGE_HEIGHT      = 1.3
 
 // --- npcFighter "attitude" (npcDetails.js's Renarden/Vesper own attitude:{}
 // fields) - the new per-fighter personality system this whole block powers.
@@ -197,13 +203,28 @@ const DODGE_DURATION_MS    = 220
 //   continuescast - after a cast/flurry, chance to immediately queue
 //                    another one soon (CONTINUE_CAST_DELAY_MS) instead of
 //                    waiting out the normal randomized interval again
+//   jumping       - chance a dodge is leapt instead of hopped (see
+//                    performDodge's airborne)
+//   critical      - chance any one blow (swing, dash, not a skill cast)
+//                    lands as a critical, for the player's own multiplier
+//                    off this fighter's stats.critical (withCrit below)
+//   swingMs       - how long between melee swings (a heavy weapon's slower)
 //
 // DEFAULT_ATTITUDE reproduces today's exact hardcoded behavior for any
 // npcFighter with no attitude field at all (Robin) - always melees, flat
 // DODGE_CHANCE, never blocks/distances/continue-casts, and stays on the old
 // hp-tiered skill model (standbycasting:0 means the isStandbyCaster roll
 // below can never come up true).
-const DEFAULT_ATTITUDE = { weapon: 1, dodging: DODGE_CHANCE, blocking: 0, standbycasting: 0, distancing: 0, continuescast: 0 }
+const DEFAULT_ATTITUDE = { weapon: 1, dodging: DODGE_CHANCE, blocking: 0, standbycasting: 0, distancing: 0, continuescast: 0, jumping: 0, critical: 0, swingMs: ATTACK_INTERVAL_MS }
+
+// A critical blow's damage - the player's own rule (attackingSystem.js's
+// calcDmg: 1 + critical * CRIT_DMG_PER_CRITICAL), off the fighter's
+// stats.critical. Blinkstrike keeps its own flat BLINK_CRIT_MULTIPLIER.
+const CRIT_DMG_PER_CRITICAL = 0.5
+function withCrit(dmg, npcDet, isCritical){
+    if(!isCritical) return dmg
+    return Math.round(dmg * (1 + (npcDet.stats?.critical ?? 1) * CRIT_DMG_PER_CRITICAL))
+}
 
 // Blocking - same detection/cadence rollDodge's own DODGE_CHECK_MS/
 // DODGE_MELEE_RANGE already use, just a different reaction (a real
@@ -279,12 +300,13 @@ const BLINK_LAND_OFFSET_DEFAULT = 1.2
 // tsunamiwrath skill projectiles already launch with, see skillsData.js);
 // staff gets its own dedicated staffS1 (a real "./sounds/weapons/staffS1.mp3"
 // asset already registered in soundSystem.js but never actually played
-// anywhere until now - a staff is a stick, shouldn't sound like a blade landing)
+// anywhere until now - a staff is a stick, shouldn't sound like a blade landing);
+// hammer its own hammerS1, the same one meleeCombat.js's playHitSound uses
 const WEAPON_HIT_SOUNDS = {
     sword: "swordS1",
     axe: "swordS1",
     pickaxe: "swordS1",
-    hammer: "swordS1",
+    hammer: "hammerS1",
     spear: "spearS1",
     staff: "staffS1",
 }
@@ -536,7 +558,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // hit-registration sites (the player's skill-wheel spells) target this
     // opponent the same way they already target real, server-tracked
     // enemies. applyDamage below is the same local damage path melee uses.
-    pushDuelOpponentOnScene({ body: opponent.body, applyDamage: applyDamageToOpponent })
+    pushDuelOpponentOnScene({ body: opponent.body, applyDamage: applyDamageToOpponent, bloodps: opponent.bloodps })
     // also exposed directly on the raw opponent object (not just the
     // registry wrapper above) - skillEffects.js's castEnemySkill is called
     // with THIS object as its own `enemy` param (this file's own
@@ -802,7 +824,30 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // swing (npcFighters have no ranged/magic skill that hits the player
     // directly - basicSkill/seriousSkill/hiddenSkill all target the
     // OPPONENT's own aggro via castEnemySkill same as a real enemy would).
-    async function applyDamageToPlayer(dmgToPlayer){
+    // The weapon's own on-hit effects (equippedWeapon.effectsWhenHit -
+    // weaponEffects.js) landing on ME: the bash that throws an enemy back and
+    // the stun a hammer adds, the same ones a player's weapon puts on an
+    // enemy, here from a fighter's blow. Through the same knockback.js a
+    // monster's slam goes by. A bash (a thrown-back) is all a guard stops: it
+    // breaks the stun, but the blow still shoves, half as far. Nothing for a
+    // fighter whose weapon carries none (or only on a critical it never lands).
+    function landWeaponEffects(victim, isCritical, blocked){
+        if(!victim) return
+        const hit = { isCritical }
+        const bash = triggeredEffect(equippedWeapon?.effectsWhenHit, "bash", hit)
+        const stun = triggeredEffect(equippedWeapon?.effectsWhenHit, "stun", hit)
+        if(blocked ? !bash : !(bash || stun)) return
+        bashLanded({
+            victim, from: opponent.body.position, isMine: true, blocked,
+            attack: {
+                knockback: bash?.distanceKnockback ?? 0,
+                stunDuration: stun?.stunDuration ?? 0,
+                whenBlocked: { knockback: (bash?.distanceKnockback ?? 0) / 2, stunDuration: 0, playerAnimationWhenHit: "blockbreak" },
+            },
+        })
+    }
+
+    async function applyDamageToPlayer(dmgToPlayer, isCritical = false){
         const myOwnPlayer = getPlayersOnScene().find(pl => pl.owner === charState.owner)
         if(myOwnPlayer?.weaponBlocking){
             // no deductHp, no blood, no hit reaction - the swing never
@@ -811,6 +856,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             // uses for the reverse direction
             getAllSounds().weaponblockS?.play()
             poppingTextMesh("Blocked!", "cyan", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight / 2 + .5, z: -1 + Math.random() * 2 }, characterBody, true)
+            landWeaponEffects(myOwnPlayer, isCritical, true)
             return
         }
 
@@ -826,11 +872,14 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // orange (not red - red's already "damage I just dealt", see the
         // atkCollider hit handler above) so incoming vs outgoing damage
         // reads as visually distinct at a glance
-        poppingTextMesh(`-${dmgToPlayer}`, "orange", 40 + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight / 2 + .5, z: -1 + Math.random() * 2 }, characterBody, true)
+        // a critical pops bigger, in gold with a "!" - the look createEnemy.js
+        // gives the player's own criticals
+        poppingTextMesh(`-${dmgToPlayer}${isCritical ? "!" : ""}`, isCritical ? "#ffc23a" : "orange", (isCritical ? 70 : 40) + Math.random() * 25, Math.random() * 1, { x: -1 + Math.random() * 2, y: capsuleHeight / 2 + .5, z: -1 + Math.random() * 2 }, characterBody, true)
         // bloodps lives on the PLAYER object (createMyCharacter.js's own
         // createCharacter() rig), not on characterBody (just the bare mesh
         // this closure was handed)
         myOwnPlayer?.bloodps?.play()
+        landWeaponEffects(myOwnPlayer, isCritical, false)
         // the crowd loves it either way - and roars when the player goes down
         // (a duel stops them at 1 hp - setAllowDeath)
         const downed = getCharState().hp <= 1
@@ -975,7 +1024,8 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // adds directly)
         setTimeout(async () => {
             if(opponentDefeated || duelState.playerDefeated) return
-            const dmgToPlayer = calcOpponentDmg(npcDet) + (getSkillEffect(skill, "offense")?.plusDmg || 0)
+            const isCritical = Math.random() < attitude.critical
+            const dmgToPlayer = withCrit(calcOpponentDmg(npcDet) + (getSkillEffect(skill, "offense")?.plusDmg || 0), npcDet, isCritical)
 
             // cursed opponent - this dash's own damage backfires onto the
             // opponent itself instead of the player, same rule
@@ -987,7 +1037,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 return
             }
 
-            await applyDamageToPlayer(dmgToPlayer)
+            await applyDamageToPlayer(dmgToPlayer, isCritical)
 
             if(getCharState().hp <= 1 && !duelState.playerDefeated){
                 duelState.playerDefeated = true
@@ -1075,7 +1125,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 return
             }
 
-            await applyDamageToPlayer(dmgToPlayer)
+            await applyDamageToPlayer(dmgToPlayer, true)
 
             if(getCharState().hp <= 1 && !duelState.playerDefeated){
                 duelState.playerDefeated = true
@@ -1192,7 +1242,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         if((!meleeThreat && !projectileThreat) || Math.random() >= attitude.dodging) return
 
         dodgeCooldownUntil = now + DODGE_COOLDOWN_MS
-        performDodge(meleeThreat ? "back" : "side")
+        performDodge(meleeThreat ? "back" : "side", Math.random() < attitude.jumping)
     }
     const dodgeCheckInterval = setInterval(rollDodge, DODGE_CHECK_MS)
 
@@ -1279,7 +1329,10 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
     // a clean motion). Eased (fast burst, settles into the landing spot)
     // rather than a linear translate, so a very short DODGE_DURATION_MS
     // still reads as a real hop instead of a teleport.
-    function performDodge(direction){
+    // airborne (attitude.jumping): leapt rather than hopped - the same
+    // direction and distance, over JUMP_DODGE_DURATION_MS in an arc
+    // JUMP_DODGE_HEIGHT high, in the FALLING pose whichever way it goes.
+    function performDodge(direction, airborne = false){
         if(opponentDefeated || duelState.playerDefeated) return
         isDodging = true
         // "back" (melee) plays "weaponblock" as a one-shot clip -
@@ -1294,7 +1347,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // why THAT branch needs the explicit reset back to COMBAT_IDLE
         // below once the hop ends (setState holds until told otherwise,
         // unlike playAction's own nextState-on-complete).
-        if(direction === "back"){
+        if(direction === "back" && !airborne){
             playFirstAction(opponent.characterAnimations, opponent.anims, ["weaponblock"], { nextState: null })
         } else {
             opponent.characterAnimations.setState(ANIM_STATE.FALLING, 4)
@@ -1328,25 +1381,31 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         const startZ = opponent.body.position.z
         const targetX = startX + dirX * hopDist
         const targetZ = startZ + dirZ * hopDist
+        // the body has no physics (createFighterNpc), so nothing else moves
+        // its height - a leap lands back exactly where it took off
+        const startY = opponent.body.position.y
+        const duration = airborne ? JUMP_DODGE_DURATION_MS : DODGE_DURATION_MS
 
         const startTime = performance.now()
         const dodgeObserver = scene.onBeforeRenderObservable.add(() => {
             if(opponentDefeated || duelState.playerDefeated || opponent.body.isDisposed()){
                 scene.onBeforeRenderObservable.remove(dodgeObserver)
                 isDodging = false
+                if(airborne && !opponent.body.isDisposed()) opponent.body.position.y = startY
                 return
             }
-            const t = Math.min(1, (performance.now() - startTime) / DODGE_DURATION_MS)
+            const t = Math.min(1, (performance.now() - startTime) / duration)
             const eased = 1 - Math.pow(1 - t, 3) // ease-out cubic
             opponent.body.position.x = startX + (targetX - startX) * eased
             opponent.body.position.z = startZ + (targetZ - startZ) * eased
+            if(airborne) opponent.body.position.y = startY + JUMP_DODGE_HEIGHT * 4 * t * (1 - t)
             if(t >= 1){
                 scene.onBeforeRenderObservable.remove(dodgeObserver)
                 isDodging = false
-                // only the "side"/FALLING branch needs this - "back"'s own
+                // only the FALLING branches need this - "back"'s own
                 // "weaponblock" playAction already reverts on its own once
                 // the clip finishes (nextState:null), setState doesn't
-                if(direction !== "back"){
+                if(direction !== "back" || airborne){
                     // back to a normal combat pose - chaseObserver's own next
                     // frame will immediately re-evaluate RUNNING/COMBAT_IDLE
                     // correctly on its own, this just avoids a one-frame flash
@@ -1797,15 +1856,18 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // once armed, swing the actual weapon (same weaponType-driven naming
         // uimanagement.js's own player combo uses) instead of continuing to
         // punch/kick bare-handed with a sword visibly in hand
+        // a hammer and a pickaxe have no clips of their own: they swing the
+        // axe's, as the player's own do (uimanagement.js)
+        const swingClip = ["pickaxe", "hammer"].includes(equippedWeapon?.weaponType) ? "axe" : equippedWeapon?.weaponType
         const animName = equippedWeapon
-            ? `${equippedWeapon.weaponType}attack${comboNum}`
+            ? `${swingClip}attack${comboNum}`
             : (comboNum === 1 ? "punch1" : "kick1")
         comboNum = comboNum === 1 ? 2 : 1
         playFirstAction(opponent.characterAnimations, opponent.anims, [animName], { nextState: ANIM_STATE.COMBAT_IDLE })
         // only a real sword slash gets the sword sound - equippedWeapon is
         // falsy for the punch1/kick1 branch above, which shouldn't sound
         // like a blade landing
-        if(equippedWeapon) getAllSounds().swordS1?.play()
+        if(equippedWeapon) getAllSounds()[WEAPON_HIT_SOUNDS[equippedWeapon.weaponType] ?? DEFAULT_HIT_SOUND]?.play()
 
         // captured once so the popup shows exactly what was sent into
         // deductHp - that's the raw pre-defense number, not the post-mitigation
@@ -1817,7 +1879,8 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
         // to "how hard was I just hit" for a popup; not exact combat-log math.
         // Ignored entirely if the player is currently blocking - see
         // applyDamageToPlayer's own header comment.
-        const dmgToPlayer = calcOpponentDmg(npcDet)
+        const isCritical = Math.random() < attitude.critical
+        const dmgToPlayer = withCrit(calcOpponentDmg(npcDet), npcDet, isCritical)
 
         // cursed opponent - this swing's own damage backfires onto the
         // opponent itself instead of the player, same rule
@@ -1827,7 +1890,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
             return
         }
 
-        await applyDamageToPlayer(dmgToPlayer)
+        await applyDamageToPlayer(dmgToPlayer, isCritical)
 
         if(getCharState().hp <= 1 && !duelState.playerDefeated){
             duelState.playerDefeated = true
@@ -1856,7 +1919,7 @@ function spawnDuelOpponent(scene, characterBody, npcId, placeDetail, position, s
                 { speech: "You Lose!" }
             ], returnToExitPlace, undefined, true)
         }
-    }, ATTACK_INTERVAL_MS)
+    }, attitude.swingMs)
 
     opponent.body.onDisposeObservable.add(stopFight)
 }

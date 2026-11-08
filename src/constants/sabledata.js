@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { buyOrSell } from '../components/buyorsell'
+import { canSpar, travelToSparArena } from './witchSpar.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Sable", isLeft: false, message }))
@@ -12,6 +13,12 @@ function pick(variants){
 const sableOffers = [
     ["The reading's done. The other thing I do is less mysterious.", "I keep books. The ones the other two won't touch."],
     ["You came for a reading. You can leave with something heavier.", "Tomes. Difficult ones. I don't talk anyone into them."],
+]
+
+// once Vesper has been beaten and has told you of her sisters (witchSpar.js)
+const sableSpar = [
+    "I saw this coming the moment Vesper's door closed behind you.",
+    "Let's see which of us the pattern favours.",
 ]
 
 const sableFarewell = [
@@ -35,9 +42,18 @@ export function sableData(){
             conversationWithQuestion: toLines(pick(sableOffers)),
             answers: [
                 { text: "Let me see them", cb: () => buyOrSell(false, "119_sable") },
+                // only once Vesper has told you her sisters are interested
+                ...(canSpar() ? [{ text: "Let's Spar", cb: () => startQuestionare(572) }] : []),
                 { text: "Another time", cb: () => startQuestionare(571) },
             ],
             cb: () => {}
+        },
+        {
+            // the challenge itself: her lines, then the arena (placeId 204)
+            questionId: 572,
+            conversationWithQuestion: toLines(sableSpar),
+            answers: [],
+            cb: () => travelToSparArena(204)
         },
         {
             questionId: 571,

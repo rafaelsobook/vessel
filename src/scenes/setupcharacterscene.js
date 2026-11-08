@@ -173,6 +173,9 @@ export async function setupCharacterScene(engine){
         // be nested underneath one instead of sitting as a plain sibling.
         if(meshPartName.includes("ref")) return mesh.dispose(true);
         if(meshPartName.includes("hiddenbody")) return mesh.dispose(true);
+        // the skeleton (createcharacter.js keeps it for lightning) - not on
+        // the character screen
+        if(meshPartName === "undeadbody") return mesh.dispose(true);
         // tripo_node_<uuid> - leftover Tripo3D import artifact bundled
         // alongside the new female body parts, same category as ref/hiddenbody
         if(meshPartName.includes("tripo_node")) return mesh.dispose(true);

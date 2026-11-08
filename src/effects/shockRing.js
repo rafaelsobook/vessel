@@ -23,18 +23,34 @@ function ringTexture(scene){
     return tex
 }
 
+// one material per scene and colour, shared by every ring of it - each ring
+// fades through its own mesh's visibility, so they needn't be made and thrown
+// away per ring (a blast pops two or three of them at once)
+const materials = new WeakMap()   // scene -> Map(colour hex -> material)
+
+function ringMaterial(scene, color){
+    let byColor = materials.get(scene)
+    if(!byColor) materials.set(scene, byColor = new Map())
+    const key = color.toHexString()
+    let mat = byColor.get(key)
+    if(mat) return mat
+    mat = new StandardMaterial(`shockRingMat.${key}`, scene)
+    mat.disableLighting = true
+    mat.diffuseColor = Color3.Black()
+    mat.specularColor = Color3.Black()
+    mat.emissiveColor = color.clone()
+    mat.opacityTexture = ringTexture(scene)
+    mat.backFaceCulling = false
+    mat.alphaMode = Constants.ALPHA_ADD
+    byColor.set(key, mat)
+    return mat
+}
+
 // position: the point on the ground it spreads from. size: metres across at
 // its widest; seconds: how long it takes to get there and fade out
 export function popShockRing(scene, position, { size = 3, seconds = 0.5, color = new Color3(1, 0.45, 0.1) } = {}){
     if(!scene || scene.isDisposed) return
-    const mat = new StandardMaterial("shockRingMat", scene)
-    mat.disableLighting = true
-    mat.diffuseColor = Color3.Black()
-    mat.specularColor = Color3.Black()
-    mat.emissiveColor = color
-    mat.opacityTexture = ringTexture(scene)
-    mat.backFaceCulling = false
-    mat.alphaMode = Constants.ALPHA_ADD
+    const mat = ringMaterial(scene, color)
 
     const ring = MeshBuilder.CreateGround("shockRing", { width: 1, height: 1 }, scene)
     ring.isPickable = false
@@ -50,8 +66,7 @@ export function popShockRing(scene, position, { size = 3, seconds = 0.5, color =
         ring.visibility = 1 - t
         if(t < 1) return
         scene.onBeforeRenderObservable.remove(grow)
+        // the mesh only - its material is shared (ringMaterial)
         ring.dispose()
-        // not the texture - it's the scene's, shared by every ring
-        mat.dispose(false, false)
     })
 }

@@ -1,5 +1,5 @@
 
-import { Engine, WebGPUEngine, Scene } from "@babylonjs/core"
+import { Engine, WebGPUEngine, Scene, Effect } from "@babylonjs/core"
 import loadScene from "./loadScene.js"
 import "@babylonjs/loaders"
 // self-starting side effect only (its own module-level setInterval) - see
@@ -21,8 +21,8 @@ import { initOnceStorySystem } from "../charactersystem/storyQuestSystem.js";
 import { setSocketOn } from "../sockets/worldsocket.js";
 import { initOnceWorldChatSystem } from "../components/worldChatSystem.js";
 import { initOnceOutputSliders } from "../charactersystem/outputSliders.js";
+import { initOnceTravelRecord } from "../charactersystem/travelRecord.js";
 import { updateGuildIconVisibility } from "../htmlcomp/guildboard.js";
-import { showLoadingScreen } from "../htmlcomp/loadingscreen.js";
 import { refreshWeatherVisuals, onSceneDisposedForWeather } from "../components/weatherSystem.js";
 const canvas = document.querySelector("canvas")
 const fpsCounter = document.querySelector(".fps-counter")
@@ -40,8 +40,8 @@ window.addEventListener("unhandledrejection", (event) => {
     }
 })
 
-
-showLoadingScreen([], 2000);
+// the home page's opening (index.html's .home-page.intro) is what covers the
+// load - a loading screen shown here at startup would hide it
 
 let engine 
 let scene
@@ -78,6 +78,7 @@ export async function changeScene(_sceneName){
 
     scene?.meshes?.forEach(mesh => mesh.dispose())
     scene?.dispose()
+    releaseOneOffShaders()
 
     const sceneDetail = await loadScene()
 
@@ -130,6 +131,7 @@ export async function startScene(willCreateCharacter){
         initOnceStatsSystem()
         initOnceStorySystem()
         initOnceOutputSliders()
+        initOnceTravelRecord()
         // initOnceEnhanceSystem()
         // initOnceEmojiActions()
         // playSocketScene(_scene)
@@ -137,10 +139,17 @@ export async function startScene(willCreateCharacter){
         const sceneDetail = await setupCharacterScene(engine)
         scene = sceneDetail.scene
     }
+    // the counter's text twice a second, not every frame - a DOM write per
+    // frame is a style/layout invalidation per frame
+    let fpsShownAt = 0
     engine.runRenderLoop(() => {
         if(gameStatus !== "running") return
         scene.render()
-        fpsCounter.textContent = `${engine.getFps().toFixed(0)} FPS`
+        const now = performance.now()
+        if(now - fpsShownAt >= 500){
+            fpsShownAt = now
+            fpsCounter.textContent = `${engine.getFps().toFixed(0)} FPS`
+        }
     })
     window.addEventListener("resize", ()  => engine.resize())
     engine.resize()
@@ -167,13 +176,25 @@ async function initEngine(){
     //     // alert("WebGPU is NOT supported");
     // }
 
+    // Compiled shaders stay compiled for the whole session. Babylon counts how
+    // many materials/meshes/particle systems use each shader and deletes it
+    // the moment the last one is disposed - so every enemy cast (its effect
+    // meshes made, then all disposed a second later) threw its shaders away,
+    // and the next cast compiled and linked them again: a ~50 ms frame on
+    // every fireball/bolt/slash (measured, ANGLE on D3D11; WebGL on iOS also
+    // goes through ANGLE, onto Metal). It also undid every prewarm (zap.js's
+    // prewarmZap and the rest compile on a dummy mesh they then dispose).
+    // The set of shader variants the game uses is small and fixed, so keeping
+    // them all costs little - except CustomMaterial's, see releaseOneOffShaders.
+    Effect.PersistentMode = true
+
     engine = new Engine(canvas, true, {
         stencil: false,
         antialias: false,
         audioEngine: true,
-        adaptToDeviceRatio: false,   
+        adaptToDeviceRatio: false,
         disableWebGL2Support: false,
-        useHighPrecisionFloats: false,  
+        useHighPrecisionFloats: false,
         powerPreference: "high-performance",
         failIfMajorPerformanceCaveat: false,
         preserveDrawingBuffer: false,
@@ -181,4 +202,16 @@ async function initEngine(){
     });
 
     return engine
+}
+
+// CustomMaterial (tools/groundmat.js, tools/dungeonFloorMat.js) builds a
+// shader of its own for every material - "custom_<n>", never shared or used
+// again once its scene is gone. With Effect.PersistentMode those would pile
+// up one place change after another, so they're let go with the scene.
+function releaseOneOffShaders(){
+    const compiled = engine?._compiledEffects
+    if(!compiled) return
+    Object.keys(compiled).forEach(key => {
+        if(key.startsWith("custom_")) compiled[key]?.dispose(true)
+    })
 }

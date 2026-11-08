@@ -34,7 +34,6 @@ const UPDATE_EVERY_FRAMES = 30
 // how much of each light/feature is left at the darkest point of the night
 const NIGHT_SUN_INTENSITY = 0.5       // directional light - moonlight
 const NIGHT_AMBIENT_INTENSITY = 0.7   // hemispheric fill
-const NIGHT_ENVIRONMENT = 0.25        // PBR image-based lighting
 // the fog at the darkest point: this much of the way to NIGHT_FOG_COLOR (a
 // little of the place's own colour left in it), and at least this thick -
 // a clear night's mist, while a foggier weather keeps its own
@@ -137,7 +136,6 @@ export function startDayNight(scene, areaType){
         scene.fogColor = trackColor("fog", scene.fogColor, base => Color3.Lerp(base, NIGHT_FOG_COLOR, night * NIGHT_FOG_BLEND))
         scene.fogDensity = trackNumber("fogDensity", scene.fogDensity, base => lerp(base, Math.max(base, NIGHT_FOG_DENSITY), night))
         fogWritten = { density: scene.fogDensity, color: scene.fogColor.clone() }
-        scene.environmentIntensity = scaleNumber("env", scene.environmentIntensity, lerp(NIGHT_ENVIRONMENT, 1, daylight))
 
         // createSky's SkyMaterial - the sun placed directly (it ignores
         // inclination/azimuth while useSunPosition is on), arcing east to

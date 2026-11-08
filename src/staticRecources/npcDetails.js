@@ -19,6 +19,44 @@ import { eligibleSkillsFor } from "../charactersystem/skillWheel.js"
 import { chooseASkill } from "../components/chooseskillui.js"
 import { OPENWORLD_PLACE_ID, ZERECH_FARE } from "../constants/constants.js"
 import { makeSkillBooks } from "./skillBooks.js"
+import { tobbinStock } from "../sidestories/tobbin.js"
+import { SKILLS_BY_NAME } from "./skillsData.js"
+
+// An independent copy of a player skill for an npcFighter to cast - the
+// "never a shared reference" convention the other fighters' skill objects
+// follow: skill objects get mutated in place elsewhere (upgradeSkill/
+// trackSkillUsage), so a fighter casting the skillsData.js export itself would
+// level the player's own copy with every cast.
+const duelSkill = name => structuredClone(SKILLS_BY_NAME[name])
+
+// One piece of plate an NPC wears - a tintable armour piece (inventory.js's
+// TINTED_ARMOR) in the given metal, at its plain iron stats. Worn wherever the
+// NPC is built: createcharacter.js equips any equiped piece either way.
+// emeraldPlate is Sable's valkyrie plate, steelPlate Halden's.
+const platePiece = (metalColor, prefix) => (name, dn, itemType, def, resistance, modelName) => ({
+    itemId: randomNum(),
+    name,
+    modelName,
+    dn: `${prefix} ${dn}`,
+    itemCateg: "equipable",
+    itemType,
+    weaponType: undefined,
+    equipAbilities: { dmg: 0, def, resistance, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+    consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+    equiped: true,
+    soulFeed: 0,
+    isEnhanceAble: true,
+    enhancedLevel: 0,
+    slots: [],
+    durability: { current: 100, max: 100 },
+    price: { coinType: "bronze", pieces: 10 },
+    qnty: 1,
+    desc: undefined,
+    rarity: "rare",
+    metalColor,
+})
+const emeraldPlate = platePiece(METAL_COLOR.EMERALD, "Emerald")
+const steelPlate = platePiece(METAL_COLOR.STEEL, "Steel")
 import { jerkyItem } from "./foodItems.js"
 import { obtain } from "../charactersystem/inventory.js"
 import { earnFromPrice } from "../charactersystem/currencySystem.js"
@@ -978,6 +1016,9 @@ export default [
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: "sword",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { 
                 dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
@@ -1503,6 +1544,9 @@ export default [
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: "sword",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { 
                 dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
@@ -1600,6 +1644,195 @@ export default [
         callbackAfterRandomSpeech: () => {
             startQuestionare(40)
         }
+    },
+    {
+        // Tobbin - keeper of the Hearth, the village tavern (placeId 18). The
+        // tavern runs on what players bring him, grain above all (it's the
+        // beer) - his board, rumours and the Vordz debt are all
+        // sidestories/tobbin.js (questions 1300+). Stands in the clear
+        // north-east corner, past the east-wall tables, facing the door.
+        // toSell is read live (tobbinStock): his shelf grows with each job done.
+        glbPath: null,
+        gender: "male",
+        currentPlaceId: 18,
+        mode: "idle",
+        _id: "123_tobbin",
+        name: "Tobbin",
+        hurtSpeech: [
+            "Oi! Fights are OUTSIDE.",
+            "That's coming out of your tab, friend.",
+            "I've thrown out bigger than you. Not many, but some.",
+        ],
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x: 7,
+        y: 0.01,
+        z: 5.2,
+        _dirTarg: {x: 0, z: -4},
+        cloth: 'style2',
+        pants: 'style2',
+        hair: 'style1',
+        boots: 'style1',
+        skinColor: "skin3",
+        hairColor: ADVENTURER_COLORS.brown,
+        clothColor: ADVENTURER_COLORS.tan,
+        pantsColor: ADVENTURER_COLORS.darkBrown,
+        items: [],
+        titles: [],
+        skills: [],
+        status: [],
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2,
+        coins: 200,
+        aptitude: ['fire'],
+        get toSell(){ return tobbinStock() },
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "Welcome to the Hearth! Wipe your boots - or don't, the floor's seen worse."},
+            {name: "", message: "Best ale this side of the dark land. Only ale this side of the dark land, but still."},
+            {name: "", message: "Every adventurer who ever walked out that gate drank here first. Most of them drank here after, too."},
+        ],
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(1300)
+        },
+        forQuests: []
+    },
+    {
+        // Halden - the third gate guard, on Strong's other side (Vordz is on his
+        // right, Halden his left: three in a row, 8 apart). The veteran of the
+        // three, and the one who tells a new player about the four standing
+        // wolves (tcp's genenemy.ts STANDING_WOLVES) at all: he met Vargoth and
+        // lived, held down by chains of light he paid for with years of his life
+        // (his grey hair) - the chain skill is foreshadowed here, not given.
+        // His story and his warnings are constants/haldendata.js (700-705).
+        glbPath: null,
+        currentPlaceId: 1,
+        mode: "idle",
+        _id: "122_halden",
+        name: "Halden",
+        // shouted when the player's swing lands on them - createAllNpcInArea.js's
+        // registerNpcHitReaction picks one at random
+        hurtSpeech: [
+            "I've been hit by worse. It had more teeth.",
+            "Save that arm for what's out past the fence.",
+            "Careful. The last thing that struck me first didn't live to brag about it either.",
+        ],
+        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 1, spd: npcEnemySpd},
+        lvl: 1,
+        rank: "none",
+        hp: 100,
+        maxHp:100,
+        mp: 100,
+        maxMp: 100,
+        sp: 100,
+        maxSp:100,
+        exp: 0,
+        maxExp: 100,
+        x:-12,
+        y: 0.01,
+        z: -33,
+        _dirTarg: {x:-12,z:100},
+        cloth: 'style3',
+        pants: 'style2',
+        hair: 'style1',
+        boots: 'style1',
+        skinColor: "skin2",
+        // grey - it was black the morning he met Vargoth (haldendata.js)
+        hairColor: ADVENTURER_COLORS.gray,
+        clothColor: ADVENTURER_COLORS.charcoal,
+        pantsColor: ADVENTURER_COLORS.black,
+        // steel plate, older and plainer than the other two guards' silver, and
+        // a mask over the face - the hair still shows (hairVisible)
+        items: [
+            steelPlate("knightscale", "Knight's Scale", "armor", 20, 10),
+            steelPlate("ironpaul", "Pauldron", "pauldron", 20, 0),
+            steelPlate("gauntler", "Gauntlet", "gauntlet", 20, 10),
+            { ...steelPlate("ironmask", "Mask", "helmet", 12, 5, "ironmask"), hairVisible: true },
+            {
+                // Strong's boots - painted, not tinted, so no metal
+                itemId: randomNum(),
+                name: "leatherboots",
+                dn: "Leather Boots",
+                itemCateg: "equipable",
+                itemType: "boots",
+                equipAbilities: { dmg: 0, def: 0, resistance: 5, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: false,
+                enhancedLevel: 0,
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 9 },
+                qnty: 1,
+                desc: "Worn soft from thirteen years of the same gate.",
+                rarity: "common"
+            },
+            {
+                // the game's one spear model (swordsdata.js's stormpiercer), in plain steel
+                itemId: randomNum(),
+                name: "stormpiercer",
+                dn: "Watchman's Spear",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "spear",
+                equipAbilities: { dmg: 25, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 19 },
+                qnty: 1,
+                desc: "A guard's spear, plain and well kept.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.STEEL,
+                parts: {
+                    bladeRarity: "rare1",
+                    guardRarity: "rare1",
+                    handleRarity: "rare1",
+                    pommelRarity: "rare1",
+
+                    bladeColor: "steel",
+                    guardColor: "iron",
+                    handleColor: "wood",
+                    pommelColor: "iron",
+                }
+            },
+        ],
+        titles: ['priest'],
+        skills: [],
+        status: [], // sickness //poisoned etc
+        regens: {sp: 1, hp: 1, mana: 1},
+        monsSoul: 2, // same like points system
+        coins: 120,
+        aptitude: ['light'],
+        blessings: [],
+        race: "human",
+        characterType:"npcStandby",// npcStandby//npcEnemy//npcFighter//npcWalk
+        randomSpeech: [
+            {name: "", message: "Keep an eye on the far ridges. Some of what walks out there doesn't walk on four legs."},
+            {name: "", message: "If you ever hear a howl that ends like a man laughing - don't look for it. Run."},
+            {name: "", message: "Strong watches the fruit stall. Vordz watches Strong. Somebody has to watch the dark."},
+            {name: "", message: "Thirteen years on this gate. I haven't slept with my back to that fence once."},
+        ],
+        // his menu - the story, the four, how to live through them (haldendata.js)
+        callbackAfterRandomSpeech: () => {
+            startQuestionare(700)
+        },
+        forQuests: []
     },
     {
         glbPath: null,
@@ -1763,6 +1996,9 @@ export default [
             itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
             itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
             weaponType: "sword",
+            effectsWhenHit: [
+                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+            ],
             equipAbilities: { 
                 dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
             }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)
@@ -2150,6 +2386,7 @@ export default [
                 equipAbilities: { dmg: 45, magicDmg: 13, magicResistance: 12, def: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
                 consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
                 effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
                     { effectType: "burn", dmgPm: 45, duration: 4000, soundPlayPerDmg: "dmgpm" },
                 ],
                 // its Phoenix Ore handle's fire - it cuts ghosts
@@ -2536,6 +2773,9 @@ export default [
                 itemCateg: "equipable",
                 itemType: "weapon",
                 weaponType: "staff",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
                 equipAbilities: { dmg: 10, def: 0, magicDmg: 12, plusStr: 0, plusDex: 0, plusInt: 0 },
                 consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
                 equiped: true,
@@ -2854,6 +3094,9 @@ export default [
                     {name:"", message: "One more thing, since you've earned the honesty. There are Lordz beyond here - I won't claim to know everything about them, but I know enough to tell you the road to them isn't just open ground."},
                     {name:"", message: "Four dark beasts stand over it, one to each direction - north, south, east, west. Not the kind of guard you talk your way past."},
                     {name:"", message: "That's from what I've faced myself, not a story someone handed me. Whatever's out there, far from here, isn't scaled to how strong you feel right now. Don't treat it like a joke."},
+                    {name:"", message: "And since you've beaten me, I should warn you - I have two sisters. Ilvara, who answers everything with fire, and Sable, who sees too much and says too little."},
+                    {name:"", message: "Word travels between our towers faster than it should. Beating me has caught their interest."},
+                    {name:"", message: "If either of them sees you, don't be surprised if you're asked to prove it again. Neither of them has ever turned down a spar."},
                     {name:"", message: "Go on, then. The door's behind you, same as it was."},
                 ],
                 notCompletedSpeech: [
@@ -2907,8 +3150,9 @@ export default [
         stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 2, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
-        hp: 100,
-        maxHp:100,
+        // a touch more than Vesper's 100 - she's the one who wanted the fight
+        hp: 150,
+        maxHp:150,
         mp: 150,
         maxMp: 150,
         sp: 100,
@@ -2925,7 +3169,26 @@ export default [
         hairColor: ADVENTURER_COLORS.maroon,
         items: [],
         titles: [],
-        skills: [],
+        // her spar (constants/witchSpar.js - "Let's Spar" in her menu, once
+        // Vesper has been beaten): a fire caster in her own dueling grounds
+        // (duelingGrounds.js's placeId 203). Vesper's casting AI - a flurry of
+        // whatever's off cooldown - on the fire line she sells the books of,
+        // closer in and more willing to take a hit than Vesper is.
+        attitude: { weapon: 0, dodging: 0.6, blocking: 0.4, standbycasting: 1, distancing: 0.5, continuescast: 0.5 },
+        skills: {
+            flamebrand: duelSkill("flamebrand"),
+            infernorush: duelSkill("infernorush"),
+            pyroclasm: duelSkill("pyroclasm"),
+        },
+        battleSpeech: {
+            whileFighting: [
+                "Fire doesn't wait for permission!",
+                "Keep moving. Standing still is how you get burned.",
+                "Not bad. Not enough, but not bad."
+            ],
+            afterTheFightSpeech: "Hah! Vesper said you'd manage. Fine. Come back in when your boots stop smoking.",
+            afterFightSpeechPlayerLoose: "That's what happens when you stand still. Come back when you've got some speed."
+        },
         status: [], // sickness //poisoned etc
         regens: {sp: 1, hp: 1, mana: 1},
         monsSoul: 2, // same like points system
@@ -2978,13 +3241,17 @@ export default [
         forQuests: []
     },
     {
-        // Sable - lives in her own witch tower ({x:-600,z:-1400} in the
-        // openworld, placeId 888), reached through her own interior
+        // Sable - lives in her own witch tower (witchTowers.js's
+        // TOWER_SPOTS.sable in the openworld, placeId 888), reached through her own interior
         // (placeId 17 - localroomdb.js). A third distinct witch archetype:
         // cryptic and unreadable where Vesper is composed and Ilvara is
         // blunt. Purely narrative interaction (a "reading") - no mechanical
         // effect at all, deliberately, so not every witch tower resolves
         // into a stat buff.
+        //
+        // The witch who fights like a valkyrie: in full emerald plate under a
+        // Knight's Helm III, a war hammer on her back, and the best fighter of
+        // the three up close (her spar, see her attitude below).
         glbPath: null,
         gender: "female",
         currentPlaceId: 17,
@@ -2998,11 +3265,15 @@ export default [
             "Strange. Your thread showed a far gentler hand than that.",
             "Pain fades. What you've just set in motion will not.",
         ],
-        stats: { weapon: 1, accuracy: 1, critical: 1.4, dex: 1, strength: 1, magic: 2, spd: npcEnemySpd},
+        // strength/weapon are what her blows hit for (duelSystem.js's
+        // calcOpponentDmg - 24, over twice Renarden's), critical how much
+        // harder a critical one lands (1.8x)
+        stats: { weapon: 2, accuracy: 2, critical: 1.6, dex: 2, strength: 3, magic: 2, spd: npcEnemySpd},
         lvl: 1,
         rank: "none",
-        hp: 100,
-        maxHp:100,
+        // twice Vesper's 100 - she's in plate
+        hp: 200,
+        maxHp:200,
         mp: 150,
         maxMp: 150,
         sp: 100,
@@ -3015,9 +3286,82 @@ export default [
         _dirTarg: {x:0, z:-4},
         hair: 'hair1',
         hairColor: ADVENTURER_COLORS.black,
-        items: [],
+        // every tintable armour piece, all emerald. Boots are left off: they're
+        // painted from a texture, not tinted, so they couldn't be green.
+        items: [
+            emeraldPlate("ironjaw", "Knight's Helm III", "helmet", 20, 10, "ironjaw"),
+            emeraldPlate("knightscale", "Knight's Scale", "armor", 20, 10),
+            emeraldPlate("ironpaul", "Pauldron", "pauldron", 20, 0),
+            emeraldPlate("gauntler", "Gauntlet", "gauntlet", 20, 10),
+            emeraldPlate("braveknee", "Brave Kneeguard", "kneearmor", 12, 6),
+            {
+                // a war hammer (inventory.js's sledgehammer - the head in emerald
+                // to match her plate). Its blows are what her style is built on
+                // (weaponEffects.js, landed on the player by duelSystem.js's
+                // landWeaponEffects): every one throws the player back, and a
+                // critical one stuns them too - so about one blow in three
+                // leaves them dazed, open to the next.
+                itemId: randomNum(),
+                name: "sledgehammer",
+                dn: "Valkyrie's Warhammer",
+                itemCateg: "equipable",
+                itemType: "weapon",
+                weaponType: "hammer",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 3, triggerWhen: "always", particlesystem: null, texture: null },
+                    { effectName: "stun", stunDuration: 1.5, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
+                equipAbilities: { dmg: 30, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
+                consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
+                equiped: true,
+                soulFeed: 0,
+                isEnhanceAble: true,
+                enhancedLevel: 0,
+                slots: [],
+                durability: { current: 100, max: 100 },
+                price: { coinType: "bronze", pieces: 19 },
+                qnty: 1,
+                desc: "Sable's war hammer, its head forged in emerald. It lands like a falling wall.",
+                rarity: "rare",
+                metalColor: METAL_COLOR.EMERALD,
+                parts: {
+                    bladeRarity: "common1",
+                    handleRarity: "common1",
+
+                    bladeColor: "emerald",
+                    handleColor: "wood",
+                }
+            },
+        ],
         titles: [],
-        skills: [],
+        // her spar (constants/witchSpar.js - "Let's Spar" in her menu, once
+        // Vesper has been beaten), in her own dueling grounds (duelingGrounds.js's
+        // placeId 204): a valkyrie, an expert up close. She always closes in
+        // with the hammer, dashes in when there's a gap, hops or leaps clear
+        // of what she can't block, blocks most of what she can, and lands a
+        // critical on about one blow in three. The hammer swings slowly
+        // (swingMs 1900 against the default 1500) but every blow throws the
+        // player back and a critical one stuns them. Her dark magic is the old
+        // hp-tiered roll (basic, then serious, then hidden as she weakens) -
+        // a cast between blows, not her main weapon.
+        attitude: { weapon: 1, dodging: 0.85, blocking: 0.9, standbycasting: 0, distancing: 0, continuescast: 0.4, jumping: 0.6, critical: 0.35, swingMs: 1900 },
+        skills: {
+            nearSkill: duelSkill("dashstrike"),
+            basicSkill: duelSkill("shadowbolt"),
+            seriousSkill: duelSkill("voidrend"),
+            hiddenSkill: duelSkill("voidcurse"),
+        },
+        battleSpeech: {
+            whileFighting: [
+                "I saw this exchange before you walked in.",
+                "Your thread frays when you hurry.",
+                "Too slow. I was already gone.",
+                "Stay down. The floor will hold you.",
+                "There. That one, I did not see."
+            ],
+            afterTheFightSpeech: "So the thread bent. Interesting. Go on - it isn't finished with you.",
+            afterFightSpeechPlayerLoose: "Exactly as I saw it. Come back once the shape of it has changed."
+        },
         status: [], // sickness //poisoned etc
         regens: {sp: 1, hp: 1, mana: 1},
         monsSoul: 2, // same like points system
@@ -3034,6 +3378,9 @@ export default [
             "multicast",
             "burstshots",
             "blinkstrike",
+            // the weapon skill that throws a wave off the blade (skillsData.js) -
+            // bookOnly, so this shelf is the one place it is sold
+            "crescenthowl",
         ]),
         blessings: [],
         race: "human",
@@ -3821,6 +4168,9 @@ export default [
                 itemCateg: "equipable",
                 itemType: "weapon",
                 weaponType: "pickaxe",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
                 equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
                 consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
                 equiped: false,
@@ -3845,6 +4195,9 @@ export default [
                 itemCateg: "equipable",
                 itemType: "weapon",
                 weaponType: "axe",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
                 equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
                 consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
                 equiped: false,
@@ -4040,6 +4393,9 @@ export default [
                 itemCateg: "equipable",
                 itemType: "weapon",
                 weaponType: "sword",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
                 equipAbilities: { dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0 },
                 consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 10, plusSpd: 1 },
                 equiped: false,
@@ -4095,6 +4451,9 @@ export default [
                             itemCateg: "equipable",
                             itemType: "weapon",
                             weaponType: "pickaxe",
+                            effectsWhenHit: [
+                                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                            ],
                             equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
                             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
                             equiped: false,
@@ -4119,6 +4478,9 @@ export default [
                             itemCateg: "equipable",
                             itemType: "weapon",
                             weaponType: "axe",
+                            effectsWhenHit: [
+                                { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                            ],
                             equipAbilities: { dmg: 10, def: 10, magicDmg: 10, plusStr: 0, plusDex: 0, plusInt: 0 },
                             consumeAbilities: { plusHp: 0, plusMp: 0, plusSp: 0, plusDmg: 0, plusSpd: 0 },
                             equiped: false,
@@ -4357,6 +4719,9 @@ export default [
                 itemCateg: "equipable", //equipable,crafting(for item looted),consum(/foods/buffs/potions)
                 itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
                 weaponType: "sword",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
                 equipAbilities: {
                     dmg: 15, def: 0, resistance: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
                 },
@@ -4513,7 +4878,9 @@ export default [
         attitude: { weapon: 1, dodging: 0.6, blocking: 0.5, standbycasting: 0, distancing: 0, continuescast: 0.5 },
         skills: renardenSkills,
         randomSpeech: [
-            {name: "", message: "don't just keep on standing on my face talk. "}
+            {name: "", message: "Swords up, or step aside. I don't chat with anyone I haven't crossed blades with."},
+            {name: "", message: "Beat me, and the Flame Ward is yours - if nobody's claimed it already. Titles like that only ever have one owner."},
+            {name: "", message: "Footwork first. A blade is only as fast as the feet under it."}
         ],
         battleSpeech: {
             whileFighting: [
@@ -4585,6 +4952,9 @@ export default [
                 itemCateg: "equipable", //equipable,crafting(for item looted),consum(/foods/buffs/potions)
                 itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
                 weaponType: "sword",
+                effectsWhenHit: [
+                    { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+                ],
                 equipAbilities: {
                     dmg: 15, def: 0, resistance: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
                 },
@@ -4764,7 +5134,9 @@ export default [
             }
         },
         randomSpeech: [
-            {name: "", message: "don't just keep on standing on my face talk. "}
+            {name: "", message: "Renarden thinks he's the best blade in this village. Beat me first, then we'll talk about him."},
+            {name: "", message: "I lost my first forty bouts. Won the forty-first. Ask me how."},
+            {name: "", message: "Keep your guard up after you swing - that's where everyone gets caught."}
         ],
         forQuests: []
     }

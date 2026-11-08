@@ -517,6 +517,9 @@ var swordItem = {
     itemCateg: "equipable",//equipable,crafting(for item looted),consum(/foods/buffs/potions)
     itemType: "weapon", // weapon/staff/spear/Pauldrons//armor/greaves || //food//potion//buff
     weaponType: "sword",
+    effectsWhenHit: [
+        { effectName: "bash", distanceKnockback: 4, triggerWhen: "critical", particlesystem: null, texture: null },
+    ],
     equipAbilities: { 
         dmg: 20, def: 0, magicDmg: 0, plusStr: 0, plusDex: 0, plusInt: 0,
     }, //str(hp,dmg) // dex(def, spd) // int(magicDmg, mana)

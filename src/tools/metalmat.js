@@ -1,4 +1,5 @@
-import { PBRMaterial, Color3, Texture } from "@babylonjs/core"
+import { StandardMaterial, Color3, Texture } from "@babylonjs/core"
+import { applyShine } from "./surfacemat.js"
 
 export const METAL_TINTS = {
     iron:       new Color3(0.56, 0.57, 0.58),
@@ -26,6 +27,9 @@ export const METAL_TINTS = {
     // MATERIAL_TEXTURES, so it reads as flat unadorned black plate and cannot
     // be mistaken for the scale-patterned dragonscale.
     black: new Color3(0.02, 0.02, 0.025),
+    // deep green plate - Sable's valkyrie armour (npcDetails.js). Not on any
+    // bot's METAL_TIERS ladder (tcp/recources/botItems.ts), so nothing drops in it.
+    emerald: new Color3(0.06, 0.4, 0.16),
 }
 
 export const METAL_ROUGHNESS = {
@@ -39,13 +43,13 @@ export const METAL_ROUGHNESS = {
     ruby: 0.25,
     dragonscale: 0.18, // hard, glossy scale
     black: 0.35, // matte blackened steel, not a mirror
+    emerald: 0.22,
 }
 
 // A real image texture some materials carry ON TOP of their flat tint above
-// (most materials here are tint-only, no entry needed) - applied as
-// albedoTexture (PBRMaterial - armor/weapon hard parts) or diffuseTexture
-// (StandardMaterial - the handle) UNDERNEATH the tint's own albedoColor/
-// diffuseColor, which still multiplies over it same as always - a textured-
+// (most materials here are tint-only, no entry needed) - applied as the
+// material's diffuseTexture UNDERNEATH the tint's own diffuseColor, which
+// still multiplies over it same as always - a textured-
 // but-untinted material would just look washed out grey. Keyed by the same
 // tint-key METAL_TINTS/weaponmat.js's GEM_TINTS use, so any consumer (armor
 // via createMetalMat below, weapon parts via weaponmat.js) picks it up for
@@ -75,16 +79,15 @@ export const METAL_COLOR = Object.fromEntries(
 export function createMetalMat(scene, metalColor = "iron") {
     const tint = METAL_TINTS[metalColor] ?? METAL_TINTS.iron
     const roughness = METAL_ROUGHNESS[metalColor] ?? 0.4
-    const mat = new PBRMaterial(`metalMat_${metalColor}`, scene)
-    mat.albedoColor = tint
-    mat.metallic = 1
-    mat.roughness = roughness
-    mat.environmentIntensity = 0.7
+    const mat = new StandardMaterial(`metalMat_${metalColor}`, scene)
+    mat.diffuseColor = tint
+    // polished metal: a highlight in its own colour, tighter the smoother it is
+    applyShine(mat, { roughness, metallic: 1, tint })
     mat.emissiveColor = tint.scale(0.05)
     // MATERIAL_TEXTURES - only materials that actually have a real surface
     // image set one (dragonscale so far); everything else stays flat-tinted
     // exactly as before, this doesn't touch them
     const texturePath = MATERIAL_TEXTURES[metalColor]
-    if(texturePath) mat.albedoTexture = new Texture(texturePath, scene)
+    if(texturePath) mat.diffuseTexture = new Texture(texturePath, scene)
     return mat
 }

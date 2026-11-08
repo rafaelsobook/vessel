@@ -15,6 +15,8 @@ import { getPlayerCoord } from "../charactersystem/createcharacter.js"
 import { setCanPress } from "../charactersystem/characterstate.js"
 import { offerDuel } from "./duelSystem.js"
 import { receiveAchievement } from "../charactersystem/achievement.js"
+import { recordTalkedTo } from "./talkedTo.js"
+import { attachSideStoryTurnIns } from "../sidestories/index.js"
 import { createBloodSplatter } from "../tools/particlesystem.js"
 import { playAnim } from "../tools/animation.js"
 import { displaySpeech } from "../tools/speechgui.js"
@@ -99,6 +101,8 @@ function registerNpcHitReaction(scene, npc){
 
 export function createAllNpcInArea(hero, scene){
     const myHeroDatabase = getCharState()
+    // the side stories' quest turn-ins join their NPCs' forQuests (once)
+    attachSideStoryTurnIns(npcDetails)
     npcDetails.forEach( async npcdet => {
         if(npcdet.currentPlaceId !== myHeroDatabase.currentPlace.placeId) return
         // npcFighter goes through the fuller createCharacter path (real
@@ -123,14 +127,25 @@ export function createAllNpcInArea(hero, scene){
                 faceForward(hero.body.position.clone(), anNpc.body)
 
                 let myState = getCharState()
+                // remembered from now on that I've talked to them (talkedTo.js)
+                recordTalkedTo(anNpc.det._id)
 
                 let storyInfo = false // the long forquest that has a speech property
                 let myQuestShortDetail = false // the short quest info// has the questRequirements.completed = false|true property
-                myState.quests.forEach(myqst => {
-
-                    storyInfo = anNpc.det.forQuests.find(qst => qst.qName ===myqst.qName)
-                    if(storyInfo) myQuestShortDetail = myqst
-                })
+                // every quest of mine this NPC takes in - not just whatever my LAST
+                // quest happened to be (storyInfo used to be overwritten by each
+                // quest in turn, so a quest from anyone else listed after this
+                // NPC's hid this NPC's turn-in entirely). One that's ready to hand
+                // in goes first; live requirements are counted fresh to know which.
+                const forThisNpc = myState.quests
+                    .map(myqst => ({ myqst, info: anNpc.det.forQuests.find(qst => qst.qName === myqst.qName) }))
+                    .filter(({ info }) => info)
+                forThisNpc.forEach(({ myqst }) => evaluateLiveQuestRequirements(myqst))
+                const chosen = forThisNpc.find(({ myqst }) => myqst.questRequirements?.completed) ?? forThisNpc[0]
+                if(chosen){
+                    storyInfo = chosen.info
+                    myQuestShortDetail = chosen.myqst
+                }
                 
                 if(!storyInfo) return startConv(anNpc.det.randomSpeech, () => {
                     // any NPC flagged npcFighter automatically gets the duel
@@ -159,6 +174,9 @@ export function createAllNpcInArea(hero, scene){
 
                 if(myQuestShortDetail.questRequirements.completed) return startConv(storyInfo.speech, async () => {
                     myState = getCharState()
+                    // a side story's own turn-in (sidestories/kit.js's turnIn): takes
+                    // what was fetched and hands over its reward, before the save below
+                    storyInfo.onTurnIn?.(myQuestShortDetail)
                     myState.quests = myState.quests.filter(stry=> stry.qName !== storyInfo.qName)
                     // then add the new questsToReceive
 

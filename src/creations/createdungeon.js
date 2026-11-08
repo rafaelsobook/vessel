@@ -20,10 +20,9 @@ import {
     Light,
     Tools,
     StandardMaterial,
-    PBRMaterial,
     Texture
 } from '@babylonjs/core';
-import { createPBRMat, createHeightBumpTexture, createAlbedoTexture } from '../tools/pbrmat';
+import { createSurfaceMat, createHeightBumpTexture, createAlbedoTexture, applyShine } from '../tools/surfacemat';
 import { createFireParticles } from '../tools/particlesystem';
 import { createDungeonFloorMat } from '../tools/dungeonFloorMat';
 import { buildRivers, buildGrass, spawnVases, spawnTorchStands, TORCH_STAND_HEIGHT } from './dungeonNature';
@@ -239,17 +238,17 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
     // stays on the bricks it was made for.
     const floorBump   = floorBumpHeightMap && !floorLayers?.length ? createHeightBumpTexture(floorBumpHeightMap, scene) : undefined;
     const floorAlbedo = floorAlbedoMap && !floorLayers?.length ? createAlbedoTexture(floorAlbedoMap, scene) : undefined;
-    const wallMat = new PBRMaterial("wall", scene);
-    wallMat.albedoTexture = new Texture(`./images/modeltex/${wallTexName}`, scene);
+    const wallMat = new StandardMaterial("wall", scene);
+    wallMat.diffuseTexture = new Texture(`./images/modeltex/${wallTexName}`, scene);
     wallMat.bumpTexture = new Texture(`./images/modeltex/${wallBumpTexName}`, scene);
-    wallMat.roughness = 0.8
-    wallMat.albedoTexture.uScale = 1;
-    wallMat.albedoTexture.vScale = 1;
-    // const wallMat  = matOverrides.wall  ?? createPBRMat("walls",wallTexName, scene, { uScale: 2, vScale: 10}, new Color3(0.07, 0.11, 0.09));
+    applyShine(wallMat, { roughness: 0.8 })
+    wallMat.diffuseTexture.uScale = 1;
+    wallMat.diffuseTexture.vScale = 1;
+    // const wallMat  = matOverrides.wall  ?? createSurfaceMat("walls",wallTexName, scene, { uScale: 2, vScale: 10}, new Color3(0.07, 0.11, 0.09));
     const mixedFloor = floorLayers?.length > 0;
     const floorMat = matOverrides.floor ?? (mixedFloor
         ? createDungeonFloorMat(scene, "mat_floor", { layers: floorLayers, accent: floorAccent, cellSize: cs })
-        : createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
+        : createSurfaceMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
             floorAlbedo ? FLOOR_TEXTURE_TINT : new Color3(0.12, 0.18, 0.14)));
     // the generator's own boss_room floor colour, so the dais reads as its own place
     const bossFloorColor = Color3.FromHexString(dungeon.rooms.find(r => r.type === "boss_room")?.pbr?.floor?.albedoColor ?? "#3a1a1a");
@@ -261,7 +260,7 @@ export function createDungeon(scene, dungeon, matOverrides = {}, rockTemplate = 
         // floods this material; the full tint on top came out solid scarlet
         ? createDungeonFloorMat(scene, "mat_boss_floor", { layers: floorLayers, accent: floorAccent, cellSize: cs,
             tint: Color3.Lerp(Color3.White(), bossFloorTint, 0.4).scale(0.55) })
-        : createPBRMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
+        : createSurfaceMat("floors",floorTexName, scene, { bumpTexture: floorBump, albedoTexture: floorAlbedo },
             floorAlbedo ? bossFloorTint : bossFloorColor));
 
     // StandardMaterial has no albedoColor/roughness/metallic - setting those

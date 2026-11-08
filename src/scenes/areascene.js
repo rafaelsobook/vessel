@@ -1,4 +1,4 @@
-import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, PBRMaterial, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4, SceneLoader } from "@babylonjs/core"
+import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4, SceneLoader } from "@babylonjs/core"
 import { createMatV2 } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam, enableRoomCameraOcclusion } from "../tools/camera.js";
@@ -22,6 +22,8 @@ import { getVillageAssetRegistry } from "../components/assetregistry.js";
 import { getSocket, joinWorld } from "../sockets/joinsocket.js";
 import { getEngine, setGameStatus } from "../main/main.js";
 import { travelToPlace, takeDoorArrival } from "../tools/travel.js";
+import { isGltfMaterial } from "../tools/gltfStandardMaterials.js";
+import { makeUnlit } from "../tools/surfacemat.js";
 import { settleOnGround } from "../creations/groundBuilding.js";
 import { exactTerrainY, openworldSurfaceY } from "../tools/groundHeight.js";
 import { getCharState, setAllowDeath, setCanPress, setCharStateMode } from "../charactersystem/characterstate.js";
@@ -137,7 +139,7 @@ export async function areaScene(placeDetail){
             // comments in tools/particlesystem.js). Gated to placeId 1
             // specifically rather than every "village" areaType, so it only
             // ever appears in the one place it was asked for.
-            if(placeId === 1) createDemoParticles(scene, { x: 0, y: 0.5, z: 0 })
+            //if(placeId === 1) createDemoParticles(scene, { x: 0, y: 0.5, z: 0 })
         break;
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
@@ -188,6 +190,19 @@ export async function areaScene(placeDetail){
             
                 {
                     viewRadius: 1,
+                    // no decorative crystals in the Crystal Hollows - every crystal
+                    // there is a real one you can mine: tcp's "hollow" ore veins
+                    // (tcp/recources/ores.ts, drawn by comp onents/oreDeposits.js)
+                    scatterDensity: { crystal: 0 },
+                    propTextures: {
+                        stone: "./images/modeltex/pillartex1.webp", //well stone
+                        rock: "./images/modeltex/rock1.jpg", //well stone
+                        // wood,
+                        // cloud,
+                        // bark,
+                        // ice,
+                        // cactus
+                    },
                     // the ONE source of truth for this number - sampleTerrainSurfaceHeight
                     // callers (renderer.js, createEnemy.js, createcastle.js,
                     // createharnessdeer.js, createstonescripture.js) all read the same
@@ -425,7 +440,7 @@ export async function areaScene(placeDetail){
             }
 
             if(item.bumpTexPath){
-                // if model.material.unlit = true bumpTexture has no effect because there's nothing reflecting the light
+                // an unlit material's bumpTexture has no effect because there's nothing reflecting the light
                 // const bumpTex = new Texture(item.bumpTexPath, scene)
                 // if(!model.material) return console.log("no material")
                 // model.material.bumpTexture = bumpTex
@@ -452,11 +467,13 @@ export async function areaScene(placeDetail){
             if (model.material instanceof MultiMaterial) {
                 // console.log(`[${item.name}] MultiMaterial with ${model.material.subMaterials.length} sub-materials — setting each unlit`)
                 model.material.subMaterials.forEach(sub => {
-                    if (sub instanceof PBRMaterial) sub.unlit = true
+                    // the model's own (glTF) ones: their colour at full
+                    // strength, no light on them; the game's own: unlit too
+                    if (isGltfMaterial(sub)) makeUnlit(sub)
                     else if (sub instanceof StandardMaterial) sub.disableLighting = true
                 })
-            } else if (model.material instanceof PBRMaterial) {
-                // model.material.unlit = true
+            } else if (isGltfMaterial(model.material)) {
+                // a model with just its one own material stays lit
             } else if (model.material instanceof StandardMaterial) {
                 model.material.disableLighting = true
             } else {

@@ -7,7 +7,9 @@ import { getAttackInfo } from "../charactersystem/attackingSystem";
 
 
 let emitMyLocInterval = null
-export function emitMove(){
+// strafe: locked on and moving sideways or back (controllers/inputMovement.js) -
+// the clip that goes with it, so everyone sees the same
+export function emitMove(strafe = null){
     const charState = getCharState()
     if(!charState) return
     const socket = getSocket()
@@ -18,7 +20,8 @@ export function emitMove(){
         ownerId: charState.owner,
         pos,
         dirTarg,
-        mode
+        mode,
+        strafe
     })
 }
 
@@ -323,8 +326,11 @@ export function emitSpawnCircle(pos, element){
 // it and re-grounds it on openworld terrain). Moved here from createEnemy.js
 // (the lesserdemon's teleport-to-melee) so skillEffects.js's enemy
 // blinkstrike can use it too without importing createEnemy.js back.
-export function emitEnemyTeleport(enemId, dest, placeId) {
+// `extra` rides through tcp untouched - enemies/voltstep.js's escape sends
+// { style, from } so every client plays the bolt.
+export function emitEnemyTeleport(enemId, dest, placeId, extra = {}) {
     getSocket()?.emit("enemyWillTeleport", {
+        ...extra,
         currentPlaceId: placeId,
         _id: enemId,
         x: dest.x,
@@ -451,6 +457,21 @@ export function emitEvolve(evolution) {
     })
 }
 
+// my farthest-from-spawn record grew (charactersystem/travelRecord.js) - tcp keeps it
+// for whoever joins later and relays it, so the Tab list's "Distance Traveled" column
+// is current on every screen
+export function emitTravelRecord(meters) {
+    const charState = getCharState()
+    if (!charState) return
+    if (!getIsSocketOn()) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("emitTravel", {
+        ownerId: charState.owner,
+        maxDistanceTraveled: meters,
+    })
+}
+
 export function emitEquipItem(itemDet, isHiding) {
 
     const charState = getCharState()
@@ -541,6 +562,17 @@ export function emitPlayerIsHit(data){
     const socket = getSocket()
     if(!socket) return
     socket.emit("playerIsHit", data)
+}
+// one of MY spells landing on one of the fog's undead (enemies/undead.js's
+// spell guard has already checked it was my cast) - magic damage, so
+// tcp/recources/undead.ts's takeHit lets it past armour and a raised guard.
+// A melee blow on one goes through emitPlayerIsHit above, like on a bot.
+export function emitUndeadIsHit({ targetId, dmg }){
+    const charState = getCharState()
+    if(!charState) return
+    const socket = getSocket()
+    if(!socket) return
+    socket.emit("undeadIsHit", { targetId, dmg, playerId: charState.owner })
 }
 // SERVANTS - npc/botInteraction.js's own "invite to follow you"/"dismiss"
 // choices. tcp/index.ts's "recruit-bot"/"dismiss-bot" handlers are the

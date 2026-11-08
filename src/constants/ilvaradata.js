@@ -1,5 +1,6 @@
 import { startQuestionare } from '../components/conversations'
 import { buyOrSell } from '../components/buyorsell'
+import { canSpar, travelToSparArena } from './witchSpar.js'
 
 function toLines(messages){
     return messages.map(message => ({ name: "Ilvara", isLeft: false, message }))
@@ -14,6 +15,12 @@ function pick(variants){
 const ilvaraOffers = [
     ["Still here. Good - I've got more than a warm swing to sell you.", "Fire, written down. Takes longer to learn than to cast, but that's your problem."],
     ["You want something that lasts longer than a blessing?", "I keep tomes. Expensive ones. Look if you like."],
+]
+
+// once Vesper has been beaten and has told you of her sisters (witchSpar.js)
+const ilvaraSpar = [
+    "Vesper's been talking, hasn't she? Good. I've been itching to see whether you burn.",
+    "No holding back. If you're going to lose, lose properly.",
 ]
 
 const ilvaraFarewell = [
@@ -39,9 +46,18 @@ export function ilvaraData(){
             conversationWithQuestion: toLines(pick(ilvaraOffers)),
             answers: [
                 { text: "Show me the tomes", cb: () => buyOrSell(false, "118_ilvara") },
+                // only once Vesper has told you her sisters are interested
+                ...(canSpar() ? [{ text: "Let's Spar", cb: () => startQuestionare(562) }] : []),
                 { text: "Not today", cb: () => startQuestionare(561) },
             ],
             cb: () => {}
+        },
+        {
+            // the challenge itself: her lines, then the arena (placeId 203)
+            questionId: 562,
+            conversationWithQuestion: toLines(ilvaraSpar),
+            answers: [],
+            cb: () => travelToSparArena(203)
         },
         {
             questionId: 561,

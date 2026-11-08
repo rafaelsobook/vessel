@@ -1,4 +1,4 @@
-import {  MeshBuilder, Quaternion, DirectionalLight,HemisphericLight, PointLight, Scene, Scalar, Matrix,ArcRotateCamera, FreeCamera, ParticleSystem, ActionManager, ExecuteCodeAction, SceneLoader, Color3, Vector3, PBRMaterial, StandardMaterial, Texture} from "@babylonjs/core"
+import {  MeshBuilder, Quaternion, DirectionalLight,HemisphericLight, PointLight, Scene, Scalar, Matrix,ArcRotateCamera, FreeCamera, ParticleSystem, ActionManager, ExecuteCodeAction, SceneLoader, Color3, Vector3, StandardMaterial, Texture} from "@babylonjs/core"
 import {SkyMaterial} from "@babylonjs/materials"
 import { createFireFlame } from "../tools/particlesystem.js"
 // import "babylonjs-materials"
@@ -102,14 +102,11 @@ export function createMaterial(scene, textureFileName, colorTexture, uVscaleTex,
     if(textureFileName.includes("hair") || textureFileName.includes("skin")){
         material.emissiveColor = new Color3(colorTexture.r,colorTexture.g,colorTexture.b)
         if(textureFileName.includes("hair")) material.specularColor = new Color3(0,0,0)
-        material.roughness = 1  
     }else{
         material.diffuseColor = new Color3(colorTexture.r,colorTexture.g,colorTexture.b)
         // material.specularColor = new Color3(.6,.6,.6)
-        material.roughness = .5
     }  
     material.backFaceCulling = false
-    // material.roughness = 1
     return material
 }
 export function createCompleteMat(scene, textureName, uvScale){
@@ -167,18 +164,17 @@ const MONSTER_NORMAL_MAPS = {
 }
 export function createMonsterMaterial(scene, mosterModelStyle,textureName){
 
+    // one per monster kind, shared by every enemy of it - and its textures
+    // made with it, once. They used to be made on every call and set on the
+    // shared material, the previous ones dropped but never disposed (two
+    // Texture objects left in the scene per enemy spawned)
+    const existing = scene.getMaterialByName(`${textureName}Mat`)
+    if(existing) return existing
+
     const tex1 = new Texture(`./images/textures/enemy/${mosterModelStyle}/${textureName}.jpg`, scene, false, false)
     // const tex1normal = new Texture(`./images/textures/enemy/${mosterModelStyle}/${textureName}normal.jpg`, scene, false, false)
     // const tex1rough = new Texture(`./images/textures/enemy/${mosterModelStyle}/${textureName}rough.jpg`, scene, false, false)
-    if(!tex1){
-        alert("no texture 1")
-        console.warn(mosterModelStyle)
-        console.warn(textureName)
-    }
-    let mat = scene.getMaterialByName(`${textureName}Mat`)
-    if(!mat){
-        mat = new StandardMaterial(`${textureName}Mat`, scene)
-    }
+    const mat = new StandardMaterial(`${textureName}Mat`, scene)
     mat.diffuseTexture = tex1
     // if(tex1normal) mat.bumpTexture = tex1normal
     // if(tex1rough) mat.specularTexture = tex1rough
@@ -277,7 +273,6 @@ function createDetailedMaterial(scene, wallDet){
     }
     if(wallDet.transparent) wallMat = createTransparentMat(scene, wallDet.transparent)
 
-    if(wallDet.isMetal) wallMat.metallic = 1
 
     if(wallDet.normal){
         const normalTex = new Texture(`./images/modeltex/${wallDet.normal}.jpg`, scene, false, false)
