@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# headless-Chrome profiles from local test scripts
+__*profile/

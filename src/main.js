@@ -6,5 +6,7 @@
 // registered before anything loads
 import './tools/gltfStandardMaterials.js'
 import { showMainPage } from './pages/mainpage.js'
+import { startPwa } from './main/pwa.js'
 
 showMainPage()
+startPwa()

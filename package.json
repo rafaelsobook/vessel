@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "vite": "^7.2.4",
+    "vite-plugin-pwa": "^2.0.0",
     "vite-plugin-static-copy": "^3.1.4"
   },
   "dependencies": {

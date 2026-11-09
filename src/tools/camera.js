@@ -58,6 +58,10 @@ export function createArcCam(scene, placeDetail, head){
 
     // a new scene - start from this camera's own radius, not the last place's
     desiredRadius = null
+    // and in third person, until the new place says where first person is
+    firstPerson = null
+    firstPersonZone = null
+    eyeLift = 0
 
     if(head) attachCam(head);
     return camera
@@ -72,6 +76,8 @@ export function attachCam(body){
     if(camera._smoothFollowObserver){
         scene.onBeforeRenderObservable.remove(camera._smoothFollowObserver)
     }
+    // following something else now (the wagon) - back out of the old head
+    if(firstPerson) leaveFirstPerson()
     // the physics body of whatever's followed (body is usually a child of it
     // - createcharacter.js's camParent) - the collision ray starts inside it
     let owner = body
@@ -79,13 +85,30 @@ export function attachCam(body){
     followedBody = owner?.physicsBody ?? null
     camera._smoothFollowObserver = scene.onBeforeRenderObservable.add(() => {
         const lerpSpeed = 8
+        const dt = scene.getEngine().getDeltaTime() / 1000
         const bodyPos = body.getAbsolutePosition()
-        smoothTarget.x += (bodyPos.x - smoothTarget.x) * lerpSpeed * (scene.getEngine().getDeltaTime() / 1000)
-        smoothTarget.y += (bodyPos.y - smoothTarget.y) * lerpSpeed * (scene.getEngine().getDeltaTime() / 1000)
-        smoothTarget.z += (bodyPos.z - smoothTarget.z) * lerpSpeed * (scene.getEngine().getDeltaTime() / 1000)
+        checkFirstPersonZone(bodyPos)
+        if(firstPerson){
+            // in the head - no lag behind it, or turning shows the inside of it
+            smoothTarget.copyFrom(bodyPos)
+        } else {
+            smoothTarget.x += (bodyPos.x - smoothTarget.x) * lerpSpeed * dt
+            smoothTarget.y += (bodyPos.y - smoothTarget.y) * lerpSpeed * dt
+            smoothTarget.z += (bodyPos.z - smoothTarget.z) * lerpSpeed * dt
+        }
+        // up to eye height and back down again eased, not in one jump
+        eyeLift += ((firstPerson ? FP_EYE_LIFT : 0) - eyeLift) * Math.min(1, FP_EYE_EASE * dt)
         camera.target.copyFrom(smoothTarget)
+        camera.target.y += eyeLift
+        if(firstPerson){
+            // its own body hidden - every frame, for anything put on meanwhile
+            const own = findAvatarOf(followedNode)
+            if(own) setAvatarHidden(own, true)
+            hideAvatarsBlockingCamera()
+            return
+        }
         // after the target moves, so the ray starts where the camera orbits this frame
-        applyCameraCollision(scene, scene.getEngine().getDeltaTime() / 1000)
+        applyCameraCollision(scene, dt)
         // after the collision, so it tests the radius actually rendered
         hideAvatarsBlockingCamera()
     })
@@ -203,6 +226,96 @@ function applyCameraCollision(scene, dt){
         appliedRadius = current + (radius - current) * Math.min(1, CAM_RETURN_SPEED * dt)
     }
     camera.radius = appliedRadius
+}
+
+// FIRST PERSON - somewhere a place marks out (the openworld's grotto mazes:
+// areascene.js), the camera goes into the player's head, and comes back out
+// to the usual third person on leaving it.
+//
+// Still the same ArcRotateCamera: at a radius of next to nothing it sits on
+// its target, looking the way it looked from behind - so dragging turns the
+// view as before and WASD (inputMovement.js's getCamDir, the camera's
+// forward flattened) still means "the way I'm looking". The target is lifted
+// to eye height, the player's own avatar hidden (layerMask, as AVATARS IN THE
+// WAY below), the view can tilt up and down, and camera collision is off -
+// there's no arm left to pull in.
+//
+// setFirstPersonZone(test): test(x, y, z, isOn) -> true while the followed
+// body there should be in first person. isOn lets it use a wider edge for
+// leaving than for entering, so standing on the line doesn't flicker.
+// createArcCam clears it - each place sets its own.
+const FP_RADIUS     = 0.05
+const FP_EYE_LIFT   = 0.42      // over camParent (1.0 up the body) - eye height
+const FP_EYE_EASE   = 10        // per second, up into the head and back down
+const FP_NEAR       = 0.05      // the player's body keeps walls ~0.3 off - 0.5 would cut into them
+const FP_FOV        = 1.0       // a little wider than third person's 0.8
+const FP_BETA_MIN   = 0.35      // looking down ~70 degrees
+const FP_BETA_MAX   = Math.PI - 0.35   // and up as far
+const FP_CHECK_MS   = 150
+
+let firstPersonZone = null
+let firstPerson = null           // while on: the third-person settings to put back
+let eyeLift = 0
+let nextZoneCheck = 0
+
+export function setFirstPersonZone(test){
+    firstPersonZone = test
+    nextZoneCheck = 0
+    if(!test && firstPerson) leaveFirstPerson()
+}
+export function isFirstPerson(){ return !!firstPerson }
+
+function checkFirstPersonZone(pos){
+    if(!firstPersonZone) return
+    const now = performance.now()
+    if(now < nextZoneCheck) return
+    nextZoneCheck = now + FP_CHECK_MS
+    const want = !!firstPersonZone(pos.x, pos.y, pos.z, !!firstPerson)
+    if(want && !firstPerson) enterFirstPerson()
+    else if(!want && firstPerson) leaveFirstPerson()
+}
+
+function enterFirstPerson(){
+    if(!camera || firstPerson) return
+    firstPerson = {
+        lowerRadiusLimit: camera.lowerRadiusLimit,
+        upperRadiusLimit: camera.upperRadiusLimit,
+        lowerBetaLimit: camera.lowerBetaLimit,
+        upperBetaLimit: camera.upperBetaLimit,
+        beta: camera.beta,
+        radius: desiredRadius ?? camera.radius,
+        minZ: camera.minZ,
+        fov: camera.fov,
+    }
+    camera.lowerRadiusLimit = camera.upperRadiusLimit = FP_RADIUS
+    camera.radius = FP_RADIUS
+    camera.inertialRadiusOffset = 0
+    camera.lowerBetaLimit = FP_BETA_MIN
+    camera.upperBetaLimit = FP_BETA_MAX
+    // straight ahead - from behind, the camera looked down at the player
+    camera.beta = Math.PI / 2
+    camera.minZ = FP_NEAR
+    camera.fov = FP_FOV
+}
+
+function leaveFirstPerson(){
+    const saved = firstPerson
+    firstPerson = null
+    if(!camera || !saved) return
+    camera.lowerRadiusLimit = saved.lowerRadiusLimit
+    camera.upperRadiusLimit = saved.upperRadiusLimit
+    camera.lowerBetaLimit = saved.lowerBetaLimit
+    camera.upperBetaLimit = saved.upperBetaLimit
+    camera.beta = saved.beta
+    camera.minZ = saved.minZ
+    camera.fov = saved.fov
+    // out of the head eased: CAMERA COLLISION carries it back out to the
+    // zoom the player had, at its usual speed
+    camera.radius = CAM_COLLISION_MIN_RADIUS
+    appliedRadius = CAM_COLLISION_MIN_RADIUS
+    desiredRadius = saved.radius
+    const own = findAvatarOf(followedNode)
+    if(own) setAvatarHidden(own, false)
 }
 // AVATARS IN THE WAY - another player, bot or npc the camera ends up inside
 // (or that stands between the camera and the player) is hidden outright

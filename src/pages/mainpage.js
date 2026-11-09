@@ -6,6 +6,7 @@ import { startHomeFx, stopHomeFx, setSummoning, leaveHome, cancelLeave } from ".
 import { startHomeMusic, stopHomeMusic, playSummonSound } from "./homemusic.js"
 import { applyAuthMode, resetAuthFields, clearAuthError, usernameInput, passwordInput, confirmInput } from "./authform.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
+import { initInstallButton } from "./installapp.js"
 import { tcpHttpURL } from "../constants/constants.js"
 
 const homePage = document.querySelector(".home-page")
@@ -247,6 +248,7 @@ export function showMainPage() {
     startHomeFx()
     startHomeMusic()
     startNews()
+    initInstallButton()
 
     // a tab still logged in continues; a device that last used an account opens the login form
     setAuthMode(!checkIfTokenSaved() && lastAuth() === "account" ? "login" : "play")

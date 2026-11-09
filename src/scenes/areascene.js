@@ -1,7 +1,7 @@
 import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3, Texture, StandardMaterial, MultiMaterial, GlowLayer, PhysicsShapeGroundMesh, PhysicsAggregate, Mesh, DirectionalLight, ConeParticleEmitter, ParticleSystem, Color4, SceneLoader } from "@babylonjs/core"
 import { createMatV2 } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
-import { createArcCam, attachCam, enableRoomCameraOcclusion } from "../tools/camera.js";
+import { createArcCam, attachCam, enableRoomCameraOcclusion, setFirstPersonZone } from "../tools/camera.js";
 import { setupLighting } from "../tools/lighting.js";
 import { createAggregate, initializePhysics } from "../tools/physics.js";
 import { createRock, createOre } from "../assetcreation/createRock.js";
@@ -49,7 +49,7 @@ import { clearLocTimeOut, faceForward, relocatePos } from "../controllers/inputM
 import { createLootItem } from "../staticRecources/resourceLoot.js";
 import { attachLightning } from "../effects/lightning.js";
 import { capsuleHeight } from "../charactersystem/createcharacter.js";
-import { createOpenWorld, createOpenWorldGrass, createMountainsInOpenWorld, SPAWN_X, SPAWN_Z, terrainHeight } from 'infterrain'
+import { createOpenWorld, createOpenWorldGrass, createMountainsInOpenWorld, SPAWN_X, SPAWN_Z, terrainHeight, grottoInteriorAt } from 'infterrain'
 import { showGamePerformanceUI } from "babylonstats"
 import { setStartingContainers } from "./containers.js";
 import { registerToAtkCollider } from "../charactersystem/attackingSystem.js";
@@ -295,6 +295,10 @@ export async function areaScene(placeDetail){
             // scene/terrain access at author time (see the witch towers' own
             // hardcoded y guess for what that limitation looks like).
             if(placeDetail.placeId === 888){
+                // first person inside a grotto's maze (tools/camera.js). It
+                // switches 1.8 m into the 3 m passage in from the front, and
+                // back 0.6 m before its mouth, so the line never flickers
+                setFirstPersonZone((x, y, z, isOn) => !!grottoInteriorAt(x, y, z, isOn ? 2.4 : 1.2))
                 OPENWORLD_CASTLES.forEach(spot => createCastle(scene, spot))
                 // four stone scriptures, one per cardinal direction, ringed
                 // 15 units out from the player's own spawn point (0, 500) -

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import { VitePWA } from 'vite-plugin-pwa'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -58,7 +59,69 @@ export default defineConfig({
           dest: 'assets'
         }
       ]
-    })
+    }),
+    // THE PWA - installable from the browser ("Add to Home Screen" on an
+    // iPhone), opening full screen with the app's own icon, and a service
+    // worker that keeps the game's files on the device so later starts load
+    // from there. Only in a build (`npm run build`, try it with `npm run
+    // preview`): the dev server never registers it, so nothing is cached
+    // under you while you work. The iOS-only tags are in index.html; the
+    // update prompt is src/main/pwa.js.
+    VitePWA({
+      // a new version waits until the player says reload (src/main/pwa.js) -
+      // never pulled out from under someone mid-fight
+      registerType: 'prompt',
+      injectRegister: false,
+      // the icons are in globPatterns already - not listed twice
+      includeManifestIcons: false,
+      manifest: {
+        name: 'Vessel',
+        short_name: 'Vessel',
+        description: 'Summoned as a vessel. Rise as a legend.',
+        start_url: './',
+        scope: './',
+        display: 'fullscreen',
+        // Android locks to it; iOS ignores it (the player turns the phone)
+        orientation: 'landscape',
+        background_color: '#14101c',
+        theme_color: '#14101c',
+        icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // downloaded on install: the code, the physics wasm, the page and its
+        // icons - ~12 MB. public/ is ~284 MB, far too much to pull down up
+        // front on a phone, so everything else is cached as it's first used
+        // (runtimeCaching below)
+        globPatterns: ['index.html', 'assets/**/*.{js,css,wasm}', 'icons/*.png'],
+        // the game's own bundle is ~9 MB, over workbox's 2 MB default
+        maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            // models, textures, images and sounds from public/. Their names
+            // never change when their contents do (no hash), so: served from
+            // the device at once, and fetched again in the background, so an
+            // updated file shows up on the next start rather than never
+            // Not ranged requests: an <audio> element (the home page's theme,
+            // homemusic.js) streams its file in pieces and holds that request
+            // open for as long as it plays - answered from here, it kept the
+            // old service worker busy and a new version could never take over
+            urlPattern: ({ url, request, sameOrigin }) => sameOrigin && !request.headers.has('range') &&
+              /\.(glb|gltf|bin|jpe?g|png|webp|gif|svg|ktx2|env|dds|mp3|ogg|wav|m4a|json)$/i.test(url.pathname),
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'vessel-assets',
+              expiration: { maxEntries: 1500, maxAgeSeconds: 60 * 60 * 24 * 60, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
+      },
+    }),
   ],
   optimizeDeps: {
     exclude: ['@babylonjs/havok', '@babylonjs/core', '@babylonjs/loaders', '@babylonjs/materials']

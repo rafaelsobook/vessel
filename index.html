@@ -2,12 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- the PWA (vite.config.js adds the manifest link in a build). iOS reads
+         these instead of the manifest: its home-screen icon (opaque - iOS
+         rounds the corners), full screen with no Safari bar, and the name
+         under the icon. viewport-fit=cover is deliberately left out: nothing
+         in style.scss keeps the HUD clear of the Dynamic Island yet
+         (env(safe-area-inset-*)), so iOS's own black side bars are safer -->
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Vessel" />
+    <meta name="theme-color" content="#14101c" />
     <link rel="stylesheet" href="/src/style.css" />
     <!-- the home page's illustration is a CSS background - fetch it with the stylesheet, not after it -->
     <link rel="preload" as="image" href="./images/wallpaper/dbhomeback.jpg" />
-    <title>client</title>
+    <title>Vessel</title>
   </head>
   <body background-color="black">
     <canvas></canvas>
@@ -101,6 +113,19 @@
                 </p>
             </div>
             <div class="hp-corner">
+                <!-- INSTALL - pages/installapp.js shows it only where the game can be installed -->
+                <button type="button" class="hp-install hidden" aria-haspopup="dialog">
+                    <span class="hpi-sigil"><img src="./icons/icon-192.png" alt=""><span class="hpi-ring"></span></span>
+                    <span class="hpi-text">
+                        <b class="hpi-title">Install</b>
+                        <small class="hpi-lines">
+                            <span class="hpi-line shown">Play full screen</span>
+                            <span class="hpi-line">One tap to the realm</span>
+                            <span class="hpi-line">Starts faster</span>
+                        </small>
+                    </span>
+                    <span class="hpi-shine"></span>
+                </button>
                 <a class="hp-icon-btn" href="https://discord.gg/3BCjhKvmn2" target="_blank" rel="noopener" aria-label="Join the Discord" title="Join the Discord">
                     <img src="./images/UI/socials/discord.webp" alt="">
                 </a>
@@ -195,6 +220,35 @@
         </form>
 
         <p class="hp-credit">Illustration by Kheil Artimist / jpandog</p>
+        <!-- how to install where the page can't do it itself (an iPhone; or a browser whose own
+             prompt was turned down) - pages/installapp.js, data-kind "ios" or "menu" -->
+        <div class="hp-install-sheet" role="dialog" aria-modal="true" aria-labelledby="hpiSheetTitle" data-kind="ios" hidden>
+            <div class="hpi-card">
+                <span class="gate-gem"></span>
+                <button type="button" class="hpi-close" aria-label="Close" title="Close (Esc)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+                <img class="hpi-emblem" src="./icons/icon-192.png" alt="">
+                <h2 class="hpi-sheet-title" id="hpiSheetTitle">Carry the realm with you</h2>
+                <p class="hpi-lead">Install Vessel and it waits on your home screen, full screen, and starts faster every time you return.</p>
+                <ul class="hpi-perks">
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Full screen</li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Faster starts</li>
+                    <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>One tap away</li>
+                </ul>
+                <ol class="hpi-steps" data-for="ios">
+                    <li><span class="hpi-num">1</span><span>Tap <b>Share</b> <svg class="hpi-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></svg> in Safari <small>(on newer iPhones, tap <b>⋯</b> first)</small></span></li>
+                    <li><span class="hpi-num">2</span><span>Choose <b>Add to Home Screen</b> <svg class="hpi-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span></li>
+                    <li><span class="hpi-num">3</span><span>Open <b>Vessel</b> from your home screen, and rise</span></li>
+                </ol>
+                <ol class="hpi-steps" data-for="menu">
+                    <li><span class="hpi-num">1</span><span>Open your browser's menu <svg class="hpi-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg></span></li>
+                    <li><span class="hpi-num">2</span><span>Choose <b>Install app</b> <small>(or <b>Add to Home screen</b>)</small></span></li>
+                    <li><span class="hpi-num">3</span><span>Open <b>Vessel</b> from your apps, and rise</span></li>
+                </ol>
+                <button type="button" class="hpi-ok">I'll do it now</button>
+            </div>
+        </div>
         <div class="hp-flash"></div>
     </div>
     <footer class="site-footer">
