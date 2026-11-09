@@ -23,6 +23,15 @@ export async function startPwa(){
     })
 }
 
+// Into the world on a phone: keep it on its side. Only an installed app on
+// Android can actually lock it (iOS can't, and a browser tab refuses) - there
+// the "Turn your phone" screen (index.html .rotate-device) asks instead.
+export function lockLandscape(){
+    try {
+        screen.orientation?.lock?.("landscape")?.catch?.(() => {})
+    } catch {}
+}
+
 // styled inline - it has to show on any screen, the home page or mid-game,
 // without depending on style.scss being compiled
 function showUpdateNotice(reload){

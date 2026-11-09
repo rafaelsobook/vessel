@@ -26,6 +26,23 @@ export const FONT_TITLE = "'M PLUS Rounded 1c'"
 export const FONT_BODY  = "'Bellefair'"
 export const FONT_NUM   = "'Graduate'"
 
+// A panel built at a fixed pixel size, shrunk whole (centred) on a screen
+// smaller than it - a phone on its side is ~320-440px tall - so its close
+// button never ends up off the edge. Checked every draw, the way
+// skillsPanel.js does, so turning the phone or resizing the window refits it;
+// it goes with the control. width/height: the room it needs, including any
+// offset (top/left) it's moved by.
+export function fitToScreen(control, ui, width, height, margin = 0.94){
+    control.onBeforeDrawObservable.add(() => {
+        const size = ui.getSize()
+        const fit = Math.min(1, size.width * margin / width, size.height * margin / height)
+        if(control.scaleX !== fit){
+            control.scaleX = fit
+            control.scaleY = fit
+        }
+    })
+}
+
 // Nine-patch background - the ornate bordered frame art (corner flourishes,
 // notched edges) stays crisp at any control size instead of the corners
 // stretching into mush the way a plain STRETCH_FILL would.

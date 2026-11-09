@@ -184,7 +184,9 @@ export function getMyAbilitiesInfo(){
 }
 // FOR UI
 export function displayEarnedAbility(_arrayOfAbility){
-    notifCont.style.display = "block"
+    // flex, not block: the list takes what height the screen leaves it and
+    // scrolls, so the accept button always shows (style.scss FIT TO THE SCREEN)
+    notifCont.style.display = "flex"
     notifCont.classList.remove("screenFadeOff")
     // if(notifCont.className.includes("screenFadeOff")) {
     //     notifCont.classList.remove("screenFadeOff")
@@ -192,8 +194,11 @@ export function displayEarnedAbility(_arrayOfAbility){
     // }
     notifLists.innerHTML = ''
 
-    _arrayOfAbility.forEach(ablty => {
+    notifLists.scrollTop = 0
+    _arrayOfAbility.forEach((ablty, i) => {
         const li = createElement('li', 'notif-bx')
+        // each card comes in a beat after the one before it
+        li.style.setProperty('--i', i)
         const brderImg = createElement('img', 'notif-borderimg')
         brderImg.src = './images/UI/border3.webp'
         const img = createElement('img', 'ablty-notif-img')

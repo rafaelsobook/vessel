@@ -874,6 +874,23 @@
             My Rank: <span class="lb-my-rank-value">-</span>
         </div>
     </div>
+    <!-- a phone held upright in the game - every screen is laid out for it on its side.
+         Shown by CSS alone (style.scss TURN YOUR PHONE), never on the home page -->
+    <div class="rotate-device" aria-live="polite">
+        <div class="rd-stage">
+            <svg class="rd-phone" viewBox="0 0 48 80" aria-hidden="true">
+                <rect x="3" y="3" width="42" height="74" rx="8"/>
+                <path d="M18 9h12"/>
+                <circle cx="24" cy="69" r="2.6"/>
+            </svg>
+            <svg class="rd-arrow" viewBox="0 0 64 64" aria-hidden="true">
+                <path d="M14 22a22 22 0 0 1 36 4"/>
+                <path d="M51 15l-1 11-11-2"/>
+            </svg>
+        </div>
+        <p class="rd-title">Turn your phone</p>
+        <p class="rd-sub">The realm opens wider on its side</p>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

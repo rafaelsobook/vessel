@@ -7,7 +7,7 @@ import { createMushroomModel } from "../assetcreation/createmushroom.js"
 import { getPlayersOnScene } from "../sockets/worldsocket.js"
 import { openCloseInteractBtn, openClosePopup, getInteractBtnOwner, isInteractBtnVisible } from "../tools/popupUI.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
-import { GOLD, GOLD_BRIGHT, TEXT_MUTED, FONT_TITLE, FONT_BODY, FONT_NUM, createNinePatchBg, createDivider, createText, createGoldButton, createWorldProgressBar } from "./guiKit.js"
+import { GOLD, GOLD_BRIGHT, TEXT_MUTED, FONT_TITLE, FONT_BODY, FONT_NUM, createNinePatchBg, createDivider, createText, createGoldButton, createWorldProgressBar, fitToScreen } from "./guiKit.js"
 
 // Cooking over a crafted bonfire (campcraft.js's "bonfire").
 //
@@ -232,6 +232,9 @@ function openList(s, bonfire){
     root.isPointerBlocker = true
     root.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER
     root.top = "-60px"
+    // up to 400px tall - more than a phone on its side has. Shrunk to fit,
+    // counting the 60px it's lifted by at both ends so its X stays on screen
+    fitToScreen(root, ui, LIST_WIDTH, height + 120)
     root.addControl(createNinePatchBg("cookList_bg", "./images/UI/frames/craftingframe.webp", 16))
 
     const inner = new GUI.StackPanel("cookList_inner")

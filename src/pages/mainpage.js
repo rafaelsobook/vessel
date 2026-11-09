@@ -7,6 +7,7 @@ import { startHomeMusic, stopHomeMusic, playSummonSound } from "./homemusic.js"
 import { applyAuthMode, resetAuthFields, clearAuthError, usernameInput, passwordInput, confirmInput } from "./authform.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { initInstallButton } from "./installapp.js"
+import { lockLandscape } from "../main/pwa.js"
 import { tcpHttpURL } from "../constants/constants.js"
 
 const homePage = document.querySelector(".home-page")
@@ -130,6 +131,7 @@ function finishIntro(){
 
 export function hideHomePage(){
     clearInterval(newsTimer)
+    lockLandscape()
     stopHomeMusic()
     // the flash into the world, then gone
     leaveHome(() => {
