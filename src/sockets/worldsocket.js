@@ -34,6 +34,7 @@ import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
 import { openworldGroundY } from '../tools/groundHeight.js'
 import { createMagicCircle } from "../creations/magiccircles.js"
 import { createTreasureMesh } from "../assetcreation/createtreasure.js"
+import { createTomeLoot } from "../effects/tomeLoot.js"
 import { createBonfireMesh } from "../assetcreation/createbonfire.js"
 import { createTrunkMesh } from "../assetcreation/createtrunk.js"
 import { placeStructure } from "../assetcreation/createstructure.js"
@@ -1907,7 +1908,11 @@ export function reCreateMeshesInScene() {
         const chestPos = treasureTcpInfo.currentPlaceId === OPENWORLD_PLACE_ID
             ? { x: treasureTcpInfo.pos.x, y: openworldRecordY(treasureTcpInfo), z: treasureTcpInfo.pos.z }
             : treasureTcpInfo.pos
-        const chest = createTreasureMesh(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId, extras: treasureTcpInfo.extras })
+        // a grotto's tome (tcp's hiddenHoards.ts) - a book floating in its
+        // aura, not a chest, but taken and removed just the same
+        const chest = treasureTcpInfo.look === "tome"
+            ? createTomeLoot(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId })
+            : createTreasureMesh(scene, chestPos, treasureTcpInfo.itemDetail, { treasureId: treasureTcpInfo.itemId, extras: treasureTcpInfo.extras })
         if(chest) treasuresInScene.push({ itemId: treasureTcpInfo.itemId })
     })
     // same three-guard shape as tcpTreasures right above (place filter,

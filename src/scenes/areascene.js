@@ -2,6 +2,7 @@ import { ArcRotateCamera, HemisphericLight, MeshBuilder, Scene, Vector3, Color3,
 import { createMatV2 } from "../tools/materials.js";
 import { createDungeon } from "../creations/createdungeon.js";
 import { createArcCam, attachCam, enableRoomCameraOcclusion, setFirstPersonZone } from "../tools/camera.js";
+import { enableRoomAO } from "../effects/roomAO.js";
 import { setupLighting } from "../tools/lighting.js";
 import { createAggregate, initializePhysics } from "../tools/physics.js";
 import { createRock, createOre } from "../assetcreation/createRock.js";
@@ -144,6 +145,9 @@ export async function areaScene(placeDetail){
         case "room":
             createRoom(scene, placeDetail, myCharacter.body);
             enableRoomCameraOcclusion(scene, cam, myCharacter.body, placeDetail.areaType)
+            // corners, wall feet, under the furniture shaded - rooms only,
+            // it costs a GPU pass every frame (effects/roomAO.js)
+            enableRoomAO(scene, cam)
         break;
         case "duel":
             createDuelArena(scene, placeDetail, myCharacter.body);

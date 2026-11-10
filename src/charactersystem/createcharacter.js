@@ -36,6 +36,7 @@ import { emitPlayerIsHit } from '../sockets/emits';
 import { onMeleeConnect } from './meleeCombat.js';
 import { applyBlessingsToMeleeHit } from './blessingEffects.js';
 import { registerBotInteraction } from '../npc/botInteraction';
+import { giveHairShading, outlineHair } from '../tools/hairShade.js';
 
 export let capsuleHeight = 1.5;
 let capsuleRadius = 0.25;
@@ -84,6 +85,9 @@ function createAnimeBodyMaterials(scene, det){
     // see-through hair instead of a solid-looking style
     femaleHair1Mat.backFaceCulling = false
     femaleHair2Mat.backFaceCulling = false
+    // hair that reads as hair, in whatever colour it's dyed - strands, the
+    // angel ring, its own shading (tools/hairShade.js)
+    ;[hairMat, femaleHair1Mat, femaleHair2Mat].forEach(mat => giveHairShading(mat))
     const clothMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const bootsMat = createMatV2(scene, "./images/fabrics/leather1.jpg", "./images/fabrics/leather1.jpg")
@@ -1254,6 +1258,8 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
                 // stays scoped to just her two hairstyles (this function's
                 // own femaleHair1Mat/femaleHair2Mat comment)
                 mes.material = hairStyleName === "hair2" ? femaleHair2Mat : femaleHair1Mat
+                // inked round its silhouette (tools/hairShade.js)
+                outlineHair(mes, det.hairColor)
 
                 characterHairs.push(mes)
                 return
@@ -1375,6 +1381,9 @@ function createAnimeBody(containers, body, bodytarget, det, scene){
                 chosenHairStyle.position = new Vector3(0,.45,-.1)
                 chosenHairStyle.scaling = new Vector3(8,8,8)
                 chosenHairStyle.isVisible=true
+                // inked round its silhouette - after it's on the head, so the
+                // line is sized for the scale it's drawn at (tools/hairShade.js)
+                outlineHair(chosenHairStyle, det.hairColor)
                 characterHairs.push(chosenHairStyle)
             }else hairMsh.isVisible = false
         })

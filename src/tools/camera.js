@@ -102,6 +102,7 @@ export function attachCam(body){
         camera.target.y += eyeLift
         if(firstPerson){
             // its own body hidden - every frame, for anything put on meanwhile
+            // (the weapon in hand is shown instead by effects/fpWeapon.js)
             const own = findAvatarOf(followedNode)
             if(own) setAvatarHidden(own, true)
             hideAvatarsBlockingCamera()
@@ -264,6 +265,28 @@ export function setFirstPersonZone(test){
     if(!test && firstPerson) leaveFirstPerson()
 }
 export function isFirstPerson(){ return !!firstPerson }
+
+// Where first person looks from and to, for aiming what the player does at
+// what they see (skillEffects.js's casts, meleeCombat.js's swings): null in
+// third person. Built from the camera's own target/angles, not its position -
+// that is only rebuilt with the view matrix, a frame behind a fast turn.
+//   eye      the camera's eye, a new Vector3
+//   forward  the way it looks (pitch and all), normalised
+//   flat     the same, level, normalised
+//   right    level, to the right of it
+export function getFirstPersonView(){
+    if(!firstPerson || !camera) return null
+    const sinBeta = Math.sin(camera.beta)
+    // the ArcRotateCamera sits at target + (cos a sin b, cos b, sin a sin b) * r,
+    // looking back through its target
+    const forward = new Vector3(-Math.cos(camera.alpha) * sinBeta, -Math.cos(camera.beta), -Math.sin(camera.alpha) * sinBeta).normalize()
+    const flat = new Vector3(forward.x, 0, forward.z)
+    if(flat.lengthSquared() < 1e-6) flat.set(0, 0, 1)
+    flat.normalize()
+    const right = new Vector3(flat.z, 0, -flat.x)
+    const eye = camera.target.subtract(forward.scale(camera.radius))
+    return { eye, forward, flat, right }
+}
 
 function checkFirstPersonZone(pos){
     if(!firstPersonZone) return

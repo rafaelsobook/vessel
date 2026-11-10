@@ -53,7 +53,9 @@ let selectedSkillName = null
 // of silently stomping it - updateSkillSlotsUI's skills.find(sk =>
 // sk.slotNumber === slotNumber) only ever returns the first match, so two
 // skills sharing a slotNumber would leave one invisibly stuck behind the other.
-export function giveSkill(skillDetail){
+// quiet: no "Learned" popup - the caller shows it its own way (a skill tome's
+// ceremony, effects/tomeReveal.js). Returns the character's own copy.
+export function giveSkill(skillDetail, { quiet = false } = {}){
     const charState = getCharState()
     if(!charState || !skillDetail) return
 
@@ -69,18 +71,20 @@ export function giveSkill(skillDetail){
     // its nested effects/projectileVisual in place (upgradeSkill), which would
     // otherwise change the definition every later learner - and every npc
     // fighter's copy - starts from, until the next reload
-    charState.skills.push({ ...JSON.parse(JSON.stringify(skillDetail)), slotNumber })
+    const owned = { ...JSON.parse(JSON.stringify(skillDetail)), slotNumber }
+    charState.skills.push(owned)
     updateSkillListUI()
     updateMyDetailsOL(charState, checkIfTokenSaved())
     // rank-framed celebration popup (skillAcquiredUI.js) instead of the old
     // plain text toast - same upgrade titleUI.js's own popup already got
-    popupReceiveSkillUI(skillDetail)
+    if(!quiet) popupReceiveSkillUI(skillDetail)
     // "awakened" fires for literally any first skill; "elite-skill" only for
     // skillrank >= 1 (skillsData.js's own header comment: 0 is "Basic Class",
     // 1+ is "Elite Skill" and up) - receiveAchievement no-ops on repeats, so
     // no extra bookkeeping needed here to only fire elite-skill once
     receiveAchievement("awakened")
     if(skillDetail.skillrank >= 1) receiveAchievement("elite-skill")
+    return owned
 }
 
 // DEBUG CHEAT - bound to the "l" key in controllers/inputMovement.js. Grants
@@ -142,7 +146,9 @@ export function giveRandomSkill(){
 // below (bound to "h"), which calls upgradeSkill() directly for every
 // entry already in charState.skills instead of doing this by-name lookup
 // once per skill.
-export function upgradeOwnedSkill(skillDetail){
+// quiet: no "Lv. N" toast - the caller shows it its own way. Returns the
+// character's own copy, levelled.
+export function upgradeOwnedSkill(skillDetail, { quiet = false } = {}){
     const charState = getCharState()
     if(!charState || !skillDetail) return
 
@@ -154,7 +160,8 @@ export function upgradeOwnedSkill(skillDetail){
     upgradeSkill(ownedSkill)
     updateSkillListUI()
     updateMyDetailsOL(charState, checkIfTokenSaved())
-    openClosePopup(`${ownedSkill.displayName} is now Lv. ${ownedSkill.lvl}`, true, 1500)
+    if(!quiet) openClosePopup(`${ownedSkill.displayName} is now Lv. ${ownedSkill.lvl}`, true, 1500)
+    return ownedSkill
 }
 
 // DEBUG CHEAT - bound to the "h" key in controllers/inputMovement.js. Upgrades
@@ -291,6 +298,77 @@ function assignSelectedSkill(){
 // "press twice" symptom under different circumstances
 const activeSkillResetTimers = new Map()
 
+// SKILL COOLDOWNS - client only, Dota style: once a skill goes off (on the
+// press, not when it lands), its slot greys over with a dark wedge that
+// sweeps away clockwise as skill.skillCoolDown (ms) runs out, the seconds
+// left in the middle, and pressing it meanwhile does nothing but flash. When
+// it's back the slot gives a short glint. Turning a toggle skill OFF (flex
+// aura) is never blocked - only casting it again. Keyed by skill name, so a
+// skill keeps its cooldown if it's moved to another slot.
+const skillCooldowns = new Map()   // skill.name -> { start, end }
+let cooldownFrame = 0
+
+function cooldownLeftMs(skillName){
+    const cd = skillCooldowns.get(skillName)
+    return cd ? Math.max(0, cd.end - performance.now()) : 0
+}
+function startCooldown(skill){
+    const ms = Number(skill.skillCoolDown) || 0
+    if(ms <= 0) return
+    const now = performance.now()
+    skillCooldowns.set(skill.name, { start: now, end: now + ms })
+    if(!cooldownFrame) cooldownFrame = requestAnimationFrame(drawCooldowns)
+}
+// the overlay inside a slot button, made the first time it's needed
+function cooldownOverlayOf(btn){
+    let overlay = btn.querySelector(".skill-cd")
+    if(!overlay){
+        overlay = document.createElement("span")
+        overlay.className = "skill-cd"
+        overlay.innerHTML = `<span class="skill-cd-time"></span>`
+        btn.appendChild(overlay)
+    }
+    return overlay
+}
+function drawCooldowns(){
+    cooldownFrame = 0
+    const now = performance.now()
+    slotbuttons.forEach(btn => {
+        const skillName = btn.className.split(" ")[2]
+        const cd = skillName && skillCooldowns.get(skillName)
+        const overlay = btn.querySelector(".skill-cd")
+        if(!cd){
+            if(overlay) overlay.classList.remove("on")
+            return
+        }
+        const el = overlay ?? cooldownOverlayOf(btn)
+        const left = cd.end - now
+        if(left <= 0){
+            skillCooldowns.delete(skillName)
+            el.classList.remove("on")
+            // ready again - a quick glint round the slot
+            btn.classList.remove("skill-ready")
+            void btn.offsetWidth
+            btn.classList.add("skill-ready")
+            return
+        }
+        el.classList.add("on")
+        el.style.setProperty("--cd", (left / (cd.end - cd.start)).toFixed(4))
+        // tenths under a second, whole seconds above - as Dota shows it
+        el.firstChild.textContent = left < 1000 ? (left / 1000).toFixed(1) : String(Math.ceil(left / 1000))
+    })
+    // cooldowns of skills not in any slot still run out
+    skillCooldowns.forEach((cd, name) => { if(cd.end <= now) skillCooldowns.delete(name) })
+    if(skillCooldowns.size) cooldownFrame = requestAnimationFrame(drawCooldowns)
+}
+// a press while it's cooling down - the slot shakes and its timer flashes
+function refuseOnCooldown(btn){
+    const overlay = cooldownOverlayOf(btn)
+    overlay.classList.remove("refuse")
+    void overlay.offsetWidth
+    overlay.classList.add("refuse")
+}
+
 // true only while multicastSkill's own click handler is synchronously
 // .click()-ing the other 4 slot buttons (see the cascade block below) - each
 // of those nested invocations stashes this onto its OWN skill._castSpread
@@ -317,6 +395,13 @@ slotbuttons.forEach(btn => {
         const skill = charState.skills.find(sk => sk.name === skillName)
 
         const willActivate = !skill.isActive
+
+        // still cooling down (SKILL COOLDOWNS above) - nothing goes off, no
+        // mana spent; a multicast cascade just skips this one
+        if(willActivate && cooldownLeftMs(skill.name) > 0){
+            refuseOnCooldown(btn)
+            return
+        }
 
         if(willActivate){
             // requireMode gates activation to a specific charState.mode (e.g.
@@ -368,6 +453,8 @@ slotbuttons.forEach(btn => {
         }
 
         skill.isActive = willActivate
+        // every check passed and it's going off - its cooldown starts now
+        if(willActivate) startCooldown(skill)
 
         // see cascadeActive's own comment above - only true while THIS
         // activation is happening as part of multicastSkill's cascade, so

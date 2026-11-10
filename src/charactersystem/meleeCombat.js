@@ -7,6 +7,8 @@ import { capsuleHeight } from "./createcharacter.js"
 import { emitFaceTarget } from "../sockets/emits.js"
 import { getAllSounds, playSound } from "../components/soundSystem.js"
 import { addCameraTrauma, punchCameraFov } from "../tools/cameraShake.js"
+import { getFirstPersonView } from "../tools/camera.js"
+import { swingFirstPersonWeapon } from "../effects/fpWeapon.js"
 import { getParticleTexture, particleTexturePath } from "../tools/particlesystem.js"
 
 // MELEE FEEL - what happens between pressing attack and the blow landing.
@@ -166,10 +168,12 @@ function pathIsClear(player, target){
 }
 
 // the enemy this swing should go for, or null - see this file's header
-export function findMeleeTarget(player, hasWeapon){
+// aimForward: the way to look instead of the body's own facing (first person:
+// the view's - see prepareMeleeSwing)
+export function findMeleeTarget(player, hasWeapon, aimForward = null){
     if(!player?.body) return null
     const from = player.body.position
-    const forward = player.body.getDirection(Vector3.Forward())
+    const forward = aimForward ? aimForward.clone() : player.body.getDirection(Vector3.Forward())
     forward.y = 0
     if(forward.lengthSquared() < 1e-6) return null
     forward.normalize()
@@ -224,7 +228,12 @@ export function prepareMeleeSwing({ animName, speedRatio = 1, hasWeapon, airborn
     const player = myPlayer()
     if(!player) return { target: null, dirTarg: null, lunge: null, impactMs: 0, animName, clipDelayMs: 0 }
 
-    const target = findMeleeTarget(player, hasWeapon)
+    // first person (tools/camera.js - the grotto mazes): the swing goes for
+    // what I'm looking at, and with nothing there it still turns me that way -
+    // the body may face wherever I last walked, and the blade swung out of view
+    const view = getFirstPersonView()
+    const target = findMeleeTarget(player, hasWeapon, view?.flat)
+    const swingInView = ms => { if(view && hasWeapon) swingFirstPersonWeapon(ms) }
     const lunges = !!target?.canLunge && !airborne
     // the jump attack, but only where the rig has it - and not bare-handed, a
     // punch has no blade to bring down
@@ -233,7 +242,15 @@ export function prepareMeleeSwing({ animName, speedRatio = 1, hasWeapon, airborn
     const clip = clipSeconds(player, animName) ?? 0.8
     let impactMs = (IMPACT_AT[animName] ?? DEFAULT_IMPACT_AT) * clip / Math.max(0.2, speedRatio) * 1000
 
-    if(!target) return { target: null, dirTarg: null, lunge: null, impactMs, animName, clipDelayMs: 0 }
+    if(!target){
+        if(!view) return { target: null, dirTarg: null, lunge: null, impactMs, animName, clipDelayMs: 0 }
+        const from = player.body.position
+        const ahead = { x: from.x + view.flat.x * 2, y: from.y, z: from.z + view.flat.z * 2 }
+        faceAttackTarget(ahead, impactMs + HIT_WINDOW_AFTER_MS + 40)
+        swingInView(impactMs)
+        // everyone else sees me turn that way too (attackingSystem.js's attack)
+        return { target: null, dirTarg: ahead, lunge: null, impactMs, animName, clipDelayMs: 0 }
+    }
 
     const tp = target.body.position
     const dirTarg = { x: tp.x, y: player.body.position.y, z: tp.z }
@@ -257,6 +274,7 @@ export function prepareMeleeSwing({ animName, speedRatio = 1, hasWeapon, airborn
         }
     }
     faceAttackTarget(tp, impactMs + HIT_WINDOW_AFTER_MS + 40)
+    swingInView(impactMs)
     showTargetRing(target)
     lockOn(target)
     return { target, dirTarg, lunge, impactMs, animName, clipDelayMs }

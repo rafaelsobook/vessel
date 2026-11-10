@@ -1,6 +1,9 @@
 import { Sound, Vector3 } from "@babylonjs/core"
 import { addSonicSounds } from "../effects/sonicSounds.js"
 import { addDarkSlashSounds } from "../effects/darkSlashSounds.js"
+import { addBlessingSounds } from "../effects/blessingSounds.js"
+import { addWheelSounds } from "../effects/wheelSounds.js"
+import { addTomeSounds } from "../effects/tomeSounds.js"
 let allSounds = {}
 
 // Missing/corrupt sound files don't throw synchronously - Sound fetches
@@ -255,6 +258,11 @@ export function initSounds(scene){
     // a moment from now (effects/sonicSounds.js)
     addSonicSounds(scene, allSounds)
     addDarkSlashSounds(scene, allSounds)
+    // receiving a blessing (effects/blessingReveal.js), the level-up wheel (effects/fortuneWheel.js)
+    addBlessingSounds(scene, allSounds)
+    addWheelSounds(scene, allSounds)
+    // learning a skill from a tome (effects/tomeReveal.js)
+    addTomeSounds(scene, allSounds)
     return allSounds;
 }
 

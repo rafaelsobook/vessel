@@ -4,6 +4,7 @@ import { openClosePopup} from "../tools/popupUI.js";
 import { getCharState, updateMyDetailsOL, activateLifeSystem, getAdditionalsFromAbilities } from "./characterstate.js";
 import { refreshBlessingVisuals } from "./blessingEffects.js";
 import { createElement} from "../tools/GUITools.js"
+import { revealBlessings } from "../effects/blessingReveal.js"
 const uniqueDescBx = document.querySelector('.uniques-desc-bx')
 const abilityImg = document.querySelector('.ability-img')
 const abilityName = document.querySelector('.ability-name')
@@ -36,6 +37,8 @@ export function getAbilities(){
 export async function receiveAbilities(_numberNotGreaterThanTen, limit, specificAbility = null){
     const state = getCharState()
     const abilitiesReceived = []
+    // the ones they already had, gone up a level (the reveal says so)
+    const upgraded = new Set()
 
     // Build the list to iterate: specific ability first (if provided), then random ones
     const abilitiesToProcess = specificAbility
@@ -78,6 +81,7 @@ export async function receiveAbilities(_numberNotGreaterThanTen, limit, specific
                     ablty.regens.mp += 0.025
                     ablty.regens.sp += 0.05
                     abilitiesReceived.push(ablty)
+                    upgraded.add(ablty)
                 }
             })
             return
@@ -92,10 +96,24 @@ export async function receiveAbilities(_numberNotGreaterThanTen, limit, specific
     })
 
     if(abilitiesReceived.length){
-        displayEarnedAbility(abilitiesReceived)
+        presentBlessings(abilitiesReceived, upgraded)
     } else if(limit && abilitiesReceived.length <= limit) {
         receiveAbilities(_numberNotGreaterThanTen, limit, specificAbility)
     }
+}
+// Received: theirs from now on - saved at once - and shown going into them in
+// the world (effects/blessingReveal.js), their perks taking hold as the last
+// one goes in. With no body of theirs on screen to show it on, the old card
+// list instead (its accept button does the rest).
+function presentBlessings(received, upgraded){
+    updateMyDetailsOL(getCharState(), checkIfTokenSaved(), true)
+    const shown = revealBlessings(received.map(blessing => ({ blessing, upgraded: upgraded.has(blessing) })), { onDone: takeHold })
+    if(!shown) displayEarnedAbility(received)
+}
+function takeHold(){
+    activateLifeSystem()
+    // the Four Heavens' Ward appears the moment it's gained
+    refreshBlessingVisuals()
 }
 export async function upgradeAbility(ablty){
     ablty.lvl+=1,

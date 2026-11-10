@@ -34,7 +34,7 @@ import { showShortNotice } from '../components/shortNotice.js';
 import { evolveInto, devolve } from '../charactersystem/evolution.js';
 import { getCombatLock, getCombatLockRadius } from '../charactersystem/meleeCombat.js';
 
-let ISINDEVEMODE = true
+let ISINDEVEMODE = false
 let devSpeed = 20
 // the most recent enemy MY OWN melee attack actually landed on (see
 // createEnemy.js's atkCollider hit handler, right alongside its own

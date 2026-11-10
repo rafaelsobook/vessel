@@ -24,6 +24,7 @@ import { initOnceOutputSliders } from "../charactersystem/outputSliders.js";
 import { initOnceTravelRecord } from "../charactersystem/travelRecord.js";
 import { updateGuildIconVisibility } from "../htmlcomp/guildboard.js";
 import { refreshWeatherVisuals, onSceneDisposedForWeather } from "../components/weatherSystem.js";
+import { disableRoomAO } from "../effects/roomAO.js";
 const canvas = document.querySelector("canvas")
 const fpsCounter = document.querySelector(".fps-counter")
 
@@ -75,6 +76,9 @@ export async function changeScene(_sceneName){
     // at dead objects, and the next place's applyWeather would compare against
     // a scene that no longer exists instead of building a fresh field.
     onSceneDisposedForWeather()
+    // a room's ambient occlusion off before its scene goes, not only on the
+    // scene's own dispose event (effects/roomAO.js)
+    disableRoomAO()
 
     scene?.meshes?.forEach(mesh => mesh.dispose())
     scene?.dispose()

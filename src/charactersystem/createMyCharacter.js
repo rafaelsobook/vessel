@@ -29,6 +29,7 @@ import { attachControllerToThisCharacter, activateMouseControls } from "../contr
 import { getSceneDet } from "../main/main.js"
 import { findPlaceMetaData } from "../states/placestates.js"
 import { attachCam } from "../tools/camera.js"
+import { startFirstPersonWeapon } from "../effects/fpWeapon.js"
 import { getSpawnPos } from "../tools/position.js"
 import { createCharacter } from "./createcharacter.js"
 import { ActionManager, MeshBuilder, Quaternion, Vector3 } from "@babylonjs/core"
@@ -54,6 +55,8 @@ export function createMyCharacter(charState, scene, allsounds){
     }, true)
     if(!player) return
     attachCam(player.camParent)
+    // my drawn weapon, held in view whenever the camera goes first person
+    startFirstPersonWeapon(player)
 
     // soundSystem.js measures "is this close enough to hear" against this body
     // (playSoundNear). Registered here, on the one character that is actually

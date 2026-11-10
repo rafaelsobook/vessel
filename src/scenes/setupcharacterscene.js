@@ -2,9 +2,7 @@ import { Scene, Vector3, Quaternion, SceneLoader, LoadAssetContainerAsync, Color
 import { setGameStatus } from "../main/main";
 import { avatarGlBpath } from "../constants/constants";
 import { showCreateCharacterPage } from "../pages/createcharacterpage";
-import * as GUI from "@babylonjs/gui"
 import { createColorMat, createMat, createMatV2 } from "../tools/materials";
-import { createColorPicker } from "../gui/colorpicker";
 import { disableEnableAttackButtonsContainer } from "../charactersystem/uimanagement.js";
 import { createRidingForest, createRiderCamera } from "./setupbackdrop.js";
 import { SKIN_TEXTURES, SKIN_TEXTURE_LIST } from "../constants/skinColors.js";
@@ -14,6 +12,7 @@ import { layerAvatarMaterials, layerFacePart, layerHelmet, layerWorn, tuckOutfit
 import { createMaterialFromDir } from "../creations/creationTools.js";
 import { createMetalMat, METAL_COLOR } from "../tools/metalmat.js";
 import { giveArmorDetail } from "../tools/armorDetail.js";
+import { giveHairShading, outlineHair } from "../tools/hairShade.js";
 
 // what the new character wears in the preview, both bodies: the Iron Kraun
 // Mask (npcDetails.js's kraunmask - helmets.glb's helmet.kraunmask.*) and the
@@ -139,6 +138,8 @@ export async function setupCharacterScene(engine){
     const femaleHair1Mat = createColorMat("hair_mat_f1", toSave.hairColor, scene)
     femaleHair1Mat.backFaceCulling = false
     femaleHair2Mat.backFaceCulling = false
+    // strands, the angel ring, shading (tools/hairShade.js) - as in the game
+    ;[hairMat, femaleHair1Mat, femaleHair2Mat].forEach(mat => giveHairShading(mat))
     const clothMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     const pantsMat = createMatV2(scene, false, "./images/fabrics/fabric4normal.jpg")
     clothMat.diffuseColor = new Color3(0.42, 0.30, 0.16)
@@ -299,6 +300,9 @@ export async function setupCharacterScene(engine){
         hairs.push(hairMsh)
     })
     HairModel.meshes[0]?.dispose()
+    // each hairstyle inked round its silhouette in a dark shade of the dye
+    const outlineAllHair = color => [...hairs, ...femaleHairs].forEach(mesh => outlineHair(mesh, color))
+    outlineAllHair(toSave.hairColor)
 
     // the Iron Kraun Mask on the head, as the game puts on a helmet
     // (createcharacter.js's createHelmet) - a mask, so the hair stays
@@ -385,7 +389,25 @@ export async function setupCharacterScene(engine){
 
     const onCategoryChange = (category) => {
         selectedCategory = category
-        if (colorPicker) colorPicker.isVisible = category !== "skin"
+    }
+
+    // a dye picked on the creation screen (createcharacterpage.js's swatches)
+    const matMap = { hair: hairMat, cloth: clothMat, pants: pantsMat }
+    const colorKey = { hair: "hairColor", cloth: "clothColor", pants: "pantsColor" }
+    const onColorSelect = (category, { r, g, b }) => {
+        const mat = matMap[category]
+        if (!mat) return
+        mat.diffuseColor.set(r, g, b)
+        // femaleHair1Mat/femaleHair2Mat are SEPARATE material objects from
+        // hairMat (so hair2's bump texture and both hairstyles'
+        // backFaceCulling:false don't also apply to male hair/scalp, which
+        // still shares hairMat) - mirror the dye onto them too
+        if (category === "hair"){
+            femaleHair1Mat.diffuseColor.set(r, g, b)
+            femaleHair2Mat.diffuseColor.set(r, g, b)
+            outlineAllHair({ r, g, b })
+        }
+        toSave = { ...toSave, [colorKey[category]]: { r, g, b } }
     }
 
     // male-only for now (createcharacter.js's own createAnimeBody has the
@@ -403,43 +425,15 @@ export async function setupCharacterScene(engine){
         onStyleSelect,
         onCategoryChange,
         onSkinSelect,
-        onGenderSelect
+        onGenderSelect,
+        { onColorSelect, current: () => toSave }
     )
-    
-
-    const overlay = document.querySelector(".page-overlay")
-    // overlay.style.display ="none"   
 
     setGameStatus("running")
     const pelvisBoneForPreview2 = findDeepByName(meshes[0], bne => bne.name === "pelvis")
     if(pelvisBoneForPreview2){
         headBone = pelvisBoneForPreview2.getChildren()[0].getChildren()[0].getChildren()[0].getChildren()[0]
     }
-    const UITexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene)
-
-    const matMap = { hair: hairMat, cloth: clothMat, pants: pantsMat, skin: skinMat }
-
-    const colorPicker = createColorPicker(UITexture, (pickerVal) => {
-        const { r, g, b } = pickerVal
-        const mat = matMap[selectedCategory]
-        if (mat) mat.diffuseColor.copyFrom(pickerVal)
-        // femaleHair1Mat/femaleHair2Mat are SEPARATE material objects from
-        // hairMat (so hair2's bump texture and both hairstyles'
-        // backFaceCulling:false don't also apply to male hair/scalp, which
-        // still shares hairMat) - being different objects entirely means
-        // neither ever heard about a diffuseColor change made through
-        // matMap.hair above. Mirror it here so all three hair materials
-        // track the same picked color.
-        if (selectedCategory === "hair"){
-            femaleHair1Mat.diffuseColor.copyFrom(pickerVal)
-            femaleHair2Mat.diffuseColor.copyFrom(pickerVal)
-        }
-        if (selectedCategory === "hair")  toSave = { ...toSave, hairColor:  { r, g, b } }
-        if (selectedCategory === "cloth") toSave = { ...toSave, clothColor: { r, g, b } }
-        if (selectedCategory === "pants") toSave = { ...toSave, pantsColor: { r, g, b } }
-        // no "skin" branch: the color picker is hidden for that category
-        // (onCategoryChange above) - skin is swatch-only now, via onSkinSelect.
-    })
     disableEnableAttackButtonsContainer(false, true)
     return {scene, isSocketOn: false}
 }

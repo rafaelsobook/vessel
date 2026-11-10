@@ -5,7 +5,7 @@ import { checkIfTokenSaved, randomNum, setPointerClickable, useFetch } from "../
 import { getCharState, setCharStateMode, refreshHungerUI, refreshBleeding, updateMyDetailsOL, addEffectsOnStat, healHp, damageHp, getMaxHp, getMaxMp, getMaxSp } from "./characterstate.js"
 import { COOKED_ICON_FILTER, isCookedItem } from "./cooking.js"
 import { getAllSounds } from "../components/soundSystem.js"
-import { obtain, openUpdateInventory } from "./inventory.js"
+import { closeInventory, obtain, openUpdateInventory } from "./inventory.js"
 import { getSceneDet } from "../main/main.js"
 import { capsuleHeight } from "./createcharacter.js"
 import { createGroundWeapon } from "../assetcreation/creategroundweapon.js"
@@ -27,6 +27,7 @@ import { updateThrowButtonVisibility } from "./uimanagement.js"
 // the acquired popup and the achievements all come with it.
 import { SKILLS_BY_NAME } from "../staticRecources/skillsData.js"
 import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
+import { canRevealSkillTome, revealSkillTome } from "../effects/tomeReveal.js"
 
 
 const itemInfoCont = document.querySelector(".item-info-cont")
@@ -344,6 +345,12 @@ let consumeItemFunc = async () => {
 // A skill already known isn't refused: the tome is spent to LEVEL it up one,
 // through the same upgradeOwnedSkill the skill panel's cheat key uses (the
 // owned copy's lvl and power, the skill UI, the save and the "Lv. N" popup).
+//
+// Standing in the world, it's shown there (effects/tomeReveal.js): the panels
+// close, the tome is called up and opened before you, and the skill comes out
+// of it into you - bigger the rarer the tome. The skill's taken before that
+// starts (and saved alongside it); the flat popups only where there's no body
+// of yours on screen to show it to.
 let learnSkillFunc = async () => {
     if(!itemDetail) return
     if(itemDetail.itemCateg !== "skillbook") return
@@ -357,18 +364,21 @@ let learnSkillFunc = async () => {
     if(!charState) return
 
     const alreadyKnown = !!charState.skills?.find(sk => sk.name === skill.name)
+    const book = itemDetail
+    const shown = canRevealSkillTome()
 
-    openCloseMiniLS(`Studying ${itemDetail.dn} ...`, true)
+    if(!shown) openCloseMiniLS(`Studying ${itemDetail.dn} ...`, true)
     enableDisableInfoBtns(true)
 
+    let owned
     if(alreadyKnown){
         // a second copy deepens what you know: one level
-        upgradeOwnedSkill(skill)
+        owned = upgradeOwnedSkill(skill, { quiet: shown })
     }else{
         // the shared grant path - pushes onto charState.skills with a free slot,
         // refreshes the skill UI, persists, and fires the acquired popup and the
         // "awakened"/"elite-skill" achievements
-        giveSkill(skill)
+        owned = giveSkill(skill, { quiet: shown })
     }
 
     // spend one copy, same stack-aware deduction consumeItemFunc uses
@@ -384,9 +394,16 @@ let learnSkillFunc = async () => {
         }
     })
 
+    if(shown){
+        // out of the way of the tome - the inventory rebuilds itself when it's next opened
+        closeItemInfo()
+        closeInventory()
+        revealSkillTome({ skill: owned ?? skill, rarity: book.rarity ?? "normal", upgraded: alreadyKnown, level: owned?.lvl ?? 1 })
+    }
     await updateMyDetailsOL(charState, checkIfTokenSaved())
-    openCloseMiniLS("", false)
     enableDisableInfoBtns(false)
+    if(shown) return
+    openCloseMiniLS("", false)
     openUpdateInventory(true)
     // last copy spent -> nothing left to show, so close the panel instead of
     // leaving it open on an item that is no longer in the inventory

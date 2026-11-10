@@ -41,7 +41,7 @@ import { randNum, randBetween } from "../tools/random.js"
 import { getAllSounds, playSoundNear } from "../components/soundSystem.js"
 import { getSceneDet } from "../main/main.js"
 import { updateStatUI } from "../charactersystem/statsSystem.js"
-import { camShake } from "../tools/camera.js"
+import { camShake, getFirstPersonView } from "../tools/camera.js"
 import { capsuleHeight } from "../charactersystem/createcharacter.js"
 import { openworldGroundY } from '../tools/groundHeight.js'
 import { OPENWORLD_PLACE_ID } from "../constants/constants.js"
@@ -50,7 +50,7 @@ import { giveSkill, upgradeOwnedSkill } from "../components/skillsui.js"
 import { checkIfTokenSaved } from "../tools/tools.js"
 import { isDungeon, isDungeonWallAt } from "../tools/dungeonSight.js"
 import { ATK_COLLIDER_PARKED_Y } from "../charactersystem/createMyCharacter.js"
-import { markDashActive } from "../controllers/inputMovement.js"
+import { markDashActive, faceAttackTarget } from "../controllers/inputMovement.js"
 import { createWave as createCrescentWave, windUp as crescentWindUp, release as crescentRelease } from "../effects/crescentHowl.js"
 
 // element -> magic circle texture (./images/circles/*.webp). A skill can
@@ -289,7 +289,44 @@ export function startTargetBurn(burnEffect, targetBody, scene, bodyHeight, bodyW
     }, burnEffect.duration)
 }
 
+// FIRST PERSON (tools/camera.js - the grotto mazes): my cast goes the way I
+// look, and its circle stands in front of my eyes - down at my hand it sat
+// below the bottom of the view, and aimed along my body it went wherever I
+// last walked rather than where I was looking. My body turns that way for
+// the cast too (its clip, and everyone else's screens). Smaller than the
+// usual circle, and off to the right where the hand would be, or it would
+// fill the view.
+const FP_CAST_AHEAD = 1.8
+const FP_CAST_RIGHT = 0.3
+const FP_CAST_DROP = 0.28
+const FP_CIRCLE_SCALE = 0.36
+const FP_CAST_MAX_PITCH = 0.6   // the aim's own y, so a bolt can't go straight down
+function firstPersonAim(player, turnMs){
+    if(!player?.body || player.owner !== getCharState()?.owner) return null
+    const view = getFirstPersonView()
+    if(!view) return null
+    const forward = view.forward.clone()
+    forward.y = Math.max(-FP_CAST_MAX_PITCH, Math.min(FP_CAST_MAX_PITCH, forward.y))
+    forward.normalize()
+    faceAttackTarget(player.body.position.add(view.flat), turnMs)
+    return { ...view, forward }
+}
+// the circle, turned up or down to face my eyes as well
+function tiltToView(circle, forward){
+    if(circle) circle.rotation.x = Math.asin(Math.max(-1, Math.min(1, forward.y)))
+}
+
 function computeCastOrigin(player, skill){
+    const view = firstPersonAim(player, (skill?.castDuration ?? 1) * 1000 + 400)
+    if(view){
+        const spawnPos = view.eye.add(view.forward.scale(FP_CAST_AHEAD)).addInPlace(view.right.scale(FP_CAST_RIGHT))
+        spawnPos.y -= FP_CAST_DROP
+        if(skill?._castSpread){
+            spawnPos.addInPlace(view.right.scale(randNum(-CAST_SPAWN_JITTER, CAST_SPAWN_JITTER)))
+            spawnPos.y += randNum(-CAST_SPAWN_JITTER, CAST_SPAWN_JITTER)
+        }
+        return { spawnPos, forward: view.forward, firstPerson: true }
+    }
     // "in front of my right hand" - rHand's world position if the bone's
     // available, otherwise fall back to roughly chest-height in front of
     // the body so this doesn't just silently no-op for a character whose
@@ -343,7 +380,7 @@ export function castOffenseSkill(scene, player, skill, charState){
     // skill's OWN lvl-based power (see attackingSystem.js's upgradeSkill) -
     // independent axis from how much mana was committed.
     const powerScale = (skill._castPowerScale ?? 1) * (skill.explosionScale ?? 1)
-    const { spawnPos, forward } = computeCastOrigin(player, skill)
+    const { spawnPos, forward, firstPerson } = computeCastOrigin(player, skill)
     const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
 
     // skill.groundTrap (disintegrationSkill) - this skill has no target to
@@ -385,7 +422,8 @@ export function castOffenseSkill(scene, player, skill, charState){
     } else {
         // circle stays up roughly through the cast window plus a beat after
         // the projectile launches, instead of despawning the instant it fires
-        createMagicCircle(spawnPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, forward, CIRCLE_SIZE_SCALE)
+        const circle = createMagicCircle(spawnPos, scene, circleImg, 0.8, skill.castDuration * 1000 + 800, forward, firstPerson ? FP_CIRCLE_SCALE : CIRCLE_SIZE_SCALE)
+        if(firstPerson) tiltToView(circle, forward)
     }
 
     const timeoutIds = []
@@ -513,7 +551,16 @@ function fireProjectileVolley(scene, charState, skill, spawnPos, forward, powerS
 // circle's spawn point is randomized, not what direction/what it can hit,
 // so this stays consistent with every other skill's straight-line
 // forward-facing projectile/hit-detection.
-function computeMulticastCircleOrigin(player){
+function computeMulticastCircleOrigin(player, skill){
+    // first person: scattered over what I'm looking at instead - round my
+    // body they'd mostly be behind the camera
+    const view = firstPersonAim(player, (skill?.castDuration ?? 1) * 1000 + 400)
+    if(view){
+        const spawnPos = view.eye.add(view.forward.scale(randNum(1.9, 2.8)))
+            .addInPlace(view.right.scale(randNum(-1.1, 1.1)))
+        spawnPos.y += randNum(-0.55, 0.65)
+        return { spawnPos, forward: view.forward, firstPerson: true }
+    }
     const bodyPos = player.body.absolutePosition
     const forward = Vector3.TransformNormal(new Vector3(0, 0, 1), player.body.getWorldMatrix()).normalize()
 
@@ -557,9 +604,10 @@ export function castMulticast(scene, player, skill, charState){
 
     function spawnCircle(){
         if(!player?.body) return
-        const { spawnPos, forward } = computeMulticastCircleOrigin(player)
+        const { spawnPos, forward, firstPerson } = computeMulticastCircleOrigin(player, skill)
         const circleImg = skill.magicCircleImg || ELEMENT_CIRCLES[skill.element] || ELEMENT_CIRCLES.normal
-        createMagicCircle(spawnPos, scene, circleImg, 0.8, perCircleMs + 800, forward, CIRCLE_SIZE_SCALE)
+        const circle = createMagicCircle(spawnPos, scene, circleImg, 0.8, perCircleMs + 800, forward, firstPerson ? FP_CIRCLE_SCALE : CIRCLE_SIZE_SCALE)
+        if(firstPerson) tiltToView(circle, forward)
 
         const fireId = setTimeout(() => {
             fireElementalProjectile(scene, charState, skill, spawnPos, forward, powerScale)
